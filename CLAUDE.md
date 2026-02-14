@@ -103,21 +103,22 @@ Admin routes and UI are role-gated per [REQ_Admin.md](.claude/SPECS/REQ_Admin.md
 src/app/                     — Next.js App Router pages
 src/app/login/               — Login page
 src/app/account/             — Account page (profile, prefs, security)
-src/app/admin/               — Admin section (customers, aircraft-types, import, users, settings)
+src/app/admin/               — Admin section (customers, aircraft-types, import, users, settings, analytics, audit)
 src/app/api/                 — API route handlers
 src/app/api/auth/            — Auth.js routes
 src/app/api/admin/           — Admin-only APIs (role-enforced)
+src/app/api/analytics/       — Analytics events + summary APIs
 src/app/api/account/         — User account APIs
 src/components/ui/           — shadcn/ui components
 src/components/layout/       — Sidebar, header, user menu, mobile nav
-src/components/shared/       — FilterBar, DateTimePicker, MultiSelect
+src/components/shared/       — FilterBar, FilterBarMobile, DateTimePicker, MultiSelect, LoadingSkeleton, EmptyState
 src/components/flight-board/ — ECharts Gantt components
 src/components/dashboard/    — KPI cards, charts
 src/components/capacity/     — Utilization chart, tables
 src/components/account/      — Profile, preferences, security forms
-src/components/admin/        — Customer editor, user table, user form
+src/components/admin/        — Customer editor, user table, user form, analytics dashboard
 src/lib/auth.ts              — Auth.js configuration
-src/lib/db/                  — SQLite connection, Drizzle schema, seed
+src/lib/db/                  — SQLite connection, Drizzle schema, seed, seed-analytics
 src/lib/data/                — Reader, transformer, engines
 src/lib/hooks/               — Zustand stores (filters, customers, prefs)
 src/lib/utils/               — Date, format, aircraft-type normalization (D-015), contrast helpers

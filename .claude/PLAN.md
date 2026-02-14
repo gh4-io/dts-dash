@@ -502,45 +502,44 @@ User Action → Zustand Store → URL Sync → API Fetch → Data Engines → Re
 
 ## M8: Admin Analytics + Polish + Responsive
 
-### Task 8.1: Admin Analytics Page
-- [ ] Create `src/app/admin/analytics/page.tsx`
-- [ ] Create `src/components/admin/analytics-dashboard.tsx`:
-  - Active users, page views, events by type cards
-  - Page views over time line chart
-  - Top pages bar chart
-  - Recent events table (paginated, filterable)
+### Task 8.1: Shared UI Primitives ✅
+- [x] Create `src/components/shared/loading-skeleton.tsx` — 4 variants (card/chart/table/page)
+- [x] Create `src/components/shared/empty-state.tsx` — FA icon + title + message + action
+- [x] Replace inline skeletons in Dashboard, Capacity, Flight Board pages
 
-### Task 8.2: Loading & Empty States
-- [ ] Create `src/components/shared/loading-skeleton.tsx` — Skeleton cards/charts
-- [ ] Create `src/components/shared/empty-state.tsx` — FA icon + message + action
+### Task 8.2: Error Boundaries ✅
+- [x] Create `src/app/(authenticated)/flight-board/error.tsx`
+- [x] Create `src/app/(authenticated)/dashboard/error.tsx`
+- [x] Create `src/app/(authenticated)/capacity/error.tsx`
+- [x] Create `src/app/(authenticated)/admin/error.tsx`
+- [x] Create `src/app/(authenticated)/settings/error.tsx`
+- [x] Create `src/app/(authenticated)/account/error.tsx`
 
-### Task 8.3: Error Boundaries
-- [ ] Create `src/app/flight-board/error.tsx`
-- [ ] Create `src/app/dashboard/error.tsx`
-- [ ] Create `src/app/capacity/error.tsx`
-- [ ] Create `src/app/admin/error.tsx`
+### Task 8.3: Admin Analytics Page ✅
+- [x] Create `src/app/api/analytics/summary/route.ts` — 7 aggregate queries, 7d/30d range
+- [x] Create `src/components/admin/analytics-dashboard.tsx` — KPI cards, AreaChart, BarChart, events table
+- [x] Create `src/lib/db/seed-analytics.ts` — dev seed script (60 events)
+- [x] Update `src/app/(authenticated)/admin/analytics/page.tsx` — wire to AnalyticsDashboard
 
-### Task 8.4: Responsive Polish
-- [ ] Verify sidebar: expanded (xl) → collapsed (md) → sheet (sm)
-- [ ] Verify FilterBar: 2-row → 2×2 grid → sheet
-- [ ] Verify all charts resize correctly
-- [ ] Test touch interactions on mobile
+### Task 8.4: Mobile Navigation ✅
+- [x] Create `src/components/layout/mobile-nav.tsx` — left Sheet with sidebar nav items
+- [x] Wire hamburger button in `src/components/layout/header.tsx`
 
-### Task 8.5: Theme Testing
-- [ ] Test all 4 presets × 3 color modes = 12 combinations
-- [ ] Verify accent color override in each preset
-- [ ] Verify no FOUC on page load
+### Task 8.5: Responsive FilterBar + Grid Polish ✅
+- [x] Create `src/components/shared/filter-bar-mobile.tsx` — bottom Sheet with all 7 fields
+- [x] Modify `src/components/shared/filter-bar.tsx` — mobile trigger + count badge, hide desktop rows on mobile
+- [x] Add `min-h-[250px]` to dashboard chart container for mobile
 
-### Task 8.6: Final Verification
-- [ ] Run full TEST_PLAN.md manual checklist
-- [ ] `npm run build` + `npm run lint` clean
-- [ ] All pages render in dev + production
+### Task 8.6: Final Verification ✅
+- [x] `npm run build` clean (0 errors)
+- [x] `npm run lint` clean (0 warnings)
+- [ ] Manual QA: theme preset matrix, FOUC, console error sweep
 
-**Files**: ~6 files total
+**Files**: 12 new, 6 modified
 
 ---
 
-## Complete File Inventory (~110 files)
+## Complete File Inventory (~120 files)
 
 ### Types (10)
 ```
@@ -556,11 +555,12 @@ src/types/config.ts
 src/types/analytics.ts
 ```
 
-### Database (4)
+### Database (5)
 ```
 src/lib/db/index.ts
 src/lib/db/schema.ts
 src/lib/db/seed.ts
+src/lib/db/seed-analytics.ts
 drizzle.config.ts
 ```
 
@@ -581,10 +581,11 @@ src/lib/utils/filter-helpers.ts
 src/lib/utils/date-helpers.ts
 ```
 
-### Analytics (2)
+### Analytics (3)
 ```
 src/lib/analytics/track.ts
 src/app/api/analytics/events/route.ts
+src/app/api/analytics/summary/route.ts
 ```
 
 ### Utils (3)
@@ -604,20 +605,20 @@ src/lib/hooks/use-customers.ts
 src/lib/hooks/use-preferences.ts
 ```
 
-### Layout (7)
+### Layout (6)
 ```
 src/app/layout.tsx
 src/components/layout/sidebar.tsx
 src/components/layout/header.tsx
-src/components/layout/user-menu.tsx
 src/components/layout/mobile-nav.tsx
 src/components/layout/theme-toggle.tsx
 src/components/layout/theme-provider.tsx
 ```
 
-### Shared Components (7)
+### Shared Components (9)
 ```
 src/components/shared/filter-bar.tsx
+src/components/shared/filter-bar-mobile.tsx
 src/components/shared/datetime-picker.tsx
 src/components/shared/multi-select.tsx
 src/components/shared/fa-icon.tsx
@@ -672,7 +673,7 @@ src/components/admin/user-form.tsx
 src/components/admin/analytics-dashboard.tsx
 ```
 
-### API Routes (16)
+### API Routes (18)
 ```
 src/app/api/auth/[...nextauth]/route.ts
 src/app/api/work-packages/route.ts
@@ -681,24 +682,32 @@ src/app/api/hourly-snapshots/route.ts
 src/app/api/capacity/route.ts
 src/app/api/config/route.ts
 src/app/api/analytics/events/route.ts
+src/app/api/analytics/summary/route.ts
 src/app/api/account/profile/route.ts
 src/app/api/account/preferences/route.ts
 src/app/api/account/password/route.ts
 src/app/api/admin/customers/route.ts
+src/app/api/admin/customers/[id]/route.ts
+src/app/api/admin/customers/reset/route.ts
 src/app/api/admin/users/route.ts
+src/app/api/admin/users/[id]/route.ts
+src/app/api/admin/users/[id]/reset-password/route.ts
 src/app/api/admin/aircraft-types/route.ts
 src/app/api/admin/aircraft-types/test/route.ts
+src/app/api/admin/aircraft-types/reset/route.ts
 src/app/api/admin/import/validate/route.ts
 src/app/api/admin/import/commit/route.ts
 src/app/api/admin/import/history/route.ts
 ```
 
-### Error Boundaries (4)
+### Error Boundaries (6)
 ```
-src/app/flight-board/error.tsx
-src/app/dashboard/error.tsx
-src/app/capacity/error.tsx
-src/app/admin/error.tsx
+src/app/(authenticated)/flight-board/error.tsx
+src/app/(authenticated)/dashboard/error.tsx
+src/app/(authenticated)/capacity/error.tsx
+src/app/(authenticated)/admin/error.tsx
+src/app/(authenticated)/settings/error.tsx
+src/app/(authenticated)/account/error.tsx
 ```
 
 ### Config & Static (5+)
@@ -726,7 +735,7 @@ data/input.json
 - Account page (profile, preferences, change password)
 - Admin section (customers, users, aircraft types, import, settings)
 - Admin analytics (usage tracking)
-- 4 theme presets + accent color override
+- 11 theme presets (Fumadocs) + accent color override
 - Responsive layout (desktop/tablet/mobile)
 - Pagination on table views
 

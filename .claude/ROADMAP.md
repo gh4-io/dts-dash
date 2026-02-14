@@ -130,7 +130,7 @@ See [PLAN.md](PLAN.md) M1 section.
 - [x] Tooltip shows all 9 fields on hover
 - [x] Zoom toolbar works (6h/12h/1d/3d/1w presets)
 - [x] Filters reduce visible aircraft in Gantt
-- [ ] Mobile: FilterBar collapses to Sheet *(deferred to M8 responsive polish)*
+- [x] Mobile: FilterBar collapses to Sheet *(implemented in M8)*
 
 ### Key Tasks
 1. FilterBar component (7 fields, responsive layout)
@@ -153,14 +153,14 @@ See [PLAN.md](PLAN.md) M2 section.
 **Goal**: KPI cards + charts showing operational analytics.
 
 ### Acceptance Criteria
-- [ ] KPI cards render: Total Aircraft, Avg Ground Time (<24h/>=24h), By Type, Peak Concurrent, Total MH
-- [ ] Combined bar+line chart (arrivals/departures/on-ground per hour)
-- [ ] MH by Operator horizontal bar chart
-- [ ] Aircraft by Customer donut chart
-- [ ] Operator Performance section (comparison table + share charts) — see OI-015
-- [ ] Data freshness badge in header
-- [ ] All charts use customer colors from `useCustomers()` store
-- [ ] Charts update when filters change
+- [x] KPI cards render: Total Aircraft, Avg Ground Time (<24h/>=24h), By Type, Peak Concurrent, Total MH
+- [x] Combined bar+line chart (arrivals/departures/on-ground per hour)
+- [x] MH by Operator horizontal bar chart
+- [x] Aircraft by Customer donut chart
+- [x] Operator Performance section (comparison table + share charts) — see OI-015
+- [x] Data freshness badge in header
+- [x] All charts use customer colors from `useCustomers()` store
+- [x] Charts update when filters change
 
 ### Key Tasks
 1. KPI card component
