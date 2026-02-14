@@ -343,14 +343,113 @@
 
 ---
 
+---
+
+## OI-022 | M1 Implementation Complete — 2026-02-13
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-13 |
+| **Resolved** | 2026-02-13 |
+| **Context** | M1 (Data Layer + API Routes) implementation complete. All 10 tasks implemented and verified. |
+| **Resolution** | Created: reader.ts, transformer.ts, aircraft-type.ts, hourly-snapshot.ts, capacity.ts, pagination.ts, filter-helpers.ts, date-helpers.ts, track.ts, and 6 API routes. All acceptance criteria met. Build ✅, Lint ✅, Dev ✅. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M1, [PLAN.md](PLAN.md) M1 |
+
+---
+
+## OI-023 | M2 Implementation Complete — 2026-02-13
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-13 |
+| **Resolved** | 2026-02-13 |
+| **Context** | M2 (FilterBar + Flight Board) implementation complete. All 9 tasks implemented and verified. |
+| **Resolution** | Created: use-filters.ts, use-filter-url-sync.ts, use-customers.ts, use-work-packages.ts (Zustand stores); datetime-picker.tsx, multi-select.tsx, customer-badge.tsx, filter-bar.tsx (filter components); flight-board-chart.tsx, flight-tooltip.ts, gantt-toolbar.tsx, flight-detail-drawer.tsx (Gantt components); /api/admin/customers route. Installed shadcn/ui (badge, button, popover, command, select, sheet, separator, calendar, tooltip). Build ✅, Lint ✅. Two items deferred to M8: mobile FilterBar sheet, date auto-swap validation. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M2, [PLAN.md](PLAN.md) M2 |
+
+---
+
+## OI-024 | M3 Implementation Complete — 2026-02-13
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-13 |
+| **Resolved** | 2026-02-13 |
+| **Context** | M3 (Statistics Dashboard) implementation complete. KPI cards, charts, operator performance table, data freshness badge all implemented. |
+| **Resolution** | Created: kpi-card.tsx, avg-ground-time-card.tsx, mh-by-operator-card.tsx, total-aircraft-card.tsx, aircraft-by-type-card.tsx (KPI cards); combined-chart.tsx (Recharts ComposedChart bar+line), customer-donut.tsx (PieChart donut), operator-performance.tsx (sortable table with click-to-focus cross-filtering); data-freshness-badge.tsx + /api/data-freshness route; use-hourly-snapshots.ts (Zustand hook). Dashboard page assembled with 3-column grid layout, cross-filtering between operator table/donut/MH card, loading skeleton. Build ✅, Lint ✅. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M3, [PLAN.md](PLAN.md) M3 |
+
+---
+
+## OI-025 | M4 Implementation Complete — 2026-02-14
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | M4 (Capacity Modeling) implementation complete. Config panel, utilization chart, detail table with expandable rows, CSV export, and full page assembly. |
+| **Resolution** | Created: use-capacity.ts (Zustand hook), config-panel.tsx (slider/switch/headcount controls with useReducer), utilization-chart.tsx (Recharts ComposedChart with color-coded bars, dual Y-axes, reference lines), capacity-table.tsx (TanStack Table with expandable customer/shift sub-rows, pagination, sorting), csv-export.ts (generic CSV download utility), capacity/page.tsx (full page with FilterBar, summary KPI pills, config panel, chart, table). Installed shadcn/ui: slider, switch, table, label. Build clean, lint clean. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M4, [PLAN.md](PLAN.md) M4 |
+
+---
+
+## OI-026 | M5 Implementation Complete — 2026-02-14
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | M5 (Account + Settings + Theming) implementation complete. Account page with 3 tabs, Settings page, 11 theme presets, preferences API, FOUC prevention. |
+| **Resolution** | Created: use-preferences.ts (Zustand store), preferences-loader.tsx, theme-script.tsx (FOUC prevention), profile-form.tsx, preferences-form.tsx, security-panel.tsx, change-password-form.tsx, 3 account API routes (profile/preferences/password). Rewrote settings page from stub to functional (demand model, capacity model, shifts, display). Fixed globals.css (removed duplicate oklch blocks conflicting with HSL theme system). Installed shadcn/ui tabs, input, card. All 11 Fumadocs theme presets working in light/dark/system modes. Build clean, lint clean. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M5, [PLAN.md](PLAN.md) M5 |
+
+---
+
+## OI-027 | M6 Implementation Complete — 2026-02-14
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | M6 (Admin Core — Customers + Users) implementation complete. Admin layout with role guard, customer color editor, user CRUD, admin settings, stub pages. |
+| **Resolution** | Created 19 new files, modified 4 existing. **New utilities**: contrast.ts (WCAG 2.1 contrast), seed-data.ts (shared seed constants). **Admin layout**: layout.tsx (server role guard, redirects non-admin to /dashboard), admin-nav.tsx (7 horizontal scrollable tabs). **Customer APIs**: PUT bulk update with auto colorText, POST create, DELETE soft-delete, POST reset to seed defaults. **Customer UI**: customer-color-editor.tsx (color swatch, hex input, native color picker, WCAG badge, add/reset dialogs). **User APIs**: GET list (excludes passwordHash), POST create with temp password generation, PUT update with last-superadmin protection, DELETE soft-delete, POST reset-password. **User UI**: user-table.tsx (badges, action buttons, self-row highlighting), user-form.tsx (create/edit dialog with temp password display + copy). **Admin settings**: mirrors /settings with demand/capacity/shift/display sections + vNext stubs. **Stubs**: audit, aircraft-types, import, analytics pages. Zustand use-customers.ts updated with invalidate() method. Build clean, lint clean. |
+| **Known limitations** | JWT role stale after admin changes user role (takes effect on next login). forcePasswordChange flag set but not enforced in login flow (M8 polish). |
+| **Links** | [ROADMAP.md](ROADMAP.md) M6, [PLAN.md](PLAN.md) M6 |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 2 |
+| P0 | 0 | 0 | 0 | 8 |
 | P1 | 0 | 0 | 0 | 8 |
 | P2 | 0 | 1 | 0 | 9 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **1** | **2** | **18** |
+| **Total** | **0** | **1** | **2** | **25** |
 
-**Changes this pass (Decision Resolution)**: Resolved OI-011 (Auth.js v5 — proceed), OI-012 (Drizzle + better-sqlite3 — proceed), OI-013 (vNext stubs — include with "Coming Soon" badges), OI-016 (materialized views — don't build now, monitor at 500+ records), OI-017 (event tracking — immediate writes), OI-019 (Operator Performance — available-data KPIs only), OI-021 (theme CSS — include all, optimize if needed). **Remaining**: OI-003 (Updated — aircraft type seed rules need user review), OI-006 & OI-007 (Acknowledged — informational only).
+**Changes this pass (M6 Implementation)**: Resolved OI-027 (M6 complete — Admin Core with customer color editor, user CRUD, admin layout/nav, settings, stubs). Known limitations: JWT role stale after role change, forcePasswordChange not enforced in login flow. **Remaining**: OI-003 (Updated — aircraft type seed rules need user review), OI-006 & OI-007 (Acknowledged — informational only).

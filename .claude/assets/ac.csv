@@ -1,0 +1,45 @@
+Title,InternalName,TypeAsString
+AGE,field_6,Text
+App Created By,AppAuthor,Lookup
+App Modified By,AppEditor,Lookup
+Attachments,Attachments,Attachments
+CONFIG,field_3,Text
+Color Tag,_ColorTag,Text
+Compliance Asset Id,ComplianceAssetId,Text
+Content Type,ContentType,Computed
+Created,Created,DateTime
+Created By,Author,User
+DELIVERED,DELIVERED,DateTime
+EFFECTIVECODE,EFFECTIVECODE,Text
+ENG,field_11,Text
+Edit,Edit,Computed
+Folder Child Count,FolderChildCount,Lookup
+ID,ID,Counter
+IDCODE,IDCODE,Text
+Item Child Count,ItemChildCount,Lookup
+Item is a Record,_IsRecord,Computed
+LN,field_9,Number
+Label applied by,_ComplianceTagUserId,Lookup
+Label setting,_ComplianceFlags,Lookup
+MAN,field_4,Text
+MANDATE,MANDATE,DateTime
+MSN,field_8,Text
+Model,Model,Lookup
+Model: IATA,Model_x003a__x0020_IATA,Lookup
+Model: ICAO,Model_x003a__x0020_ICAO,Lookup
+Model: TypeGroup,Model_x003a__x0020_TypeGroup,Lookup
+Modified,Modified,DateTime
+Modified By,Editor,User
+OP,field_2,Text
+OWN,field_1,Text
+REG,Title,Text
+Retention label,_ComplianceTag,Lookup
+Retention label Applied,_ComplianceTagWrittenTime,Lookup
+SN,field_13,Number
+STATUS,field_12,Text
+TYPE2,field_5,Text
+Title,LinkTitleNoMenu,Computed
+Title,LinkTitle,Computed
+Type,DocIcon,Computed
+VAR,field_10,Text
+Version,_UIVersionString,Text

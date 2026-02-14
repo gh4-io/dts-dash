@@ -4,11 +4,12 @@ import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
-
+import { usePreferences } from "@/lib/hooks/use-preferences";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
+  const { update: updatePrefs } = usePreferences();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -23,13 +24,21 @@ export function Header() {
   }, []);
 
   const toggleTheme = () => {
-    if (theme === "dark") setTheme("light");
-    else if (theme === "light") setTheme("system");
-    else setTheme("dark");
+    let next: "dark" | "light" | "system";
+    if (theme === "dark") next = "light";
+    else if (theme === "light") next = "system";
+    else next = "dark";
+
+    setTheme(next);
+    updatePrefs({ colorMode: next });
   };
 
   const themeIcon =
-    theme === "dark" ? "fa-solid fa-moon" : theme === "light" ? "fa-solid fa-sun" : "fa-solid fa-circle-half-stroke";
+    theme === "dark"
+      ? "fa-solid fa-moon"
+      : theme === "light"
+        ? "fa-solid fa-sun"
+        : "fa-solid fa-circle-half-stroke";
 
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin" || role === "superadmin";

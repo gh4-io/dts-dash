@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthProvider } from "@/components/layout/session-provider";
+import { ThemeScript } from "@/components/layout/theme-script";
+import { PreferencesLoader } from "@/components/layout/preferences-loader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,8 +27,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="theme-neutral" suppressHydrationWarning>
       <head>
+        <ThemeScript />
         <link
           rel="stylesheet"
           href="/vendor/fontawesome/css/all.min.css"
@@ -37,6 +40,7 @@ export default function RootLayout({
       >
         <AuthProvider>
           <ThemeProvider>
+            <PreferencesLoader />
             {children}
           </ThemeProvider>
         </AuthProvider>

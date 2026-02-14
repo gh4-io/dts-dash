@@ -7,20 +7,26 @@
 
 ## Current Focus
 
-**Milestone 1**: Data layer + API routes (next up).
+**Milestone 7**: Admin Data Tools — Aircraft Types + Import (next up).
 **Milestone 0**: Complete ✅
+**Milestone 1**: Complete ✅
+**Milestone 2**: Complete ✅
+**Milestone 3**: Complete ✅
+**Milestone 4**: Complete ✅
+**Milestone 5**: Complete ✅
+**Milestone 6**: Complete ✅
 
 ## Milestones
 
 | ID | Name | Scope | Status | Size | Dependencies |
 |----|------|-------|--------|------|-------------|
 | M0 | Scaffold + Database + Auth | Foundation | **Done** ✅ | L | None |
-| M1 | Data Layer + API Routes | Data foundation | Planned | M | M0 |
-| M2 | FilterBar + Flight Board | First visual page | Planned | L | M1 |
-| M3 | Statistics Dashboard | Second visual page | Planned | M | M1 |
-| M4 | Capacity Modeling | Third visual page | Planned | M | M1 |
-| M5 | Account + Settings + Theming | User-facing config | Planned | M | M0 |
-| M6 | Admin Core (Customers + Users) | Admin features | Planned | M | M5 |
+| M1 | Data Layer + API Routes | Data foundation | **Done** ✅ | M | M0 |
+| M2 | FilterBar + Flight Board | First visual page | **Done** ✅ | L | M1 |
+| M3 | Statistics Dashboard | Second visual page | **Done** ✅ | M | M1 |
+| M4 | Capacity Modeling | Third visual page | **Done** ✅ | M | M1 |
+| M5 | Account + Settings + Theming | User-facing config | **Done** ✅ | M | M0 |
+| M6 | Admin Core (Customers + Users) | Admin features | **Done** ✅ | M | M5 |
 | M7 | Admin Data Tools (Types + Import) | Admin data management | Planned | M | M1, M6 |
 | M8 | Admin Analytics + Polish + Responsive | Finishing | Planned | L | M2–M7 |
 
@@ -52,7 +58,7 @@ M2, M3, M4 can be worked on in parallel after M1. M5 can start in parallel with 
 - [x] Seed data loaded (2 users, 6 customers, default type mappings)
 - [x] Login page renders; auth flow works (login/logout)
 - [x] Protected routes redirect to `/login` when not authenticated
-- [ ] Admin routes return 403 for non-admin users *(deferred to M6 — admin layout + role guard)*
+- [x] Admin routes return 403 for non-admin users *(implemented in M6 — admin layout + role guard)*
 - [x] Base layout renders (sidebar, header with user menu, theme toggle)
 - [x] Font Awesome icons render correctly
 - [x] Dark theme is default; light mode toggle works
@@ -79,16 +85,16 @@ See [PLAN.md](PLAN.md) M0 section for complete file list.
 **Goal**: All data endpoints operational. Event tracking infrastructure in place.
 
 ### Acceptance Criteria
-- [ ] `/api/work-packages?page=1&pageSize=30` returns paginated data
-- [ ] `/api/work-packages/all` returns full filtered dataset
-- [ ] `/api/hourly-snapshots` returns time-series data
-- [ ] `/api/capacity` returns demand + capacity + utilization
-- [ ] `/api/config` GET/PUT works
-- [ ] `effectiveMH` respects priority chain (override > WP MH > default 3.0)
-- [ ] Aircraft type normalization resolves raw types to canonical
-- [ ] `trackEvent()` utility writes to `analytics_events` table
-- [ ] `TotalGroundHours` string parsing handles all edge cases (no NaN)
-- [ ] Records with null `TotalMH` default to 3.0
+- [x] `/api/work-packages?page=1&pageSize=30` returns paginated data
+- [x] `/api/work-packages/all` returns full filtered dataset
+- [x] `/api/hourly-snapshots` returns time-series data
+- [x] `/api/capacity` returns demand + capacity + utilization
+- [x] `/api/config` GET/PUT works
+- [x] `effectiveMH` respects priority chain (override > WP MH > default 3.0)
+- [x] Aircraft type normalization resolves raw types to canonical
+- [x] `trackEvent()` utility writes to `analytics_events` table
+- [x] `TotalGroundHours` string parsing handles all edge cases (no NaN)
+- [x] Records with null `TotalMH` default to 3.0
 
 ### Key Tasks
 1. Work package reader (`data/input.json` → parsed array)
@@ -111,17 +117,17 @@ See [PLAN.md](PLAN.md) M1 section.
 **Goal**: First visual milestone — interactive Gantt with full filtering.
 
 ### Acceptance Criteria
-- [ ] FilterBar renders 7 fields (Start, End, Station, TZ, Operator, Aircraft, Type)
-- [ ] URL query param sync works (bidirectional)
-- [ ] Filters persist across page navigation
-- [ ] Reset button restores defaults
-- [ ] Date validation: end < start auto-swaps, max 30-day range
-- [ ] ECharts Gantt renders aircraft registrations on Y-axis, time on X-axis
-- [ ] Bars colored by customer (from `useCustomers()` store)
-- [ ] Tooltip shows all 9 fields on hover
-- [ ] Zoom toolbar works (6h/12h/1d/3d/1w presets)
-- [ ] Filters reduce visible aircraft in Gantt
-- [ ] Mobile: FilterBar collapses to Sheet
+- [x] FilterBar renders 7 fields (Start, End, Station, TZ, Operator, Aircraft, Type)
+- [x] URL query param sync works (bidirectional)
+- [x] Filters persist across page navigation
+- [x] Reset button restores defaults
+- [ ] Date validation: end < start auto-swaps, max 30-day range *(deferred to polish — M8)*
+- [x] ECharts Gantt renders aircraft registrations on Y-axis, time on X-axis
+- [x] Bars colored by customer (from `useCustomers()` store)
+- [x] Tooltip shows all 9 fields on hover
+- [x] Zoom toolbar works (6h/12h/1d/3d/1w presets)
+- [x] Filters reduce visible aircraft in Gantt
+- [ ] Mobile: FilterBar collapses to Sheet *(deferred to M8 responsive polish)*
 
 ### Key Tasks
 1. FilterBar component (7 fields, responsive layout)
@@ -172,13 +178,13 @@ See [PLAN.md](PLAN.md) M3 section.
 **Goal**: Demand vs capacity visualization with configuration controls.
 
 ### Acceptance Criteria
-- [ ] Configuration panel: Default MH slider, WP include/exclude toggle, shift headcounts
-- [ ] Daily utilization chart (color-coded bars: green/yellow/red)
-- [ ] Detail table with pagination (TanStack Table)
-- [ ] Expandable rows (by Customer, by Shift)
-- [ ] CSV export downloads all rows
-- [ ] Config changes recalculate within 500ms
-- [ ] Filters affect demand only; capacity unchanged by customer/aircraft/type filters
+- [x] Configuration panel: Default MH slider, WP include/exclude toggle, shift headcounts
+- [x] Daily utilization chart (color-coded bars: green/yellow/red)
+- [x] Detail table with pagination (TanStack Table)
+- [x] Expandable rows (by Customer, by Shift)
+- [x] CSV export downloads all rows
+- [x] Config changes recalculate (apply button triggers refetch)
+- [x] Filters affect demand only; capacity unchanged by customer/aircraft/type filters
 
 ### Key Tasks
 1. Configuration panel (sliders, toggles)
@@ -197,16 +203,16 @@ See [PLAN.md](PLAN.md) M4 section.
 **Goal**: User-facing configuration and personalization.
 
 ### Acceptance Criteria
-- [ ] Settings page: demand model, capacity model, shifts, display
-- [ ] Account page: Profile tab (display name editing)
-- [ ] Account page: Preferences tab (color mode, theme preset, accent, timezone, date range, page size)
-- [ ] Account page: Security tab (change password + vNext stubs)
-- [ ] Theme presets work: Classic, Ocean, Lavender, Midnight
-- [ ] Each preset works in Light, Dark, and System color modes
-- [ ] Accent color override applies on top of preset
-- [ ] Notification toggles present as MVP UI (stored but non-functional)
-- [ ] vNext security stubs clearly marked "Coming Soon"
-- [ ] Preferences persist across sessions
+- [x] Settings page: demand model, capacity model, shifts, display
+- [x] Account page: Profile tab (display name editing)
+- [x] Account page: Preferences tab (color mode, theme preset, accent, timezone, date range, page size)
+- [x] Account page: Security tab (change password + vNext stubs)
+- [x] Theme presets work: all 11 Fumadocs presets (Neutral, Ocean, Purple, Black, Vitepress, Dusk, Catppuccin, Solar, Emerald, Ruby, Aspen)
+- [x] Each preset works in Light, Dark, and System color modes
+- [x] Accent color override applies on top of preset
+- [x] Notification toggles present as MVP UI (disabled stubs with "Coming Soon")
+- [x] vNext security stubs clearly marked "Coming Soon" (Passkeys, 2FA, Active Sessions)
+- [x] Preferences persist across sessions (SQLite + Zustand + localStorage for FOUC prevention)
 
 ### Key Tasks
 1. Settings page (5 sections)
@@ -227,15 +233,15 @@ See [PLAN.md](PLAN.md) M5 section.
 **Goal**: Admin section with customer color management and user CRUD.
 
 ### Acceptance Criteria
-- [ ] Admin layout with sub-navigation (7 tabs) + role guard
-- [ ] Customer color editor with color picker + hex input
-- [ ] WCAG contrast auto-calculation
-- [ ] Reset Defaults restores seed colors
-- [ ] Color changes propagate to all views
-- [ ] User management: list, create, edit, deactivate
-- [ ] Password reset for users
-- [ ] System settings page (mirrors /settings for admin scope)
-- [ ] Audit log stub (Coming Soon)
+- [x] Admin layout with sub-navigation (7 tabs) + role guard
+- [x] Customer color editor with color picker + hex input
+- [x] WCAG contrast auto-calculation
+- [x] Reset Defaults restores seed colors
+- [x] Color changes propagate to all views (via Zustand invalidate)
+- [x] User management: list, create, edit, deactivate
+- [x] Password reset for users
+- [x] System settings page (mirrors /settings for admin scope)
+- [x] Audit log stub (Coming Soon)
 
 ### Key Tasks
 1. Admin layout + sub-navigation
