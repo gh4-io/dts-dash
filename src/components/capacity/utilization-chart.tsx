@@ -23,9 +23,10 @@ interface UtilizationChartProps {
 }
 
 function getUtilizationColor(percent: number): string {
-  if (percent > 100) return "#ef4444"; // red
-  if (percent > 80) return "#eab308"; // yellow
-  return "#22c55e"; // green
+  if (percent > 120) return "#ef4444"; // red — critical
+  if (percent > 100) return "#f59e0b"; // amber — overtime
+  if (percent > 80) return "#3b82f6"; // blue — optimal
+  return "#22c55e"; // green — under-utilized
 }
 
 function formatDate(dateStr: string): string {
@@ -141,12 +142,12 @@ export function UtilizationChart({
         <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
         <ReferenceLine
           yAxisId="pct"
-          y={100}
+          y={120}
           stroke="#ef4444"
           strokeDasharray="4 4"
           strokeWidth={1.5}
           label={{
-            value: "100%",
+            value: "CRITICAL",
             position: "right",
             fill: "#ef4444",
             fontSize: 10,
@@ -154,10 +155,16 @@ export function UtilizationChart({
         />
         <ReferenceLine
           yAxisId="pct"
-          y={80}
-          stroke="#eab308"
+          y={100}
+          stroke="#f59e0b"
           strokeDasharray="4 4"
           strokeWidth={1}
+          label={{
+            value: "100%",
+            position: "right",
+            fill: "#f59e0b",
+            fontSize: 10,
+          }}
         />
         <Bar
           yAxisId="mh"

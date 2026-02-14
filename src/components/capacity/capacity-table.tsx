@@ -81,8 +81,15 @@ function getUtilizationBadge(percent: number, critical: boolean, overtime: boole
   }
   if (overtime) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
         <i className="fa-solid fa-clock text-[9px]" />
+        {percent.toFixed(1)}%
+      </span>
+    );
+  }
+  if (percent > 80) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
         {percent.toFixed(1)}%
       </span>
     );

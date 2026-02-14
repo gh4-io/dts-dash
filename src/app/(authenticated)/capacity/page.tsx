@@ -72,11 +72,13 @@ export default function CapacityPage() {
                 label="Avg Utilization"
                 value={`${summary.avgUtil.toFixed(1)}%`}
                 color={
-                  summary.avgUtil > 100
+                  summary.avgUtil > 120
                     ? "text-red-500"
-                    : summary.avgUtil > 80
-                      ? "text-yellow-500"
-                      : "text-green-500"
+                    : summary.avgUtil > 100
+                      ? "text-amber-500"
+                      : summary.avgUtil > 80
+                        ? "text-blue-500"
+                        : "text-green-500"
                 }
               />
               <SummaryPill

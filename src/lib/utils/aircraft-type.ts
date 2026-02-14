@@ -1,6 +1,6 @@
 import { db } from "@/lib/db/client";
 import { aircraftTypeMappings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import type { AircraftTypeMapping, NormalizedAircraftType } from "@/types";
 
 /**
@@ -24,7 +24,7 @@ async function loadMappings(): Promise<AircraftTypeMapping[]> {
       .select()
       .from(aircraftTypeMappings)
       .where(eq(aircraftTypeMappings.isActive, true))
-      .orderBy(aircraftTypeMappings.priority);
+      .orderBy(desc(aircraftTypeMappings.priority));
 
     cachedMappings = mappings.map((m) => ({
       ...m,

@@ -3,16 +3,21 @@
 import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { MobileNav } from "./mobile-nav";
 
 export function Header() {
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const { data: session } = useSession();
   const { update: updatePrefs } = usePreferences();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,12 +40,15 @@ export function Header() {
     updatePrefs({ colorMode: next });
   };
 
-  const themeIcon =
-    theme === "dark"
+  const themeIcon = !mounted
+    ? "fa-solid fa-circle-half-stroke"
+    : resolvedTheme === "dark"
       ? "fa-solid fa-moon"
-      : theme === "light"
+      : resolvedTheme === "light"
         ? "fa-solid fa-sun"
         : "fa-solid fa-circle-half-stroke";
+
+  const themeLabel = mounted ? theme ?? "system" : "system";
 
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin" || role === "superadmin";
@@ -63,7 +71,7 @@ export function Header() {
         <button
           onClick={toggleTheme}
           className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-          title={`Theme: ${theme}`}
+          title={`Theme: ${themeLabel}`}
         >
           <i className={themeIcon} />
         </button>
