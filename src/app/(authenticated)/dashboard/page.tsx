@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useMemo, useCallback } from "react";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { AvgGroundTimeCard } from "@/components/dashboard/avg-ground-time-card";
 import { MhByOperatorCard } from "@/components/dashboard/mh-by-operator-card";
@@ -73,7 +74,7 @@ export default function DashboardPage() {
       </Suspense>
 
       {isLoading || snapshotsLoading ? (
-        <DashboardSkeleton />
+        <LoadingSkeleton variant="page" />
       ) : (
         <>
           {/* KPI Cards + Combined Chart + Donut - Main grid */}
@@ -90,7 +91,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Center: Combined chart */}
-            <div className="rounded-lg border border-border bg-card p-3 xl:col-span-1">
+            <div className="rounded-lg border border-border bg-card p-3 xl:col-span-1 min-h-[250px]">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
@@ -135,16 +136,3 @@ function PageHeader() {
   );
 }
 
-function DashboardSkeleton() {
-  return (
-    <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3">
-      <div className="space-y-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="rounded-lg border border-border bg-card p-4 h-28 animate-pulse" />
-        ))}
-      </div>
-      <div className="rounded-lg border border-border bg-card p-4 h-[380px] animate-pulse" />
-      <div className="rounded-lg border border-border bg-card p-4 h-[300px] animate-pulse" />
-    </div>
-  );
-}

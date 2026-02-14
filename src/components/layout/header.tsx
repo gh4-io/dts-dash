@@ -5,12 +5,14 @@ import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { usePreferences } from "@/lib/hooks/use-preferences";
+import { MobileNav } from "./mobile-nav";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { data: session } = useSession();
   const { update: updatePrefs } = usePreferences();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,9 +48,13 @@ export function Header() {
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
       {/* Mobile menu button */}
-      <button className="md:hidden p-2 text-muted-foreground hover:text-foreground">
+      <button
+        className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+        onClick={() => setMobileNavOpen(true)}
+      >
         <i className="fa-solid fa-bars" />
       </button>
+      <MobileNav open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
 
       <div className="flex-1" />
 

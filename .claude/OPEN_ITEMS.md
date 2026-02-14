@@ -442,14 +442,46 @@
 
 ---
 
+## OI-028 | M7 Implementation Complete — 2026-02-14
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | M7 (Admin Data Tools — Aircraft Types + Import) implementation complete. Aircraft type editor and data import workflows fully functional. |
+| **Resolution** | Created 8 new files, modified 4 existing. **Seed data**: Extracted SEED_AIRCRAFT_TYPE_MAPPINGS to seed-data.ts, updated seed.ts to import from shared constant. **Aircraft type API routes**: GET (all mappings, priority DESC), POST (create), PUT (single edit + bulk reorder), DELETE; test endpoint (POST normalizeAircraftType); reset endpoint (superadmin only, deletes all + re-inserts seed). **Aircraft type editor**: Table with pattern/canonical/description/priority/active columns, add/edit/delete dialogs, test input with confidence badges (exact/pattern/fallback), reset defaults with confirmation. **Import API routes**: validate (parse JSON, schema check, summary stats, warnings), commit (write to data/input.json, log to import_log, invalidate reader cache), history (paginated with user display names via LEFT JOIN). **Data import component**: File upload + paste JSON tabs, two-step validate-then-import flow, preview with record/customer/aircraft counts + date range + warnings, import history table with pagination. Build clean, lint clean. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M7, [PLAN.md](PLAN.md) M7 |
+
+---
+
+## OI-029 | M8 Implementation Complete — 2026-02-14
+
+| Field | Value |
+|-------|-------|
+| **Type** | Milestone |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | M8 (Admin Analytics + Polish + Responsive) — final milestone. |
+| **Resolution** | Created 12 new files, modified 6 existing. **Shared primitives**: `LoadingSkeleton` (4 variants: card/chart/table/page) + `EmptyState` (icon/title/message/action). Replaced inline skeletons in Dashboard, Capacity, Flight Board. **Error boundaries**: 6 route-level error.tsx files (FlightBoard, Dashboard, Capacity, Admin, Settings, Account) — each with FA icon, error message, Try Again button. **Admin Analytics**: Summary API (`/api/analytics/summary`) with 7 aggregate queries (activeUsers, pageViews, dataImports, errors, pageViewsByDay, topPages, eventsByType) + time range (7d/30d). Analytics dashboard component with KPI cards, Recharts AreaChart (page views over time), horizontal BarChart (top pages), events-by-type table, paginated recent events. Seed script (`seed-analytics.ts`) generates 60 sample events across 14 days. **Mobile navigation**: Left-side Sheet with same 4 nav items as sidebar, wired to header hamburger button. **Mobile FilterBar**: Bottom Sheet (85vh) with all 7 filter fields in vertical stack + Reset/Done footer. Desktop FilterBar hidden on mobile, replaced with "Filters" button + active count badge. **Grid polish**: min-h-[250px] on dashboard chart for mobile. Build clean, lint clean. |
+| **Links** | [ROADMAP.md](ROADMAP.md) M8, [PLAN.md](PLAN.md) M8 |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 8 |
+| P0 | 0 | 0 | 0 | 10 |
 | P1 | 0 | 0 | 0 | 8 |
 | P2 | 0 | 1 | 0 | 9 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **1** | **2** | **25** |
+| **Total** | **0** | **1** | **2** | **27** |
 
-**Changes this pass (M6 Implementation)**: Resolved OI-027 (M6 complete — Admin Core with customer color editor, user CRUD, admin layout/nav, settings, stubs). Known limitations: JWT role stale after role change, forcePasswordChange not enforced in login flow. **Remaining**: OI-003 (Updated — aircraft type seed rules need user review), OI-006 & OI-007 (Acknowledged — informational only).
+**Changes this pass (M8 Implementation)**: Resolved OI-029 (M8 complete — Admin analytics page, shared skeletons/empty states, 6 error boundaries, mobile nav sheet, mobile filter bar, responsive polish). **All milestones M0–M8 complete.** Remaining manual QA items: theme preset matrix testing, FOUC verification, console error sweep across all 14 routes.

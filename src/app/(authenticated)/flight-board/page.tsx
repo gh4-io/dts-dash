@@ -3,6 +3,7 @@
 import { Suspense, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { GanttToolbar } from "@/components/flight-board/gantt-toolbar";
 import { FlightDetailDrawer } from "@/components/flight-board/flight-detail-drawer";
 import { useWorkPackages, type SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
@@ -15,19 +16,8 @@ const FlightBoardChart = dynamic(
     import("@/components/flight-board/flight-board-chart").then(
       (mod) => mod.FlightBoardChart
     ),
-  { ssr: false, loading: () => <ChartSkeleton /> }
+  { ssr: false, loading: () => <LoadingSkeleton variant="chart" /> }
 );
-
-function ChartSkeleton() {
-  return (
-    <div className="flex items-center justify-center h-[400px] rounded-lg border border-border bg-card">
-      <div className="text-center text-muted-foreground">
-        <i className="fa-solid fa-spinner fa-spin text-2xl mb-2 block" />
-        <p className="text-sm">Loading chart...</p>
-      </div>
-    </div>
-  );
-}
 
 export default function FlightBoardPage() {
   const [zoomLevel, setZoomLevel] = useState("3d");
@@ -76,7 +66,7 @@ export default function FlightBoardPage() {
           <p className="text-sm text-destructive">{error}</p>
         </div>
       ) : isLoading ? (
-        <ChartSkeleton />
+        <LoadingSkeleton variant="chart" />
       ) : (
         <div className="rounded-lg border border-border bg-card">
           <FlightBoardChart

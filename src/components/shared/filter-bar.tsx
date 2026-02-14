@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useFilters } from "@/lib/hooks/use-filters";
 import { useFilterUrlSync } from "@/lib/hooks/use-filter-url-sync";
 import { useCustomers } from "@/lib/hooks/use-customers";
@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FilterBarMobile } from "./filter-bar-mobile";
 import type { AircraftType } from "@/types";
 
 const AIRCRAFT_TYPES: AircraftType[] = ["B777", "B767", "B747", "B757", "B737"];
@@ -64,11 +65,34 @@ export function FilterBar() {
 
   // Active filter pills
   const hasActiveFilters = operators.length > 0 || aircraft.length > 0 || types.length > 0;
+  const activeFilterCount = operators.length + aircraft.length + types.length + (timezone !== "UTC" ? 1 : 0);
+
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <div className="space-y-2">
+      {/* Mobile: filter trigger button */}
+      <div className="md:hidden">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 text-xs gap-1.5"
+          onClick={() => setMobileOpen(true)}
+        >
+          <i className="fa-solid fa-filter" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
+        <FilterBarMobile open={mobileOpen} onOpenChange={setMobileOpen} />
+      </div>
+
+      {/* Desktop: inline filters */}
       {/* Row 1: Date range + Station + Timezone */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="hidden md:flex flex-wrap items-center gap-2">
         <DateTimePicker
           value={start}
           onChange={setStart}
@@ -98,8 +122,8 @@ export function FilterBar() {
         </Select>
       </div>
 
-      {/* Row 2: Entity filters + Reset */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Row 2: Entity filters + Reset (desktop only) */}
+      <div className="hidden md:flex flex-wrap items-center gap-2">
         <MultiSelect
           options={operatorOptions}
           selected={operators}
@@ -137,9 +161,9 @@ export function FilterBar() {
         </Button>
       </div>
 
-      {/* Active filter pills */}
+      {/* Active filter pills (desktop only) */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="hidden md:flex flex-wrap items-center gap-1.5">
           {operators.map((op) => (
             <Badge key={op} variant="secondary" className="gap-1 text-xs">
               {op}

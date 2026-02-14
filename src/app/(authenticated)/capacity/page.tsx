@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo } from "react";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { ConfigPanel } from "@/components/capacity/config-panel";
 import { UtilizationChart } from "@/components/capacity/utilization-chart";
@@ -60,7 +61,7 @@ export default function CapacityPage() {
       </Suspense>
 
       {isLoading || isConfigLoading ? (
-        <CapacitySkeleton />
+        <LoadingSkeleton variant="page" />
       ) : (
         <>
           {/* Summary KPI pills */}
@@ -181,12 +182,3 @@ function SummaryPill({
   );
 }
 
-function CapacitySkeleton() {
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-border bg-card p-4 h-16 animate-pulse" />
-      <div className="rounded-lg border border-border bg-card p-4 h-[380px] animate-pulse" />
-      <div className="rounded-lg border border-border bg-card p-4 h-[300px] animate-pulse" />
-    </div>
-  );
-}
