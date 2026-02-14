@@ -1,0 +1,330 @@
+# Roadmap
+
+> **What changed and why (2026-02-13):** Full rebuild in PASS 2 re-plan. Consolidated from M0–M9 (prior) into M0–M8 with clearer acceptance criteria, explicit MVP vs vNext labeling, and dependency chains. Aircraft types + import merged into M7. Admin analytics folded into M8 (polish). Removed stale hour estimates — replaced with scope-based sizing (S/M/L).
+> See [PLAN.md](PLAN.md) for detailed tasks per milestone.
+
+---
+
+## Current Focus
+
+**Milestone 0**: Project scaffold — dependencies, database, auth, base layout.
+
+## Milestones
+
+| ID | Name | Scope | Status | Size | Dependencies |
+|----|------|-------|--------|------|-------------|
+| M0 | Scaffold + Database + Auth | Foundation | **Next** | L | None |
+| M1 | Data Layer + API Routes | Data foundation | Planned | M | M0 |
+| M2 | FilterBar + Flight Board | First visual page | Planned | L | M1 |
+| M3 | Statistics Dashboard | Second visual page | Planned | M | M1 |
+| M4 | Capacity Modeling | Third visual page | Planned | M | M1 |
+| M5 | Account + Settings + Theming | User-facing config | Planned | M | M0 |
+| M6 | Admin Core (Customers + Users) | Admin features | Planned | M | M5 |
+| M7 | Admin Data Tools (Types + Import) | Admin data management | Planned | M | M1, M6 |
+| M8 | Admin Analytics + Polish + Responsive | Finishing | Planned | L | M2–M7 |
+
+## Dependency Graph
+
+```
+M0 ──┬── M1 ──┬── M2 (FilterBar + Flight Board)
+     │        ├── M3 (Dashboard)
+     │        ├── M4 (Capacity)
+     │        └──────── M7 (Admin Data Tools)
+     │
+     └── M5 ──── M6 ──── M7
+                          │
+     M2+M3+M4+M5+M6+M7 ── M8 (Polish)
+```
+
+M2, M3, M4 can be worked on in parallel after M1. M5 can start in parallel with M1. M6 requires M5. M7 requires M1 + M6. M8 is the final integration/polish milestone.
+
+---
+
+## M0: Scaffold + Database + Auth
+
+**Goal**: Bootable app with auth, base layout, and all infrastructure.
+
+### Acceptance Criteria
+- [ ] `npm run dev` serves app on localhost:3000
+- [ ] `npm run build` passes clean
+- [ ] SQLite database created at `data/dashboard.db` with all tables
+- [ ] Seed data loaded (2 users, 6 customers, default type mappings)
+- [ ] Login page renders; auth flow works (login/logout)
+- [ ] Protected routes redirect to `/login` when not authenticated
+- [ ] Admin routes return 403 for non-admin users
+- [ ] Base layout renders (sidebar, header with user menu, theme toggle)
+- [ ] Font Awesome icons render correctly
+- [ ] Dark theme is default; light mode toggle works
+
+### Key Tasks
+1. `create-next-app` + dependencies (shadcn/ui, ECharts, Zustand, Auth.js, Drizzle, etc.)
+2. Tailwind v4 config + CSS custom properties for theme
+3. Font Awesome self-hosted setup (`public/vendor/fontawesome/`)
+4. SQLite + Drizzle schema (users, sessions, customers, config, mh_overrides, aircraft_type_mappings, import_log, analytics_events, user_preferences)
+5. Seed script (default users, customers with colors, aircraft type mappings)
+6. Auth.js configuration (credentials provider, database sessions)
+7. Login page + middleware for route protection
+8. Base layout: sidebar navigation, header with user menu, mobile nav
+9. Theme toggle (next-themes, dark default)
+10. TypeScript types (all interfaces from REQ_DataModel.md)
+
+### Files Created (~30)
+See [PLAN.md](PLAN.md) M0 section for complete file list.
+
+---
+
+## M1: Data Layer + API Routes
+
+**Goal**: All data endpoints operational. Event tracking infrastructure in place.
+
+### Acceptance Criteria
+- [ ] `/api/work-packages?page=1&pageSize=30` returns paginated data
+- [ ] `/api/work-packages/all` returns full filtered dataset
+- [ ] `/api/hourly-snapshots` returns time-series data
+- [ ] `/api/capacity` returns demand + capacity + utilization
+- [ ] `/api/config` GET/PUT works
+- [ ] `effectiveMH` respects priority chain (override > WP MH > default 3.0)
+- [ ] Aircraft type normalization resolves raw types to canonical
+- [ ] `trackEvent()` utility writes to `analytics_events` table
+- [ ] `TotalGroundHours` string parsing handles all edge cases (no NaN)
+- [ ] Records with null `TotalMH` default to 3.0
+
+### Key Tasks
+1. Work package reader (`data/input.json` → parsed array)
+2. Transformer (SharePointWorkPackage → WorkPackage)
+3. Aircraft type normalization service (D-015)
+4. effectiveMH computation with MH override lookups
+5. Hourly snapshot engine
+6. Capacity computation engine
+7. API routes: work-packages (paginated + all), hourly-snapshots, capacity, config
+8. Pagination utility
+9. Event tracking utility (`trackEvent()` + POST /api/analytics/events)
+
+### Files Created (~15)
+See [PLAN.md](PLAN.md) M1 section.
+
+---
+
+## M2: FilterBar + Flight Board
+
+**Goal**: First visual milestone — interactive Gantt with full filtering.
+
+### Acceptance Criteria
+- [ ] FilterBar renders 7 fields (Start, End, Station, TZ, Operator, Aircraft, Type)
+- [ ] URL query param sync works (bidirectional)
+- [ ] Filters persist across page navigation
+- [ ] Reset button restores defaults
+- [ ] Date validation: end < start auto-swaps, max 30-day range
+- [ ] ECharts Gantt renders aircraft registrations on Y-axis, time on X-axis
+- [ ] Bars colored by customer (from `useCustomers()` store)
+- [ ] Tooltip shows all 9 fields on hover
+- [ ] Zoom toolbar works (6h/12h/1d/3d/1w presets)
+- [ ] Filters reduce visible aircraft in Gantt
+- [ ] Mobile: FilterBar collapses to Sheet
+
+### Key Tasks
+1. FilterBar component (7 fields, responsive layout)
+2. DateTimePicker (Popover + Calendar + time input)
+3. MultiSelect (searchable, with color dots for Operator)
+4. Zustand filter store + URL sync hook
+5. ECharts Gantt component (dynamic import, ssr: false)
+6. Custom `renderItem` for flight bars
+7. HTML tooltip formatter
+8. Zoom toolbar
+9. Flight board page assembly
+
+### Files Created (~12)
+See [PLAN.md](PLAN.md) M2 section.
+
+---
+
+## M3: Statistics Dashboard
+
+**Goal**: KPI cards + charts showing operational analytics.
+
+### Acceptance Criteria
+- [ ] KPI cards render: Total Aircraft, Avg Ground Time (<24h/>=24h), By Type, Peak Concurrent, Total MH
+- [ ] Combined bar+line chart (arrivals/departures/on-ground per hour)
+- [ ] MH by Operator horizontal bar chart
+- [ ] Aircraft by Customer donut chart
+- [ ] Operator Performance section (comparison table + share charts) — see OI-015
+- [ ] Data freshness badge in header
+- [ ] All charts use customer colors from `useCustomers()` store
+- [ ] Charts update when filters change
+
+### Key Tasks
+1. KPI card component
+2. Combined bar+line chart (Recharts ComposedChart)
+3. MH by Operator chart
+4. Aircraft by Customer donut
+5. Operator Performance table (KPI-09, KPI-10, KPI-18, KPI-19)
+6. Data freshness badge
+7. Dashboard page assembly
+
+### Files Created (~8)
+See [PLAN.md](PLAN.md) M3 section.
+
+---
+
+## M4: Capacity Modeling
+
+**Goal**: Demand vs capacity visualization with configuration controls.
+
+### Acceptance Criteria
+- [ ] Configuration panel: Default MH slider, WP include/exclude toggle, shift headcounts
+- [ ] Daily utilization chart (color-coded bars: green/yellow/red)
+- [ ] Detail table with pagination (TanStack Table)
+- [ ] Expandable rows (by Customer, by Shift)
+- [ ] CSV export downloads all rows
+- [ ] Config changes recalculate within 500ms
+- [ ] Filters affect demand only; capacity unchanged by customer/aircraft/type filters
+
+### Key Tasks
+1. Configuration panel (sliders, toggles)
+2. Utilization chart (Recharts BarChart)
+3. Detail table (TanStack Table, paginated)
+4. CSV export utility
+5. Capacity page assembly
+
+### Files Created (~6)
+See [PLAN.md](PLAN.md) M4 section.
+
+---
+
+## M5: Account + Settings + Theming
+
+**Goal**: User-facing configuration and personalization.
+
+### Acceptance Criteria
+- [ ] Settings page: demand model, capacity model, shifts, display
+- [ ] Account page: Profile tab (display name editing)
+- [ ] Account page: Preferences tab (color mode, theme preset, accent, timezone, date range, page size)
+- [ ] Account page: Security tab (change password + vNext stubs)
+- [ ] Theme presets work: Classic, Ocean, Lavender, Midnight
+- [ ] Each preset works in Light, Dark, and System color modes
+- [ ] Accent color override applies on top of preset
+- [ ] Notification toggles present as MVP UI (stored but non-functional)
+- [ ] vNext security stubs clearly marked "Coming Soon"
+- [ ] Preferences persist across sessions
+
+### Key Tasks
+1. Settings page (5 sections)
+2. Account page with 3 tabs
+3. Profile form
+4. Preferences form (appearance, notifications, data display)
+5. Security panel (change password + stubs)
+6. Theme preset CSS (4 presets × 3 modes)
+7. Preferences Zustand store
+
+### Files Created (~12)
+See [PLAN.md](PLAN.md) M5 section.
+
+---
+
+## M6: Admin Core (Customers + Users)
+
+**Goal**: Admin section with customer color management and user CRUD.
+
+### Acceptance Criteria
+- [ ] Admin layout with sub-navigation (7 tabs) + role guard
+- [ ] Customer color editor with color picker + hex input
+- [ ] WCAG contrast auto-calculation
+- [ ] Reset Defaults restores seed colors
+- [ ] Color changes propagate to all views
+- [ ] User management: list, create, edit, deactivate
+- [ ] Password reset for users
+- [ ] System settings page (mirrors /settings for admin scope)
+- [ ] Audit log stub (Coming Soon)
+
+### Key Tasks
+1. Admin layout + sub-navigation
+2. Customer color editor component
+3. Contrast calculation utility
+4. User management table + form
+5. Admin API routes (customers, users)
+6. System settings page
+7. Audit log stub page
+
+### Files Created (~14)
+See [PLAN.md](PLAN.md) M6 section.
+
+---
+
+## M7: Admin Data Tools (Aircraft Types + Import)
+
+**Goal**: Admin-controlled data management tools.
+
+### Acceptance Criteria
+- [ ] Aircraft type mapping editor with pattern/canonical/description columns
+- [ ] Test input shows real-time match result
+- [ ] Reset Defaults restores seed mappings
+- [ ] File upload accepts valid OData JSON
+- [ ] Paste-JSON validates and shows preview
+- [ ] Preview shows record count, customer count, aircraft count, date range, warnings
+- [ ] Import commits data and logs to `import_log` table
+- [ ] Import history displayed on page
+- [ ] vNext Power Automate endpoint documented but not implemented
+
+### Key Tasks
+1. Aircraft type editor component + test input
+2. Aircraft type API routes
+3. Data import component (file upload + paste JSON + preview)
+4. Import validation + commit API routes
+5. Import history display
+
+### Files Created (~8)
+See [PLAN.md](PLAN.md) M7 section.
+
+---
+
+## M8: Admin Analytics + Polish + Responsive
+
+**Goal**: System usage analytics, responsive design, and final polish.
+
+### Acceptance Criteria
+- [ ] `/admin/analytics` page: active users, page views, events by type, recent events table
+- [ ] Responsive: desktop (expanded sidebar), tablet (collapsed), mobile (sheet)
+- [ ] Mobile nav sheet, mobile FilterBar sheet
+- [ ] Loading skeletons for all data areas
+- [ ] Empty states with FA icons
+- [ ] Error boundaries per page
+- [ ] All theme presets tested against all components
+- [ ] No FOUC on page load
+- [ ] All pages render without console errors
+
+### Key Tasks
+1. Admin analytics page (usage charts + tables)
+2. Responsive layout adjustments (all pages)
+3. Loading skeleton components
+4. Empty state components
+5. Error boundaries
+6. Final theme preset testing
+7. Cross-browser smoke test
+
+### Files Created (~6)
+See [PLAN.md](PLAN.md) M8 section.
+
+---
+
+## Build Order (Recommended)
+
+| Phase | Milestones | Focus |
+|-------|-----------|-------|
+| Phase 1 | M0 | Foundation: scaffold, DB, auth, layout |
+| Phase 2 | M1 + M5 (parallel) | Data layer + user config |
+| Phase 3 | M2 | Hero page: Flight Board + FilterBar |
+| Phase 4 | M3 + M4 (parallel) | Dashboard + Capacity |
+| Phase 5 | M6 | Admin core |
+| Phase 6 | M7 | Admin data tools |
+| Phase 7 | M8 | Analytics, polish, responsive |
+
+## Detailed Plans
+
+- Implementation task plan: `.claude/PLAN.md`
+- FilterBar integration: `/plan/PLAN-AMENDMENT-001-FILTER-BAR.md`
+- Analytics spec: `.claude/SPECS/REQ_Analytics.md`
+- Auth spec: `.claude/SPECS/REQ_Auth.md`
+- Admin spec: `.claude/SPECS/REQ_Admin.md`
+- Account spec: `.claude/SPECS/REQ_Account.md`
+- Aircraft types spec: `.claude/SPECS/REQ_AircraftTypes.md`
+- Data import spec: `.claude/SPECS/REQ_DataImport.md`

@@ -1,0 +1,378 @@
+# REQ: Flight Board Page
+
+> **What changed and why (2026-02-13):** Updated from photo-driven UI reconciliation pass + user direction on information-dense bars. Bars now show arrival/departure times, registration, and flight ID with progressive disclosure by width. Hover tooltip shows full aircraft/schedule/WP details. Click opens a detail drawer with all linked information and navigation links. Added day-boundary separators, refresh action, toolbar placement, data freshness badge. (D-025)
+> Route: `/flight-board` (default landing page)
+
+## Purpose
+Gantt-style timeline showing aircraft on-ground windows at CVG. Primary operational view.
+
+## Filters
+Uses the global FilterBar. See [REQ_Filters.md](REQ_Filters.md) for full spec.
+
+## Layout
+
+Derived from CargoJet flight board reference + CVG Line Maintenance dashboard Gantt section:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ FILTER BAR (7 fields — see REQ_Filters.md)                            │
+├──────────────────────────────────────────────────────────────────────┤
+│ TOOLBAR: [6h][12h][1d][3d][1w]  [🔍+][🔍-]     [🔄 Refresh]         │
+├──────────┬───────────────────────────────────────────────────────────┤
+│          │  ┊ FRIDAY             ┊ SATURDAY            ┊ SUNDAY     │
+│ AIRCRAFT │  7   11   15   19   23┊ 3   7   11   15   19┊ 3   7 ... │
+│ (Y-axis) │  ┊                    ┊                     ┊            │
+│ C-FOIJ   │ ┌05:38─── C-FOIJ CJT507 ──────────10:00┐               │
+│          │ └▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓┘               │
+│ N774CK   │       ┌05:41── N774CK CJT917 ──08:00┐                   │
+│          │       └▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓┘                   │
+│ C-FHCJ   │  ┌▓▓▓┐                                                   │
+│ ...      │  ┊                    ┊                     ┊            │
+├──────────┴───────────────────────────────────────────────────────────┤
+│ LEGEND: ● CargoJet  ● Aerologic  ● Kalitta  ● DHL  ...              │
+├──────────────────────────────────────────────────────────────────────┤
+│ Data freshness: "Last import: Feb 13, 14:30 UTC"                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Layout Features (from reference images + user direction)
+- **Information-dense bars**: Each bar shows as much data as fits — registration, arrival/departure times, flight ID
+- **Day labels across top**: Day names (FRIDAY, SATURDAY, etc.) span the timeline above hour marks
+- **Day-boundary separators**: Dashed vertical lines at midnight between days
+- **Toolbar between FilterBar and Gantt**: Zoom presets + refresh action
+- **Legend below Gantt**: Horizontal row of colored dots with customer labels
+- **Data freshness badge**: Bottom of the page, shows last import timestamp
+- **Hover**: Rich tooltip with full aircraft/schedule/work package details
+- **Click**: Opens detail panel with all linked information
+
+## Gantt Specifications
+
+- **Library**: Apache ECharts via `echarts-for-react` (D-008)
+- **Renderer**: Canvas (default) — smooth, performant, dark-theme-friendly
+- **Approach**: Custom series with `renderItem` — based on ECharts' official `custom-gantt-flight` example
+- **Y-axis**: Category axis — aircraft registrations, sorted by earliest arrival
+- **X-axis**: Time axis — viewport determined by filter start/end dates
+- **Bars**: Colored by customer via `renderItem` with inline `itemStyle.color`
+- **Bar width**: Proportional to ground time duration
+- **Scales**: Auto-formatted by ECharts time axis (day labels + hour marks)
+- **SSR**: Must use `dynamic(() => import(...), { ssr: false })` — ECharts requires `window`
+
+## ECharts Configuration Pattern
+
+```typescript
+// Conceptual option structure (adapted from custom-gantt-flight example)
+const option: EChartsOption = {
+  tooltip: {
+    formatter: (params) => customHTMLTooltip(params.data)
+  },
+  grid: { /* main chart area */ },
+  xAxis: { type: 'time', /* start/end from filters */ },
+  yAxis: { type: 'category', data: registrations, inverse: true },
+  dataZoom: [
+    { type: 'slider', xAxisIndex: 0 },     // horizontal scroll bar
+    { type: 'inside', xAxisIndex: 0 },      // drag-to-pan + scroll-to-zoom
+  ],
+  series: [{
+    type: 'custom',
+    renderItem: renderFlightBar,            // custom bar renderer
+    encode: { x: [1, 2], y: 0 },           // arrival→departure on X, registration on Y
+    data: flightData                        // [regIndex, arrivalTs, departureTs, ...metadata]
+  }]
+};
+```
+
+## Zoom Levels
+
+Achieved via `dataZoom` — user scrolls/drags to zoom continuously. Toolbar buttons set preset ranges:
+
+| Level | Visible Range | Granularity |
+|-------|--------------|-------------|
+| 6h | 6 hours | 30-min marks |
+| 12h | 12 hours | 1-hour marks |
+| 1d | 24 hours | 3-hour marks |
+| 3d (default) | 72 hours | 3-hour marks |
+| 1w | 7 days | 6-hour marks |
+
+Toolbar buttons call `dataZoom.setOption()` with calculated `start`/`end` percentages.
+
+## Tooltip (on hover)
+
+Rich tooltip appears on hover with detailed aircraft, schedule, and work package info. ECharts `tooltip.formatter` returns an HTML string. Styled with dark background, white text, consistent with app theme.
+
+### Tooltip Layout
+
+```
+┌─────────────────────────────────────┐
+│ C-FOIJ                    CargoJet  │  ← Registration + Customer (bold, colored dot)
+│─────────────────────────────────────│
+│ Flight:    CJT507                   │
+│ Arrival:   Feb 7, 05:38 UTC         │
+│ Departure: Feb 9, 10:00 UTC         │
+│ Ground:    52h 22m                   │
+│─────────────────────────────────────│
+│ Status:    New                       │
+│ WP #:      —                         │  ← or actual WP number if present
+│ Man-Hours: 3.0 MH (default)         │
+│─────────────────────────────────────│
+│ "Please date for the 7th."          │  ← Calendar comments (if present)
+│─────────────────────────────────────│
+│ Click for full details →            │  ← hint to user
+└─────────────────────────────────────┘
+```
+
+### Tooltip Fields
+
+| Section | Field | Source | Format | Example |
+|---------|-------|--------|--------|---------|
+| Header | Registration | `aircraftReg` | Bold, large | C-FOIJ |
+| Header | Customer | `customer` | With color dot | CargoJet Airways |
+| Schedule | Flight ID | `flightId` | — | CJT507 |
+| Schedule | Arrival | `arrival` | Formatted in selected TZ | Feb 7, 05:38 UTC |
+| Schedule | Departure | `departure` | Formatted in selected TZ | Feb 9, 10:00 UTC |
+| Schedule | Ground Time | computed | HH:MM or Xh Ym | 52h 22m |
+| Work Package | Status | `status` | — | New / Approved |
+| Work Package | WP Number | `workpackageNo` | — or "—" if null | MS28782-14 |
+| Work Package | Man-Hours | `effectiveMH` + source | Value + source label | 3.0 MH (default) |
+| Notes | Comments | `calendarComments` | HTML stripped to text, truncated 100ch | "Please date for the 7th." |
+| Footer | Click hint | static | Subtle gray text | "Click for full details →" |
+
+### Tooltip Styling
+- Background: `--popover` token (dark)
+- Text: `--popover-foreground` (white/light)
+- Max width: 320px
+- Customer color dot: 8px circle matching customer color
+- Section dividers: 1px border in `--border` color
+- Comments section: italic, slightly smaller font
+- Click hint: muted foreground color, 11px
+
+## renderItem Function (Conceptual)
+
+```typescript
+function renderFlightBar(params, api) {
+  const regIndex = api.value(0);
+  const arrival = api.coord([api.value(1), regIndex]);
+  const departure = api.coord([api.value(2), regIndex]);
+  const barWidth = departure[0] - arrival[0];
+  const barHeight = api.size([0, 1])[1] * 0.6;
+  const customerColor = colorMap[api.value(3)]; // from useCustomers()
+  const registration = api.value(4);
+  const flightId = api.value(5);
+  const arrivalTime = formatTime(api.value(1)); // HH:MM in selected TZ
+  const departureTime = formatTime(api.value(2));
+
+  const rect = clipRectByRect(
+    { x: arrival[0], y: arrival[1] - barHeight / 2, width: barWidth, height: barHeight },
+    { x: params.coordSys.x, y: params.coordSys.y, width: params.coordSys.width, height: params.coordSys.height }
+  );
+
+  if (!rect) return;
+
+  const children = [
+    // Background rectangle
+    { type: 'rect', shape: rect, style: { fill: customerColor, stroke: '#000', lineWidth: 0.5 } }
+  ];
+
+  const centerY = rect.y + barHeight / 2;
+
+  if (barWidth > 150) {
+    // WIDE: arrival + registration · flightId + departure
+    const centerLabel = flightId ? `${registration}  ·  ${flightId}` : registration;
+    children.push(
+      { type: 'text', style: { text: arrivalTime, x: rect.x + 4, y: centerY, fill: 'rgba(255,255,255,0.85)', fontSize: 9, verticalAlign: 'middle' } },
+      { type: 'text', style: { text: centerLabel, x: rect.x + barWidth / 2, y: centerY, fill: '#fff', fontSize: 10, fontWeight: 'bold', align: 'center', verticalAlign: 'middle' } },
+      { type: 'text', style: { text: departureTime, x: rect.x + barWidth - 4, y: centerY, fill: 'rgba(255,255,255,0.85)', fontSize: 9, align: 'right', verticalAlign: 'middle' } }
+    );
+  } else if (barWidth > 100) {
+    // MEDIUM: registration + flightId
+    const label = flightId ? `${registration} · ${flightId}` : registration;
+    children.push(
+      { type: 'text', style: { text: label, x: rect.x + barWidth / 2, y: centerY, fill: '#fff', fontSize: 10, fontWeight: 'bold', align: 'center', verticalAlign: 'middle' } }
+    );
+  } else if (barWidth > 50) {
+    // NARROW: registration only
+    children.push(
+      { type: 'text', style: { text: registration, x: rect.x + barWidth / 2, y: centerY, fill: '#fff', fontSize: 9, align: 'center', verticalAlign: 'middle', overflow: 'truncate', width: barWidth - 8 } }
+    );
+  }
+  // VERY NARROW (<50px): no text, tooltip only
+
+  return { type: 'group', children };
+}
+```
+
+## Toolbar (above Gantt, below FilterBar)
+- Zoom preset buttons: 6h / 12h / 1d / 3d / 1w
+- Zoom in/out: `fa-solid fa-magnifying-glass-plus` / `fa-solid fa-magnifying-glass-minus`
+- Refresh button: `fa-solid fa-arrows-rotate` — re-fetches data from API (confirmed by CargoJet "Refresh Sched" button in reference image 1)
+- Note: Date range and entity filters in FilterBar (per D-004)
+
+## Day Labels and Separators
+- **Day labels**: Rendered above the time axis showing day names (FRIDAY, SATURDAY, SUNDAY, etc.)
+- **Midnight separators**: Dashed vertical lines at 00:00 boundaries between days — confirmed by CVG dashboard reference (images 3/4)
+- Implementation: ECharts `markLine` or custom `renderItem` group for separators; day labels via secondary axis or annotation
+
+## Bar Content (Information-Dense)
+
+Bars display as much information as the available width allows. Content is rendered via ECharts `renderItem` as a group of text elements on the colored rectangle.
+
+### Bar Layout (Wide — >150px rendered width)
+
+```
+┌──────────────────────────────────────────────────────┐
+│ 05:38   C-FOIJ  ·  CJT507                    10:00  │
+└──────────────────────────────────────────────────────┘
+```
+
+| Position | Content | Font | Alignment |
+|----------|---------|------|-----------|
+| Left edge (inside, padded 4px) | Arrival time (HH:MM in selected TZ) | 9px, white, regular | Left |
+| Center | Registration + Flight ID (separated by ` · `) | 10px, white, bold | Center |
+| Right edge (inside, padded 4px) | Departure time (HH:MM in selected TZ) | 9px, white, regular | Right |
+
+### Progressive Disclosure by Bar Width
+
+| Bar Width (px) | Content Shown |
+|----------------|---------------|
+| **>150px** (wide) | Arrival time + Registration + Flight ID + Departure time |
+| **100–150px** (medium) | Registration + Flight ID (centered) |
+| **50–100px** (narrow) | Registration only (centered, truncated) |
+| **<50px** (very narrow) | No text — tooltip on hover only |
+
+### Text Styling
+- All text: white (`#ffffff`) on customer-colored background
+- Registration: bold, 10px
+- Times: regular weight, 9px, slightly translucent (`rgba(255,255,255,0.85)`)
+- Flight ID: regular weight, 9px
+- If `flightId` is null/empty, omit (show registration only in center)
+- Vertical centering within bar height
+
+## Legend (below Gantt)
+- ECharts built-in legend component or custom horizontal row of colored dots with customer labels
+- Customer colors from `useCustomers()` store (D-010) — not hardcoded
+
+## Click-to-Detail (Bar Click)
+
+Clicking a bar opens a **detail drawer** (shadcn/ui Sheet, slides in from right) showing full information about that work package with navigation links to related data.
+
+### Detail Drawer Layout
+
+```
+┌─────────────────────────────────────────┐
+│ Work Package Detail              [✕]    │
+│─────────────────────────────────────────│
+│                                          │
+│ AIRCRAFT                                 │
+│ ┌───────────────────────────────────────┐│
+│ │ Registration:  C-FOIJ                 ││
+│ │ Customer:      CargoJet Airways  ●    ││
+│ │ Type:          B767 (inferred)        ││
+│ │ → View all C-FOIJ work packages       ││ ← link: filters to this aircraft
+│ └───────────────────────────────────────┘│
+│                                          │
+│ SCHEDULE                                 │
+│ ┌───────────────────────────────────────┐│
+│ │ Flight ID:     CJT507                 ││ ← link if available
+│ │ Arrival:       Feb 7, 2026 05:38 UTC  ││
+│ │ Departure:     Feb 9, 2026 10:00 UTC  ││
+│ │ Ground Time:   52h 22m                ││
+│ │ Status:        New                    ││
+│ └───────────────────────────────────────┘│
+│                                          │
+│ WORK PACKAGE                             │
+│ ┌───────────────────────────────────────┐│
+│ │ WP Number:     —                      ││
+│ │ Has WP:        No                     ││
+│ │ Man-Hours:     3.0 MH (default)       ││
+│ │ MH Source:     Default (TotalMH null) ││
+│ │ WP Assets:     [Open in SharePoint →] ││ ← external link to WP assets URL
+│ └───────────────────────────────────────┘│
+│                                          │
+│ NOTES                                    │
+│ ┌───────────────────────────────────────┐│
+│ │ "Please date for the 7th."            ││
+│ └───────────────────────────────────────┘│
+│                                          │
+│ LINKED INFORMATION                       │
+│ ┌───────────────────────────────────────┐│
+│ │ → All CJT507 flights (filter by ID)  ││
+│ │ → All C-FOIJ visits (filter by reg)  ││
+│ │ → All CargoJet WPs (filter by oper)  ││
+│ │ → Open WP assets folder              ││ ← external link
+│ └───────────────────────────────────────┘│
+│                                          │
+│ ┌───────────────────────────────────────┐│
+│ │ ID: 9181  Created: Feb 5, 14:17 UTC  ││ ← metadata footer
+│ └───────────────────────────────────────┘│
+└─────────────────────────────────────────┘
+```
+
+### Detail Drawer Fields
+
+| Section | Field | Source | Notes |
+|---------|-------|--------|-------|
+| Aircraft | Registration | `aircraftReg` | Bold, large |
+| Aircraft | Customer | `customer` | With color dot |
+| Aircraft | Type | `inferredType` | With "(inferred)" label if from mapping table |
+| Schedule | Flight ID | `flightId` | Link: filters Gantt to all WPs with this flight ID |
+| Schedule | Arrival | `arrival` | Formatted in selected timezone |
+| Schedule | Departure | `departure` | Formatted in selected timezone |
+| Schedule | Ground Time | computed | HH:MM format |
+| Schedule | Status | `status` | Badge styling |
+| Work Package | WP Number | `workpackageNo` | "—" if null |
+| Work Package | Has WP | `hasWorkpackage` | Yes/No badge |
+| Work Package | Man-Hours | `effectiveMH` | With source explanation |
+| Work Package | MH Source | computed | "Override" / "WP MH" / "Default (TotalMH null)" |
+| Work Package | WP Assets | `workpackageAssets.Url` | External link (opens in new tab) |
+| Notes | Comments | `calendarComments` | HTML rendered, full text (not truncated) |
+| Links | All flights for this Flight ID | — | Navigates to `/flight-board?flightId=CJT507` or filters |
+| Links | All visits for this registration | — | Navigates to `/flight-board?ac=C-FOIJ` |
+| Links | All WPs for this customer | — | Navigates to `/flight-board?op=CargoJet+Airways` |
+| Links | WP assets folder | `workpackageAssets.Url` | External link |
+| Metadata | Record ID | `id` | Small, muted text |
+| Metadata | Created | `created` | Formatted date |
+
+### Behavior
+- **Open**: ECharts `click` event handler → sets selected WP ID in state → Sheet opens
+- **Close**: X button, Escape key, or click outside
+- **Links**: "View all X" links apply the relevant filter to the global FilterBar and close the drawer
+- **External links**: Open in new tab (`target="_blank"`, `rel="noopener"`)
+- **Keyboard**: Escape closes, Tab navigates through links
+
+## Data Flow
+```
+FilterBar → useFilters() → fetch /api/work-packages?start=&end=&op=&ac=&type=
+         → useWorkPackages() → toEChartsData() → ECharts custom series
+                                                   ↓ (bar click)
+                                            FlightDetailDrawer opens
+                                                   ↓ (link click)
+                                            FilterBar updated → Gantt re-renders
+```
+
+## Components
+| Component | File | Purpose |
+|-----------|------|---------|
+| `FlightBoardChart` | `src/components/flight-board/flight-board-chart.tsx` | ECharts wrapper (dynamic import, ssr: false) |
+| `GanttToolbar` | `src/components/flight-board/gantt-toolbar.tsx` | Zoom preset buttons + refresh |
+| `FlightTooltip` | `src/components/flight-board/flight-tooltip.tsx` | HTML tooltip formatter function |
+| `FlightDetailDrawer` | `src/components/flight-board/flight-detail-drawer.tsx` | Click-to-detail Sheet with all WP info + links |
+
+## Next.js Integration Notes
+- Add `transpilePackages: ['echarts', 'zrender']` to `next.config.js`
+- Use tree-shaken imports via `echarts/core` to reduce bundle (~120-150 KB gz vs ~330 KB full)
+- ECharts built-in `'dark'` theme aligns with app dark mode; switch theme on `next-themes` change
+- ECharts and Recharts coexist without conflict (independent renderers)
+
+## Performance Expectations
+- Render 57 aircraft rows × 86 work packages without stutter
+- Canvas renderer handles high point counts efficiently (confirmed by ECharts architecture)
+- `dataZoom` provides smooth pan/zoom without re-rendering the entire chart
+- Dynamic import (`ssr: false`) prevents server-side rendering issues
+- Lazy rendering: ECharts only renders visible bars in the viewport; off-screen bars are culled
+
+## Reference
+- ECharts flight Gantt example: https://echarts.apache.org/examples/en/editor.html?c=custom-gantt-flight
+- CargoJet flight board screenshot: `.claude/assets/img/airways.cargojet.com_ords_f_p=1122_92_*.png`
+- CVG Line Maintenance dashboard Gantt: `.claude/assets/img/Screenshot 2026-02-13 16060*.png`
+- [UI_REFERENCE_MAP.md](../UI/UI_REFERENCE_MAP.md) — images 1, 3, 4
+- CargoJet HAR analysis: [REQ_DataSources.md](REQ_DataSources.md) → HAR section
+- CargoJet uses Oracle JET `ojGantt` v14.0.0 — our ECharts approach recreates the same visual pattern
