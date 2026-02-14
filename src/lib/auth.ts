@@ -4,10 +4,39 @@ import { compareSync } from "bcryptjs";
 import { db } from "./db/client";
 import { users } from "./db/schema";
 import { eq } from "drizzle-orm";
-import { authConfig } from "./auth.config";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  ...authConfig,
+  pages: {
+    signIn: "/login",
+  },
+  callbacks: {
+    authorized({ auth, request }) {
+      const isLoggedIn = !!auth?.user;
+      const isOnLogin = request.nextUrl.pathname === "/login";
+
+      if (isOnLogin) {
+        return isLoggedIn
+          ? Response.redirect(new URL("/dashboard", request.nextUrl))
+          : true;
+      }
+
+      return isLoggedIn;
+    },
+    jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.role = (user as { role: string }).role;
+      }
+      return token;
+    },
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+        (session.user as { role: string }).role = token.role as string;
+      }
+      return session;
+    },
+  },
   providers: [
     Credentials({
       name: "credentials",
@@ -47,4 +76,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
+  session: {
+    strategy: "jwt",
+  },
 });
