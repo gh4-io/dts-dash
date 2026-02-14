@@ -81,6 +81,9 @@ data/dashboard.db-wal
 *.key
 *.pem
 
+# Font Awesome source archive (extracted)
+Font.Awesome.Pro.v6.5.1-Aetherx/
+
 # Temporary files
 *.tmp
 *.bak

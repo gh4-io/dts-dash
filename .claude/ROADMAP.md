@@ -7,13 +7,14 @@
 
 ## Current Focus
 
-**Milestone 0**: Project scaffold — dependencies, database, auth, base layout.
+**Milestone 1**: Data layer + API routes (next up).
+**Milestone 0**: Complete ✅
 
 ## Milestones
 
 | ID | Name | Scope | Status | Size | Dependencies |
 |----|------|-------|--------|------|-------------|
-| M0 | Scaffold + Database + Auth | Foundation | **Next** | L | None |
+| M0 | Scaffold + Database + Auth | Foundation | **Done** ✅ | L | None |
 | M1 | Data Layer + API Routes | Data foundation | Planned | M | M0 |
 | M2 | FilterBar + Flight Board | First visual page | Planned | L | M1 |
 | M3 | Statistics Dashboard | Second visual page | Planned | M | M1 |
@@ -45,16 +46,16 @@ M2, M3, M4 can be worked on in parallel after M1. M5 can start in parallel with 
 **Goal**: Bootable app with auth, base layout, and all infrastructure.
 
 ### Acceptance Criteria
-- [ ] `npm run dev` serves app on localhost:3000
-- [ ] `npm run build` passes clean
-- [ ] SQLite database created at `data/dashboard.db` with all tables
-- [ ] Seed data loaded (2 users, 6 customers, default type mappings)
-- [ ] Login page renders; auth flow works (login/logout)
-- [ ] Protected routes redirect to `/login` when not authenticated
-- [ ] Admin routes return 403 for non-admin users
-- [ ] Base layout renders (sidebar, header with user menu, theme toggle)
-- [ ] Font Awesome icons render correctly
-- [ ] Dark theme is default; light mode toggle works
+- [x] `npm run dev` serves app on localhost:3000
+- [x] `npm run build` passes clean
+- [x] SQLite database created at `data/dashboard.db` with all tables
+- [x] Seed data loaded (2 users, 6 customers, default type mappings)
+- [x] Login page renders; auth flow works (login/logout)
+- [x] Protected routes redirect to `/login` when not authenticated
+- [ ] Admin routes return 403 for non-admin users *(deferred to M6 — admin layout + role guard)*
+- [x] Base layout renders (sidebar, header with user menu, theme toggle)
+- [x] Font Awesome icons render correctly
+- [x] Dark theme is default; light mode toggle works
 
 ### Key Tasks
 1. `create-next-app` + dependencies (shadcn/ui, ECharts, Zustand, Auth.js, Drizzle, etc.)
