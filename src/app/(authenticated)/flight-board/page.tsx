@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useCallback, useRef, useMemo } from "react";
+import { Suspense, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
@@ -25,16 +25,18 @@ const FlightBoardChart = dynamic(
   { ssr: false, loading: () => <LoadingSkeleton variant="chart" /> }
 );
 
-function getStoredExpanded(): boolean {
-  if (typeof window === "undefined") return false;
-  return localStorage.getItem("flightBoardExpanded") === "true";
-}
-
 function FlightBoardPageInner() {
   const [zoomLevel, setZoomLevel] = useState("all");
   const [selectedWp, setSelectedWp] = useState<SerializedWorkPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(getStoredExpanded);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Sync from localStorage after hydration to avoid mismatch
+  useEffect(() => {
+    const stored = localStorage.getItem("flightBoardExpanded");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
+    if (stored === "true") setIsExpanded(true);
+  }, []);
   const [viewOpen, setViewOpen] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const chartRef = useRef<FlightBoardChartHandle>(null);
@@ -134,7 +136,10 @@ function FlightBoardPageInner() {
   ];
 
   return (
-    <div className="space-y-3">
+    <div className={cn(
+      "flex flex-col gap-3",
+      !isExpanded && "h-full min-h-0"
+    )}>
       <TopMenuBar
         title="Flight Board"
         icon="fa-solid fa-plane-departure"
@@ -235,7 +240,10 @@ function FlightBoardPageInner() {
       ) : isLoading ? (
         <LoadingSkeleton variant="chart" />
       ) : (
-        <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className={cn(
+          "rounded-lg border border-border bg-card overflow-hidden",
+          !isExpanded && "flex-1 min-h-0 flex flex-col"
+        )}>
           <FlightBoardChart
             ref={chartRef}
             workPackages={transformedWps}
@@ -254,13 +262,13 @@ function FlightBoardPageInner() {
       )}
 
       {/* Interaction hints */}
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-[11px] text-muted-foreground flex-shrink-0">
         Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
       </p>
 
       {/* Legend */}
       {customers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4 px-1">
+        <div className="flex flex-wrap items-center gap-4 px-1 flex-shrink-0">
           {customers
             .filter((c) => c.isActive)
             .map((c) => (
