@@ -1,23 +1,26 @@
 # REQ: Flight Board Page
 
-> **What changed and why (2026-02-13):** Updated from photo-driven UI reconciliation pass + user direction on information-dense bars. Bars now show arrival/departure times, registration, and flight ID with progressive disclosure by width. Hover tooltip shows full aircraft/schedule/WP details. Click opens a detail drawer with all linked information and navigation links. Added day-boundary separators, refresh action, toolbar placement, data freshness badge. (D-025)
+> **What changed and why (2026-02-14):** Major UI refactor replacing FilterBar + GanttToolbar with TopMenuBar architecture. Added ActionsMenu with sort/group/highlight/columns/control-break dialogs, active filter chips, and FlightBoardFormatPanel. Aircraft type now displayed in tooltips (OI-003). Updated layout diagram to reflect current implementation.
+>
+> **Prior change (2026-02-13):** Updated from photo-driven UI reconciliation pass + user direction on information-dense bars. Bars now show arrival/departure times, registration, and flight ID with progressive disclosure by width. Hover tooltip shows full aircraft/schedule/WP details. Click opens a detail drawer with all linked information and navigation links. Added day-boundary separators, refresh action, toolbar placement, data freshness badge. (D-025)
+>
 > Route: `/flight-board` (default landing page)
 
 ## Purpose
 Gantt-style timeline showing aircraft on-ground windows at CVG. Primary operational view.
 
 ## Filters
-Uses the global FilterBar. See [REQ_Filters.md](REQ_Filters.md) for full spec.
+Uses TopMenuBar with filter dropdowns and active filter chips. See [REQ_Filters.md](REQ_Filters.md) for full spec and [UI_FILTER_PATTERNS.md](../UI/UI_FILTER_PATTERNS.md) for component patterns.
 
 ## Layout
 
-Derived from CargoJet flight board reference + CVG Line Maintenance dashboard Gantt section:
+Current implementation with TopMenuBar architecture:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ FILTER BAR (7 fields — see REQ_Filters.md)                            │
+│ TOP MENU BAR: [Filters ▾] [Actions ▾] [Format ▾]   [◐] [≡] [@User] │
 ├──────────────────────────────────────────────────────────────────────┤
-│ TOOLBAR: [6h][12h][1d][3d][1w]  [🔍+][🔍-]     [🔄 Refresh]         │
+│ Active Filters: [✕ CargoJet] [✕ B767, B777] [Clear All]             │
 ├──────────┬───────────────────────────────────────────────────────────┤
 │          │  ┊ FRIDAY             ┊ SATURDAY            ┊ SUNDAY     │
 │ AIRCRAFT │  7   11   15   19   23┊ 3   7   11   15   19┊ 3   7 ... │
@@ -35,14 +38,17 @@ Derived from CargoJet flight board reference + CVG Line Maintenance dashboard Ga
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Layout Features (from reference images + user direction)
+### Key Layout Features
+- **TopMenuBar**: Single-row menu with Filter/Actions/Format dropdowns + theme toggle + mobile nav + user menu
+- **Active Filter Chips**: Dismissible pills showing active filters with X to remove (only shown when filters applied)
 - **Information-dense bars**: Each bar shows as much data as fits — registration, arrival/departure times, flight ID
 - **Day labels across top**: Day names (FRIDAY, SATURDAY, etc.) span the timeline above hour marks
 - **Day-boundary separators**: Dashed vertical lines at midnight between days
-- **Toolbar between FilterBar and Gantt**: Zoom presets + refresh action
+- **Format Panel**: Popover with zoom controls (6h/12h/1d/3d/1w presets, +/-/Now/Reset buttons) and expanded mode toggle
+- **Actions Menu**: Dropdown with Sort, Group By, Highlight, Columns, Control Break dialogs
 - **Legend below Gantt**: Horizontal row of colored dots with customer labels
 - **Data freshness badge**: Bottom of the page, shows last import timestamp
-- **Hover**: Rich tooltip with full aircraft/schedule/work package details
+- **Hover**: Rich tooltip with full aircraft/schedule/work package details including aircraft type
 - **Click**: Opens detail panel with all linked information
 
 ## Gantt Specifications
@@ -104,6 +110,7 @@ Rich tooltip appears on hover with detailed aircraft, schedule, and work package
 ```
 ┌─────────────────────────────────────┐
 │ C-FOIJ                    CargoJet  │  ← Registration + Customer (bold, colored dot)
+│ B767                                │  ← Aircraft Type (OI-003)
 │─────────────────────────────────────│
 │ Flight:    CJT507                   │
 │ Arrival:   Feb 7, 05:38 UTC         │
@@ -126,6 +133,7 @@ Rich tooltip appears on hover with detailed aircraft, schedule, and work package
 |---------|-------|--------|--------|---------|
 | Header | Registration | `aircraftReg` | Bold, large | C-FOIJ |
 | Header | Customer | `customer` | With color dot | CargoJet Airways |
+| Header | Aircraft Type | `aircraftType` | Below registration | B767 |
 | Schedule | Flight ID | `flightId` | — | CJT507 |
 | Schedule | Arrival | `arrival` | Formatted in selected TZ | Feb 7, 05:38 UTC |
 | Schedule | Departure | `departure` | Formatted in selected TZ | Feb 9, 10:00 UTC |
@@ -200,11 +208,13 @@ function renderFlightBar(params, api) {
 }
 ```
 
-## Toolbar (above Gantt, below FilterBar)
+## Format Panel (Popover from TopMenuBar)
 - Zoom preset buttons: 6h / 12h / 1d / 3d / 1w
-- Zoom in/out: `fa-solid fa-magnifying-glass-plus` / `fa-solid fa-magnifying-glass-minus`
-- Refresh button: `fa-solid fa-arrows-rotate` — re-fetches data from API (confirmed by CargoJet "Refresh Sched" button in reference image 1)
-- Note: Date range and entity filters in FilterBar (per D-004)
+- Zoom controls: Zoom In (+) / Zoom Out (-) / Now / Reset
+- Expanded mode toggle: Full-width chart when enabled
+- Refresh button: `fa-solid fa-arrows-rotate` — re-fetches data from API (window.location.reload)
+- Programmatic zoom API: Chart exposes `dispatchZoom(start, end)` and `getZoomRange()` methods via ref
+- Note: Date range and entity filters in FilterDropdown (per D-024)
 
 ## Day Labels and Separators
 - **Day labels**: Rendered above the time axis showing day names (FRIDAY, SATURDAY, SUNDAY, etc.)
@@ -351,10 +361,15 @@ FilterBar → useFilters() → fetch /api/work-packages?start=&end=&op=&ac=&type
 ## Components
 | Component | File | Purpose |
 |-----------|------|---------|
-| `FlightBoardChart` | `src/components/flight-board/flight-board-chart.tsx` | ECharts wrapper (dynamic import, ssr: false) |
-| `GanttToolbar` | `src/components/flight-board/gantt-toolbar.tsx` | Zoom preset buttons + refresh |
-| `FlightTooltip` | `src/components/flight-board/flight-tooltip.tsx` | HTML tooltip formatter function |
+| `FlightBoardChart` | `src/components/flight-board/flight-board-chart.tsx` | ECharts wrapper (dynamic import, ssr: false) with zoom API |
+| `FlightBoardFormatPanel` | `src/components/flight-board/flight-board-format-panel.tsx` | Popover with zoom controls and expanded mode toggle |
+| `FlightTooltip` | `src/components/flight-board/flight-tooltip.ts` | HTML tooltip formatter function with aircraft type |
 | `FlightDetailDrawer` | `src/components/flight-board/flight-detail-drawer.tsx` | Click-to-detail Sheet with all WP info + links |
+| `TopMenuBar` | `src/components/shared/top-menu-bar.tsx` | Single-row menu with Filter/Actions/Format dropdowns |
+| `FilterDropdown` | `src/components/shared/filter-dropdown.tsx` | Filter controls in dropdown panel |
+| `ActionsMenu` | `src/components/shared/actions-menu.tsx` | Dropdown with Sort/Group/Highlight/Columns/Break dialogs |
+| `FormatDropdown` | `src/components/shared/format-dropdown.tsx` | Zoom controls and display options |
+| `ActiveChips` | `src/components/shared/active-chips.tsx` | Dismissible filter pills below TopMenuBar |
 
 ## Next.js Integration Notes
 - Add `transpilePackages: ['echarts', 'zrender']` to `next.config.js`

@@ -37,20 +37,19 @@
 
 ---
 
-## OI-003 | Aircraft Type Normalization Rules — UPDATED
+## OI-003 | ~~Aircraft Type Normalization Rules~~ RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Question |
-| **Status** | **Updated** — partially addressed by D-015 |
-| **Priority** | P2 — mitigated by admin-editable mapping |
-| **Owner** | User + Claude |
+| **Status** | **Resolved** |
+| **Priority** | ~~P2~~ |
+| **Owner** | Claude |
 | **Created** | 2026-02-13 |
-| **Updated** | 2026-02-13 |
-| **Context** | ~~Deprecated — registration-prefix inference is no longer the primary logic.~~ Aircraft type is sourced from admin-controlled mapping (D-015). **Key finding**: review of input.json shows NO aircraft type field in inbound data — the `Aircraft` object only contains `Title` (registration). Type resolution depends entirely on the admin mapping table. |
-| **Mitigation** | D-015 adds an admin-editable aircraft type mapping table with pattern matching. Since there's no type field in data, seed rules must map by **registration pattern** (e.g., `C-F*` → B767, `C-G*` → B767 for CargoJet fleet) or admin manual classification. Unknown registrations fall back to "Unknown" type. Admin can add rules without code changes. |
-| **Remaining** | User should review seed mapping rules against actual fleet roster and add registration-to-type patterns via the Admin UI. The mapping table design should support both type-string patterns AND registration patterns. |
-| **Links** | [REQ_DataModel.md](SPECS/REQ_DataModel.md), [REQ_Admin.md](SPECS/REQ_Admin.md), [REQ_AircraftTypes.md](SPECS/REQ_AircraftTypes.md), [DECISIONS.md](DECISIONS.md) D-015, [RISKS.md](DEV/RISKS.md) R4, OI-019 |
+| **Resolved** | 2026-02-14 |
+| **Context** | Aircraft type is sourced from admin-controlled mapping (D-015). Review of input.json shows NO aircraft type field in inbound data — the `Aircraft` object only contains `Title` (registration). Type resolution depends entirely on the admin mapping table. Initial seed data had regex patterns (`^C-F`, `^N77[0-9]`) that were being escaped by `matchesPattern` function, causing all 57 aircraft to resolve to "Unknown". |
+| **Resolution** | **Fix 1:** Updated seed data to use wildcard patterns (`C-F*`, `N77?CK`, `*777*`) instead of regex, matching the `matchesPattern` function's design. **Fix 2:** Added comprehensive registration-based patterns for all customers: CargoJet (C-F*, C-G* → B767), Aerologic (D-AA*, D-AER* → B777), DHL Air UK (G-DHL*, G-DHM* → B767), Kalitta (N77?CK → B777, N76?CK → B767, N74/78/79?CK → B747, N2/3/4* → B767). Result: All 57 aircraft now resolve correctly (B747: 4, B767: 31, B777: 22). **Fix 3:** Made filter dropdowns dynamic — extract unique types from work packages instead of hardcoded `["B777", "B767", "B747", "B757", "B737"]`. **Fix 4:** Added aircraft type display to flight board tooltips (shows below registration). Database re-seeded with 24 mappings. |
+| **Links** | [REQ_DataModel.md](SPECS/REQ_DataModel.md), [REQ_AircraftTypes.md](SPECS/REQ_AircraftTypes.md), [seed-data.ts](../src/lib/db/seed-data.ts), [aircraft-type.ts](../src/lib/utils/aircraft-type.ts), D-015, R4 |
 
 ---
 
@@ -474,14 +473,30 @@
 
 ---
 
+## OI-030 | Project Steward Skill Created — 2026-02-14
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | Created Project Steward skill system: session workflow enforcement, doc authority chain, auto-commit policy, phase_commit.sh, feature_intake.sh. Integrated into CLAUDE.md, README.md, DEV_COMMANDS.md. |
+| **Resolution** | All deliverables written to disk: `.claude/SKILLS/PROJECT_STEWARD.md`, `.claude/SKILLS/AUTO_COMMIT_POLICY.md`, `scripts/phase_commit.sh`, `scripts/feature_intake.sh`. CLAUDE.md updated with Project Steward section and OPEN_ITEMS verbatim rule. README.md updated with SKILLS/ directory. DEV_COMMANDS.md updated with git setup and script instructions. |
+| **Links** | [PROJECT_STEWARD.md](SKILLS/PROJECT_STEWARD.md), [AUTO_COMMIT_POLICY.md](SKILLS/AUTO_COMMIT_POLICY.md), [DEV_COMMANDS.md](DEV/DEV_COMMANDS.md) |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 10 |
-| P1 | 0 | 0 | 0 | 8 |
-| P2 | 0 | 1 | 0 | 9 |
+| P1 | 0 | 0 | 0 | 9 |
+| P2 | 0 | 0 | 0 | 10 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **1** | **2** | **27** |
+| **Total** | **0** | **0** | **2** | **29** |
 
-**Changes this pass (M8 Implementation)**: Resolved OI-029 (M8 complete — Admin analytics page, shared skeletons/empty states, 6 error boundaries, mobile nav sheet, mobile filter bar, responsive polish). **All milestones M0–M8 complete.** Remaining manual QA items: theme preset matrix testing, FOUC verification, console error sweep across all 14 routes.
+**Changes this pass (Aircraft Type Fix)**: Resolved OI-003 (aircraft type registration and display). Fixed seed data patterns (wildcard vs regex), added comprehensive registration-based mappings (24 total), made filter dropdowns dynamic (extract from data), added aircraft type to flight board tooltips. All 57 aircraft now resolve correctly (B747: 4, B767: 31, B777: 22). Build ✅, Lint ✅.

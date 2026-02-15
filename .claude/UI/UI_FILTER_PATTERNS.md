@@ -1,20 +1,39 @@
 # UI: Filter Patterns
 
-> **What changed and why (2026-02-13):** Updated from photo-driven UI reconciliation pass. Confirmed instant filtering on desktop, Apply-on-close for mobile sheet. Added active filter pill pattern (from CargoJet reference images 8-10). Added Column/Operator/Expression reference note (vNext only). Updated Type options to 5 canonical types.
+> **What changed and why (2026-02-14):** Major refactor to TopMenuBar architecture. FilterBar replaced with FilterDropdown component. Added ActiveChips component for dismissible filter pills. Added FormatDropdown for zoom/display controls. Updated component architecture to reflect current implementation.
+>
+> **Prior change (2026-02-13):** Updated from photo-driven UI reconciliation pass. Confirmed instant filtering on desktop, Apply-on-close for mobile sheet. Added active filter pill pattern (from CargoJet reference images 8-10). Added Column/Operator/Expression reference note (vNext only). Updated Type options to 5 canonical types.
 
-Reusable patterns for filter controls used in the FilterBar. See [REQ_Filters.md](../SPECS/REQ_Filters.md) for the full spec.
+Reusable patterns for filter controls used across the application. See [REQ_Filters.md](../SPECS/REQ_Filters.md) for the full spec.
 
 ## Component Architecture
 
+### TopMenuBar Pattern (Current Implementation)
+
 ```
-<FilterBar>
-  ├── <DateTimePicker />          × 2 (start, end)
-  ├── <Badge variant="secondary"> (station — display only)
-  ├── <Select />                  (timezone)
-  ├── <MultiSelect />             × 3 (operator, aircraft, type)
-  └── <Button />                  (reset)
-</FilterBar>
+<TopMenuBar>
+  ├── <FilterDropdown>
+  │     ├── <DateTimePicker />          × 2 (start, end)
+  │     ├── <Badge variant="secondary"> (station — display only)
+  │     ├── <Select />                  (timezone)
+  │     ├── <MultiSelect />             × 3 (operator, aircraft, type)
+  │     └── <Button />                  (reset)
+  ├── <ActionsMenu>                     (page-specific actions)
+  ├── <FormatDropdown>                  (page-specific display controls)
+  ├── <ThemeToggle />
+  ├── <MobileNav />                     (mobile only)
+  └── <UserMenu />
+</TopMenuBar>
+
+<ActiveChips>                           (shown below TopMenuBar when filters active)
+  ├── <Badge />                         × N (one per active filter)
+  └── <Button />                        (clear all)
+</ActiveChips>
 ```
+
+### Legacy FilterBar Pattern (Removed 2026-02-14)
+
+Previously used a dedicated FilterBar component. Replaced with FilterDropdown in TopMenuBar for better space efficiency and consistency with ActionsMenu/FormatDropdown patterns.
 
 ## DateTimePicker Pattern
 
@@ -134,14 +153,41 @@ Below `md` breakpoint, the entire FilterBar collapses into a Sheet:
 
 Mobile mode: Apply button required (no live update to reduce re-renders).
 
-## Active Filter Pills
+## FilterDropdown Pattern
 
-Derived from CargoJet reference images (8-10). When filters have non-default values, show active filter state as dismissible pills.
+Collapsible dropdown in TopMenuBar containing all filter controls.
 
 ```
-┌─ Active Filters (below FilterBar, inline) ─────────────────────┐
-│ [✕ Operator: CargoJet] [✕ Type: B767, B777] [Clear All]        │
-└─────────────────────────────────────────────────────────────────┘
+┌─ TopMenuBar ──────────────────────────────────────────┐
+│ [Filters ▾] [Actions ▾] [Format ▾]      [◐] [≡] [@] │
+└───────────────────────────────────────────────────────┘
+       ↓ (click Filters)
+┌─ FilterDropdown Popover ──────────────────────┐
+│ Start Date    [Feb 13 09:00 UTC]              │
+│ End Date      [Feb 16 09:00 UTC]              │
+│ Station       CVG 🔒                          │
+│ Timezone      [UTC ▾]                         │
+│ Operator      [All Operators ▾]              │
+│ Aircraft      [All Aircraft ▾]               │
+│ Type          [All Types ▾]                  │
+│ ───────────────────────────────────────────  │
+│ [    Reset Filters    ]                      │
+└───────────────────────────────────────────────┘
+```
+
+- Uses Popover (shadcn/ui) triggered by TopMenuBar button
+- All filters apply instantly (no Apply button on desktop)
+- Reset button at bottom clears all filters to defaults
+- Component: `src/components/shared/filter-dropdown.tsx`
+
+## ActiveChips Pattern
+
+Derived from CargoJet reference images (8-10). When filters have non-default values, show active filter state as dismissible pills below TopMenuBar.
+
+```
+┌─ Active Filters (below TopMenuBar, inline) ─────────────────┐
+│ [✕ Operator: CargoJet] [✕ Type: B767, B777] [Clear All]     │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 - Each active filter shows as a Badge (shadcn/ui) with dismiss X
@@ -149,6 +195,34 @@ Derived from CargoJet reference images (8-10). When filters have non-default val
 - "Clear All" resets all filters to defaults
 - Only shown when at least one filter has a non-default value
 - Not shown for Start/End dates or Timezone (always have a value)
+- Component: `src/components/shared/active-chips.tsx`
+
+## FormatDropdown Pattern
+
+Page-specific display controls (zoom, layout options) in TopMenuBar.
+
+```
+┌─ TopMenuBar ──────────────────────────────────────────┐
+│ [Filters ▾] [Actions ▾] [Format ▾]      [◐] [≡] [@] │
+└───────────────────────────────────────────────────────┘
+                          ↓ (click Format)
+┌─ FormatDropdown Popover (Flight Board) ───────────┐
+│ Zoom Presets                                       │
+│ [6h] [12h] [1d] [3d] [1w]                         │
+│                                                    │
+│ Zoom Controls                                      │
+│ [Zoom In] [Zoom Out] [Now] [Reset]                │
+│                                                    │
+│ Display                                            │
+│ ☐ Expanded Mode                                   │
+│ [🔄 Refresh]                                       │
+└────────────────────────────────────────────────────┘
+```
+
+- Content varies by page (Flight Board: zoom; Dashboard: chart toggles; etc.)
+- Uses Popover (shadcn/ui) triggered by TopMenuBar button
+- Component: `src/components/shared/format-dropdown.tsx` (generic wrapper)
+- Page-specific: `src/components/flight-board/flight-board-format-panel.tsx`
 
 ## Filtering Model
 

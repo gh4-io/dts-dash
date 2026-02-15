@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState, useMemo, useCallback } from "react";
-import { FilterBar } from "@/components/shared/filter-bar";
+import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { AvgGroundTimeCard } from "@/components/dashboard/avg-ground-time-card";
@@ -14,30 +14,28 @@ import { OperatorPerformance } from "@/components/dashboard/operator-performance
 import { useWorkPackages } from "@/lib/hooks/use-work-packages";
 import { useHourlySnapshots } from "@/lib/hooks/use-hourly-snapshots";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { useEffect } from "react";
 
-export default function DashboardPage() {
+function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
   const { snapshots, isLoading: snapshotsLoading } = useHourlySnapshots();
   const { fetch: fetchCustomers } = useCustomers();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
 
-  // Fetch customers on mount
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  // Cross-filter: when an operator is focused, filter WPs to that operator
-  const displayWps = useMemo(() => {
-    if (!focusedOperator) return workPackages;
-    return workPackages.filter((wp) => wp.customer === focusedOperator);
-  }, [workPackages, focusedOperator]);
+  // Apply actions transforms (sort, status filter, etc.)
+  const { data: transformedWps } = useTransformedData(workPackages);
 
-  // Filtered snapshots for the combined chart (client-side cross-filter)
+  const displayWps = useMemo(() => {
+    if (!focusedOperator) return transformedWps;
+    return transformedWps.filter((wp) => wp.customer === focusedOperator);
+  }, [transformedWps, focusedOperator]);
+
   const displaySnapshots = useMemo(() => {
-    // Cross-filtering snapshots would require re-computing from WPs client-side.
-    // For now, show all snapshots (they already reflect global FilterBar).
-    // Operator focus only dims the performance table and donut — chart stays global.
     return snapshots;
   }, [snapshots]);
 
@@ -52,10 +50,7 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div className="space-y-3">
-        <PageHeader />
-        <Suspense fallback={null}>
-          <FilterBar />
-        </Suspense>
+        <TopMenuBar title="Dashboard" icon="fa-solid fa-chart-line" />
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
           <p className="text-sm text-destructive">{error}</p>
@@ -66,12 +61,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader />
+      <TopMenuBar title="Dashboard" icon="fa-solid fa-chart-line" />
 
-      {/* Filter Bar */}
-      <Suspense fallback={null}>
-        <FilterBar />
-      </Suspense>
+      {/* Data Freshness */}
+      <DataFreshnessBadge />
 
       {isLoading || snapshotsLoading ? (
         <LoadingSkeleton variant="page" />
@@ -124,15 +117,10 @@ export default function DashboardPage() {
   );
 }
 
-function PageHeader() {
+export default function DashboardPage() {
   return (
-    <div className="flex items-center justify-between">
-      <h1 className="text-xl font-bold">
-        <i className="fa-solid fa-chart-line mr-2" />
-        Dashboard
-      </h1>
-      <DataFreshnessBadge />
-    </div>
+    <Suspense fallback={null}>
+      <DashboardPageInner />
+    </Suspense>
   );
 }
-

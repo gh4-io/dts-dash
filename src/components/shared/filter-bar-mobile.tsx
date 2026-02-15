@@ -24,8 +24,6 @@ import {
 } from "@/components/ui/sheet";
 import type { AircraftType } from "@/types";
 
-const AIRCRAFT_TYPES: AircraftType[] = ["B777", "B767", "B747", "B757", "B737"];
-
 interface FilterBarMobileProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,10 +59,18 @@ export function FilterBarMobile({ open, onOpenChange }: FilterBarMobileProps) {
       .map((reg) => ({ value: reg, label: reg }));
   }, [workPackages]);
 
-  const typeOptions: MultiSelectOption[] = AIRCRAFT_TYPES.map((t) => ({
-    value: t,
-    label: t,
-  }));
+  // Extract unique aircraft types from work packages (dynamic, not hardcoded)
+  const typeOptions: MultiSelectOption[] = useMemo(() => {
+    const uniqueTypes = new Set<string>();
+    workPackages.forEach((wp) => {
+      if (wp.inferredType && wp.inferredType !== "Unknown") {
+        uniqueTypes.add(wp.inferredType);
+      }
+    });
+    return Array.from(uniqueTypes)
+      .sort()
+      .map((t) => ({ value: t as AircraftType, label: t }));
+  }, [workPackages]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

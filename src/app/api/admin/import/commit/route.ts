@@ -74,18 +74,26 @@ export async function POST(request: NextRequest) {
 
     // Log to import_log
     const logId = crypto.randomUUID();
-    db.insert(importLog)
-      .values({
-        id: logId,
-        importedAt: new Date().toISOString(),
-        recordCount: records.length,
-        source,
-        fileName: fileName || null,
-        importedBy: session.user.id,
-        status: "success",
-        errors: null,
-      })
-      .run();
+    try {
+      db.insert(importLog)
+        .values({
+          id: logId,
+          importedAt: new Date().toISOString(),
+          recordCount: records.length,
+          source,
+          fileName: fileName || null,
+          importedBy: session.user.id,
+          status: "success",
+          errors: null,
+        })
+        .run();
+    } catch (logErr) {
+      console.error("[api/admin/import/commit] Failed to log import:", logErr);
+      // If logging fails due to stale user ID, still return success but warn
+      if ((logErr as Error).message?.includes("FOREIGN KEY")) {
+        console.warn("[api/admin/import/commit] Stale user session - import succeeded but logging failed. User should log out and back in.");
+      }
+    }
 
     // Invalidate reader cache
     invalidateCache();

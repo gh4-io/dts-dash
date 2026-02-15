@@ -40,7 +40,11 @@ export type ConfidenceLevel = "exact" | "pattern" | "fallback";
 export interface SharePointWorkPackage {
   ID: number;
   DocumentSetID: number;
-  Aircraft: { Title: string };
+  Aircraft: {
+    Title: string;              // Registration e.g. "C-FOIJ"
+    field_5?: string;            // Aircraft type e.g. "777F", "767-300(F)" (if present in SharePoint)
+    AircraftType?: string;       // Alternative type field (rare)
+  };
   AircraftId: number;
   Customer: string;
   FlightId: string | null;

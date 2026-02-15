@@ -3,6 +3,7 @@
  */
 export function formatFlightTooltip(data: {
   registration: string;
+  aircraftType: string;
   customer: string;
   customerColor: string;
   flightId: string | null;
@@ -14,19 +15,28 @@ export function formatFlightTooltip(data: {
   effectiveMH: number;
   mhSource: string;
   comments: string | null;
+  timezone?: string;
 }): string {
   const groundH = Math.floor(data.groundHours);
   const groundM = Math.round((data.groundHours - groundH) * 60);
   const groundStr = `${groundH}h ${groundM}m`;
 
+  const tz = data.timezone ?? "UTC";
   const arrivalDate = new Date(data.arrival);
   const departureDate = new Date(data.departure);
 
+  // Get timezone abbreviation (e.g., "UTC", "EST", "EDT")
+  const tzLabel = tz === "UTC"
+    ? "UTC"
+    : new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
+        .formatToParts(arrivalDate)
+        .find((p) => p.type === "timeZoneName")?.value ?? "ET";
+
   const fmtDate = (d: Date) =>
-    d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) +
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) +
     ", " +
-    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" }) +
-    " UTC";
+    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }) +
+    ` ${tzLabel}`;
 
   const mhLabel =
     data.mhSource === "manual"
@@ -42,7 +52,10 @@ export function formatFlightTooltip(data: {
   return `
 <div style="padding:10px 12px;max-width:320px;font-size:12px;line-height:1.5;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-    <span style="font-size:14px;font-weight:bold;">${data.registration}</span>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <span style="font-size:14px;font-weight:bold;">${data.registration}</span>
+      <span style="font-size:11px;color:rgba(255,255,255,0.6);">${data.aircraftType}</span>
+    </div>
     <span style="display:flex;align-items:center;gap:5px;">
       <span style="width:8px;height:8px;border-radius:50%;background:${data.customerColor};display:inline-block;"></span>
       ${data.customer}

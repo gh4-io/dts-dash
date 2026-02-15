@@ -103,6 +103,46 @@ Before starting M0 implementation:
    npm run build && npm run lint && npm run dev
    ```
 
+## Git Setup
+
+```bash
+# Initialize repo (if not already done)
+git init
+
+# Set user identity
+git config user.name "Jason"
+git config user.email "admin@gh4.io"
+
+# Create and switch to dev branch
+git checkout -b dev
+
+# Initial commit (after all docs are in place)
+git add -A
+git commit -m "$(cat <<'EOF'
+chore: Initial project setup with Project Steward skill
+
+Scaffold, docs, skills, and scripts for CVG Line Maintenance Dashboard.
+
+Docs: CLAUDE.md, .claude/README.md, .claude/SKILLS/PROJECT_STEWARD.md, .claude/SKILLS/AUTO_COMMIT_POLICY.md
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+
+## Project Steward Scripts
+
+```bash
+# Phase commit — guided commit with verification gates and doc-touch checks
+chmod +x scripts/phase_commit.sh
+./scripts/phase_commit.sh
+
+# Feature intake — create new OI entry + optional stub spec
+chmod +x scripts/feature_intake.sh
+./scripts/feature_intake.sh
+```
+
+Both scripts are POSIX-compatible (bash). No external tooling beyond git + node/npm required.
+
 ## Troubleshooting
 
 | Issue | Fix |

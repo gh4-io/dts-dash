@@ -187,7 +187,7 @@ export async function seed() {
       )
       .run();
 
-    console.log("  Seeded 10 aircraft type mappings");
+    console.log(`  Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`);
   }
 
   // ─── Seed Default Config ─────────────────────────────────────────────────

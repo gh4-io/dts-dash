@@ -119,12 +119,13 @@ export async function POST(request: NextRequest) {
       warnings.push(`${missingMH} record${missingMH !== 1 ? "s" : ""} missing TotalMH (will use default 3.0)`);
     }
 
+    // Check for aircraft type in field_5 (SharePoint actual field) or AircraftType
     const missingType = records.filter((r: Record<string, unknown>) => {
       const aircraft = r.Aircraft as Record<string, unknown> | undefined;
-      return !aircraft?.AircraftType;
+      return !aircraft?.field_5 && !aircraft?.AircraftType;
     }).length;
     if (missingType > 0) {
-      warnings.push(`${missingType} record${missingType !== 1 ? "s" : ""} missing AircraftType`);
+      warnings.push(`${missingType} record${missingType !== 1 ? "s" : ""} missing aircraft type (will infer from registration)`);
     }
 
     return NextResponse.json({

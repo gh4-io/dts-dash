@@ -44,6 +44,9 @@ This directory is the **living specification** for the CVG Line Maintenance Oper
     DEV_COMMANDS.md      ← Build, dev, lint, test commands
     TEST_PLAN.md         ← Testing strategy, smoke tests, verification
     RISKS.md             ← Technical risks R1–R19 and mitigations
+  SKILLS/
+    PROJECT_STEWARD.md   ← Session workflow, doc authority, change discipline
+    AUTO_COMMIT_POLICY.md ← Commit triggers, message format, verification gates
   assets/                ← Reference images, sample data
     input.json           ← SharePoint OData export (86 records)
     img/                 ← Design reference screenshots

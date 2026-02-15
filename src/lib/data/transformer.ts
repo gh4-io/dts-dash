@@ -100,7 +100,10 @@ export async function transformWorkPackages(
   const overrides = await loadOverrides();
 
   // Normalize aircraft types in batch
-  const rawTypes = raw.map((wp) => wp.Aircraft?.Title ?? null);
+  // Prefer field_5 (actual type from SharePoint) or AircraftType, fallback to registration
+  const rawTypes = raw.map((wp) =>
+    wp.Aircraft?.field_5 ?? wp.Aircraft?.AircraftType ?? wp.Aircraft?.Title ?? null
+  );
   const normalizedTypesModule = await import("@/lib/utils/aircraft-type");
   const normalizedTypes = await normalizedTypesModule.normalizeAircraftTypes(rawTypes);
 

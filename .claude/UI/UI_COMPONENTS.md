@@ -1,5 +1,7 @@
 # UI Components Inventory
 
+> **What changed (2026-02-14):** Added TopMenuBar, FilterDropdown, FormatDropdown, ActionsMenu, ActiveChips components. Added ActionsMenu dialog components (Sort, GroupBy, Highlight, Columns, ControlBreak). Updated Flight Board components section with new format panel.
+
 ## shadcn/ui Components (installed via `npx shadcn@latest add`)
 
 | Component | Used In | Notes |
@@ -25,20 +27,43 @@
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `FilterBar` | `src/components/shared/filter-bar.tsx` | Global filter bar |
+| `TopMenuBar` | `src/components/shared/top-menu-bar.tsx` | Single-row menu with Filter/Actions/Format dropdowns |
+| `FilterDropdown` | `src/components/shared/filter-dropdown.tsx` | Filter controls in dropdown panel |
+| `FormatDropdown` | `src/components/shared/format-dropdown.tsx` | Display controls dropdown (zoom, layout) |
+| `ActionsMenu` | `src/components/shared/actions-menu.tsx` | Actions dropdown with dialogs |
+| `ActiveChips` | `src/components/shared/active-chips.tsx` | Dismissible filter pills |
 | `DateTimePicker` | `src/components/shared/datetime-picker.tsx` | Date + time input |
 | `MultiSelect` | `src/components/shared/multi-select.tsx` | Searchable multi-check |
 | `FaIcon` | `src/components/shared/fa-icon.tsx` | Font Awesome helper |
 | `CustomerBadge` | `src/components/shared/customer-badge.tsx` | Colored dot + name |
 | `LoadingSkeleton` | `src/components/shared/loading-skeleton.tsx` | Skeleton cards/charts |
 | `EmptyState` | `src/components/shared/empty-state.tsx` | No-data display |
+| `FilterBarMobile` | `src/components/shared/filter-bar-mobile.tsx` | Mobile sheet with filters |
 | `Sidebar` | `src/components/layout/sidebar.tsx` | Navigation sidebar |
 | `Header` | `src/components/layout/header.tsx` | Top bar |
 | `MobileNav` | `src/components/layout/mobile-nav.tsx` | Sheet-based nav |
 | `ThemeToggle` | `src/components/layout/theme-toggle.tsx` | Dark/light switch |
 
 ## Flight Board Components
-See [REQ_FlightBoard.md](../SPECS/REQ_FlightBoard.md) → Components section.
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `FlightBoardChart` | `src/components/flight-board/flight-board-chart.tsx` | ECharts Gantt with zoom API |
+| `FlightBoardFormatPanel` | `src/components/flight-board/flight-board-format-panel.tsx` | Zoom controls and expanded mode |
+| `FlightTooltip` | `src/components/flight-board/flight-tooltip.ts` | Tooltip formatter with aircraft type |
+| `FlightDetailDrawer` | `src/components/flight-board/flight-detail-drawer.tsx` | Click-to-detail Sheet |
+
+## Actions Menu Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `SortDialog` | `src/components/shared/actions-menu/sort-dialog.tsx` | Sort configuration dialog |
+| `GroupByDialog` | `src/components/shared/actions-menu/group-by-dialog.tsx` | Grouping configuration dialog |
+| `HighlightDialog` | `src/components/shared/actions-menu/highlight-dialog.tsx` | Conditional highlighting dialog |
+| `ColumnsFilterDialog` | `src/components/shared/actions-menu/columns-filter-dialog.tsx` | Column visibility dialog |
+| `ControlBreakDialog` | `src/components/shared/actions-menu/control-break-dialog.tsx` | Control break configuration dialog |
+
+See [REQ_FlightBoard.md](../SPECS/REQ_FlightBoard.md) for Flight Board specs.
 
 ## Dashboard Components
 See [REQ_OtherPages.md](../SPECS/REQ_OtherPages.md) → Dashboard section.

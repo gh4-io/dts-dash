@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useMemo } from "react";
-import { FilterBar } from "@/components/shared/filter-bar";
+import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { ConfigPanel } from "@/components/capacity/config-panel";
@@ -9,7 +9,7 @@ import { UtilizationChart } from "@/components/capacity/utilization-chart";
 import { CapacityTable } from "@/components/capacity/capacity-table";
 import { useCapacity } from "@/lib/hooks/use-capacity";
 
-export default function CapacityPage() {
+function CapacityPageInner() {
   const {
     demand,
     capacity,
@@ -22,7 +22,6 @@ export default function CapacityPage() {
     refetch,
   } = useCapacity();
 
-  // Summary stats for the header
   const summary = useMemo(() => {
     if (utilization.length === 0) return null;
     const avgUtil =
@@ -40,10 +39,7 @@ export default function CapacityPage() {
   if (error) {
     return (
       <div className="space-y-3">
-        <PageHeader />
-        <Suspense fallback={null}>
-          <FilterBar />
-        </Suspense>
+        <TopMenuBar title="Capacity Modeling" icon="fa-solid fa-gauge-high" />
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
           <p className="text-sm text-destructive">{error}</p>
@@ -54,11 +50,10 @@ export default function CapacityPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader />
+      <TopMenuBar title="Capacity Modeling" icon="fa-solid fa-gauge-high" />
 
-      <Suspense fallback={null}>
-        <FilterBar />
-      </Suspense>
+      {/* Data Freshness */}
+      <DataFreshnessBadge />
 
       {isLoading || isConfigLoading ? (
         <LoadingSkeleton variant="page" />
@@ -115,7 +110,7 @@ export default function CapacityPage() {
             </div>
           )}
 
-          {/* Config Panel — keyed to reset local state when config changes upstream */}
+          {/* Config Panel */}
           {config && (
             <ConfigPanel
               key={`${config.defaultMH}:${config.wpMHMode}:${JSON.stringify(config.shifts)}`}
@@ -150,15 +145,11 @@ export default function CapacityPage() {
   );
 }
 
-function PageHeader() {
+export default function CapacityPage() {
   return (
-    <div className="flex items-center justify-between">
-      <h1 className="text-xl font-bold">
-        <i className="fa-solid fa-gauge-high mr-2" />
-        Capacity Modeling
-      </h1>
-      <DataFreshnessBadge />
-    </div>
+    <Suspense fallback={null}>
+      <CapacityPageInner />
+    </Suspense>
   );
 }
 
@@ -183,4 +174,3 @@ function SummaryPill({
     </div>
   );
 }
-

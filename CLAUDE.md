@@ -3,7 +3,7 @@
 > Canonical operating manual for Claude Code. Read this first, every session.
 > Detailed specs live in `.claude/` — this file links to them, never duplicates.
 >
-> **Last updated:** 2026-02-13 (UI Reconciliation Pass)
+> **Last updated:** 2026-02-14 (Project Steward Skill)
 >
 > **What changed (UI Reconciliation Pass):**
 > - Created `REQ_Dashboard_UI.md` — dashboard layout from CVG Line Maintenance reference screenshots
@@ -178,6 +178,24 @@ plan/                        — Implementation plans
 | [DEV_COMMANDS.md](.claude/DEV/DEV_COMMANDS.md) | Setup, install, build, dev commands |
 | [TEST_PLAN.md](.claude/DEV/TEST_PLAN.md) | Manual test checklist, future automation |
 | [RISKS.md](.claude/DEV/RISKS.md) | R1–R19 risks with mitigations |
+
+### Skills
+| File | Purpose |
+|------|---------|
+| [PROJECT_STEWARD.md](.claude/SKILLS/PROJECT_STEWARD.md) | Session workflow, doc authority, change discipline |
+| [AUTO_COMMIT_POLICY.md](.claude/SKILLS/AUTO_COMMIT_POLICY.md) | Commit triggers, message format, verification gates |
+
+## Project Steward Skill
+
+> **Run this workflow every session.** See [PROJECT_STEWARD.md](.claude/SKILLS/PROJECT_STEWARD.md) for full details.
+
+**EVERY SESSION: Review OPEN_ITEMS.md first, and before finishing; update statuses, add new OIs, and link each OI to the spec/decision/risk it touches.**
+
+**After major phases/changes, run `scripts/phase_commit.sh`** to verify gates (lint + build), check doc touchpoints, and generate a conventional commit with metadata footers.
+
+**Scripts:**
+- `scripts/phase_commit.sh` — Guided commit with verification gates and doc-touch checks
+- `scripts/feature_intake.sh` — Create new OPEN_ITEMS entries + optional stub specs
 
 ## Session Workflow
 
