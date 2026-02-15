@@ -124,10 +124,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   // ✅ NEW: Track real dataZoom state (for adaptive tick interval)
   const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
   const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
-  // ─── NOW timestamp — initialized on mount, updated every 60s (used by smart anchor in zoomRange)
+  // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
   const [nowTimestamp, setNowTimestamp] = useState(0);
-  // ✅ Capture zoom state as render-safe value (avoids ref-in-useMemo lint error)
-  const [currentZoomMidpoint, setCurrentZoomMidpoint] = useState(50);
   const { getColor } = useCustomers();
   const { timeFormat } = usePreferences();
   const { resolvedTheme } = useTheme();
@@ -246,11 +244,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     };
   }, [workPackages, getColor, transformedRegistrations, groups]);
 
-  // ─── Zoom range for the dataZoom ───
+  // ─── Zoom range for the dataZoom (only recalculates on preset/filter change) ───
   const zoomRange = useMemo(() => {
     if (workPackages.length === 0) return { start: 0, end: 100 };
 
-    // ✅ FIX BUG 1: Use filter bounds instead of data bounds
     const filterStartMs = new Date(filterStart).getTime();
     const filterEndMs = new Date(filterEnd).getTime();
     const totalMs = filterEndMs - filterStartMs || 86400000;
@@ -266,32 +263,20 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
     // Clamp: if preset exceeds filter span, show full range
     if (span >= 99) {
-      console.warn(`[Zoom] Preset "${zoomLevel}" (${hours}h) exceeds filter range (${(totalMs / 3600000).toFixed(1)}h)`);
       return { start: 0, end: 100 };
     }
 
-    // ✅ STEP 4: Smart anchor — center on "now" if in filter range, else preserve midpoint
-    // Use nowTimestamp state (pure) instead of Date.now() (impure function)
-    const now = nowTimestamp > 0 ? nowTimestamp : filterStartMs + (filterEndMs - filterStartMs) / 2;
-    const nowInRange = nowTimestamp > 0 && now >= filterStartMs && now <= filterEndMs;
+    // Smart anchor: center on "now" if within filter range, else center of filter
+    const now = Date.now();
+    const centerMs = (now >= filterStartMs && now <= filterEndMs)
+      ? now
+      : filterStartMs + totalMs / 2;
 
-    let centerMs: number;
-    if (nowInRange) {
-      // Center on current time
-      centerMs = now;
-    } else {
-      // Preserve current midpoint (using render-safe state, not ref)
-      centerMs = filterStartMs + (currentZoomMidpoint / 100) * (filterEndMs - filterStartMs);
-    }
-
-    // Convert center timestamp to percentage
-    const centerPct = ((centerMs - filterStartMs) / (filterEndMs - filterStartMs)) * 100;
-
-    // Position window around center
+    const centerPct = ((centerMs - filterStartMs) / totalMs) * 100;
     const start = Math.max(0, Math.min(100 - span, centerPct - span / 2));
     const end = start + span;
     return { start, end };
-  }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp, currentZoomMidpoint]);
+  }, [workPackages.length, filterStart, filterEnd, zoomLevel]);
 
   // ─── Filter-based midnight boundaries (TZ-aware) ───
   const { midnightTimestamps, timeGrid } = useMemo(() => {
@@ -388,19 +373,17 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
     const intervalMs = intervalHours * 3600000;
 
-    // ✅ PATCH #3: Robust axis targeting with explicit position
-    [headerChartRef, bodyChartRef].forEach((ref) => {
-      const instance = ref.current?.getEchartsInstance();
-      if (!instance) return;
+    // Update header chart — 2 axes (bottom hidden for sync + top day names)
+    const headerInstance = headerChartRef.current?.getEchartsInstance();
+    if (headerInstance) {
       try {
-        instance.setOption({
+        headerInstance.setOption({
           xAxis: [
             {
-              // Bottom axis (time labels) — update interval
+              // Bottom axis (hidden, for dataZoom sync) — update interval
               type: "value",
               position: "bottom",
               interval: intervalMs,
-              axisLabel: { show: true }, // Ensure labels not hidden
             },
             {
               // Top axis (day labels) — always 24h interval
@@ -412,9 +395,26 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           ],
         });
       } catch (err) {
-        console.warn("[Adaptive Ticks] setOption error:", err);
+        console.warn("[Adaptive Ticks] header setOption error:", err);
       }
-    });
+    }
+
+    // Update body chart — single axis (top, time labels)
+    const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+    if (bodyInstance) {
+      try {
+        bodyInstance.setOption({
+          xAxis: {
+            type: "value",
+            position: "top",
+            interval: intervalMs,
+            axisLabel: { show: true },
+          },
+        });
+      } catch (err) {
+        console.warn("[Adaptive Ticks] body setOption error:", err);
+      }
+    }
 
     console.log(`[Adaptive Ticks] Visible: ${visibleHours.toFixed(1)}h → Interval: ${intervalHours}h`);
   }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length]);
@@ -556,8 +556,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     [colorMap, timeFmt, registrations, highlightMap, cc]
   );
 
-  // ─── HEADER OPTION (time axis + slider — always visible) ───
-  const headerOption = useMemo(() => {
+  // ─── Shared time formatters (used by both header and body charts) ───
+  const { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel } = useMemo(() => {
     const hourFormatter = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone, hour: "2-digit", minute: "2-digit",
       hourCycle: timeFormat === "12h" ? "h12" : "h23",
@@ -570,6 +570,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     });
     const tzLabel = timezone === "UTC" ? "UTC" : "Eastern (ET)";
     const midnightSet = new Set(midnightTimestamps);
+    return { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel };
+  }, [timezone, timeFormat, midnightTimestamps]);
+
+  // ─── HEADER OPTION (time axis + slider — always visible) ───
+  const headerOption = useMemo(() => {
 
     return {
       backgroundColor: "transparent",
@@ -598,42 +603,20 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         left: 100,
         right: 20,
         top: 22,
-        bottom: 30,
+        bottom: 8,
       },
       xAxis: [
-        // Bottom axis — time labels at deterministic intervals from midnight
+        // Bottom axis — hidden labels, kept for dataZoom sync
         {
           type: "value" as const,
           position: "bottom" as const,
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
           interval: timeGrid.intervalMs,
-          axisLabel: {
-            interval: 0, // show ALL labels at tick positions — never auto-skip
-            color: cc.fg,
-            fontSize: 12,
-            formatter: (value: number) => {
-              // interval guarantees clean hour positions — no tick-matching needed
-              if (midnightSet.has(value)) {
-                const dateStr = dateFmt.format(new Date(value));
-                const timeStr = hourFormatter.format(new Date(value));
-                return `{date|${dateStr}}\n{time|${timeStr}}`;
-              }
-              return `{time|${hourFormatter.format(new Date(value))}}`;
-            },
-            rich: {
-              date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
-              time: { fontSize: 12, lineHeight: 16 },
-            },
-          },
+          axisLabel: { show: false },
           splitLine: { show: false },
-          axisLine: { show: true },
-          axisTick: {
-            show: true,
-            alignWithLabel: true,
-            length: 6,
-            lineStyle: { color: cc.mutedFg },
-          },
+          axisLine: { show: false },
+          axisTick: { show: false },
         },
         // Top axis — day name labels at midnight boundaries (one per day)
         {
@@ -667,7 +650,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           bottom: 4,
           start: zoomRange.start,
           end: zoomRange.end,
-          handleSize: "80%",
+          handleSize: 18,
+          handleStyle: {
+            borderRadius: 3,
+          },
           borderColor: cc.border,
           fillerColor: cc.primary15,
           textStyle: { color: cc.mutedFg },
@@ -682,15 +668,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
       series: [],
     };
-  }, [timezone, timeFormat, timeGrid, zoomRange, midnightTimestamps, cc]);
+  }, [hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel, timeGrid, zoomRange, cc]);
 
-  // ─── BODY OPTION (bars + y-axis, no visible xAxis) ───
+  // ─── BODY OPTION (bars + y-axis, time labels at top) ───
   const bodyOption = useMemo(() => {
     return {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item" as const,
-        appendToBody: true,
+        appendToBody: false,
         confine: true,
         backgroundColor: cc.popover,
         borderColor: cc.border,
@@ -723,17 +709,39 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       grid: {
         left: 100,
         right: 20,
-        top: 2,
+        top: 34,
         bottom: 2,
       },
       xAxis: {
         type: "value" as const,
+        position: "top" as const,
         min: timeGrid.axisMin,
         max: timeGrid.axisMax,
         interval: timeGrid.intervalMs,
-        axisLabel: { show: false },
-        axisTick: { show: false },
-        axisLine: { show: false },
+        axisLabel: {
+          interval: 0,
+          color: cc.fg,
+          fontSize: 12,
+          formatter: (value: number) => {
+            if (midnightSet.has(value)) {
+              const dateStr = dateFmt.format(new Date(value));
+              const timeStr = hourFormatter.format(new Date(value));
+              return `{date|${dateStr}}\n{time|${timeStr}}`;
+            }
+            return `{time|${hourFormatter.format(new Date(value))}}`;
+          },
+          rich: {
+            date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
+            time: { fontSize: 12, lineHeight: 16 },
+          },
+        },
+        axisLine: { show: true, lineStyle: { color: cc.border } },
+        axisTick: {
+          show: true,
+          alignWithLabel: true,
+          length: 6,
+          lineStyle: { color: cc.mutedFg },
+        },
         splitLine: {
           show: true,
           lineStyle: {
@@ -796,7 +804,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
     };
   }, [registrations, chartData, colorMap, allWps, renderFlightBar,
-      timeGrid, timezone, timeFormat, zoomRange, cc]);
+      timeGrid, timezone, timeFormat, zoomRange, cc,
+      hourFormatter, dateFmt, midnightSet]);
 
   // ─── Sync header zoom → body ───
   const handleHeaderDataZoom = useCallback(() => {
@@ -809,11 +818,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const opt = headerInstance.getOption() as any;
       const dz = opt?.dataZoom?.[0];
       if (dz) {
-        // ✅ NEW: Capture real zoom state for adaptive ticks
         const start = dz.start ?? 0;
         const end = dz.end ?? 100;
         realZoomState.current = { start, end };
-        setCurrentZoomMidpoint((start + end) / 2);
         setTickRecalcTrigger((t) => t + 1);
 
         bodyInstance.dispatchAction({
@@ -837,11 +844,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const opt = bodyInstance.getOption() as any;
       const dz = opt?.dataZoom?.[0];
       if (dz) {
-        // ✅ NEW: Capture real zoom state for adaptive ticks
         const start = dz.start ?? 0;
         const end = dz.end ?? 100;
         realZoomState.current = { start, end };
-        setCurrentZoomMidpoint((start + end) / 2);
         setTickRecalcTrigger((t) => t + 1);
 
         headerInstance.dispatchAction({ type: "dataZoom", start: dz.start, end: dz.end });
@@ -1077,7 +1082,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     );
   }
 
-  const bodyHeight = Math.max(300, registrations.length * 36 + 20);
+  const bodyHeight = Math.max(300, registrations.length * 36 + 38);
 
   return (
     <div className={cn(
@@ -1090,7 +1095,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           ref={headerChartRef}
           echarts={echarts}
           option={headerOption}
-          style={{ height: 90, width: "100%" }}
+          style={{ height: 65, width: "100%" }}
           theme={echartsTheme}
           notMerge
           onEvents={{ datazoom: handleHeaderDataZoom }}
