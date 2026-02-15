@@ -92,12 +92,14 @@ export function FilterBarMobile({ open, onOpenChange }: FilterBarMobileProps) {
                 onChange={setStart}
                 label="Start"
                 icon="fa-solid fa-calendar"
+                timezone={timezone}
               />
               <DateTimePicker
                 value={end}
                 onChange={setEnd}
                 label="End"
                 icon="fa-solid fa-calendar-check"
+                timezone={timezone}
               />
             </div>
           </div>

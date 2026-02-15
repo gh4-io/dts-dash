@@ -97,6 +97,14 @@ export function Header() {
                 <i className="fa-solid fa-user w-4 text-center" />
                 Account
               </Link>
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
+              >
+                <i className="fa-solid fa-gear w-4 text-center" />
+                Settings
+              </Link>
               {isAdmin && (
                 <Link
                   href="/admin"

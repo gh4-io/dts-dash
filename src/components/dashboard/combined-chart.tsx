@@ -62,15 +62,42 @@ export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProp
       }));
   }, [chartData, timezone]);
 
-  // Determine smart tick interval based on data size
-  const tickInterval = useMemo(() => {
-    const len = chartData.length;
-    if (len <= 48) return 3;       // ≤2 days: every 3h
-    if (len <= 96) return 6;       // ≤4 days: every 6h
-    if (len <= 168) return 12;     // ≤7 days: every 12h
-    if (len <= 720) return 24;     // ≤30 days: every 24h (daily)
-    return 48;                     // >30 days: every 2 days
-  }, [chartData.length]);
+  // Compute explicit tick positions aligned to multiples of (1,2,3,6,12) off 00:00
+  // Always includes the first and last data points so the axis spans the full range
+  const alignedTicks = useMemo(() => {
+    if (chartData.length === 0) return [];
+
+    // Pick step: aim for ~8-16 visible ticks
+    const hours = chartData.length;
+    let step: number;
+    if (hours <= 12) step = 1;       // ≤12h: every hour
+    else if (hours <= 24) step = 2;  // ≤1 day: every 2h
+    else if (hours <= 48) step = 3;  // ≤2 days: every 3h
+    else if (hours <= 96) step = 6;  // ≤4 days: every 6h
+    else step = 12;                  // >4 days: every 12h
+
+    const hourFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+
+    const first = chartData[0].hour;
+    const last = chartData[chartData.length - 1].hour;
+
+    const aligned = chartData
+      .filter((d) => {
+        const h = parseInt(hourFmt.format(new Date(d.hour)));
+        return h % step === 0;
+      })
+      .map((d) => d.hour);
+
+    // Ensure start and end are always present
+    if (aligned[0] !== first) aligned.unshift(first);
+    if (aligned[aligned.length - 1] !== last) aligned.push(last);
+
+    return aligned;
+  }, [chartData, timezone]);
 
   // Format x-axis ticks — show date at midnight, time otherwise
   const formatTick = useMemo(() => {
@@ -145,7 +172,7 @@ export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProp
         <XAxis
           dataKey="hour"
           tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
-          interval={tickInterval}
+          ticks={alignedTicks}
           tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
           axisLine={{ stroke: "hsl(var(--muted-foreground))" }}
           tickFormatter={formatTick}

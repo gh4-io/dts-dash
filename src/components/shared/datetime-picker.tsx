@@ -11,35 +11,108 @@ interface DateTimePickerProps {
   onChange: (iso: string) => void;
   label: string;
   icon?: string; // FA class
+  timezone?: string; // IANA timezone (default UTC)
 }
 
-export function DateTimePicker({ value, onChange, label, icon }: DateTimePickerProps) {
-  const date = value ? new Date(value) : new Date();
+/** Extract wall-clock components for a UTC date in a given timezone */
+function getWallClock(date: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+
+  return {
+    year: parseInt(get("year")),
+    month: parseInt(get("month")) - 1, // 0-indexed for Date constructor
+    day: parseInt(get("day")),
+    hour: get("hour"),
+    minute: get("minute"),
+  };
+}
+
+/** Convert wall-clock year/month/day/hour/minute in a timezone to a UTC ISO string */
+function wallClockToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  tz: string,
+): string {
+  // Create a tentative UTC date with the wall-clock components
+  const tentative = new Date(Date.UTC(year, month, day, hour, minute, 0, 0));
+
+  // See what that tentative UTC looks like in the target timezone
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(tentative);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const wallStr = `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}`;
+  const wallAsUtc = new Date(wallStr + "Z");
+
+  // Offset = tentative - wallAsUtc; correct = tentative + offset
+  const offset = tentative.getTime() - wallAsUtc.getTime();
+  return new Date(tentative.getTime() + offset).toISOString();
+}
+
+export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" }: DateTimePickerProps) {
   const [open, setOpen] = React.useState(false);
 
-  const hours = date.getUTCHours().toString().padStart(2, "0");
-  const minutes = date.getUTCMinutes().toString().padStart(2, "0");
+  // Wall-clock components in the selected timezone
+  const wc = React.useMemo(() => {
+    const date = value ? new Date(value) : new Date();
+    return getWallClock(date, timezone);
+  }, [value, timezone]);
 
   const handleDateSelect = (selected: Date | undefined) => {
     if (!selected) return;
-    const updated = new Date(date);
-    updated.setUTCFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
-    onChange(updated.toISOString());
+    // Keep current wall-clock time, change the date
+    onChange(
+      wallClockToUtc(
+        selected.getFullYear(),
+        selected.getMonth(),
+        selected.getDate(),
+        parseInt(wc.hour),
+        parseInt(wc.minute),
+        timezone,
+      )
+    );
   };
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const [h, m] = e.target.value.split(":").map(Number);
     if (isNaN(h) || isNaN(m)) return;
-    const updated = new Date(date);
-    updated.setUTCHours(h, m, 0, 0);
-    onChange(updated.toISOString());
+    onChange(wallClockToUtc(wc.year, wc.month, wc.day, h, m, timezone));
   };
 
   const formatDisplay = () => {
-    return `${date.getUTCFullYear()}-${(date.getUTCMonth() + 1)
-      .toString()
-      .padStart(2, "0")}-${date.getUTCDate().toString().padStart(2, "0")} ${hours}:${minutes}`;
+    const y = wc.year;
+    const mo = (wc.month + 1).toString().padStart(2, "0");
+    const d = wc.day.toString().padStart(2, "0");
+    return `${y}-${mo}-${d} ${wc.hour}:${wc.minute}`;
   };
+
+  // Create a Date for the Calendar that represents the wall-clock date
+  // Use noon to avoid date-boundary issues across browser timezones
+  const calendarDate = new Date(wc.year, wc.month, wc.day, 12, 0, 0);
+
+  const tzLabel = timezone === "UTC" ? "UTC" : "Eastern";
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -59,17 +132,17 @@ export function DateTimePicker({ value, onChange, label, icon }: DateTimePickerP
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="single"
-          selected={date}
+          selected={calendarDate}
           onSelect={handleDateSelect}
           initialFocus
         />
         <div className="border-t p-3">
           <label className="text-xs text-muted-foreground">
-            Time (UTC)
+            Time ({tzLabel})
           </label>
           <input
             type="time"
-            value={`${hours}:${minutes}`}
+            value={`${wc.hour}:${wc.minute}`}
             onChange={handleTimeChange}
             className="mt-1 block w-full rounded-md border bg-background px-2 py-1 text-sm"
           />

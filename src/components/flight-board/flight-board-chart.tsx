@@ -183,7 +183,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     if (workPackages.length === 0) return { start: 0, end: 100 };
     const totalMs = maxTime - minTime || 86400000;
     const zoomHours: Record<string, number> = { "6h": 6, "12h": 12, "1d": 24, "3d": 72, "1w": 168 };
-    const hours = zoomHours[zoomLevel] ?? 72;
+    const hours = zoomHours[zoomLevel];
+    if (!hours) return { start: 0, end: 100 };
     const rangeMs = hours * 3600000;
     return { start: 0, end: Math.min(100, (rangeMs / totalMs) * 100) };
   }, [workPackages.length, minTime, maxTime, zoomLevel]);
@@ -193,6 +194,38 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     if (workPackages.length === 0) return [];
     return computeMidnights(minTime, maxTime, timezone);
   }, [workPackages.length, minTime, maxTime, timezone]);
+
+  // ─── TZ-aligned time grid (clean intervals from midnight) ───
+  const timeGrid = useMemo(() => {
+    if (workPackages.length === 0 || midnightTimestamps.length === 0) {
+      return { intervalMs: 21600000, axisMin: minTime, axisMax: maxTime, ticks: [] as number[] };
+    }
+
+    const totalMs = maxTime - minTime || 86400000;
+
+    // Pick clean interval: 1h, 2h, 3h, 6h, or 12h — aim for ~12–24 divisions
+    const candidates = [1, 2, 3, 6, 12];
+    let intervalHours = 12;
+    for (const h of candidates) {
+      if (totalMs / (h * 3600000) <= 24) {
+        intervalHours = h;
+        break;
+      }
+    }
+    const intervalMs = intervalHours * 3600000;
+
+    // Snap axis range to timezone midnight boundaries
+    const axisMin = midnightTimestamps[0];
+    const axisMax = midnightTimestamps[midnightTimestamps.length - 1] + 86400000;
+
+    // Generate tick positions from first midnight at the chosen interval
+    const ticks: number[] = [];
+    for (let ts = axisMin; ts <= axisMax; ts += intervalMs) {
+      ticks.push(ts);
+    }
+
+    return { intervalMs, axisMin, axisMax, ticks };
+  }, [workPackages.length, minTime, maxTime, midnightTimestamps]);
 
   // ─── NOW timestamp — initialized on mount, updated every 60s ───
   const [nowTimestamp, setNowTimestamp] = useState(0);
@@ -301,23 +334,13 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const hourFormatter = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false,
     });
-    const hourNumFmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone, hour: "numeric", hourCycle: "h23",
-    });
     const dayNameFmt = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone, weekday: "long",
     });
+    const dateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone, month: "numeric", day: "numeric",
+    });
     const tzLabel = timezone === "UTC" ? "UTC" : "Eastern (ET)";
-
-    // Adaptive time intervals based on zoom level
-    const intervalMap: Record<string, number> = {
-      "6h":  3600000,   // 1h
-      "12h": 7200000,   // 2h
-      "1d":  10800000,  // 3h
-      "3d":  21600000,  // 6h
-      "1w":  43200000,  // 12h
-    };
-    const interval = intervalMap[zoomLevel] ?? 21600000; // default 6h
 
     return {
       backgroundColor: "transparent",
@@ -335,43 +358,40 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         bottom: 38,
       },
       xAxis: [
-        // Bottom axis (index 0) — hour marks with date at midnight & noon
+        // Bottom axis — time labels anchored to TZ midnight at clean intervals
         {
           type: "time" as const,
           position: "bottom" as const,
-          min: minTime,
-          max: maxTime,
-          minInterval: interval,
-          maxInterval: interval,
+          min: timeGrid.axisMin,
+          max: timeGrid.axisMax,
+          minInterval: timeGrid.intervalMs,
+          maxInterval: timeGrid.intervalMs,
           axisLabel: {
             color: "hsl(var(--muted-foreground))",
-            fontSize: 12,
+            fontSize: 11,
             formatter: (value: number) => {
-              const date = new Date(value);
-              const h = parseInt(hourNumFmt.format(date));
-              const timeStr = hourFormatter.format(date);
-              // Show M/D date at midnight (0) and noon (12) — max 2x per day
-              if (h === 0 || h === 12) {
-                const m = date.toLocaleDateString("en-US", { month: "numeric", day: "numeric", timeZone: timezone });
-                return `{date|${m}} {time|${timeStr}}`;
+              const timeStr = hourFormatter.format(new Date(value));
+              if (timeStr === "00:00") {
+                const dateStr = dateFmt.format(new Date(value));
+                return `{date|${dateStr}}\n{time|${timeStr}}`;
               }
               return `{time|${timeStr}}`;
             },
             rich: {
               date: { fontWeight: "bold" as const, fontSize: 11, lineHeight: 16, color: "hsl(var(--foreground))" },
-              time: { fontSize: 12, lineHeight: 16 },
+              time: { fontSize: 11, lineHeight: 16 },
             },
           },
           splitLine: { show: false },
           axisLine: { show: true },
           axisTick: { show: true },
         },
-        // Top axis (index 1) — day name labels
+        // Top axis — day name labels only (no lines/ticks)
         {
           type: "time" as const,
           position: "top" as const,
-          min: minTime,
-          max: maxTime,
+          min: timeGrid.axisMin,
+          max: timeGrid.axisMax,
           axisLabel: {
             color: "hsl(var(--foreground))",
             fontSize: 12,
@@ -410,16 +430,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
       series: [],
     };
-  }, [timezone, minTime, maxTime, zoomRange, zoomLevel]);
+  }, [timezone, timeGrid, zoomRange]);
 
   // ─── BODY OPTION (bars + y-axis, no visible xAxis) ───
   const bodyOption = useMemo(() => {
-    const markLineData = midnightTimestamps.map((ts) => ({
-      xAxis: ts,
-      lineStyle: { type: "dashed" as const, color: "rgba(128,128,128,0.4)", width: 1 },
-      label: { show: false },
-    }));
-
     return {
       backgroundColor: "transparent",
       tooltip: {
@@ -459,15 +473,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       },
       xAxis: {
         type: "time" as const,
-        min: minTime,
-        max: maxTime,
+        min: timeGrid.axisMin,
+        max: timeGrid.axisMax,
         axisLabel: { show: false },
         axisTick: { show: false },
         axisLine: { show: false },
-        splitLine: {
-          show: true,
-          lineStyle: { color: "hsl(var(--border))", opacity: 0.3 },
-        },
+        splitLine: { show: false },
       },
       yAxis: {
         type: "category" as const,
@@ -478,7 +489,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           fontSize: 11,
           fontWeight: "bold" as const,
           formatter: (value: string) => {
-            // Hide labels for break separator entries (rendered in chart area)
             if (value.startsWith(BREAK_PREFIX)) return "";
             return value;
           },
@@ -509,13 +519,13 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             silent: true,
             symbol: ["none", "none"],
             animation: false,
-            data: markLineData,
+            data: [],
           },
         },
       ],
     };
   }, [registrations, chartData, colorMap, allWps, renderFlightBar,
-      midnightTimestamps, timezone, minTime, maxTime, zoomRange]);
+      timeGrid, timezone, zoomRange]);
 
   // ─── Sync header zoom → body ───
   const handleHeaderDataZoom = useCallback(() => {
@@ -549,34 +559,41 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     [allWps, onBarClick]
   );
 
-  // ─── Live NOW line — merge-update on body chart ───
+  // ─── Live NOW line + time grid lines — merge-update on body chart ───
   useEffect(() => {
     if (nowTimestamp === 0 || workPackages.length === 0) return;
     const instance = bodyChartRef.current?.getEchartsInstance();
     if (!instance) return;
 
-    const nowInRange = nowTimestamp >= minTime && nowTimestamp <= maxTime;
-    const markLineData = [
-      ...midnightTimestamps.map((ts) => ({
-        xAxis: ts,
-        lineStyle: { type: "dashed" as const, color: "rgba(128,128,128,0.4)", width: 1 },
-        label: { show: false },
-      })),
-      ...(nowInRange
-        ? [{
-            xAxis: nowTimestamp,
-            lineStyle: { type: "solid" as const, color: "#ef4444", width: 2 },
-            label: {
-              show: true,
-              formatter: "NOW",
-              position: "start" as const,
-              color: "#ef4444",
-              fontWeight: "bold" as const,
-              fontSize: 10,
-            },
-          }]
-        : []),
-    ];
+    const midnightSet = new Set(midnightTimestamps);
+
+    // Time grid lines — midnight = solid/thicker, sub-day = dashed/thinner
+    const gridLines = timeGrid.ticks.map((ts) => ({
+      xAxis: ts,
+      lineStyle: {
+        type: (midnightSet.has(ts) ? "solid" : "dashed") as "solid" | "dashed",
+        color: midnightSet.has(ts) ? "rgba(128,128,128,0.5)" : "rgba(128,128,128,0.2)",
+        width: midnightSet.has(ts) ? 1.5 : 1,
+      },
+      label: { show: false },
+    }));
+
+    // NOW line
+    const nowInRange = nowTimestamp >= timeGrid.axisMin && nowTimestamp <= timeGrid.axisMax;
+    const nowLine = nowInRange
+      ? [{
+          xAxis: nowTimestamp,
+          lineStyle: { type: "solid" as const, color: "#ef4444", width: 2 },
+          label: {
+            show: true,
+            formatter: "NOW",
+            position: "start" as const,
+            color: "#ef4444",
+            fontWeight: "bold" as const,
+            fontSize: 10,
+          },
+        }]
+      : [];
 
     instance.setOption({
       series: [{
@@ -584,11 +601,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           silent: true,
           symbol: ["none", "none"],
           animation: false,
-          data: markLineData,
+          data: [...gridLines, ...nowLine],
         },
       }],
     });
-  }, [nowTimestamp, midnightTimestamps, minTime, maxTime, workPackages.length]);
+  }, [nowTimestamp, timeGrid, midnightTimestamps, workPackages.length]);
 
   // ─── Empty state ───
   if (workPackages.length === 0) {

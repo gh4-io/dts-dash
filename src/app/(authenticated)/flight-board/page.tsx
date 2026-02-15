@@ -31,7 +31,7 @@ function getStoredExpanded(): boolean {
 }
 
 function FlightBoardPageInner() {
-  const [zoomLevel, setZoomLevel] = useState("3d");
+  const [zoomLevel, setZoomLevel] = useState("all");
   const [selectedWp, setSelectedWp] = useState<SerializedWorkPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(getStoredExpanded);
@@ -111,7 +111,7 @@ function FlightBoardPageInner() {
   // Build format chips for non-default zoom
   const formatChips: ActiveChip[] = useMemo(
     () =>
-      zoomLevel !== "3d"
+      zoomLevel !== "all"
         ? [
             {
               id: "zoom",

@@ -8,7 +8,6 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
   { href: "/flight-board", label: "Flight Board", icon: "fa-solid fa-plane-departure" },
   { href: "/capacity", label: "Capacity", icon: "fa-solid fa-gauge-high" },
-  { href: "/settings", label: "Settings", icon: "fa-solid fa-gear" },
 ];
 
 export function Sidebar() {
