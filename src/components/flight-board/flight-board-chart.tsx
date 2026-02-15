@@ -126,6 +126,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
   // ─── NOW timestamp — initialized on mount, updated every 60s (used by smart anchor in zoomRange)
   const [nowTimestamp, setNowTimestamp] = useState(0);
+  // ✅ Capture zoom state as render-safe value (avoids ref-in-useMemo lint error)
+  const [currentZoomMidpoint, setCurrentZoomMidpoint] = useState(50);
   const { getColor } = useCustomers();
   const { timeFormat } = usePreferences();
   const { resolvedTheme } = useTheme();
@@ -278,9 +280,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       // Center on current time
       centerMs = now;
     } else {
-      // Preserve current midpoint
-      const currentMidpointPct = (realZoomState.current.start + realZoomState.current.end) / 2;
-      centerMs = filterStartMs + (currentMidpointPct / 100) * (filterEndMs - filterStartMs);
+      // Preserve current midpoint (using render-safe state, not ref)
+      centerMs = filterStartMs + (currentZoomMidpoint / 100) * (filterEndMs - filterStartMs);
     }
 
     // Convert center timestamp to percentage
@@ -290,7 +291,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const start = Math.max(0, Math.min(100 - span, centerPct - span / 2));
     const end = start + span;
     return { start, end };
-  }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp]);
+  }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp, currentZoomMidpoint]);
 
   // ─── Filter-based midnight boundaries (TZ-aware) ───
   const { midnightTimestamps, timeGrid } = useMemo(() => {
@@ -691,9 +692,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         trigger: "item" as const,
         appendToBody: true,
         confine: true,
-        backgroundColor: "hsl(var(--popover))",
-        borderColor: "hsl(var(--border))",
-        textStyle: { color: "hsl(var(--popover-foreground))" },
+        backgroundColor: cc.popover,
+        borderColor: cc.border,
+        textStyle: { color: cc.popoverFg },
         formatter: (params: { data: GanttDataItem }) => {
           const d = params.data;
           if (!d || !Array.isArray(d)) return "";
@@ -747,7 +748,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         data: registrations,
         inverse: true,
         axisLabel: {
-          color: "hsl(var(--foreground))",
+          color: cc.fg,
           fontSize: 11,
           fontWeight: "bold" as const,
           formatter: (value: string) => {
@@ -757,7 +758,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         },
         splitLine: {
           show: true,
-          lineStyle: { color: "hsl(var(--border))", opacity: 0.4 },
+          lineStyle: { color: cc.border, opacity: 0.4 },
         },
       },
       dataZoom: [
@@ -795,7 +796,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
     };
   }, [registrations, chartData, colorMap, allWps, renderFlightBar,
-      timeGrid, timezone, timeFormat, zoomRange]);
+      timeGrid, timezone, timeFormat, zoomRange, cc]);
 
   // ─── Sync header zoom → body ───
   const handleHeaderDataZoom = useCallback(() => {
@@ -809,7 +810,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const dz = opt?.dataZoom?.[0];
       if (dz) {
         // ✅ NEW: Capture real zoom state for adaptive ticks
-        realZoomState.current = { start: dz.start ?? 0, end: dz.end ?? 100 };
+        const start = dz.start ?? 0;
+        const end = dz.end ?? 100;
+        realZoomState.current = { start, end };
+        setCurrentZoomMidpoint((start + end) / 2);
         setTickRecalcTrigger((t) => t + 1);
 
         bodyInstance.dispatchAction({
@@ -834,7 +838,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const dz = opt?.dataZoom?.[0];
       if (dz) {
         // ✅ NEW: Capture real zoom state for adaptive ticks
-        realZoomState.current = { start: dz.start ?? 0, end: dz.end ?? 100 };
+        const start = dz.start ?? 0;
+        const end = dz.end ?? 100;
+        realZoomState.current = { start, end };
+        setCurrentZoomMidpoint((start + end) / 2);
         setTickRecalcTrigger((t) => t + 1);
 
         headerInstance.dispatchAction({ type: "dataZoom", start: dz.start, end: dz.end });
@@ -1084,7 +1091,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           echarts={echarts}
           option={headerOption}
           style={{ height: 90, width: "100%" }}
-          theme="dark"
+          theme={echartsTheme}
           notMerge
           onEvents={{ datazoom: handleHeaderDataZoom }}
         />
@@ -1102,7 +1109,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           echarts={echarts}
           option={bodyOption}
           style={{ height: bodyHeight, width: "100%" }}
-          theme="dark"
+          theme={echartsTheme}
           notMerge
           onEvents={{ click: handleClick, datazoom: handleBodyDataZoom }}
         />
