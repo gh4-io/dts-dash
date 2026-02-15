@@ -19,6 +19,7 @@ import { usePreferences } from "@/lib/hooks/use-preferences";
 import { formatFlightTooltip } from "./flight-tooltip";
 import { cn } from "@/lib/utils";
 import { BREAK_PREFIX } from "@/lib/hooks/use-transformed-data";
+import { computeTickInterval } from "@/lib/utils/tick-interval";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams } from "echarts";
 
@@ -36,6 +37,10 @@ echarts.use([
   GraphicComponent,
   CanvasRenderer,
 ]);
+
+// ─── Layout constants for pixel-based tick computation ───
+const GRID_PADDING = 120; // grid.left (100) + grid.right (20)
+const SSR_FALLBACK_WIDTH = 1200; // reasonable desktop assumption before DOM is available
 
 /**
  * Find midnight boundaries for the filter range in the given timezone
@@ -121,8 +126,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   const headerChartRef = useRef<ReactEChartsCore>(null);
   const bodyChartRef = useRef<ReactEChartsCore>(null);
   const syncLock = useRef(false);
-  // ✅ NEW: Track real dataZoom state (for adaptive tick interval)
+  // Track real dataZoom state (for adaptive tick interval)
   const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
+  // Track body chart container width for pixel-based tick computation
+  const chartWidthRef = useRef<number>(0);
   const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
   // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
   const [nowTimestamp, setNowTimestamp] = useState(0);
@@ -298,21 +305,16 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const totalMs = axisMax - axisMin || 86400000;
     const totalHours = totalMs / 3600000;
 
-    // Compute visible hours from zoom preset for tick density
+    // Compute visible ms from zoom preset for tick density
     const zoomHoursMap: Record<string, number> = { "6h": 6, "12h": 12, "1d": 24, "3d": 72, "1w": 168 };
-    const visibleHours = zoomHoursMap[zoomLevel] ?? totalHours;
-    const effectiveHours = Math.min(visibleHours, totalHours);
+    const visibleHours = Math.min(zoomHoursMap[zoomLevel] ?? totalHours, totalHours);
+    const visibleMs = visibleHours * 3600000;
 
-    // Pick interval based on visible window, not full range
-    let intervalHours: number;
-    if (effectiveHours <= 6) intervalHours = 0.25;       // 15 min
-    else if (effectiveHours <= 12) intervalHours = 0.5;  // 30 min
-    else if (effectiveHours <= 24) intervalHours = 1;    // 1h
-    else if (effectiveHours <= 72) intervalHours = 3;    // 3h
-    else if (effectiveHours <= 192) intervalHours = 6;   // 6h  (≤8 days)
-    else intervalHours = 12;                              // 12h (>14 days, dates only)
-
-    const intervalMs = intervalHours * 3600000;
+    // Pixel-based interval selection (SSR fallback before DOM is available)
+    const containerWidth = chartWidthRef.current || SSR_FALLBACK_WIDTH;
+    const availablePixels = Math.max(containerWidth - GRID_PADDING, 100);
+    const intervalMs = computeTickInterval({ availablePixels, visibleMs });
+    const intervalHours = intervalMs / 3600000;
 
     // Generate tick positions — step by interval or 1h, whichever is smaller
     const hourFmt = new Intl.DateTimeFormat("en-US", {
@@ -385,21 +387,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const filterEndMs = new Date(filterEnd).getTime();
     const totalMs = filterEndMs - filterStartMs || 86400000;
     const visibleMs = ((end - start) / 100) * totalMs;
-    const visibleHours = visibleMs / 3600000;
 
-    let intervalHours: number;
-    if (visibleHours <= 6) intervalHours = 0.25;       // 15 min
-    else if (visibleHours <= 12) intervalHours = 0.5;  // 30 min
-    else if (visibleHours <= 24) intervalHours = 1;    // 1h
-    else if (visibleHours <= 72) intervalHours = 3;    // 3h
-    else if (visibleHours <= 192) intervalHours = 6;   // 6h  (≤8 days)
-    else if (visibleHours <= 336) intervalHours = 12;  // 12h (≤14 days)
-    else intervalHours = 24;                            // 24h (>14 days)
-
-    const intervalMs = intervalHours * 3600000;
+    // Pixel-based interval selection using real DOM width
+    const containerWidth = chartWidthRef.current
+      || bodyChartRef.current?.getEchartsInstance()?.getDom()?.clientWidth
+      || SSR_FALLBACK_WIDTH;
+    const availablePixels = Math.max(containerWidth - GRID_PADDING, 100);
+    const intervalMs = computeTickInterval({ availablePixels, visibleMs });
 
     // Top axis interval: coarser than time ticks (minimum 3h) for day labels
-    // At fine zoom, only need enough precision to detect day boundaries
     const topIntervalMs = Math.max(intervalMs, 3 * 3600000);
 
     // Update header chart — 2 axes (bottom hidden for sync + top day names)
@@ -457,10 +453,30 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         console.warn("[Adaptive Ticks] body setOption error:", err);
       }
     }
-
-    console.log(`[Adaptive Ticks] Visible: ${visibleHours.toFixed(1)}h → Interval: ${intervalHours}h`);
   }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length,
       midnightSet, dateFmt, hourFormatter]);
+
+  // ─── Track body chart container width via ResizeObserver ───
+  useEffect(() => {
+    const dom = bodyChartRef.current?.getEchartsInstance()?.getDom();
+    if (!dom) return;
+
+    // Initialize immediately
+    chartWidthRef.current = dom.clientWidth;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newWidth = entry.contentRect.width;
+        if (Math.abs(newWidth - chartWidthRef.current) > 5) {
+          chartWidthRef.current = newWidth;
+          setTickRecalcTrigger((t) => t + 1);
+        }
+      }
+    });
+
+    observer.observe(dom);
+    return () => observer.disconnect();
+  }, [workPackages.length]);
 
   // ✅ STEP 3b: Update visible window start date label
   useEffect(() => {
