@@ -4,9 +4,7 @@ import * as React from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { TimePickerInput } from "@/components/ui/time-picker-input";
-import { TimePeriodSelect } from "@/components/ui/time-picker-period-select";
-import { type Period } from "@/components/ui/time-picker-utils";
+import { TimeColumn, type TimeColumnItem } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 
@@ -79,38 +77,63 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
   const [open, setOpen] = React.useState(false);
   const { timeFormat } = usePreferences();
 
-  const minuteRef = React.useRef<HTMLInputElement>(null);
-  const hourRef = React.useRef<HTMLInputElement>(null);
-  const periodRef = React.useRef<HTMLButtonElement>(null);
-
   // Wall-clock components in the selected timezone
   const wc = React.useMemo(() => {
     const date = value ? new Date(value) : new Date();
     return getWallClock(date, timezone);
   }, [value, timezone]);
 
-  // Build a local Date that the TimePicker components can manipulate.
-  // The local hours/minutes represent the wall-clock time in the selected tz.
-  const timeDate = React.useMemo(() => {
-    return new Date(2000, 0, 1, wc.hour, wc.minute, 0, 0);
-  }, [wc.hour, wc.minute]);
+  const is12h = timeFormat === "12h";
 
-  const [period, setPeriod] = React.useState<Period>(wc.hour >= 12 ? "PM" : "AM");
+  // Derive display hour + meridiem from 24h wall-clock hour
+  const displayHour = React.useMemo(() => {
+    if (!is12h) return wc.hour;
+    return wc.hour % 12 || 12;
+  }, [wc.hour, is12h]);
 
-  // Sync period when wall-clock hour changes externally
-  React.useEffect(() => {
-    setPeriod(wc.hour >= 12 ? "PM" : "AM");
+  const meridiem = React.useMemo<"AM" | "PM">(() => {
+    return wc.hour >= 12 ? "PM" : "AM";
   }, [wc.hour]);
 
-  const handleTimeChange = React.useCallback(
-    (newDate: Date | undefined) => {
-      if (!newDate) return;
-      const h = newDate.getHours();
-      const m = newDate.getMinutes();
-      onChange(wallClockToUtc(wc.year, wc.month, wc.day, h, m, timezone));
+  // Commit a new wall-clock hour (24h) + minute
+  const commitTime = React.useCallback(
+    (h24: number, m: number) => {
+      onChange(wallClockToUtc(wc.year, wc.month, wc.day, h24, m, timezone));
     },
     [wc.year, wc.month, wc.day, timezone, onChange],
   );
+
+  // Convert a 12h display hour + meridiem back to 24h
+  const to24h = (h12: number, mer: "AM" | "PM"): number => {
+    if (mer === "AM") return h12 === 12 ? 0 : h12;
+    return h12 === 12 ? 12 : h12 + 12;
+  };
+
+  const handleHourSelect = (v: number | string) => {
+    const h = v as number;
+    if (is12h) {
+      commitTime(to24h(h, meridiem), wc.minute);
+    } else {
+      commitTime(h, wc.minute);
+    }
+  };
+
+  const handleMinuteSelect = (v: number | string) => {
+    commitTime(wc.hour, v as number);
+  };
+
+  const handleMeridiemSelect = (v: number | string) => {
+    const newMer = v as "AM" | "PM";
+    commitTime(to24h(displayHour, newMer), wc.minute);
+  };
+
+  const handleNow = () => {
+    const now = new Date();
+    const nowWc = getWallClock(now, timezone);
+    onChange(
+      wallClockToUtc(wc.year, wc.month, wc.day, nowWc.hour, nowWc.minute, timezone),
+    );
+  };
 
   const handleDateSelect = (selected: Date | undefined) => {
     if (!selected) return;
@@ -133,7 +156,7 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
     const hStr = wc.hour.toString().padStart(2, "0");
     const mStr = wc.minute.toString().padStart(2, "0");
 
-    if (timeFormat === "12h") {
+    if (is12h) {
       const p = wc.hour >= 12 ? "PM" : "AM";
       const h12 = wc.hour === 0 ? 12 : wc.hour > 12 ? wc.hour - 12 : wc.hour;
       return `${y}-${mo}-${d} ${h12}:${mStr} ${p}`;
@@ -156,7 +179,30 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
   const calendarDate = new Date(wc.year, wc.month, wc.day, 12, 0, 0);
 
   const tzLabel = timezone === "UTC" ? "UTC" : "Eastern";
-  const is12h = timeFormat === "12h";
+
+  // Build column items
+  const hourItems = React.useMemo((): TimeColumnItem[] => {
+    const start = is12h ? 1 : 0;
+    const end = is12h ? 12 : 23;
+    const items: TimeColumnItem[] = [];
+    for (let i = start; i <= end; i++) {
+      items.push({ value: i, label: i.toString().padStart(2, "0") });
+    }
+    return items;
+  }, [is12h]);
+
+  const minuteItems = React.useMemo((): TimeColumnItem[] => {
+    const items: TimeColumnItem[] = [];
+    for (let i = 0; i <= 59; i++) {
+      items.push({ value: i, label: i.toString().padStart(2, "0") });
+    }
+    return items;
+  }, []);
+
+  const meridiemItems: TimeColumnItem[] = [
+    { value: "AM", label: "AM" },
+    { value: "PM", label: "PM" },
+  ];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -180,8 +226,8 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
           onSelect={handleDateSelect}
           initialFocus
         />
-        <div className="border-t p-3">
-          <div className="flex items-center justify-between">
+        <div className="border-t">
+          <div className="flex items-center justify-between px-3 pt-2">
             <label className="text-xs text-muted-foreground">
               Time ({tzLabel})
             </label>
@@ -191,34 +237,42 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
               </span>
             )}
           </div>
-          <div className="mt-2 flex items-center gap-1">
-            <TimePickerInput
-              picker={is12h ? "12hours" : "hours"}
-              period={is12h ? period : undefined}
-              date={timeDate}
-              setDate={handleTimeChange}
-              ref={hourRef}
-              onRightFocus={() => minuteRef.current?.focus()}
+          {/* Scroll-column time picker */}
+          <div className="flex border-t mt-2">
+            <TimeColumn
+              title="Hours"
+              items={hourItems}
+              selectedValue={displayHour}
+              onSelect={handleHourSelect}
             />
-            <span className="text-sm font-medium text-muted-foreground">:</span>
-            <TimePickerInput
-              picker="minutes"
-              date={timeDate}
-              setDate={handleTimeChange}
-              ref={minuteRef}
-              onLeftFocus={() => hourRef.current?.focus()}
-              onRightFocus={is12h ? () => periodRef.current?.focus() : undefined}
+            <TimeColumn
+              title="Min"
+              items={minuteItems}
+              selectedValue={wc.minute}
+              onSelect={handleMinuteSelect}
+              isLast={!is12h}
             />
             {is12h && (
-              <TimePeriodSelect
-                period={period}
-                setPeriod={setPeriod}
-                date={timeDate}
-                setDate={handleTimeChange}
-                ref={periodRef}
-                onLeftFocus={() => minuteRef.current?.focus()}
+              <TimeColumn
+                title="AM/PM"
+                items={meridiemItems}
+                selectedValue={meridiem}
+                onSelect={handleMeridiemSelect}
+                isLast
               />
             )}
+          </div>
+          {/* Footer with Now shortcut */}
+          <div className="flex items-center justify-end border-t px-2 py-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={handleNow}
+              className="text-xs"
+            >
+              Now
+            </Button>
           </div>
         </div>
       </PopoverContent>

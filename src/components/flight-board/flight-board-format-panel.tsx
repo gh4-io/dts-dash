@@ -13,6 +13,7 @@ interface FlightBoardFormatPanelProps {
   onNow: () => void;
   onFit: () => void;
   showNow: boolean;
+  filterSpanHours: number; // ✅ PATCH #1: For disabling presets
 }
 
 const ZOOM_LEVELS = [
@@ -33,6 +34,7 @@ export function FlightBoardFormatPanel({
   onNow,
   onFit,
   showNow,
+  filterSpanHours,
 }: FlightBoardFormatPanelProps) {
   return (
     <div className="space-y-3">
@@ -42,20 +44,27 @@ export function FlightBoardFormatPanel({
           Zoom
         </label>
         <div className="flex items-center rounded-md border bg-muted/50 p-0.5">
-          {ZOOM_LEVELS.map((level) => (
-            <Button
-              key={level.id}
-              variant={activeZoom === level.id ? "default" : "ghost"}
-              size="sm"
-              className={cn(
-                "h-7 px-2.5 text-xs flex-1",
-                activeZoom !== level.id && "text-muted-foreground"
-              )}
-              onClick={() => onZoomChange(level.id)}
-            >
-              {level.label}
-            </Button>
-          ))}
+          {ZOOM_LEVELS.map((level) => {
+            const levelHours = parseInt(level.id); // "6h" → 6, "12h" → 12, etc.
+            const disabled = filterSpanHours < levelHours;
+
+            return (
+              <Button
+                key={level.id}
+                variant={activeZoom === level.id ? "default" : "ghost"}
+                size="sm"
+                disabled={disabled} // ✅ PATCH #1: Disable when filter span < preset hours
+                title={disabled ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h` : undefined}
+                className={cn(
+                  "h-7 px-2.5 text-xs flex-1",
+                  activeZoom !== level.id && "text-muted-foreground"
+                )}
+                onClick={() => onZoomChange(level.id)}
+              >
+                {level.label}
+              </Button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-1 mt-1.5">
           <Button

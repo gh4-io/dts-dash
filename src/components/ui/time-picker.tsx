@@ -632,4 +632,5 @@ function TimePicker({
 
 TimePicker.displayName = "TimePicker";
 
-export { TimePicker };
+export { TimePicker, TimeColumn };
+export type { TimeColumnItem };

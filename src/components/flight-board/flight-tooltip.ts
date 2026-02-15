@@ -47,34 +47,39 @@ export function formatFlightTooltip(data: {
         ? "WP"
         : "default";
 
+  // Use CSS variables for theme-aware colors
+  const dimColor = "hsl(var(--muted-foreground))";
+  const borderColor = "hsl(var(--border))";
+  const fgColor = "hsl(var(--popover-foreground))";
+
   const commentsHtml = data.comments
-    ? `<div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;margin-top:6px;font-style:italic;font-size:11px;color:rgba(255,255,255,0.7);">"${data.comments.slice(0, 100)}${data.comments.length > 100 ? "..." : ""}"</div>`
+    ? `<div style="border-top:1px solid ${borderColor};padding-top:6px;margin-top:6px;font-style:italic;font-size:11px;color:${dimColor};">"${data.comments.slice(0, 100)}${data.comments.length > 100 ? "..." : ""}"</div>`
     : "";
 
   return `
-<div style="padding:10px 12px;max-width:320px;font-size:12px;line-height:1.5;">
+<div style="padding:10px 12px;max-width:320px;font-size:12px;line-height:1.5;color:${fgColor};">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
     <div style="display:flex;flex-direction:column;gap:2px;">
       <span style="font-size:14px;font-weight:bold;">${data.registration}</span>
-      <span style="font-size:11px;color:rgba(255,255,255,0.6);">${data.aircraftType}</span>
+      <span style="font-size:11px;color:${dimColor};">${data.aircraftType}</span>
     </div>
     <span style="display:flex;align-items:center;gap:5px;">
       <span style="width:8px;height:8px;border-radius:50%;background:${data.customerColor};display:inline-block;"></span>
       ${data.customer}
     </span>
   </div>
-  <div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;">
-    ${data.flightId ? `<div><span style="color:rgba(255,255,255,0.6);">Flight:</span> ${data.flightId}</div>` : ""}
-    <div><span style="color:rgba(255,255,255,0.6);">Arrival:</span> ${fmtDate(arrivalDate)}</div>
-    <div><span style="color:rgba(255,255,255,0.6);">Departure:</span> ${fmtDate(departureDate)}</div>
-    <div><span style="color:rgba(255,255,255,0.6);">Ground:</span> ${groundStr}</div>
+  <div style="border-top:1px solid ${borderColor};padding-top:6px;">
+    ${data.flightId ? `<div><span style="color:${dimColor};">Flight:</span> ${data.flightId}</div>` : ""}
+    <div><span style="color:${dimColor};">Arrival:</span> ${fmtDate(arrivalDate)}</div>
+    <div><span style="color:${dimColor};">Departure:</span> ${fmtDate(departureDate)}</div>
+    <div><span style="color:${dimColor};">Ground:</span> ${groundStr}</div>
   </div>
-  <div style="border-top:1px solid rgba(255,255,255,0.15);padding-top:6px;margin-top:6px;">
-    <div><span style="color:rgba(255,255,255,0.6);">Status:</span> ${data.status}</div>
-    <div><span style="color:rgba(255,255,255,0.6);">WP #:</span> ${data.workpackageNo ?? "—"}</div>
-    <div><span style="color:rgba(255,255,255,0.6);">Man-Hours:</span> ${data.effectiveMH} MH (${mhLabel})</div>
+  <div style="border-top:1px solid ${borderColor};padding-top:6px;margin-top:6px;">
+    <div><span style="color:${dimColor};">Status:</span> ${data.status}</div>
+    <div><span style="color:${dimColor};">WP #:</span> ${data.workpackageNo ?? "—"}</div>
+    <div><span style="color:${dimColor};">Man-Hours:</span> ${data.effectiveMH} MH (${mhLabel})</div>
   </div>
   ${commentsHtml}
-  <div style="margin-top:6px;font-size:11px;color:rgba(255,255,255,0.4);">Click for full details →</div>
+  <div style="margin-top:6px;font-size:11px;color:${dimColor};">Click for full details →</div>
 </div>`.trim();
 }

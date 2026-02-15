@@ -13,6 +13,7 @@ import {
   GraphicComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
+import { useTheme } from "next-themes";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { formatFlightTooltip } from "./flight-tooltip";
@@ -120,8 +121,39 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   const headerChartRef = useRef<ReactEChartsCore>(null);
   const bodyChartRef = useRef<ReactEChartsCore>(null);
   const syncLock = useRef(false);
+  // ✅ NEW: Track real dataZoom state (for adaptive tick interval)
+  const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
+  const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
+  // ─── NOW timestamp — initialized on mount, updated every 60s (used by smart anchor in zoomRange)
+  const [nowTimestamp, setNowTimestamp] = useState(0);
   const { getColor } = useCustomers();
   const { timeFormat } = usePreferences();
+  const { resolvedTheme } = useTheme();
+  const echartsTheme = resolvedTheme === "dark" ? "dark" : undefined;
+
+  // Resolve CSS variables to concrete colors for ECharts canvas (canvas can't parse var())
+  const cc = useMemo(() => {
+    if (typeof document === "undefined") {
+      // SSR fallback — dark defaults
+      return { fg: "#e5e5e5", mutedFg: "#a1a1aa", border: "#27272a", popover: "#18181b", popoverFg: "#fafafa", primary15: "rgba(59,130,246,0.15)" };
+    }
+    const s = getComputedStyle(document.documentElement);
+    const v = (name: string) => {
+      const raw = s.getPropertyValue(name).trim();
+      return raw ? `hsl(${raw})` : "#888";
+    };
+    return {
+      fg: v("--foreground"),
+      mutedFg: v("--muted-foreground"),
+      border: v("--border"),
+      popover: v("--popover"),
+      popoverFg: v("--popover-foreground"),
+      primary15: (() => {
+        const raw = s.getPropertyValue("--primary").trim();
+        return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
+      })(),
+    };
+  }, [resolvedTheme]);
 
   // Expose zoom read/write for parent toolbar handlers
   useImperativeHandle(ref, () => ({
@@ -141,7 +173,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   }));
 
   // ─── Compute chart data + time bounds ───
-  const { registrations, chartData, colorMap, allWps, minTime, maxTime } = useMemo(() => {
+  // ✅ Note: minTime/maxTime still computed for chart data but not used for zoom (now using filter bounds)
+  const { registrations, chartData, colorMap, allWps } = useMemo(() => {
     if (workPackages.length === 0) {
       return {
         registrations: [] as string[],
@@ -214,13 +247,50 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   // ─── Zoom range for the dataZoom ───
   const zoomRange = useMemo(() => {
     if (workPackages.length === 0) return { start: 0, end: 100 };
-    const totalMs = maxTime - minTime || 86400000;
-    const zoomHours: Record<string, number> = { "6h": 6, "12h": 12, "1d": 24, "3d": 72, "1w": 168 };
+
+    // ✅ FIX BUG 1: Use filter bounds instead of data bounds
+    const filterStartMs = new Date(filterStart).getTime();
+    const filterEndMs = new Date(filterEnd).getTime();
+    const totalMs = filterEndMs - filterStartMs || 86400000;
+
+    const zoomHours: Record<string, number> = {
+      "6h": 6, "12h": 12, "1d": 24, "3d": 72, "1w": 168
+    };
     const hours = zoomHours[zoomLevel];
     if (!hours) return { start: 0, end: 100 };
+
     const rangeMs = hours * 3600000;
-    return { start: 0, end: Math.min(100, (rangeMs / totalMs) * 100) };
-  }, [workPackages.length, minTime, maxTime, zoomLevel]);
+    const span = Math.min(100, (rangeMs / totalMs) * 100);
+
+    // Clamp: if preset exceeds filter span, show full range
+    if (span >= 99) {
+      console.warn(`[Zoom] Preset "${zoomLevel}" (${hours}h) exceeds filter range (${(totalMs / 3600000).toFixed(1)}h)`);
+      return { start: 0, end: 100 };
+    }
+
+    // ✅ STEP 4: Smart anchor — center on "now" if in filter range, else preserve midpoint
+    // Use nowTimestamp state (pure) instead of Date.now() (impure function)
+    const now = nowTimestamp > 0 ? nowTimestamp : filterStartMs + (filterEndMs - filterStartMs) / 2;
+    const nowInRange = nowTimestamp > 0 && now >= filterStartMs && now <= filterEndMs;
+
+    let centerMs: number;
+    if (nowInRange) {
+      // Center on current time
+      centerMs = now;
+    } else {
+      // Preserve current midpoint
+      const currentMidpointPct = (realZoomState.current.start + realZoomState.current.end) / 2;
+      centerMs = filterStartMs + (currentMidpointPct / 100) * (filterEndMs - filterStartMs);
+    }
+
+    // Convert center timestamp to percentage
+    const centerPct = ((centerMs - filterStartMs) / (filterEndMs - filterStartMs)) * 100;
+
+    // Position window around center
+    const start = Math.max(0, Math.min(100 - span, centerPct - span / 2));
+    const end = start + span;
+    return { start, end };
+  }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp]);
 
   // ─── Filter-based midnight boundaries (TZ-aware) ───
   const { midnightTimestamps, timeGrid } = useMemo(() => {
@@ -282,8 +352,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     };
   }, [workPackages.length, filterStart, filterEnd, timezone, zoomLevel]);
 
-  // ─── NOW timestamp — initialized on mount, updated every 60s ───
-  const [nowTimestamp, setNowTimestamp] = useState(0);
+  // ─── Update NOW timestamp every 60s ───
   useEffect(() => {
     const tid = setTimeout(() => setNowTimestamp(Date.now()), 0);
     const id = setInterval(() => setNowTimestamp(Date.now()), 60000);
@@ -299,6 +368,89 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     }),
     [timezone, timeFormat]
   );
+
+  // ✅ STEP 3: Adaptive tick interval based on real visible window
+  useEffect(() => {
+    const { start, end } = realZoomState.current;
+    const filterStartMs = new Date(filterStart).getTime();
+    const filterEndMs = new Date(filterEnd).getTime();
+    const totalMs = filterEndMs - filterStartMs || 86400000;
+    const visibleMs = ((end - start) / 100) * totalMs;
+    const visibleHours = visibleMs / 3600000;
+
+    let intervalHours: number;
+    if (visibleHours <= 6) intervalHours = 0.25;       // 15 min
+    else if (visibleHours <= 12) intervalHours = 0.5;  // 30 min
+    else if (visibleHours <= 24) intervalHours = 1;    // 1h
+    else if (visibleHours <= 72) intervalHours = 3;    // 3h
+    else intervalHours = 6;                             // 6h
+
+    const intervalMs = intervalHours * 3600000;
+
+    // ✅ PATCH #3: Robust axis targeting with explicit position
+    [headerChartRef, bodyChartRef].forEach((ref) => {
+      const instance = ref.current?.getEchartsInstance();
+      if (!instance) return;
+      try {
+        instance.setOption({
+          xAxis: [
+            {
+              // Bottom axis (time labels) — update interval
+              type: "value",
+              position: "bottom",
+              interval: intervalMs,
+              axisLabel: { show: true }, // Ensure labels not hidden
+            },
+            {
+              // Top axis (day labels) — always 24h interval
+              type: "value",
+              position: "top",
+              interval: 86400000,
+              axisLabel: { show: true },
+            },
+          ],
+        });
+      } catch (err) {
+        console.warn("[Adaptive Ticks] setOption error:", err);
+      }
+    });
+
+    console.log(`[Adaptive Ticks] Visible: ${visibleHours.toFixed(1)}h → Interval: ${intervalHours}h`);
+  }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length]);
+
+  // ✅ STEP 3b: Update visible window start date label
+  useEffect(() => {
+    const { start } = realZoomState.current;
+    const filterStartMs = new Date(filterStart).getTime();
+    const filterEndMs = new Date(filterEnd).getTime();
+    const totalMs = filterEndMs - filterStartMs || 86400000;
+
+    // Compute visible window start timestamp
+    const visibleStartMs = filterStartMs + (start / 100) * totalMs;
+    const dateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      month: "numeric",
+      day: "numeric",
+    });
+    const dateStr = dateFmt.format(new Date(visibleStartMs));
+
+    // Update header chart graphic
+    const headerInstance = headerChartRef.current?.getEchartsInstance();
+    if (headerInstance) {
+      try {
+        headerInstance.setOption({
+          graphic: [
+            {
+              id: "visibleStartDate",
+              style: { text: dateStr },
+            },
+          ],
+        });
+      } catch (err) {
+        console.warn("[Date Anchor] setOption error:", err);
+      }
+    }
+  }, [filterStart, filterEnd, timezone, tickRecalcTrigger]);
 
   // ─── renderItem for custom flight bars ───
   const renderFlightBar = useCallback(
@@ -327,11 +479,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             // Background band
             { type: "rect", shape: { x: coordSys.x, y: bandTop, width: coordSys.width, height: bandHeight }, style: { fill: "rgba(128,128,128,0.15)" } },
             // Top border line
-            { type: "line", shape: { x1: coordSys.x, y1: bandTop, x2: coordSys.x + coordSys.width, y2: bandTop }, style: { stroke: "hsl(var(--border))", lineWidth: 1 } },
+            { type: "line", shape: { x1: coordSys.x, y1: bandTop, x2: coordSys.x + coordSys.width, y2: bandTop }, style: { stroke: cc.border, lineWidth: 1 } },
             // Bottom border line
-            { type: "line", shape: { x1: coordSys.x, y1: bandTop + bandHeight, x2: coordSys.x + coordSys.width, y2: bandTop + bandHeight }, style: { stroke: "hsl(var(--border))", lineWidth: 1 } },
+            { type: "line", shape: { x1: coordSys.x, y1: bandTop + bandHeight, x2: coordSys.x + coordSys.width, y2: bandTop + bandHeight }, style: { stroke: cc.border, lineWidth: 1 } },
             // Centered bold label
-            { type: "text", style: { text: breakLabel, x: coordSys.x + coordSys.width / 2, y: centerY, fill: "hsl(var(--foreground))", fontSize: 12, fontWeight: "bold", align: "center", verticalAlign: "middle" } },
+            { type: "text", style: { text: breakLabel, x: coordSys.x + coordSys.width / 2, y: centerY, fill: cc.fg, fontSize: 12, fontWeight: "bold", align: "center", verticalAlign: "middle" } },
           ],
         } as RenderGroup;
       }
@@ -358,7 +510,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const centerY = y + barHeight / 2;
 
       const children: RenderGroup[] = [
-        { type: "rect", shape: { x, y, width: w, height: barHeight, r: 3 }, style: { fill: color } } as RenderGroup,
+        { type: "rect", shape: { x, y, width: w, height: barHeight, r: barHeight / 2 }, style: { fill: color } } as RenderGroup,
       ];
 
       const fmtTime = (ts: number) => timeFmt.format(new Date(ts));
@@ -400,7 +552,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
       return { type: "group", children } as RenderGroup;
     },
-    [colorMap, timeFmt, registrations, highlightMap]
+    [colorMap, timeFmt, registrations, highlightMap, cc]
   );
 
   // ─── HEADER OPTION (time axis + slider — always visible) ───
@@ -425,7 +577,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           type: "text",
           right: 25,
           top: 6,
-          style: { text: tzLabel, fill: "#999", fontSize: 10 },
+          style: { text: tzLabel, fill: cc.mutedFg, fontSize: 10 },
           z: 100,
         },
         {
@@ -433,10 +585,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           left: 100,
           top: 6,
           style: {
-            text: dateFmt.format(new Date(timeGrid.axisMin)),
-            fill: "hsl(var(--muted-foreground))",
+            text: "", // ✅ PATCH #5: Will be updated dynamically by useEffect
+            fill: cc.mutedFg,
             fontSize: 10,
           },
+          id: "visibleStartDate", // ✅ ID for targeting in setOption
           z: 100,
         },
       ],
@@ -456,7 +609,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           interval: timeGrid.intervalMs,
           axisLabel: {
             interval: 0, // show ALL labels at tick positions — never auto-skip
-            color: "hsl(var(--foreground))",
+            color: cc.fg,
             fontSize: 12,
             formatter: (value: number) => {
               // interval guarantees clean hour positions — no tick-matching needed
@@ -468,7 +621,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               return `{time|${hourFormatter.format(new Date(value))}}`;
             },
             rich: {
-              date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: "hsl(var(--foreground))" },
+              date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
               time: { fontSize: 12, lineHeight: 16 },
             },
           },
@@ -478,7 +631,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             show: true,
             alignWithLabel: true,
             length: 6,
-            lineStyle: { color: "hsl(var(--muted-foreground))" },
+            lineStyle: { color: cc.mutedFg },
           },
         },
         // Top axis — day name labels at midnight boundaries (one per day)
@@ -490,7 +643,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           interval: 86400000, // 24 hours — one tick per day
           axisLabel: {
             interval: 0, // show all day labels — never auto-skip
-            color: "hsl(var(--foreground))",
+            color: cc.fg,
             fontSize: 12,
             fontWeight: "bold" as const,
             formatter: (value: number) => {
@@ -514,9 +667,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           start: zoomRange.start,
           end: zoomRange.end,
           handleSize: "80%",
-          borderColor: "hsl(var(--border))",
-          fillerColor: "hsla(var(--primary), 0.15)",
-          textStyle: { color: "hsl(var(--muted-foreground))" },
+          borderColor: cc.border,
+          fillerColor: cc.primary15,
+          textStyle: { color: cc.mutedFg },
         },
         {
           type: "inside" as const,
@@ -528,7 +681,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
       series: [],
     };
-  }, [timezone, timeFormat, timeGrid, zoomRange, midnightTimestamps]);
+  }, [timezone, timeFormat, timeGrid, zoomRange, midnightTimestamps, cc]);
 
   // ─── BODY OPTION (bars + y-axis, no visible xAxis) ───
   const bodyOption = useMemo(() => {
@@ -536,6 +689,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item" as const,
+        appendToBody: true,
+        confine: true,
         backgroundColor: "hsl(var(--popover))",
         borderColor: "hsl(var(--border))",
         textStyle: { color: "hsl(var(--popover-foreground))" },
@@ -653,6 +808,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const opt = headerInstance.getOption() as any;
       const dz = opt?.dataZoom?.[0];
       if (dz) {
+        // ✅ NEW: Capture real zoom state for adaptive ticks
+        realZoomState.current = { start: dz.start ?? 0, end: dz.end ?? 100 };
+        setTickRecalcTrigger((t) => t + 1);
+
         bodyInstance.dispatchAction({
           type: "dataZoom",
           start: dz.start,
@@ -674,6 +833,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const opt = bodyInstance.getOption() as any;
       const dz = opt?.dataZoom?.[0];
       if (dz) {
+        // ✅ NEW: Capture real zoom state for adaptive ticks
+        realZoomState.current = { start: dz.start ?? 0, end: dz.end ?? 100 };
+        setTickRecalcTrigger((t) => t + 1);
+
         headerInstance.dispatchAction({ type: "dataZoom", start: dz.start, end: dz.end });
       }
     }

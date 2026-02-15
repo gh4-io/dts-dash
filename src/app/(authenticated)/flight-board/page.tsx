@@ -45,6 +45,13 @@ function FlightBoardPageInner() {
   const { customers } = useCustomers();
   const { timezone, start: filterStart, end: filterEnd } = useFilters();
 
+  // ✅ PATCH #1: Compute filter span in hours for preset disable logic
+  const filterSpanHours = useMemo(() => {
+    if (!filterStart || !filterEnd) return 0;
+    const spanMs = new Date(filterEnd).getTime() - new Date(filterStart).getTime();
+    return spanMs / 3600000;
+  }, [filterStart, filterEnd]);
+
   // Apply actions transforms (sort, breaks, highlights, groupBy, status filter)
   const { data: transformedWps, registrations, highlightMap, groups } = useTransformedData(workPackages);
 
@@ -91,21 +98,27 @@ function FlightBoardPageInner() {
 
   const handleNow = useCallback(() => {
     if (transformedWps.length === 0) return;
-    const allTimes = transformedWps.flatMap((wp) => [
-      new Date(wp.arrival).getTime(),
-      new Date(wp.departure).getTime(),
-    ]);
-    const minTime = Math.min(...allTimes);
-    const maxTime = Math.max(...allTimes);
-    const totalMs = maxTime - minTime || 86400000;
+
+    // ✅ STEP 6: Use filter bounds (not data bounds)
+    const filterStartMs = new Date(filterStart).getTime();
+    const filterEndMs = new Date(filterEnd).getTime();
+    const totalMs = filterEndMs - filterStartMs || 86400000;
+
     const now = Date.now();
-    const rangeMs = 24 * 3600000;
+
+    // ✅ STEP 6: Use current zoom span (not hardcoded 24h)
+    const currentRange = chartRef.current?.getZoomRange();
+    const currentSpan = currentRange ? currentRange.end - currentRange.start : 50;
+    const rangeMs = (currentSpan / 100) * totalMs;
+
     const startMs = now - rangeMs / 2;
     const endMs = now + rangeMs / 2;
-    const startPct = Math.max(0, ((startMs - minTime) / totalMs) * 100);
-    const endPct = Math.min(100, ((endMs - minTime) / totalMs) * 100);
+
+    const startPct = Math.max(0, ((startMs - filterStartMs) / totalMs) * 100);
+    const endPct = Math.min(100, ((endMs - filterStartMs) / totalMs) * 100);
+
     chartRef.current?.dispatchZoom(startPct, endPct);
-  }, [transformedWps]);
+  }, [transformedWps, filterStart, filterEnd]);
 
   const handleFit = useCallback(() => {
     chartRef.current?.dispatchZoom(0, 100);
@@ -155,20 +168,27 @@ function FlightBoardPageInner() {
             >
               {/* Zoom presets */}
               <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
-                {ZOOM_LEVELS.map((level) => (
-                  <Button
-                    key={level.id}
-                    variant={zoomLevel === level.id ? "default" : "ghost"}
-                    size="sm"
-                    className={cn(
-                      "h-7 px-2 text-xs",
-                      zoomLevel !== level.id && "text-muted-foreground"
-                    )}
-                    onClick={() => setZoomLevel(level.id)}
-                  >
-                    {level.label}
-                  </Button>
-                ))}
+                {ZOOM_LEVELS.map((level) => {
+                  const levelHours = parseInt(level.id); // "6h" → 6, "12h" → 12, etc.
+                  const disabled = filterSpanHours < levelHours;
+
+                  return (
+                    <Button
+                      key={level.id}
+                      variant={zoomLevel === level.id ? "default" : "ghost"}
+                      size="sm"
+                      disabled={disabled} // ✅ Disable when filter span < preset hours
+                      title={disabled ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h` : undefined}
+                      className={cn(
+                        "h-7 px-2 text-xs",
+                        zoomLevel !== level.id && "text-muted-foreground"
+                      )}
+                      onClick={() => setZoomLevel(level.id)}
+                    >
+                      {level.label}
+                    </Button>
+                  );
+                })}
               </div>
 
               {/* Zoom +/- */}
