@@ -820,11 +820,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           type: "custom" as const,
           renderItem: () => ({ type: "group" as const, children: [] }),
           data: [],
-          z: 1,
+          z: 0,
           markLine: {
             silent: true,
             symbol: ["none", "none"],
             animation: false,
+            z: 0,
             data: [],
           },
         },
@@ -1053,14 +1054,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         return {
           xAxis: ts,
           lineStyle: { type: "solid" as const, color: "rgba(128,128,128,0.5)", width: 1.5 },
-          label: {
-            show: true,
-            formatter: dateFmt.format(new Date(ts)),
-            position: "start" as const,
-            color: "rgba(160,160,160,0.8)",
-            fontWeight: "bold" as const,
-            fontSize: 11,
-          },
+          label: { show: false },
         };
       });
 
@@ -1091,6 +1085,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               silent: true,
               symbol: ["none", "none"],
               animation: false,
+              z: 0,
               data: [...midnightLines, ...nowLine],
             },
           },
