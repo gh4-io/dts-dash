@@ -11,6 +11,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 
 interface HourlySnapshot {
@@ -22,38 +23,82 @@ interface HourlySnapshot {
 
 interface CombinedChartProps {
   snapshots: HourlySnapshot[];
+  timezone?: string;
 }
 
-function formatHourLabel(isoStr: string): string {
-  const d = new Date(isoStr);
-  return d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    hour12: true,
-    timeZone: "UTC",
-  });
-}
-
-function formatDayLabel(isoStr: string): string {
-  const d = new Date(isoStr);
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-export function CombinedChart({ snapshots }: CombinedChartProps) {
+export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProps) {
   const chartData = useMemo(() => {
     return snapshots.map((s) => ({
       hour: s.hour,
-      label: formatHourLabel(s.hour),
-      dayLabel: formatDayLabel(s.hour),
       arrivals: s.arrivalsCount,
       departures: s.departuresCount,
       onGround: s.onGroundCount,
     }));
   }, [snapshots]);
+
+  // Find midnight ISO strings for day separator reference lines
+  const midnightHours = useMemo(() => {
+    if (chartData.length === 0) return [];
+    const hourFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+    const dateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+
+    return chartData
+      .filter((d) => {
+        const h = parseInt(hourFmt.format(new Date(d.hour)));
+        return h === 0;
+      })
+      .map((d) => ({
+        hour: d.hour,
+        dateLabel: dateFmt.format(new Date(d.hour)),
+      }));
+  }, [chartData, timezone]);
+
+  // Determine smart tick interval based on data size
+  const tickInterval = useMemo(() => {
+    const len = chartData.length;
+    if (len <= 48) return 3;       // ≤2 days: every 3h
+    if (len <= 96) return 6;       // ≤4 days: every 6h
+    if (len <= 168) return 12;     // ≤7 days: every 12h
+    if (len <= 720) return 24;     // ≤30 days: every 24h (daily)
+    return 48;                     // >30 days: every 2 days
+  }, [chartData.length]);
+
+  // Format x-axis ticks — show date at midnight, time otherwise
+  const formatTick = useMemo(() => {
+    const hourFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+    const timeFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hour12: true,
+    });
+    const dateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      month: "short",
+      day: "numeric",
+    });
+
+    return (isoStr: string) => {
+      const d = new Date(isoStr);
+      const h = parseInt(hourFmt.format(d));
+      if (h === 0) {
+        return dateFmt.format(d);
+      }
+      return timeFmt.format(d);
+    };
+  }, [timezone]);
 
   if (chartData.length === 0) {
     return (
@@ -66,34 +111,51 @@ export function CombinedChart({ snapshots }: CombinedChartProps) {
     );
   }
 
-  // Calculate tick indices for midnight markers (day separators)
-  const midnightIndices = chartData
-    .map((d, i) => ({ i, hour: new Date(d.hour).getUTCHours() }))
-    .filter((d) => d.hour === 0)
-    .map((d) => d.i);
-
   return (
     <ResponsiveContainer width="100%" height={340}>
-      <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+      <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
         <CartesianGrid
           strokeDasharray="3 3"
-          stroke="hsl(var(--border))"
-          opacity={0.3}
+          stroke="hsl(var(--muted-foreground))"
+          opacity={0.2}
+          horizontal={true}
+          vertical={false}
         />
+
+        {/* Day separator lines at midnight */}
+        {midnightHours.map((m) => (
+          <ReferenceLine
+            key={m.hour}
+            x={m.hour}
+            stroke="hsl(var(--foreground))"
+            strokeWidth={1}
+            strokeDasharray="6 3"
+            opacity={0.5}
+            label={{
+              value: m.dateLabel,
+              position: "insideTopRight",
+              fill: "hsl(var(--foreground))",
+              fontSize: 10,
+              fontWeight: 700,
+              offset: 4,
+            }}
+          />
+        ))}
+
         <XAxis
-          dataKey="label"
-          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-          interval="preserveStartEnd"
-          tickLine={false}
-          axisLine={{ stroke: "hsl(var(--border))" }}
-          // Show midnight ticks as day labels
-          ticks={midnightIndices.map((i) => chartData[i]?.label)}
+          dataKey="hour"
+          tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
+          interval={tickInterval}
+          tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+          axisLine={{ stroke: "hsl(var(--muted-foreground))" }}
+          tickFormatter={formatTick}
         />
         <YAxis
-          tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+          tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
           tickLine={false}
           axisLine={false}
           allowDecimals={false}
+          width={35}
         />
         <Tooltip
           contentStyle={{
@@ -103,11 +165,21 @@ export function CombinedChart({ snapshots }: CombinedChartProps) {
             color: "hsl(var(--popover-foreground))",
             fontSize: 12,
           }}
-          labelFormatter={(_, payload) => {
-            if (payload?.[0]?.payload?.dayLabel) {
-              return `${payload[0].payload.dayLabel} ${payload[0].payload.label}`;
-            }
-            return "";
+          labelFormatter={(isoStr) => {
+            const d = new Date(isoStr);
+            const datePart = d.toLocaleDateString("en-US", {
+              timeZone: timezone,
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            });
+            const timePart = d.toLocaleTimeString("en-US", {
+              timeZone: timezone,
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            });
+            return `${datePart} ${timePart}`;
           }}
         />
         <Legend

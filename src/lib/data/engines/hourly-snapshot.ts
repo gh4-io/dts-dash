@@ -12,20 +12,32 @@ import type { WorkPackage, HourlySnapshot } from "@/types";
  *
  * @param workPackages - Filtered work packages
  * @param timezone - IANA timezone for hour boundaries (default UTC)
+ * @param filterStart - Optional filter start date to clamp chart range
+ * @param filterEnd - Optional filter end date to clamp chart range
  * @returns Array of hourly snapshots sorted by hour
  */
 export function computeHourlySnapshots(
   workPackages: WorkPackage[],
-  timezone: string = "UTC"
+  timezone: string = "UTC",
+  filterStart?: Date,
+  filterEnd?: Date,
 ): HourlySnapshot[] {
   if (workPackages.length === 0) {
     return [];
   }
 
-  // Find date range
-  const allDates = workPackages.flatMap((wp) => [wp.arrival, wp.departure]);
-  const minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
-  const maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
+  // Use filter dates as bounds when provided, otherwise fall back to data range
+  let minDate: Date;
+  let maxDate: Date;
+
+  if (filterStart && filterEnd) {
+    minDate = filterStart;
+    maxDate = filterEnd;
+  } else {
+    const allDates = workPackages.flatMap((wp) => [wp.arrival, wp.departure]);
+    minDate = new Date(Math.min(...allDates.map((d) => d.getTime())));
+    maxDate = new Date(Math.max(...allDates.map((d) => d.getTime())));
+  }
 
   // Generate hour boundaries
   const hourBoundaries = generateHourBoundaries(minDate, maxDate, timezone);

@@ -14,6 +14,7 @@ import { OperatorPerformance } from "@/components/dashboard/operator-performance
 import { useWorkPackages } from "@/lib/hooks/use-work-packages";
 import { useHourlySnapshots } from "@/lib/hooks/use-hourly-snapshots";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { useFilters } from "@/lib/hooks/use-filters";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { useEffect } from "react";
 
@@ -21,6 +22,7 @@ function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
   const { snapshots, isLoading: snapshotsLoading } = useHourlySnapshots();
   const { fetch: fetchCustomers } = useCustomers();
+  const { timezone } = useFilters();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,37 +72,39 @@ function DashboardPageInner() {
         <LoadingSkeleton variant="page" />
       ) : (
         <>
-          {/* KPI Cards + Combined Chart + Donut - Main grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3">
+          {/* KPI Cards + Combined Chart + Donut/MH - Main grid */}
+          <div className="grid grid-cols-1 xl:grid-cols-[200px_1fr_280px] gap-3">
             {/* Left: KPI cards stacked */}
-            <div className="space-y-3 xl:col-span-1">
+            <div className="space-y-3">
               <AvgGroundTimeCard workPackages={displayWps} />
-              <MhByOperatorCard
-                workPackages={displayWps}
-                onOperatorClick={handleOperatorFromCard}
-              />
               <TotalAircraftCard workPackages={displayWps} />
               <AircraftByTypeCard workPackages={displayWps} />
             </div>
 
             {/* Center: Combined chart */}
-            <div className="rounded-lg border border-border bg-card p-3 xl:col-span-1 min-h-[250px]">
+            <div className="rounded-lg border border-border bg-card p-3">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
               </h3>
-              <CombinedChart snapshots={displaySnapshots} />
+              <CombinedChart snapshots={displaySnapshots} timezone={timezone} />
             </div>
 
-            {/* Right: Donut */}
-            <div className="rounded-lg border border-border bg-card p-3 xl:col-span-1">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-                <i className="fa-solid fa-chart-pie" />
-                Aircraft By Customer
-              </h3>
-              <CustomerDonut
+            {/* Right: Donut + Scheduled MH */}
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border bg-card p-3">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="fa-solid fa-chart-pie" />
+                  Aircraft By Customer
+                </h3>
+                <CustomerDonut
+                  workPackages={displayWps}
+                  onCustomerClick={handleOperatorFromCard}
+                />
+              </div>
+              <MhByOperatorCard
                 workPackages={displayWps}
-                onCustomerClick={handleOperatorFromCard}
+                onOperatorClick={handleOperatorFromCard}
               />
             </div>
           </div>

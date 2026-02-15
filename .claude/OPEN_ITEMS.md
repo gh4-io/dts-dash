@@ -489,14 +489,31 @@
 
 ---
 
+## OI-031 | Dashboard Chart Time Responsiveness & Separators — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-14 |
+| **Resolved** | 2026-02-14 |
+| **Context** | Dashboard "Arrivals/Departures/On Ground" chart (CombinedChart) was not responding to filter time changes and lacked time divisions/date markers. Chart used hardcoded UTC timezone instead of filter timezone. Day separator logic (lines 69-90) was incomplete — calculated midnight indices but didn't render visual separator lines. X-axis showed only time labels without date markers at midnight. |
+| **Resolution** | **Fix 1**: Modified CombinedChart to accept `timezone` prop (default "UTC"). **Fix 2**: Updated formatHourLabel and formatDayLabel to use timezone parameter. **Fix 3**: Added ReferenceLine components for each midnight (day separators) — dashed vertical lines at 40% opacity. **Fix 4**: Implemented formatXAxisTick to show full date labels at midnight hours, regular time labels elsewhere. **Fix 5**: Updated dashboard page to pass timezone from useFilters() to CombinedChart. **Result**: Chart now dynamically adjusts to filter time/timezone changes, shows clear day separator lines, and displays date markers at midnight boundaries. Build ✅. |
+| **Files Modified** | `src/components/dashboard/combined-chart.tsx` (added timezone prop, ReferenceLine components, timezone-aware formatters), `src/app/(authenticated)/dashboard/page.tsx` (added useFilters import, passed timezone to chart) |
+| **Links** | [REQ_Dashboard_UI.md](SPECS/REQ_Dashboard_UI.md), [REQ_Filters.md](SPECS/REQ_Filters.md), M3 |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 10 |
-| P1 | 0 | 0 | 0 | 9 |
+| P1 | 0 | 0 | 0 | 10 |
 | P2 | 0 | 0 | 0 | 10 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **0** | **2** | **29** |
+| **Total** | **0** | **0** | **2** | **30** |
 
-**Changes this pass (Aircraft Type Fix)**: Resolved OI-003 (aircraft type registration and display). Fixed seed data patterns (wildcard vs regex), added comprehensive registration-based mappings (24 total), made filter dropdowns dynamic (extract from data), added aircraft type to flight board tooltips. All 57 aircraft now resolve correctly (B747: 4, B767: 31, B777: 22). Build ✅, Lint ✅.
+**Changes this pass (Dashboard Chart Fix)**: Resolved OI-031 (dashboard chart time responsiveness). Fixed CombinedChart to respond to filter timezone changes, added ReferenceLine day separators at midnight, improved x-axis labels to show dates at midnight. Chart now dynamically adjusts with filter changes and shows clear time divisions. Build ✅.

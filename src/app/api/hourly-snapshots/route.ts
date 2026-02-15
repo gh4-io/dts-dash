@@ -30,8 +30,12 @@ export async function GET(request: NextRequest) {
     // Apply filters
     const filtered = applyFilters(workPackages, filterParams);
 
-    // Compute snapshots
-    const snapshots = computeHourlySnapshots(filtered, timezone);
+    // Parse filter dates to clamp chart range
+    const filterStart = filterParams.start ? new Date(filterParams.start) : undefined;
+    const filterEnd = filterParams.end ? new Date(filterParams.end) : undefined;
+
+    // Compute snapshots (bounded to filter date range)
+    const snapshots = computeHourlySnapshots(filtered, timezone, filterStart, filterEnd);
 
     return NextResponse.json({
       data: snapshots,
