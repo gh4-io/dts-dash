@@ -278,6 +278,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     return { start, end };
   }, [workPackages.length, filterStart, filterEnd, zoomLevel]);
 
+  // ─── Sync realZoomState ref when zoom preset/filter changes ───
+  useEffect(() => {
+    realZoomState.current = { start: zoomRange.start, end: zoomRange.end };
+  }, [zoomRange]);
+
   // ─── Filter-based midnight boundaries (TZ-aware) ───
   const { midnightTimestamps, timeGrid } = useMemo(() => {
     if (workPackages.length === 0 || !filterStart || !filterEnd) {
@@ -304,7 +309,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     else if (effectiveHours <= 12) intervalHours = 0.5;  // 30 min
     else if (effectiveHours <= 24) intervalHours = 1;    // 1h
     else if (effectiveHours <= 72) intervalHours = 3;    // 3h
-    else intervalHours = 6;                               // 6h
+    else if (effectiveHours <= 192) intervalHours = 6;   // 6h  (≤8 days)
+    else intervalHours = 12;                              // 12h (>14 days, dates only)
 
     const intervalMs = intervalHours * 3600000;
 
@@ -355,6 +361,23 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     [timezone, timeFormat]
   );
 
+  // ─── Shared time formatters (used by header, body, and adaptive tick effect) ───
+  const { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel } = useMemo(() => {
+    const hourFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone, hour: "2-digit", minute: "2-digit",
+      hourCycle: timeFormat === "12h" ? "h12" : "h23",
+    });
+    const dayNameFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone, weekday: "long",
+    });
+    const dateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone, month: "numeric", day: "numeric",
+    });
+    const tzLabel = timezone === "UTC" ? "UTC" : "Eastern (ET)";
+    const midnightSet = new Set(midnightTimestamps);
+    return { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel };
+  }, [timezone, timeFormat, midnightTimestamps]);
+
   // ✅ STEP 3: Adaptive tick interval based on real visible window
   useEffect(() => {
     const { start, end } = realZoomState.current;
@@ -369,9 +392,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     else if (visibleHours <= 12) intervalHours = 0.5;  // 30 min
     else if (visibleHours <= 24) intervalHours = 1;    // 1h
     else if (visibleHours <= 72) intervalHours = 3;    // 3h
-    else intervalHours = 6;                             // 6h
+    else if (visibleHours <= 192) intervalHours = 6;   // 6h  (≤8 days)
+    else if (visibleHours <= 336) intervalHours = 12;  // 12h (≤14 days)
+    else intervalHours = 24;                            // 24h (>14 days)
 
     const intervalMs = intervalHours * 3600000;
+
+    // Top axis interval: coarser than time ticks (minimum 3h) for day labels
+    // At fine zoom, only need enough precision to detect day boundaries
+    const topIntervalMs = Math.max(intervalMs, 3 * 3600000);
 
     // Update header chart — 2 axes (bottom hidden for sync + top day names)
     const headerInstance = headerChartRef.current?.getEchartsInstance();
@@ -386,10 +415,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               interval: intervalMs,
             },
             {
-              // Top axis (day labels) — always 24h interval
+              // Top axis (day labels) — coarser interval, formatter filters to day boundaries
               type: "value",
               position: "top",
-              interval: 86400000,
+              interval: topIntervalMs,
               axisLabel: { show: true },
             },
           ],
@@ -400,6 +429,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     }
 
     // Update body chart — single axis (top, time labels)
+    const wideView = intervalMs >= 12 * 3600000;
     const bodyInstance = bodyChartRef.current?.getEchartsInstance();
     if (bodyInstance) {
       try {
@@ -408,7 +438,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             type: "value",
             position: "top",
             interval: intervalMs,
-            axisLabel: { show: true },
+            axisLabel: {
+              show: true,
+              formatter: (value: number) => {
+                if (midnightSet.has(value)) {
+                  if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
+                  const dateStr = dateFmt.format(new Date(value));
+                  const timeStr = hourFormatter.format(new Date(value));
+                  return `{date|${dateStr}}\n{time|${timeStr}}`;
+                }
+                if (wideView) return "";
+                return `{time|${hourFormatter.format(new Date(value))}}`;
+              },
+            },
           },
         });
       } catch (err) {
@@ -417,7 +459,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     }
 
     console.log(`[Adaptive Ticks] Visible: ${visibleHours.toFixed(1)}h → Interval: ${intervalHours}h`);
-  }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length]);
+  }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length,
+      midnightSet, dateFmt, hourFormatter]);
 
   // ✅ STEP 3b: Update visible window start date label
   useEffect(() => {
@@ -556,23 +599,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     [colorMap, timeFmt, registrations, highlightMap, cc]
   );
 
-  // ─── Shared time formatters (used by both header and body charts) ───
-  const { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel } = useMemo(() => {
-    const hourFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone, hour: "2-digit", minute: "2-digit",
-      hourCycle: timeFormat === "12h" ? "h12" : "h23",
-    });
-    const dayNameFmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone, weekday: "long",
-    });
-    const dateFmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone, month: "numeric", day: "numeric",
-    });
-    const tzLabel = timezone === "UTC" ? "UTC" : "Eastern (ET)";
-    const midnightSet = new Set(midnightTimestamps);
-    return { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel };
-  }, [timezone, timeFormat, midnightTimestamps]);
-
   // ─── HEADER OPTION (time axis + slider — always visible) ───
   const headerOption = useMemo(() => {
 
@@ -618,21 +644,28 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           axisLine: { show: false },
           axisTick: { show: false },
         },
-        // Top axis — day name labels at midnight boundaries (one per day)
+        // Top axis — day name labels (shown at first tick of each day in viewport)
         {
           type: "value" as const,
           position: "top" as const,
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
-          interval: 86400000, // 24 hours — one tick per day
+          interval: Math.max(timeGrid.intervalMs, 3 * 3600000), // minimum 3h for day labels
           axisLabel: {
-            interval: 0, // show all day labels — never auto-skip
+            interval: 0,
             color: cc.fg,
             fontSize: 12,
             fontWeight: "bold" as const,
             formatter: (value: number) => {
-              // Only show label if value is at a midnight boundary
-              return midnightSet.has(value) ? dayNameFmt.format(new Date(value)).toUpperCase() : "";
+              const topInterval = Math.max(timeGrid.intervalMs, 3 * 3600000);
+              // Show day name only at midnight OR at the first tick of a new day
+              if (midnightSet.has(value)) return dayNameFmt.format(new Date(value)).toUpperCase();
+              const prevDay = dayNameFmt.format(new Date(value - topInterval));
+              const curDay = dayNameFmt.format(new Date(value));
+              if (curDay !== prevDay) return curDay.toUpperCase();
+              // Show on the very first axis tick so viewport always has a day label
+              if (value === timeGrid.axisMin) return curDay.toUpperCase();
+              return "";
             },
           },
           axisLine: { show: false },
@@ -720,11 +753,16 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           color: cc.fg,
           fontSize: 12,
           formatter: (value: number) => {
+            const wideView = timeGrid.intervalMs >= 12 * 3600000;
             if (midnightSet.has(value)) {
+              if (wideView) {
+                return `{date|${dateFmt.format(new Date(value))}}`;
+              }
               const dateStr = dateFmt.format(new Date(value));
               const timeStr = hourFormatter.format(new Date(value));
               return `{date|${dateStr}}\n{time|${timeStr}}`;
             }
+            if (wideView) return "";
             return `{time|${hourFormatter.format(new Date(value))}}`;
           },
           rich: {
