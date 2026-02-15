@@ -1,0 +1,85 @@
+---
+title: Deployment
+description: How to deploy the CVG Dashboard
+---
+
+# Deployment
+
+## Local Deployment (Primary)
+
+The dashboard is designed as a local-first application. No cloud infrastructure required.
+
+### Build and Start
+
+```bash
+npm run build
+npm run start
+```
+
+The server runs on `http://localhost:3000` by default.
+
+### First-Time Setup
+
+1. Install dependencies: `npm install`
+2. Create `.env.local` with `AUTH_SECRET`
+3. Seed database: `npx tsx src/lib/db/seed.ts`
+4. Place work package data at `data/input.json`
+5. Build: `npm run build`
+6. Start: `npm run start`
+
+### Data Directory
+
+```
+data/
+├── input.json       # Work package data (SharePoint OData export)
+├── dashboard.db     # SQLite database (auto-created on seed)
+├── dashboard.db-shm # SQLite shared memory (runtime)
+└── dashboard.db-wal # SQLite write-ahead log (runtime)
+```
+
+Back up `dashboard.db` and `input.json` to preserve configuration and data.
+
+## Production Considerations
+
+### Environment Variables
+
+```env
+AUTH_SECRET=<generate-with-openssl>
+NODE_ENV=production
+```
+
+### Process Manager
+
+For production, use a process manager:
+
+```bash
+# Using PM2
+npm install -g pm2
+pm2 start npm --name "cvg-dashboard" -- run start
+pm2 save
+pm2 startup
+```
+
+### Reverse Proxy
+
+If exposing to a network, place behind a reverse proxy (nginx, Caddy):
+
+```nginx
+server {
+    listen 80;
+    server_name dashboard.local;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+### Security Notes
+
+- Change default seed passwords immediately
+- Set `NODE_ENV=production` to restrict seed endpoint
+- Consider adding rate limiting if exposed to network
+- Back up `data/dashboard.db` regularly

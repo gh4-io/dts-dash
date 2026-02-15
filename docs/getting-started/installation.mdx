@@ -1,0 +1,85 @@
+---
+title: Installation
+description: How to set up the CVG Dashboard locally
+---
+
+# Installation
+
+## Prerequisites
+
+| Requirement | Version |
+|-------------|---------|
+| Node.js | 20.x or later |
+| npm | 10.x or later |
+| OS | Windows (WSL2), macOS, or Linux |
+
+## Steps
+
+### 1. Clone the repository
+
+```bash
+git clone <repo-url> dashboard
+cd dashboard
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Set up environment
+
+Create `.env.local` in the project root:
+
+```env
+AUTH_SECRET=your-random-secret-here
+```
+
+Generate a secret:
+```bash
+openssl rand -base64 32
+```
+
+### 4. Seed the database
+
+```bash
+npx tsx src/lib/db/seed.ts
+```
+
+This creates `data/dashboard.db` with:
+- Default admin user (`admin@cvg.local`)
+- Default test user (`user@cvg.local`)
+- 6 customer color presets
+- Aircraft type mappings
+- Default app configuration
+
+### 5. Add work package data
+
+Place your SharePoint OData JSON export at `data/input.json`. The file should be either:
+- A bare JSON array: `[{...}, {...}]`
+- OData format: `{"value": [{...}, {...}]}`
+
+### 6. Start the development server
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+## Troubleshooting
+
+### Build fails with stale cache
+
+```bash
+rm -rf .next
+npm run build
+```
+
+### WSL: SWC binary lock
+
+```bash
+rm -rf node_modules/@next/swc*
+npm install
+```

@@ -132,7 +132,8 @@ export function computeDailyUtilization(
       };
     }
 
-    const utilizationPercent = (d.totalDemandMH / cap.realCapacityMH) * 100;
+    const utilizationPercent =
+      cap.realCapacityMH > 0 ? (d.totalDemandMH / cap.realCapacityMH) * 100 : 0;
     const surplusDeficitMH = cap.realCapacityMH - d.totalDemandMH;
     const overtimeFlag = utilizationPercent > 100;
     const criticalFlag = utilizationPercent > 120;

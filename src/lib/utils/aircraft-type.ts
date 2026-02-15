@@ -31,7 +31,7 @@ async function loadMappings(): Promise<AircraftTypeMapping[]> {
       description: m.description ?? null,
     }));
 
-    console.log(`[aircraft-type] Loaded ${cachedMappings.length} active mappings`);
+    console.warn(`[aircraft-type] Loaded ${cachedMappings.length} active mappings`);
     return cachedMappings;
   } catch (error) {
     console.error("[aircraft-type] Failed to load mappings:", error);
@@ -44,7 +44,7 @@ async function loadMappings(): Promise<AircraftTypeMapping[]> {
  */
 export function invalidateMappingsCache(): void {
   cachedMappings = null;
-  console.log("[aircraft-type] Mappings cache invalidated");
+  console.warn("[aircraft-type] Mappings cache invalidated");
 }
 
 /**

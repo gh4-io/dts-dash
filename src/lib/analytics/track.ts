@@ -19,7 +19,7 @@ export interface TrackEventProps {
 export function trackEvent(eventType: string, props?: TrackEventProps): void {
   // Don't track in development (optional - remove if you want dev tracking)
   if (process.env.NODE_ENV === "development") {
-    console.log(`[analytics] ${eventType}`, props);
+    console.warn(`[analytics] ${eventType}`, props);
     return;
   }
 

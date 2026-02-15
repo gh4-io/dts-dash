@@ -1,0 +1,77 @@
+---
+title: Modules
+description: Source code modules and their responsibilities
+---
+
+# Modules
+
+## Directory Structure
+
+```
+src/
+├── app/                     # Next.js pages and API routes
+│   ├── (authenticated)/     # Auth-protected pages
+│   │   ├── account/         # User profile/preferences
+│   │   ├── admin/           # Admin panel (7 sub-pages)
+│   │   ├── capacity/        # Capacity modeling
+│   │   ├── dashboard/       # Statistics dashboard
+│   │   ├── flight-board/    # Gantt timeline
+│   │   └── settings/        # App settings
+│   ├── api/                 # API route handlers
+│   │   ├── account/         # User account APIs
+│   │   ├── admin/           # Admin CRUD APIs
+│   │   ├── analytics/       # Event tracking
+│   │   ├── auth/            # Auth.js handlers
+│   │   ├── capacity/        # Capacity data
+│   │   ├── config/          # App configuration
+│   │   └── work-packages/   # Work package data
+│   └── login/               # Login page
+├── components/
+│   ├── ui/                  # shadcn/ui primitives
+│   ├── shared/              # Cross-cutting (FilterBar, etc.)
+│   ├── layout/              # Header, sidebar, nav
+│   ├── flight-board/        # ECharts Gantt
+│   ├── dashboard/           # KPI cards, Recharts
+│   ├── capacity/            # Config panel, tables
+│   ├── admin/               # Admin editors
+│   └── account/             # Profile forms
+├── lib/
+│   ├── auth.ts              # Auth.js configuration
+│   ├── data/                # Data reading and transformation
+│   │   ├── reader.ts        # JSON file reader with cache
+│   │   ├── transformer.ts   # WP normalization and enrichment
+│   │   └── engines/         # Computation engines
+│   ├── db/                  # Database layer
+│   │   ├── client.ts        # SQLite connection
+│   │   ├── schema.ts        # Drizzle ORM schema
+│   │   └── seed.ts          # Database seeding
+│   ├── hooks/               # Zustand stores and fetch hooks
+│   └── utils/               # Pure utility functions
+├── test/                    # Test setup
+└── types/                   # TypeScript interfaces
+```
+
+## Module Dependencies
+
+| Module | Depends On | Depended By |
+|--------|-----------|-------------|
+| `types/` | Nothing | Everything |
+| `lib/utils/` | Nothing | lib/data/, components/ |
+| `lib/db/` | types/ | lib/auth, lib/data/ |
+| `lib/auth.ts` | lib/db/ | proxy.ts, API routes |
+| `lib/data/` | lib/db/, lib/utils/, types/ | API routes |
+| `lib/hooks/` | types/ | components/ |
+| `components/ui/` | Nothing | components/ |
+| `components/shared/` | ui/, hooks/ | page components |
+| `components/layout/` | hooks/ | app layout |
+| `components/*` | shared/, hooks/ | app pages |
+| `app/api/` | lib/auth, lib/data/, lib/db/ | client hooks |
+| `app/(authenticated)/` | components/ | Nothing |
+
+## Computation Engines
+
+### capacity.ts
+Computes daily demand, capacity, and utilization metrics from work packages and shift configuration.
+
+### hourly-snapshot.ts
+Generates hourly snapshots of concurrent aircraft count for timeline analysis.

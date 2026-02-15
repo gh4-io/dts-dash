@@ -1,0 +1,83 @@
+---
+title: Development Workflow
+description: How to develop and contribute
+---
+
+# Development Workflow
+
+## Setup
+
+```bash
+git clone <repo-url> dashboard
+cd dashboard
+npm install
+cp .env.local.example .env.local  # Add AUTH_SECRET
+npx tsx src/lib/db/seed.ts
+npm run dev
+```
+
+## Development Cycle
+
+1. **Start:** Read `CLAUDE.md` and check `.claude/OPEN_ITEMS.md`
+2. **Branch:** Create feature branch from `dev`
+3. **Code:** Make changes following `DEV_STANDARDS.md`
+4. **Verify:** Run `npm run validate` (typecheck + lint + test + build)
+5. **Commit:** Use conventional commits (see below)
+6. **Review:** Update OPEN_ITEMS if needed
+
+## Verification Gates
+
+Every change must pass:
+
+```bash
+npm run typecheck  # TypeScript strict mode
+npm run lint       # ESLint (0 errors)
+npm run test       # Vitest (all pass)
+npm run build      # Production build succeeds
+```
+
+Or run all at once:
+
+```bash
+npm run validate
+```
+
+## Commit Convention
+
+Format: `type(scope): description`
+
+| Type | Usage |
+|------|-------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `refactor` | Code restructure (no behavior change) |
+| `docs` | Documentation only |
+| `test` | Adding or fixing tests |
+| `chore` | Build, deps, config changes |
+| `style` | Formatting (no logic change) |
+
+Examples:
+```
+feat(flight-board): add zoom synchronization between header and body
+fix(capacity): prevent division by zero in utilization calculation
+docs: update API endpoint documentation
+test(utils): add date-helpers edge case tests
+```
+
+## File Organization
+
+- **One component per file** (default export)
+- **Hooks** in `src/lib/hooks/`
+- **Pure utilities** in `src/lib/utils/`
+- **Types** in `src/types/`
+- **Tests** co-located: `src/lib/utils/__tests__/date-helpers.test.ts`
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Project operating manual |
+| `.claude/OPEN_ITEMS.md` | Tracked issues and questions |
+| `.claude/DECISIONS.md` | Architectural decisions log |
+| `.claude/PLAN.md` | Implementation plan |
+| `docs/review/` | Code review artifacts |

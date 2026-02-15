@@ -72,7 +72,7 @@ async function loadOverrides(): Promise<Map<number, number>> {
   try {
     const overrides = await db.select().from(mhOverrides);
     cachedOverrides = new Map(overrides.map((o) => [o.workPackageId, o.overrideMH]));
-    console.log(`[transformer] Loaded ${cachedOverrides.size} MH overrides`);
+    console.warn(`[transformer] Loaded ${cachedOverrides.size} MH overrides`);
     return cachedOverrides;
   } catch (error) {
     console.error("[transformer] Failed to load overrides:", error);
@@ -87,7 +87,7 @@ async function loadOverrides(): Promise<Map<number, number>> {
 export function invalidateTransformerCache(): void {
   cachedConfig = null;
   cachedOverrides = null;
-  console.log("[transformer] Cache invalidated");
+  console.warn("[transformer] Cache invalidated");
 }
 
 /**

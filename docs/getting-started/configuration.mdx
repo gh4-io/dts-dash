@@ -1,0 +1,55 @@
+---
+title: Configuration
+description: Environment variables and app settings
+---
+
+# Configuration
+
+## Environment Variables
+
+Create `.env.local` in the project root:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AUTH_SECRET` | Yes | — | Secret key for JWT signing. Generate with `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | No | `http://localhost:3000` | Base URL for auth callbacks |
+| `NODE_ENV` | No | `development` | `development` or `production` |
+
+## App Configuration (SQLite)
+
+These settings are stored in the `app_config` table and editable via the Admin panel or API:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `defaultMH` | `3.0` | Default man-hours per work package |
+| `wpMHMode` | `include` | Whether to include WP man-hours (`include` or `exclude`) |
+| `theoreticalCapacityPerPerson` | `8.0` | Theoretical MH per person per shift |
+| `realCapacityPerPerson` | `6.5` | Real (effective) MH per person per shift |
+| `timelineDefaultDays` | `3` | Default number of days shown on flight board |
+| `defaultTimezone` | `UTC` | Default timezone for new users |
+| `shifts` | See below | JSON array of shift definitions |
+
+### Shifts Configuration
+
+```json
+[
+  { "name": "Day",   "startHour": 7,  "endHour": 15, "headcount": 8 },
+  { "name": "Swing", "startHour": 15, "endHour": 23, "headcount": 6 },
+  { "name": "Night", "startHour": 23, "endHour": 7,  "headcount": 4 }
+]
+```
+
+## User Preferences (Per-User)
+
+Stored in `user_preferences` table, editable via Account page:
+
+| Preference | Default | Options |
+|------------|---------|---------|
+| Color mode | `dark` | `dark`, `light`, `system` |
+| Theme preset | `neutral` | 11 Fumadocs presets |
+| Accent color | — | Custom hex color |
+| Compact mode | `false` | `true`, `false` |
+| Default timezone | `UTC` | `UTC`, `America/New_York` |
+| Default date range | `3d` | `1d`, `3d`, `7d`, `14d`, `30d` |
+| Time format | `24h` | `24h`, `12h` |
+| Table page size | `30` | 1–200 |

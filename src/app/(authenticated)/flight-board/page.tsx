@@ -41,7 +41,7 @@ function FlightBoardPageInner() {
 
   const { workPackages, isLoading, error } = useWorkPackages();
   const { customers } = useCustomers();
-  const timezone = useFilters((s) => s.timezone);
+  const { timezone, start: filterStart, end: filterEnd } = useFilters();
 
   // Apply actions transforms (sort, breaks, highlights, groupBy, status filter)
   const { data: transformedWps, registrations, highlightMap, groups } = useTransformedData(workPackages);
@@ -241,6 +241,8 @@ function FlightBoardPageInner() {
             workPackages={transformedWps}
             zoomLevel={zoomLevel}
             timezone={timezone}
+            filterStart={filterStart}
+            filterEnd={filterEnd}
             isExpanded={isExpanded}
             onBarClick={handleBarClick}
             transformedRegistrations={registrations}

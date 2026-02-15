@@ -1,0 +1,42 @@
+---
+title: Changelog
+description: High-level changelog from the code review
+---
+
+# Changelog
+
+## Code Review (2026-02-15)
+
+### Security Fixes
+- **Secured `/api/seed` endpoint** — removed from proxy exclusions, added superadmin guard in production
+- **Removed credential logging** — seed script no longer prints passwords to console
+- **Added config key whitelist** — `PUT /api/config` now rejects unknown keys
+
+### Bug Fixes
+- **Fixed NaN propagation in `formatDuration()`** — returns `"0:00"` for NaN/Infinity instead of `"NaN:NaN"`
+- **Fixed NaN propagation in `formatDurationHuman()`** — returns `"0m"` for invalid input
+- **Fixed division by zero in capacity utilization** — returns 0% when `realCapacityMH = 0`
+
+### Code Quality
+- **Replaced 17 `console.log` calls** with `console.warn` across data layer for consistent log levels
+- **Added ESLint rules** — `no-console`, `no-debugger`, `prefer-const`, `no-var`, `eqeqeq`
+- **Added Prettier** for consistent formatting
+- **Added eslint-config-prettier** to prevent rule conflicts
+
+### Testing
+- **Added Vitest** test framework with jsdom environment
+- **51 unit tests** covering date-helpers (24), pagination (12), contrast (13), csv-export (2)
+- **Added test scripts** — `test`, `test:watch`, `test:coverage`
+
+### Developer Experience
+- **Added `validate` script** — runs typecheck + lint + test + build in sequence
+- **Added `format` and `format:check` scripts** for Prettier
+- **Added `typecheck` script** for standalone TypeScript checking
+
+### Documentation
+- **Created FumaDocs documentation set** — 15 pages covering getting-started, architecture, API, operations, contributing
+- **Created code review artifacts** — 9 files in `docs/review/`
+
+## Previous Milestones (M0–M8)
+
+See `.claude/ROADMAP.md` for the complete milestone history.

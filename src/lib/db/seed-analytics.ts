@@ -39,7 +39,7 @@ const PAGES = [
 ];
 
 async function seedAnalytics() {
-  console.log("Seeding analytics events...");
+  console.warn("Seeding analytics events...");
 
   // Get first user ID
   const allUsers = db.select().from(users).all();
@@ -95,8 +95,8 @@ async function seedAnalytics() {
   // Insert in batch
   db.insert(analyticsEvents).values(events).run();
 
-  console.log(`  Seeded ${events.length} analytics events across 14 days`);
-  console.log("Done.");
+  console.warn(`  Seeded ${events.length} analytics events across 14 days`);
+  console.warn("Done.");
 }
 
 seedAnalytics().catch(console.error);

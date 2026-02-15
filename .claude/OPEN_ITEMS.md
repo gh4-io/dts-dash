@@ -506,14 +506,48 @@
 
 ---
 
+## OI-032 | Flight Board Time Filtering & xAxis Error — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-15 |
+| **Resolved** | 2026-02-15 |
+| **Context** | Two bugs reported: (1) Flight board not respecting start/end time filter — work packages that started before or ended after the filter window were incorrectly excluded. (2) Console error "xAxis '0' not found" at flight-board-chart.tsx:743 during chart initialization/updates. **Root causes**: (1) Incorrect date range logic in filter-helpers.ts lines 84-92 used `wp.departure >= startDate` and `wp.arrival <= endDate`, which only showed flights fully contained within the window. Correct logic should show flights that OVERLAP the window. (2) useEffect at line 708 attempted to update markLine data via setOption before the chart's xAxis was fully initialized, causing ECharts to throw an error. |
+| **Resolution** | **Fix 1 (Time Filtering)**: Rewrote date range filter logic in `filter-helpers.ts` to use overlap detection: `(wp.arrival < endDate) AND (wp.departure > startDate)`. This correctly shows all work packages that have any overlap with the filter time window. Also added separate handling for when only start or only end is provided. **Fix 2 (xAxis Error)**: Added safety checks in `flight-board-chart.tsx` useEffect (line 708): (a) Check if chart option's xAxis exists before calling setOption. (b) Wrapped setOption in try-catch to suppress errors during chart transitions. (c) Added console.warn for debugging. **Result**: Flight board now correctly shows all overlapping work packages regardless of whether they extend beyond the filter window. xAxis error eliminated. Lint ✅, Dev server running. |
+| **Files Modified** | `src/lib/utils/filter-helpers.ts` (lines 77-92, rewrote date range logic with overlap detection), `src/components/flight-board/flight-board-chart.tsx` (lines 708-760, added xAxis safety checks and try-catch) |
+| **Links** | [REQ_Filters.md](SPECS/REQ_Filters.md), [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), M2 |
+
+---
+
+## OI-033 | Flight Board Time Axis Alignment & Day Labels — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-15 |
+| **Resolved** | 2026-02-15 |
+| **Context** | Flight board time axis showing incorrect range and misaligned ticks. Filter set to Feb 13-16 (4 days), but chart showed ~2 weeks of days. Time ticks displayed at 00:38, 12:38 instead of clean midnight-aligned intervals (00:00, 06:00, 12:00, etc.). Day labels (TUESDAY, WEDNESDAY...) extended far beyond the filter range. **Root cause**: Chart was computing axis bounds from data timestamps ±2 days, not from filter dates. The `computeMidnights` function scanned `minTs - 2*86400000` to `maxTs + 2*86400000`, causing the extended range. Time ticks used fixed intervals but weren't aligned to timezone midnight boundaries. |
+| **Resolution** | **Complete rewrite of time axis logic** to match dashboard pattern: (1) Added `filterStart` and `filterEnd` props to FlightBoardChart component. (2) Rewrote `computeMidnights` → `findFilterMidnights`: finds midnight AT OR BEFORE filterStart and midnight AT OR AFTER filterEnd, only collects midnights within that range. (3) Rewrote `timeGrid` computation: uses filter-based midnights as axis bounds, picks clean interval (1h/2h/3h/6h/12h) based on total hours, generates ticks where `hour % intervalHours === 0` in timezone. (4) Updated bottom axis (time ticks): uses `splitNumber` based on tick count, shows labels only at computed tick positions, displays date at midnight. (5) Updated top axis (day names): uses `splitNumber` based on midnight count, shows labels only at midnight timestamps. **Result**: Chart now displays ONLY the filtered date range, time ticks align to clean intervals from midnight (00:00, 03:00, 06:00, etc. or 00:00, 12:00 depending on range), day labels only show for days within filter. Matches dashboard behavior. Lint ✅. |
+| **Files Modified** | `src/app/(authenticated)/flight-board/page.tsx` (lines 42-44: extract filterStart/filterEnd from useFilters; lines 239-250: pass to chart), `src/components/flight-board/flight-board-chart.tsx` (lines 39-73: rewrote findFilterMidnights; lines 62-76: added filterStart/filterEnd props; lines 90: added to function params; lines 196-238: rewrote timeGrid with filter-based logic; lines 367-417: updated xAxis configs with splitNumber and tick-based formatters; line 486: added midnightTimestamps to deps) |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), [REQ_Filters.md](SPECS/REQ_Filters.md), M2, OI-032 (related time filter fix) |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 10 |
+| P0 | 0 | 0 | 0 | 12 |
 | P1 | 0 | 0 | 0 | 10 |
 | P2 | 0 | 0 | 0 | 10 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **0** | **2** | **30** |
+| **Total** | **0** | **0** | **2** | **32** |
 
-**Changes this pass (Dashboard Chart Fix)**: Resolved OI-031 (dashboard chart time responsiveness). Fixed CombinedChart to respond to filter timezone changes, added ReferenceLine day separators at midnight, improved x-axis labels to show dates at midnight. Chart now dynamically adjusts with filter changes and shows clear time divisions. Build ✅.
+**Changes this pass (Flight Board Time Axis Overhaul)**: Resolved OI-032 (time filter logic) and OI-033 (time axis alignment). Flight board now: (1) shows only the filtered date range (no extended ±2 days), (2) aligns time ticks to clean intervals from midnight (1h/2h/3h/6h/12h based on range), (3) displays day labels only for days within filter, (4) matches dashboard time axis behavior. Time ticks now show 00:00, 03:00, 06:00 etc. instead of 00:38, 12:38. Lint ✅.

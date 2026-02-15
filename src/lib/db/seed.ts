@@ -9,7 +9,7 @@ function generateId(): string {
 }
 
 export async function seed() {
-  console.log("Seeding database...");
+  console.warn("Seeding database...");
 
   // Create tables using raw SQL (Drizzle push would be better but this works for bootstrap)
   sqlite.exec(`
@@ -151,7 +151,7 @@ export async function seed() {
       ])
       .run();
 
-    console.log("  Seeded 2 users (admin@cvg.local / admin123, user@cvg.local / user123)");
+    console.warn("  Seeded 2 users (admin@cvg.local, user@cvg.local). Default passwords in use — change after first login.");
   }
 
   // ─── Seed Customers ──────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ export async function seed() {
       )
       .run();
 
-    console.log("  Seeded 6 customers with colors");
+    console.warn("  Seeded 6 customers with colors");
   }
 
   // ─── Seed Aircraft Type Mappings (D-015) ──────────────────────────────────
@@ -195,7 +195,7 @@ export async function seed() {
       )
       .run();
 
-    console.log(`  Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`);
+    console.warn(`  Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`);
   }
 
   // ─── Seed Default Config ─────────────────────────────────────────────────
@@ -225,10 +225,10 @@ export async function seed() {
       .values(defaults.map((d) => ({ ...d, updatedAt: now })))
       .run();
 
-    console.log("  Seeded default app configuration");
+    console.warn("  Seeded default app configuration");
   }
 
-  console.log("Seeding complete.");
+  console.warn("Seeding complete.");
 }
 
 // Allow running directly

@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     // Invalidate reader cache
     invalidateCache();
 
-    console.log(`[import] Committed ${records.length} records from ${source}, logId=${logId}`);
+    console.warn(`[import] Committed ${records.length} records from ${source}, logId=${logId}`);
 
     return NextResponse.json({ success: true, logId, recordCount: records.length });
   } catch (error) {

@@ -1,0 +1,80 @@
+---
+title: Data Flow
+description: How data moves through the application
+---
+
+# Data Flow
+
+## Work Package Pipeline
+
+```
+SharePoint OData export
+        │
+        ▼
+  data/input.json
+        │
+        ▼
+  reader.ts ──────────── Module-level cache
+        │                (invalidated on import)
+        ▼
+  SharePointWorkPackage[]
+        │
+        ▼
+  transformer.ts ─────── DB: config, overrides, aircraft mappings
+        │
+        ▼
+  WorkPackage[]
+        │
+        ├─── /api/work-packages ──► useWorkPackages hook ──► Components
+        │
+        ├─── /api/capacity ──► capacity engine ──► useCapacity hook
+        │
+        └─── /api/hourly-snapshots ──► snapshot engine ──► useHourlySnapshots hook
+```
+
+## Key Transformations
+
+### reader.ts → SharePointWorkPackage
+- Reads `data/input.json` from disk
+- Handles both OData `{value: [...]}` and bare array `[...]` formats
+- Caches in module-level variable
+
+### transformer.ts → WorkPackage
+- Parses date strings to Date objects
+- Computes `groundHours` from arrival/departure
+- Applies `effectiveMH` business rule: manual override > WP MH > default (3.0)
+- Normalizes aircraft types via DB mappings
+
+### effectiveMH Business Rule
+```
+if (manual override exists for this WP ID)  → use override
+else if (WP has TotalMH and wpMHMode = "include") → use WP MH
+else → use defaultMH from config (default: 3.0)
+```
+
+## Database Schema
+
+### Users & Auth
+- `users` — email, passwordHash, role, isActive
+- `sessions` — userId, expiresAt
+- `user_preferences` — colorMode, themePreset, timezone, etc.
+
+### Configuration
+- `app_config` — key/value pairs for app settings
+- `customers` — name, color, displayName
+- `aircraft_type_mappings` — pattern, canonicalType, priority
+- `mh_overrides` — workPackageId, overrideMH
+
+### Logging
+- `import_log` — importedAt, recordCount, source
+- `analytics_events` — userId, eventType, page
+
+## Caching Strategy
+
+| Layer | Cache | Invalidation |
+|-------|-------|--------------|
+| reader.ts | Module-level array | On import (flag-based) |
+| transformer.ts | Module-level config + overrides | On config change (null-set) |
+| aircraft-type.ts | Module-level mappings array | On admin edit (null-set) |
+| API routes | None (stateless) | N/A |
+| React hooks | Zustand store | On filter change (re-fetch) |

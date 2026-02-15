@@ -1,0 +1,83 @@
+---
+title: Monitoring
+description: Logs, health checks, and observability
+---
+
+# Monitoring
+
+## Logging
+
+The application uses `console.warn` and `console.error` for server-side logging.
+
+### Log Prefixes
+
+| Prefix | Source |
+|--------|--------|
+| `[reader]` | Work package file reader |
+| `[transformer]` | Data transformation layer |
+| `[aircraft-type]` | Aircraft type normalization |
+| `[analytics]` | Analytics event tracking (dev only) |
+| `[import]` | Data import operations |
+| `[api/config]` | Configuration API |
+| `[api/admin/*]` | Admin API operations |
+
+### Viewing Logs
+
+Development:
+```bash
+npm run dev
+# Logs appear in terminal
+```
+
+Production with PM2:
+```bash
+pm2 logs cvg-dashboard
+pm2 logs cvg-dashboard --lines 200
+```
+
+## Health Checks
+
+No dedicated health endpoint exists. Verify via:
+
+```bash
+# Check if server responds
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/login
+# Expected: 200
+
+# Check API (requires auth cookie)
+curl -s http://localhost:3000/api/config -H "Cookie: <session-cookie>" | jq .
+```
+
+## Analytics
+
+The admin panel at `/admin/analytics` shows:
+- Page view counts by route
+- Event type distribution
+- User activity timeline
+- 14-day trend data
+
+Analytics events are stored in SQLite and queryable via:
+- `GET /api/analytics/summary` (admin only)
+- `GET /api/analytics/events` (admin only)
+
+## Database Health
+
+```bash
+# Check database file exists and size
+ls -la data/dashboard.db
+
+# Check SQLite integrity
+sqlite3 data/dashboard.db "PRAGMA integrity_check;"
+
+# Check table row counts
+sqlite3 data/dashboard.db "SELECT 'users', COUNT(*) FROM users UNION ALL SELECT 'customers', COUNT(*) FROM customers UNION ALL SELECT 'analytics', COUNT(*) FROM analytics_events;"
+```
+
+## Common Issues
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Empty flight board | Missing `data/input.json` | Import data via admin or place file |
+| Build failure | Stale `.next` cache | `rm -rf .next && npm run build` |
+| Login fails | Database not seeded | `npx tsx src/lib/db/seed.ts` |
+| "Internal server error" | Check console for `[reader]` or `[transformer]` errors | Review logs |

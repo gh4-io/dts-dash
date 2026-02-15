@@ -80,15 +80,18 @@ export function applyFilters(
 ): WorkPackage[] {
   let filtered = [...workPackages];
 
-  // Date range filter
-  if (filters.start) {
+  // Date range filter — show work packages that OVERLAP with the time window
+  // A work package overlaps if: arrival < endDate AND departure > startDate
+  if (filters.start && filters.end) {
     const startDate = new Date(filters.start);
-    filtered = filtered.filter((wp) => wp.departure >= startDate);
-  }
-
-  if (filters.end) {
     const endDate = new Date(filters.end);
-    filtered = filtered.filter((wp) => wp.arrival <= endDate);
+    filtered = filtered.filter((wp) => wp.arrival < endDate && wp.departure > startDate);
+  } else if (filters.start) {
+    const startDate = new Date(filters.start);
+    filtered = filtered.filter((wp) => wp.departure > startDate);
+  } else if (filters.end) {
+    const endDate = new Date(filters.end);
+    filtered = filtered.filter((wp) => wp.arrival < endDate);
   }
 
   // Operator filter (customer)

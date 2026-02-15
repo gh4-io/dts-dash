@@ -1,0 +1,84 @@
+---
+title: Code Standards
+description: Coding conventions and patterns
+---
+
+# Code Standards
+
+## TypeScript
+
+- **Strict mode** enabled (`"strict": true` in tsconfig)
+- **No `any`** unless interfacing with untyped libraries (ECharts)
+- **Prefer interfaces** over type aliases for object shapes
+- **Use discriminated unions** for action types (reducers)
+
+## React
+
+- **Functional components** only (no class components)
+- **Hooks** for all state and side effects
+- **Zustand** for shared client state
+- **Server Components** where possible (data fetching on server)
+
+## Naming
+
+| Item | Convention | Example |
+|------|-----------|---------|
+| Components | PascalCase | `FlightBoardChart` |
+| Files | kebab-case | `flight-board-chart.tsx` |
+| Hooks | camelCase with `use` prefix | `useWorkPackages` |
+| Utilities | camelCase | `formatDuration` |
+| Constants | UPPER_SNAKE_CASE | `DEFAULT_PAGE_SIZE` |
+| Types/Interfaces | PascalCase | `WorkPackage` |
+| CSS classes | Tailwind utilities | `bg-card text-card-foreground` |
+
+## Patterns
+
+### Data Fetching (Server)
+```typescript
+// API route
+export async function GET(request: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // ... fetch and return data
+}
+```
+
+### Data Fetching (Client)
+```typescript
+// Zustand store with fetch
+const useStore = create<StoreType>((set) => ({
+  data: [],
+  isLoading: false,
+  error: null,
+  fetch: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await fetch("/api/...");
+      const json = await res.json();
+      set({ data: json.data, isLoading: false });
+    } catch (err) {
+      set({ error: (err as Error).message, isLoading: false });
+    }
+  },
+}));
+```
+
+### Error Handling
+- API routes: try/catch with console.error and 500 response
+- Components: Error boundaries per page (`error.tsx`)
+- Hooks: Loading/error state in store
+
+## Formatting
+
+- **Prettier** for code formatting (`.prettierrc.json`)
+- **ESLint** for code quality
+- Run `npm run format` before committing
+- Run `npm run lint` to check for issues
+
+## Don'ts
+
+- Don't hardcode customer colors (use DB)
+- Don't use `console.log` in production code (use `console.warn` or `console.error`)
+- Don't skip TypeScript strict checks
+- Don't use `any` without justification
+- Don't add cloud dependencies (local-first)

@@ -36,22 +36,49 @@ echarts.use([
   CanvasRenderer,
 ]);
 
-/** Compute midnight (00:00) timestamps in the given timezone between minTs and maxTs */
-function computeMidnights(minTs: number, maxTs: number, tz: string): number[] {
-  const midnights: number[] = [];
+/**
+ * Find midnight boundaries for the filter range in the given timezone
+ * Returns [firstMidnight, lastMidnight] where:
+ * - firstMidnight is the midnight AT OR BEFORE filterStart
+ * - lastMidnight is the midnight AT OR AFTER filterEnd
+ */
+function findFilterMidnights(filterStart: string, filterEnd: string, tz: string): { first: number; last: number; all: number[] } {
+  const startTs = new Date(filterStart).getTime();
+  const endTs = new Date(filterEnd).getTime();
+
   const hourFmt = new Intl.DateTimeFormat("en-US", {
     timeZone: tz,
     hour: "numeric",
     hourCycle: "h23",
   });
-  const scanStart = minTs - 2 * 86400000;
-  const scanEnd = maxTs + 2 * 86400000;
-  for (let ts = scanStart; ts <= scanEnd; ts += 3600000) {
+
+  // Scan backwards from start to find first midnight AT OR BEFORE
+  let firstMidnight = startTs;
+  for (let ts = startTs; ts >= startTs - 86400000; ts -= 3600000) {
     if (parseInt(hourFmt.format(new Date(ts))) === 0) {
-      midnights.push(ts);
+      firstMidnight = ts;
+      break;
     }
   }
-  return midnights;
+
+  // Scan forwards from end to find last midnight AT OR AFTER
+  let lastMidnight = endTs;
+  for (let ts = endTs; ts <= endTs + 86400000; ts += 3600000) {
+    if (parseInt(hourFmt.format(new Date(ts))) === 0) {
+      lastMidnight = ts;
+      break;
+    }
+  }
+
+  // Collect all midnights in the range
+  const all: number[] = [];
+  for (let ts = firstMidnight; ts <= lastMidnight; ts += 86400000) {
+    if (parseInt(hourFmt.format(new Date(ts))) === 0) {
+      all.push(ts);
+    }
+  }
+
+  return { first: firstMidnight, last: lastMidnight, all };
 }
 
 export interface FlightBoardChartHandle {
@@ -63,6 +90,8 @@ interface FlightBoardChartProps {
   workPackages: SerializedWorkPackage[];
   zoomLevel: string;
   timezone: string;
+  filterStart: string;
+  filterEnd: string;
   isExpanded: boolean;
   onBarClick?: (wp: SerializedWorkPackage) => void;
   /** If provided, used instead of computing registrations internally */
@@ -87,7 +116,7 @@ type GanttDataItem = [
 ];
 
 export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardChartProps>(
-  function FlightBoardChart({ workPackages, zoomLevel, timezone, isExpanded, onBarClick, transformedRegistrations, highlightMap, groups, panMode }, ref) {
+  function FlightBoardChart({ workPackages, zoomLevel, timezone, filterStart, filterEnd, isExpanded, onBarClick, transformedRegistrations, highlightMap, groups, panMode }, ref) {
   const headerChartRef = useRef<ReactEChartsCore>(null);
   const bodyChartRef = useRef<ReactEChartsCore>(null);
   const syncLock = useRef(false);
@@ -193,43 +222,52 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     return { start: 0, end: Math.min(100, (rangeMs / totalMs) * 100) };
   }, [workPackages.length, minTime, maxTime, zoomLevel]);
 
-  // ─── Midnight line timestamps (TZ-aware) ───
-  const midnightTimestamps = useMemo(() => {
-    if (workPackages.length === 0) return [];
-    return computeMidnights(minTime, maxTime, timezone);
-  }, [workPackages.length, minTime, maxTime, timezone]);
-
-  // ─── TZ-aligned time grid (clean intervals from midnight) ───
-  const timeGrid = useMemo(() => {
-    if (workPackages.length === 0 || midnightTimestamps.length === 0) {
-      return { intervalMs: 21600000, axisMin: minTime, axisMax: maxTime, ticks: [] as number[] };
+  // ─── Filter-based midnight boundaries (TZ-aware) ───
+  const { midnightTimestamps, timeGrid } = useMemo(() => {
+    if (workPackages.length === 0 || !filterStart || !filterEnd) {
+      return {
+        midnightTimestamps: [] as number[],
+        timeGrid: { intervalMs: 21600000, axisMin: 0, axisMax: 0, ticks: [] as number[] },
+      };
     }
 
-    const totalMs = maxTime - minTime || 86400000;
+    const { first, last, all } = findFilterMidnights(filterStart, filterEnd, timezone);
+    const axisMin = first;
+    const axisMax = last;
+    const totalMs = axisMax - axisMin || 86400000;
 
     // Pick clean interval: 1h, 2h, 3h, 6h, or 12h — aim for ~12–24 divisions
-    const candidates = [1, 2, 3, 6, 12];
-    let intervalHours = 12;
-    for (const h of candidates) {
-      if (totalMs / (h * 3600000) <= 24) {
-        intervalHours = h;
-        break;
-      }
-    }
+    const totalHours = totalMs / 3600000;
+    let intervalHours: number;
+    if (totalHours <= 12) intervalHours = 1;
+    else if (totalHours <= 24) intervalHours = 2;
+    else if (totalHours <= 48) intervalHours = 3;
+    else if (totalHours <= 96) intervalHours = 6;
+    else intervalHours = 12;
+
     const intervalMs = intervalHours * 3600000;
 
-    // Snap axis range to timezone midnight boundaries
-    const axisMin = midnightTimestamps[0];
-    const axisMax = midnightTimestamps[midnightTimestamps.length - 1] + 86400000;
-
     // Generate tick positions from first midnight at the chosen interval
+    // Only include ticks where hour % intervalHours === 0 in the timezone
+    const hourFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+
     const ticks: number[] = [];
-    for (let ts = axisMin; ts <= axisMax; ts += intervalMs) {
-      ticks.push(ts);
+    for (let ts = axisMin; ts <= axisMax; ts += 3600000) {
+      const h = parseInt(hourFmt.format(new Date(ts)));
+      if (h % intervalHours === 0) {
+        ticks.push(ts);
+      }
     }
 
-    return { intervalMs, axisMin, axisMax, ticks };
-  }, [workPackages.length, minTime, maxTime, midnightTimestamps]);
+    return {
+      midnightTimestamps: all,
+      timeGrid: { intervalMs, axisMin, axisMax, ticks },
+    };
+  }, [workPackages.length, filterStart, filterEnd, timezone]);
 
   // ─── NOW timestamp — initialized on mount, updated every 60s ───
   const [nowTimestamp, setNowTimestamp] = useState(0);
@@ -365,19 +403,24 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         bottom: 38,
       },
       xAxis: [
-        // Bottom axis — time labels anchored to TZ midnight at clean intervals
+        // Bottom axis — time labels at clean intervals from midnight
         {
           type: "value" as const,
           position: "bottom" as const,
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
-          interval: timeGrid.intervalMs,
+          splitNumber: Math.max(1, timeGrid.ticks.length - 1),
           axisLabel: {
             color: "hsl(var(--muted-foreground))",
             fontSize: 11,
             formatter: (value: number) => {
+              // Only show labels at our computed tick positions
+              const isTickPosition = timeGrid.ticks.some((ts) => Math.abs(ts - value) < 1000);
+              if (!isTickPosition) return "";
+
               const timeStr = hourFormatter.format(new Date(value));
-              if (timeStr === "00:00") {
+              const isMidnight = timeStr === "00:00" || timeStr === "12:00 AM";
+              if (isMidnight) {
                 const dateStr = dateFmt.format(new Date(value));
                 return `{date|${dateStr}}\n{time|${timeStr}}`;
               }
@@ -393,17 +436,22 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           axisTick: { show: true },
         },
         // Top axis — day name labels only (no lines/ticks)
+        // Only show labels at midnight timestamps (which are filtered to the date range)
         {
           type: "value" as const,
           position: "top" as const,
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
-          interval: 86400000,
+          splitNumber: midnightTimestamps.length - 1 || 1,
           axisLabel: {
             color: "hsl(var(--foreground))",
             fontSize: 12,
             fontWeight: "bold" as const,
-            formatter: (value: number) => dayNameFmt.format(new Date(value)).toUpperCase(),
+            formatter: (value: number) => {
+              // Only show label if value is at a midnight boundary
+              const isMidnight = midnightTimestamps.some((ts) => Math.abs(ts - value) < 1000);
+              return isMidnight ? dayNameFmt.format(new Date(value)).toUpperCase() : "";
+            },
           },
           axisLine: { show: false },
           axisTick: { show: false },
@@ -435,7 +483,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
       series: [],
     };
-  }, [timezone, timeFormat, timeGrid, zoomRange]);
+  }, [timezone, timeFormat, timeGrid, zoomRange, midnightTimestamps]);
 
   // ─── BODY OPTION (bars + y-axis, no visible xAxis) ───
   const bodyOption = useMemo(() => {
@@ -710,6 +758,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const instance = bodyChartRef.current?.getEchartsInstance();
     if (!instance) return;
 
+    // Safety check: ensure chart is fully initialized with xAxis before updating
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opt = instance.getOption() as any;
+      if (!opt?.xAxis || opt.xAxis.length === 0) {
+        // Chart not fully initialized yet, skip this update
+        return;
+      }
+    } catch {
+      // getOption failed, chart not ready
+      return;
+    }
+
     const midnightSet = new Set(midnightTimestamps);
 
     // Time grid lines — midnight = solid/thicker, sub-day = dashed/thinner
@@ -740,17 +801,22 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         }]
       : [];
 
-    instance.setOption({
-      series: [{
-        type: "custom",
-        markLine: {
-          silent: true,
-          symbol: ["none", "none"],
-          animation: false,
-          data: [...gridLines, ...nowLine],
-        },
-      }],
-    });
+    try {
+      instance.setOption({
+        series: [{
+          type: "custom",
+          markLine: {
+            silent: true,
+            symbol: ["none", "none"],
+            animation: false,
+            data: [...gridLines, ...nowLine],
+          },
+        }],
+      });
+    } catch (err) {
+      // Suppress setOption errors during chart transitions
+      console.warn("[FlightBoardChart] setOption error (likely chart transition):", err);
+    }
   }, [nowTimestamp, timeGrid, midnightTimestamps, workPackages.length]);
 
   // ─── Empty state ───

@@ -1,0 +1,95 @@
+---
+title: API Endpoints
+description: Complete list of REST API endpoints
+---
+
+# API Endpoints
+
+## Data APIs (Authenticated)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/work-packages` | Paginated, filtered work packages |
+| GET | `/api/work-packages/all` | All work packages (no pagination) |
+| GET | `/api/capacity` | Daily demand, capacity, utilization |
+| GET | `/api/hourly-snapshots` | Hourly concurrent aircraft counts |
+| GET | `/api/data-freshness` | Last import timestamp and record count |
+| GET | `/api/config` | App configuration |
+
+### Query Parameters (work-packages)
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `page` | number | Page number (default: 1) |
+| `pageSize` | number | Items per page (1-200, default: 30) |
+| `start` | ISO date | Filter: arrival after this date |
+| `end` | ISO date | Filter: departure before this date |
+| `operators` | comma-separated | Filter by customer names |
+| `aircraft` | comma-separated | Filter by aircraft registrations |
+| `types` | comma-separated | Filter by aircraft types |
+
+## Account APIs (Authenticated)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | `/api/account/profile` | Update display name |
+| PUT | `/api/account/password` | Change password |
+| GET | `/api/account/preferences` | Get user preferences |
+| PUT | `/api/account/preferences` | Update user preferences |
+
+## Admin APIs (Admin/Superadmin)
+
+### Users
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/users` | List all users |
+| POST | `/api/admin/users` | Create user |
+| PUT | `/api/admin/users/[id]` | Update user |
+| DELETE | `/api/admin/users/[id]` | Delete user |
+| POST | `/api/admin/users/[id]/reset-password` | Reset user password |
+
+### Customers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/customers` | List customers with colors |
+| PUT | `/api/admin/customers` | Bulk update customer colors |
+| POST | `/api/admin/customers/reset` | Reset to seed colors |
+
+### Aircraft Types
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/aircraft-types` | List type mappings |
+| POST | `/api/admin/aircraft-types` | Create/update mappings |
+| POST | `/api/admin/aircraft-types/reset` | Reset to seed mappings |
+| POST | `/api/admin/aircraft-types/test` | Test a type pattern |
+
+### Data Import
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/admin/import/validate` | Validate JSON data |
+| POST | `/api/admin/import/commit` | Import validated data |
+| GET | `/api/admin/import/history` | Import history log |
+
+### Configuration
+
+| Method | Path | Description |
+|--------|------|-------------|
+| PUT | `/api/config` | Update app configuration |
+
+## Analytics APIs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/analytics/events` | Track user event (any user) |
+| GET | `/api/analytics/events` | List events (admin only) |
+| GET | `/api/analytics/summary` | Event summary (admin only) |
+
+## Utility APIs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/seed` | Seed database (dev only, or superadmin in prod) |

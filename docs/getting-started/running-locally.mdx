@@ -1,0 +1,65 @@
+---
+title: Running Locally
+description: Development and production modes
+---
+
+# Running Locally
+
+## Development Mode
+
+```bash
+npm run dev
+```
+
+Starts the Next.js development server with Turbopack for fast hot module replacement.
+
+- URL: [http://localhost:3000](http://localhost:3000)
+- Auto-reloads on file changes
+- Detailed error overlays
+
+## Production Mode
+
+```bash
+npm run build
+npm run start
+```
+
+Builds an optimized production bundle and starts the server.
+
+## Default Users
+
+| Email | Password | Role |
+|-------|----------|------|
+| admin@cvg.local | admin123 | superadmin |
+| user@cvg.local | user123 | user |
+
+Change these passwords after first login.
+
+## Available Scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `dev` | `next dev` | Development server (Turbopack) |
+| `build` | `next build` | Production build |
+| `start` | `next start` | Production server |
+| `lint` | `eslint` | Run ESLint |
+| `lint:fix` | `eslint --fix` | Auto-fix lint issues |
+| `format` | `prettier --write "src/**/*.{ts,tsx,css,json}"` | Format code |
+| `format:check` | `prettier --check "src/**/*.{ts,tsx,css,json}"` | Check formatting |
+| `typecheck` | `tsc --noEmit` | TypeScript type checking |
+| `test` | `vitest run` | Run tests once |
+| `test:watch` | `vitest` | Watch mode |
+| `test:coverage` | `vitest run --coverage` | Coverage report |
+| `validate` | typecheck + lint + test + build | Full validation |
+
+## Pages
+
+| Route | Description | Auth Required |
+|-------|-------------|---------------|
+| `/login` | Login page | No |
+| `/flight-board` | Gantt timeline | Yes |
+| `/dashboard` | KPI cards and charts | Yes |
+| `/capacity` | Capacity modeling | Yes |
+| `/settings` | App settings | Yes |
+| `/account` | User profile/preferences | Yes |
+| `/admin/*` | Admin panel | Admin role |

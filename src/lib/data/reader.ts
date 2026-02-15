@@ -41,7 +41,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
     cachedData = records;
     shouldInvalidate = false;
 
-    console.log(`[reader] Loaded ${records.length} work packages from input.json`);
+    console.warn(`[reader] Loaded ${records.length} work packages from input.json`);
     return records;
   } catch (error) {
     console.error("[reader] Failed to read or parse input.json:", error);
@@ -57,7 +57,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
  */
 export function invalidateCache(): void {
   shouldInvalidate = true;
-  console.log("[reader] Cache invalidated");
+  console.warn("[reader] Cache invalidated");
 }
 
 /**

@@ -1,0 +1,53 @@
+---
+title: API Overview
+description: REST API design and authentication
+---
+
+# API Overview
+
+## Authentication
+
+All API routes (except `/api/auth/*`) require a valid JWT session token. The token is set as an HTTP-only cookie by Auth.js after login.
+
+### Roles
+
+| Role | Access |
+|------|--------|
+| `user` | Read-only access to data APIs |
+| `admin` | Full access to admin APIs |
+| `superadmin` | Full access + user management |
+
+### Auth Flow
+
+1. `POST /api/auth/callback/credentials` with email/password
+2. Auth.js verifies via bcryptjs, issues JWT
+3. JWT contains: `id`, `email`, `role`, `displayName`
+4. `proxy.ts` validates JWT on every request
+5. API routes call `auth()` for role checks
+
+## Response Format
+
+### Success
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "total": 86,
+    "page": 1,
+    "pageSize": 30,
+    "totalPages": 3,
+    "hasMore": true
+  }
+}
+```
+
+### Error
+
+```json
+{
+  "error": "Descriptive error message"
+}
+```
+
+Status codes: 400 (bad request), 401 (unauthorized), 403 (forbidden), 500 (server error).

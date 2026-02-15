@@ -53,8 +53,9 @@ export function fromISO(iso: string): Date {
  * e.g., 1.5 hours → "1:30"
  */
 export function formatDuration(hours: number): string {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
+  if (!Number.isFinite(hours)) return "0:00";
+  const h = Math.floor(Math.max(0, hours));
+  const m = Math.round((Math.abs(hours) - h) * 60) % 60;
   return `${h}:${m.toString().padStart(2, "0")}`;
 }
 
@@ -63,8 +64,9 @@ export function formatDuration(hours: number): string {
  * e.g., 1.5 hours → "1h 30m"
  */
 export function formatDurationHuman(hours: number): string {
-  const h = Math.floor(hours);
-  const m = Math.round((hours - h) * 60);
+  if (!Number.isFinite(hours)) return "0m";
+  const h = Math.floor(Math.max(0, hours));
+  const m = Math.round((Math.abs(hours) - h) * 60) % 60;
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;

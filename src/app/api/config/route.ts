@@ -63,17 +63,36 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
 
-    // Update config keys
-    const updates = Object.entries(body).map(([key, value]) => {
-      let stringValue: string;
-      if (typeof value === "object") {
-        stringValue = JSON.stringify(value);
-      } else {
-        stringValue = String(value);
-      }
+    // Whitelist of allowed config keys
+    const ALLOWED_CONFIG_KEYS = new Set([
+      "defaultMH",
+      "wpMHMode",
+      "theoreticalCapacityPerPerson",
+      "realCapacityPerPerson",
+      "shifts",
+      "timelineDefaultDays",
+      "defaultTimezone",
+    ]);
 
-      return { key, value: stringValue };
-    });
+    // Update config keys
+    const updates = Object.entries(body)
+      .filter(([key]) => {
+        if (!ALLOWED_CONFIG_KEYS.has(key)) {
+          console.warn(`[api/config] Rejected unknown config key: ${key}`);
+          return false;
+        }
+        return true;
+      })
+      .map(([key, value]) => {
+        let stringValue: string;
+        if (typeof value === "object") {
+          stringValue = JSON.stringify(value);
+        } else {
+          stringValue = String(value);
+        }
+
+        return { key, value: stringValue };
+      });
 
     for (const update of updates) {
       await db

@@ -1,0 +1,62 @@
+---
+title: Architecture Overview
+description: System architecture and design decisions
+---
+
+# Architecture Overview
+
+## Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router, Turbopack) |
+| Language | TypeScript 5 (strict mode) |
+| UI | React 19 + shadcn/ui + Radix UI |
+| Charts | Recharts (declarative) + Apache ECharts (Gantt canvas) |
+| Tables | TanStack Table |
+| State | Zustand (client-side stores) |
+| Auth | Auth.js v5 (JWT, credentials provider) |
+| Database | SQLite (better-sqlite3) + Drizzle ORM |
+| Styling | Tailwind CSS v4 |
+| Icons | Font Awesome 6 (self-hosted) + Lucide |
+
+## Design Principles
+
+- **Local-first**: No cloud dependencies. SQLite database, JSON file for work packages.
+- **Type-safe**: Strict TypeScript throughout. Drizzle ORM for type-safe queries.
+- **Incremental**: Small changes, always runnable. Each milestone is independently deployable.
+- **Role-based**: Three roles (user, admin, superadmin) with server-enforced access control.
+
+## High-Level Architecture
+
+The application follows a standard Next.js App Router pattern with a clear separation between server (API routes, data layer) and client (React components, Zustand stores).
+
+```
+Browser → proxy.ts (auth) → API Routes → Data Layer → SQLite/JSON
+  ↑                                                        |
+  └── React Components ← Zustand Stores ← Fetch Hooks ←───┘
+```
+
+### Server Side
+- **proxy.ts**: JWT verification on all authenticated routes
+- **API Routes**: RESTful handlers for work packages, config, admin CRUD
+- **Data Layer**: reader.ts (JSON), transformer.ts (normalize), engines (capacity, hourly)
+- **Database**: SQLite via Drizzle ORM (users, customers, config, analytics)
+
+### Client Side
+- **Zustand Stores**: filters, customers, preferences, actions
+- **Data Hooks**: useWorkPackages, useCapacity, useHourlySnapshots
+- **Components**: Domain-specific (flight-board, dashboard, capacity, admin)
+- **Shared**: FilterBar, DateTimePicker, MultiSelect, TopMenuBar
+
+## Key Design Decisions
+
+| ID | Decision | Rationale |
+|----|----------|-----------|
+| D-001 | Tech stack locked | Stability over experimentation |
+| D-008 | ECharts for Gantt | Canvas rendering for large datasets |
+| D-009 | Auth.js with JWT | Stateless auth, no session DB queries |
+| D-010 | Customer colors in DB | Admin-configurable, not hardcoded |
+| D-015 | Aircraft type mappings | Pattern-based normalization with priority |
+| D-022 | 11 Fumadocs theme presets | Visual variety without custom CSS |
+| D-024 | Instant filtering | No "Apply" button, filters take effect immediately |

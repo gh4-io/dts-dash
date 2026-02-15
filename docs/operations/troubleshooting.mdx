@@ -1,0 +1,114 @@
+---
+title: Troubleshooting
+description: Common problems and solutions
+---
+
+# Troubleshooting
+
+## Build Issues
+
+### "ENOENT: pages-manifest.json"
+
+**Cause:** Stale `.next` cache from a previous Next.js version.
+
+```bash
+rm -rf .next
+npm run build
+```
+
+### "@next/swc-linux-x64-gnu lock error" (WSL)
+
+**Cause:** SWC binary locked by another process.
+
+```bash
+rm -rf node_modules/@next/swc*
+npm install
+```
+
+### TypeScript errors after dependency update
+
+```bash
+rm -rf node_modules .next
+npm install
+npm run typecheck
+```
+
+## Runtime Issues
+
+### Empty flight board / "No data"
+
+1. Check `data/input.json` exists and is valid JSON
+2. Verify format: bare array `[{...}]` or OData `{"value": [{...}]}`
+3. Check server logs for `[reader]` errors
+4. Try importing via Admin > Import page
+
+### Login fails
+
+1. Verify database is seeded: `npx tsx src/lib/db/seed.ts`
+2. Check `.env.local` has `AUTH_SECRET` set
+3. Check server logs for auth errors
+4. Try default credentials: `admin@cvg.local` / `admin123`
+
+### Charts not rendering
+
+1. Check browser console for JavaScript errors
+2. Verify data is loaded (check Network tab for API responses)
+3. ECharts requires canvas support — ensure browser is up to date
+4. Try clearing browser cache (Ctrl+Shift+R)
+
+### "Forbidden" on admin routes
+
+1. Verify your account has `admin` or `superadmin` role
+2. Check via: `/api/admin/users` (as admin) to see your role
+3. Role is set during user creation or by another admin
+
+## Database Issues
+
+### "SQLITE_BUSY"
+
+**Cause:** Multiple processes accessing the database.
+
+1. Ensure only one `npm run dev` or `npm run start` is running
+2. Check for zombie Node.js processes: `ps aux | grep node`
+3. If needed: `kill $(lsof -t data/dashboard.db)`
+
+### Corrupted database
+
+```bash
+# Check integrity
+sqlite3 data/dashboard.db "PRAGMA integrity_check;"
+
+# If corrupt, re-seed from scratch
+rm data/dashboard.db*
+npx tsx src/lib/db/seed.ts
+```
+
+Note: This resets all configuration. Back up before deleting.
+
+### WAL file growing large
+
+```bash
+sqlite3 data/dashboard.db "PRAGMA wal_checkpoint(TRUNCATE);"
+```
+
+## Performance Issues
+
+### Slow builds
+
+- Use Turbopack (default in dev): `npm run dev`
+- Clean cache: `rm -rf .next`
+- Check disk space: `df -h`
+
+### High memory usage
+
+- 86 work packages: ~5MB in memory (normal)
+- If >1000 records: consider server-side filtering
+- ECharts canvas rendering is efficient for large datasets
+
+## Getting Help
+
+If none of the above resolves your issue:
+1. Check server logs (terminal or PM2 logs)
+2. Check browser console (F12)
+3. Review `.claude/OPEN_ITEMS.md` for known issues
+4. Check the `docs/review/` directory for detailed analysis
