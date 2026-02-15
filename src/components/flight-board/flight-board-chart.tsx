@@ -602,7 +602,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       grid: {
         left: 100,
         right: 20,
-        top: 22,
+        top: 62,
         bottom: 8,
       },
       xAxis: [
@@ -647,13 +647,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           xAxisIndex: [0, 1],
           filterMode: "weakFilter" as const,
           height: 18,
-          bottom: 4,
+          bottom: 14,
           start: zoomRange.start,
           end: zoomRange.end,
-          handleSize: 18,
-          handleStyle: {
-            borderRadius: 3,
-          },
+          handleSize: "80%",
           borderColor: cc.border,
           fillerColor: cc.primary15,
           textStyle: { color: cc.mutedFg },
@@ -1095,7 +1092,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           ref={headerChartRef}
           echarts={echarts}
           option={headerOption}
-          style={{ height: 65, width: "100%" }}
+          style={{ height: 95, width: "100%" }}
           theme={echartsTheme}
           notMerge
           onEvents={{ datazoom: handleHeaderDataZoom }}
