@@ -27,10 +27,10 @@ Centrally manage customer color coding used throughout the entire UI.
 ┌──────────────────────────────────────────────────────────┐
 │ Customer Colors                          [Reset Defaults] │
 ├──────────────────────────────────────────────────────────┤
-│ ┌──────┐ CargoJet Airways     #22c55e  [color picker] ✓  │
+│ ┌──────┐ CargoJet Airways  #22c55e [color] ✓ [✎][🗑]     │
 │ │██████│                                                  │
 │ └──────┘                                                  │
-│ ┌──────┐ Aerologic            #8b5cf6  [color picker] ✓  │
+│ ┌──────┐ Aerologic         #8b5cf6 [color] ✓ [✎][🗑]     │
 │ │██████│                                                  │
 │ └──────┘                                                  │
 │ ... (all 6 customers)                                     │
@@ -94,6 +94,7 @@ function getContrastText(hexColor: string): "#ffffff" | "#000000" {
 | `GET` | `/api/admin/customers` | List all customers with colors |
 | `PUT` | `/api/admin/customers` | Bulk update customer colors |
 | `POST` | `/api/admin/customers` | Add new customer |
+| `PATCH` | `/api/admin/customers/:id` | Update single customer (name, displayName, color) |
 | `DELETE` | `/api/admin/customers/:id` | Soft-delete (set isActive=false) |
 
 ### Client-Side Integration

@@ -83,7 +83,7 @@ See [REQ_OtherPages.md](../SPECS/REQ_OtherPages.md) → Dashboard section.
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `CustomerColorEditor` | `src/components/admin/customer-color-editor.tsx` | Color picker + hex input per customer |
+| `CustomerColorEditor` | `src/components/admin/customer-color-editor.tsx` | Color picker + hex input, inline batch edit, per-row edit/delete dialogs |
 | `AircraftTypeEditor` | `src/components/admin/aircraft-type-editor.tsx` | Mapping rule table + test input (D-015) |
 | `DataImport` | `src/components/admin/data-import.tsx` | File upload, paste JSON, preview, commit (D-016) |
 | `UserTable` | `src/components/admin/user-table.tsx` | User list with actions |

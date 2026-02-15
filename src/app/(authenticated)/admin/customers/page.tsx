@@ -87,6 +87,34 @@ export default function CustomersPage() {
     await useCustomers.getState().invalidate();
   };
 
+  const handleEdit = async (id: string, data: { name?: string; displayName?: string; color?: string }) => {
+    const res = await fetch(`/api/admin/customers/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      throw new Error(body.error ?? "Failed to update customer");
+    }
+    setMessage({ type: "success", text: "Customer updated" });
+    await fetchCustomers();
+    await useCustomers.getState().invalidate();
+  };
+
+  const handleDelete = async (id: string) => {
+    const res = await fetch(`/api/admin/customers/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const body = await res.json();
+      throw new Error(body.error ?? "Failed to delete customer");
+    }
+    setMessage({ type: "success", text: "Customer deleted" });
+    await fetchCustomers();
+    await useCustomers.getState().invalidate();
+  };
+
   if (loading) {
     return (
       <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
@@ -114,6 +142,8 @@ export default function CustomersPage() {
         onSave={handleSave}
         onReset={handleReset}
         onAdd={handleAdd}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
         saving={saving}
       />
     </div>

@@ -20,6 +20,8 @@ interface CustomerColorEditorProps {
   onSave: (updates: Array<{ id: string; color: string; displayName: string }>) => Promise<void>;
   onReset: () => Promise<void>;
   onAdd: (data: { name: string; displayName: string; color: string }) => Promise<void>;
+  onEdit: (id: string, data: { name?: string; displayName?: string; color?: string }) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
   saving: boolean;
 }
 
@@ -27,11 +29,19 @@ interface EditState {
   [id: string]: { color: string; displayName: string };
 }
 
+interface EditFormData {
+  name: string;
+  displayName: string;
+  color: string;
+}
+
 export function CustomerColorEditor({
   customers,
   onSave,
   onReset,
   onAdd,
+  onEdit,
+  onDelete,
   saving,
 }: CustomerColorEditorProps) {
   const [edits, setEdits] = useState<EditState>({});
@@ -39,6 +49,14 @@ export function CustomerColorEditor({
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newCustomer, setNewCustomer] = useState({ name: "", displayName: "", color: "#6b7280" });
   const [addError, setAddError] = useState<string | null>(null);
+
+  // Edit dialog state
+  const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
+  const [editFormData, setEditFormData] = useState<EditFormData>({ name: "", displayName: "", color: "#6b7280" });
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete dialog state
+  const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
 
   const getEditedValue = (customer: Customer) => {
     return edits[customer.id] ?? { color: customer.color, displayName: customer.displayName };
@@ -99,7 +117,72 @@ export function CustomerColorEditor({
     }
   };
 
+  const openEditDialog = (customer: Customer) => {
+    setEditFormData({
+      name: customer.name,
+      displayName: customer.displayName,
+      color: customer.color,
+    });
+    setEditError(null);
+    setEditCustomer(customer);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editCustomer) return;
+    setEditError(null);
+
+    if (!editFormData.name.trim()) {
+      setEditError("Name is required");
+      return;
+    }
+    if (!editFormData.displayName.trim()) {
+      setEditError("Display name is required");
+      return;
+    }
+    if (!isValidHex(editFormData.color)) {
+      setEditError("Invalid hex color");
+      return;
+    }
+
+    // Build partial update with only changed fields
+    const updates: { name?: string; displayName?: string; color?: string } = {};
+    if (editFormData.name !== editCustomer.name) updates.name = editFormData.name;
+    if (editFormData.displayName !== editCustomer.displayName) updates.displayName = editFormData.displayName;
+    if (editFormData.color !== editCustomer.color) updates.color = editFormData.color;
+
+    if (Object.keys(updates).length === 0) {
+      setEditCustomer(null);
+      return;
+    }
+
+    try {
+      await onEdit(editCustomer.id, updates);
+      setEditCustomer(null);
+      // Clear any inline edits for this customer since we just saved via dialog
+      const next = { ...edits };
+      delete next[editCustomer.id];
+      setEdits(next);
+    } catch (err) {
+      setEditError((err as Error).message);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteCustomer) return;
+    try {
+      await onDelete(deleteCustomer.id);
+      setDeleteCustomer(null);
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
+  };
+
   const activeCustomers = customers.filter((c) => c.isActive);
+
+  // Preview for edit dialog
+  const editPreviewColor = isValidHex(editFormData.color) ? editFormData.color : "#6b7280";
+  const editContrastText = getContrastText(editPreviewColor);
+  const editWcagLevel = getWCAGLevel(editPreviewColor, editContrastText);
 
   return (
     <div className="space-y-4">
@@ -215,6 +298,26 @@ export function CustomerColorEditor({
               >
                 {wcagLevel}
               </Badge>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0"
+                  onClick={() => openEditDialog(customer)}
+                >
+                  <i className="fa-solid fa-pen-to-square text-xs" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                  onClick={() => setDeleteCustomer(customer)}
+                >
+                  <i className="fa-solid fa-trash text-xs" />
+                </Button>
+              </div>
             </div>
           );
         })}
@@ -294,6 +397,120 @@ export function CustomerColorEditor({
             <Button onClick={handleAdd}>
               <i className="fa-solid fa-plus mr-2" />
               Add
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Customer dialog */}
+      <Dialog open={!!editCustomer} onOpenChange={(open) => !open && setEditCustomer(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {editError && (
+              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {editError}
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Customer Name</Label>
+              <Input
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                placeholder="e.g. Atlas Air"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Display Name</Label>
+              <Input
+                value={editFormData.displayName}
+                onChange={(e) => setEditFormData({ ...editFormData, displayName: e.target.value })}
+                placeholder="e.g. Atlas"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={editFormData.color}
+                  onChange={(e) => setEditFormData({ ...editFormData, color: e.target.value })}
+                  className="font-mono"
+                  placeholder="#rrggbb"
+                />
+                <input
+                  type="color"
+                  value={editPreviewColor}
+                  onChange={(e) => setEditFormData({ ...editFormData, color: e.target.value })}
+                  className="h-9 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                />
+              </div>
+            </div>
+            {/* WCAG preview */}
+            <div className="flex items-center gap-3">
+              <div
+                className="h-10 w-10 rounded-md border border-border"
+                style={{ backgroundColor: editPreviewColor }}
+              >
+                <div
+                  className="flex h-full items-center justify-center text-xs font-bold"
+                  style={{ color: editContrastText }}
+                >
+                  Aa
+                </div>
+              </div>
+              <Badge
+                variant={editWcagLevel === "Fail" ? "destructive" : "outline"}
+                className={`text-xs ${
+                  editWcagLevel === "AAA"
+                    ? "border-emerald-500 text-emerald-500"
+                    : editWcagLevel === "AA"
+                      ? "border-amber-500 text-amber-500"
+                      : ""
+                }`}
+              >
+                {editWcagLevel}
+              </Badge>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditCustomer(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleEditSubmit} disabled={saving}>
+              {saving ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-floppy-disk mr-2" />
+                  Save
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation dialog */}
+      <Dialog open={!!deleteCustomer} onOpenChange={(open) => !open && setDeleteCustomer(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Customer?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will deactivate <span className="font-medium text-foreground">{deleteCustomer?.name}</span>.
+            The customer will be hidden from all views but can be restored later.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteCustomer(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={saving}>
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
