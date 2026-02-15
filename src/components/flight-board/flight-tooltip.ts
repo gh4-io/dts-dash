@@ -16,6 +16,7 @@ export function formatFlightTooltip(data: {
   mhSource: string;
   comments: string | null;
   timezone?: string;
+  timeFormat?: "12h" | "24h";
 }): string {
   const groundH = Math.floor(data.groundHours);
   const groundM = Math.round((data.groundHours - groundH) * 60);
@@ -32,10 +33,11 @@ export function formatFlightTooltip(data: {
         .formatToParts(arrivalDate)
         .find((p) => p.type === "timeZoneName")?.value ?? "ET";
 
+  const use12h = data.timeFormat === "12h";
   const fmtDate = (d: Date) =>
     d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) +
     ", " +
-    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }) +
+    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: use12h, timeZone: tz }) +
     ` ${tzLabel}`;
 
   const mhLabel =

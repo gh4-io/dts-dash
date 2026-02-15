@@ -24,9 +24,10 @@ interface HourlySnapshot {
 interface CombinedChartProps {
   snapshots: HourlySnapshot[];
   timezone?: string;
+  timeFormat?: "12h" | "24h";
 }
 
-export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProps) {
+export function CombinedChart({ snapshots, timezone = "UTC", timeFormat = "24h" }: CombinedChartProps) {
   const chartData = useMemo(() => {
     return snapshots.map((s) => ({
       hour: s.hour,
@@ -109,7 +110,7 @@ export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProp
     const timeFmt = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
       hour: "numeric",
-      hour12: true,
+      hour12: timeFormat === "12h",
     });
     const dateFmt = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
@@ -125,7 +126,7 @@ export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProp
       }
       return timeFmt.format(d);
     };
-  }, [timezone]);
+  }, [timezone, timeFormat]);
 
   if (chartData.length === 0) {
     return (
@@ -204,7 +205,7 @@ export function CombinedChart({ snapshots, timezone = "UTC" }: CombinedChartProp
               timeZone: timezone,
               hour: "numeric",
               minute: "2-digit",
-              hour12: true,
+              hour12: timeFormat === "12h",
             });
             return `${datePart} ${timePart}`;
           }}

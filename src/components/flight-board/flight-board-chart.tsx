@@ -14,6 +14,7 @@ import {
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { usePreferences } from "@/lib/hooks/use-preferences";
 import { formatFlightTooltip } from "./flight-tooltip";
 import { cn } from "@/lib/utils";
 import { BREAK_PREFIX } from "@/lib/hooks/use-transformed-data";
@@ -70,6 +71,8 @@ interface FlightBoardChartProps {
   highlightMap?: Map<number, string>;
   /** Group-by result for collapsing rows */
   groups?: { groupedRegistrations: string[]; wpToGroupIndex: Map<number, number> } | null;
+  /** When true, click+drag on body chart pans instead of selecting bars */
+  panMode?: boolean;
 }
 
 // Data array format: [regIndex, arrivalTs, departureTs, customer, registration, flightId, wpIndex]
@@ -84,11 +87,12 @@ type GanttDataItem = [
 ];
 
 export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardChartProps>(
-  function FlightBoardChart({ workPackages, zoomLevel, timezone, isExpanded, onBarClick, transformedRegistrations, highlightMap, groups }, ref) {
+  function FlightBoardChart({ workPackages, zoomLevel, timezone, isExpanded, onBarClick, transformedRegistrations, highlightMap, groups, panMode }, ref) {
   const headerChartRef = useRef<ReactEChartsCore>(null);
   const bodyChartRef = useRef<ReactEChartsCore>(null);
   const syncLock = useRef(false);
   const { getColor } = useCustomers();
+  const { timeFormat } = usePreferences();
 
   // Expose zoom read/write for parent toolbar handlers
   useImperativeHandle(ref, () => ({
@@ -238,9 +242,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   // ─── TZ-aware time formatter (reused in renderItem) ───
   const timeFmt = useMemo(
     () => new Intl.DateTimeFormat("en-US", {
-      hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone,
+      hour: "2-digit", minute: "2-digit",
+      hourCycle: timeFormat === "12h" ? "h12" : "h23",
+      timeZone: timezone,
     }),
-    [timezone]
+    [timezone, timeFormat]
   );
 
   // ─── renderItem for custom flight bars ───
@@ -332,7 +338,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   // ─── HEADER OPTION (time axis + slider — always visible) ───
   const headerOption = useMemo(() => {
     const hourFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false,
+      timeZone: timezone, hour: "2-digit", minute: "2-digit",
+      hourCycle: timeFormat === "12h" ? "h12" : "h23",
     });
     const dayNameFmt = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone, weekday: "long",
@@ -360,12 +367,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       xAxis: [
         // Bottom axis — time labels anchored to TZ midnight at clean intervals
         {
-          type: "time" as const,
+          type: "value" as const,
           position: "bottom" as const,
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
-          minInterval: timeGrid.intervalMs,
-          maxInterval: timeGrid.intervalMs,
+          interval: timeGrid.intervalMs,
           axisLabel: {
             color: "hsl(var(--muted-foreground))",
             fontSize: 11,
@@ -388,10 +394,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         },
         // Top axis — day name labels only (no lines/ticks)
         {
-          type: "time" as const,
+          type: "value" as const,
           position: "top" as const,
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
+          interval: 86400000,
           axisLabel: {
             color: "hsl(var(--foreground))",
             fontSize: 12,
@@ -401,8 +408,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           axisLine: { show: false },
           axisTick: { show: false },
           splitLine: { show: false },
-          minInterval: 86400000,
-          maxInterval: 86400000,
         },
       ],
       yAxis: { show: false, type: "category" as const, data: [] },
@@ -430,7 +435,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
       series: [],
     };
-  }, [timezone, timeGrid, zoomRange]);
+  }, [timezone, timeFormat, timeGrid, zoomRange]);
 
   // ─── BODY OPTION (bars + y-axis, no visible xAxis) ───
   const bodyOption = useMemo(() => {
@@ -462,6 +467,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             mhSource: wp.mhSource,
             comments: wp.calendarComments,
             timezone,
+            timeFormat,
           });
         },
       },
@@ -472,7 +478,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         bottom: 2,
       },
       xAxis: {
-        type: "time" as const,
+        type: "value" as const,
         min: timeGrid.axisMin,
         max: timeGrid.axisMax,
         axisLabel: { show: false },
@@ -500,11 +506,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       },
       dataZoom: [
         {
-          type: "inside" as const,
+          type: "slider" as const,
+          show: false,
           xAxisIndex: 0,
           filterMode: "weakFilter" as const,
-          zoomOnMouseWheel: false,
-          moveOnMouseWheel: false,
           start: zoomRange.start,
           end: zoomRange.end,
         },
@@ -525,7 +530,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
     };
   }, [registrations, chartData, colorMap, allWps, renderFlightBar,
-      timeGrid, timezone, zoomRange]);
+      timeGrid, timezone, timeFormat, zoomRange]);
 
   // ─── Sync header zoom → body ───
   const handleHeaderDataZoom = useCallback(() => {
@@ -548,15 +553,155 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     syncLock.current = false;
   }, []);
 
+  // ─── Sync body zoom → header ───
+  const handleBodyDataZoom = useCallback(() => {
+    if (syncLock.current) return;
+    syncLock.current = true;
+    const headerInstance = headerChartRef.current?.getEchartsInstance();
+    const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+    if (headerInstance && bodyInstance) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opt = bodyInstance.getOption() as any;
+      const dz = opt?.dataZoom?.[0];
+      if (dz) {
+        headerInstance.dispatchAction({ type: "dataZoom", start: dz.start, end: dz.end });
+      }
+    }
+    syncLock.current = false;
+  }, []);
+
+  // ─── Body chart: Ctrl+Scroll zoom, Shift+Scroll pan ───
+  useEffect(() => {
+    const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
+    if (!bodyEl) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.shiftKey) return; // plain scroll → let CSS handle
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+      if (!headerInstance || !bodyInstance) return;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opt = headerInstance.getOption() as any;
+      const dz = opt?.dataZoom?.[0];
+      if (!dz) return;
+
+      let { start, end } = dz;
+      const span = end - start;
+
+      if (e.ctrlKey) {
+        // Zoom: scale by deltaY magnitude (clamped) to handle trackpads + mice
+        const absDelta = Math.min(Math.abs(e.deltaY), 100);
+        const rate = absDelta * 0.0015; // gentle: ~0.15 for a full mouse tick (deltaY≈100)
+        const factor = e.deltaY > 0 ? 1 + rate : 1 / (1 + rate);
+        const newSpan = Math.min(100, Math.max(1, span * factor));
+        const center = (start + end) / 2;
+        start = Math.max(0, center - newSpan / 2);
+        end = Math.min(100, center + newSpan / 2);
+      } else if (e.shiftKey) {
+        // Pan: scale by deltaY magnitude
+        const absDelta = Math.min(Math.abs(e.deltaY), 100);
+        const shift = Math.sign(e.deltaY) * span * absDelta * 0.001;
+        start = Math.max(0, Math.min(100 - span, start + shift));
+        end = start + span;
+      }
+
+      // Dispatch to both charts
+      [headerInstance, bodyInstance].forEach((inst) => {
+        inst.dispatchAction({ type: "dataZoom", start, end });
+      });
+    };
+
+    bodyEl.addEventListener("wheel", handleWheel, { passive: false });
+    return () => bodyEl.removeEventListener("wheel", handleWheel);
+  }, [workPackages.length]); // re-attach if chart rebuilds
+
+  // ─── Body chart: click+drag pan (hand tool) ───
+  const dragState = useRef<{ startX: number; startPct: number; span: number; dragging: boolean }>({
+    startX: 0, startPct: 0, span: 0, dragging: false,
+  });
+
+  useEffect(() => {
+    const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
+    if (!bodyEl) return;
+
+    if (panMode) {
+      bodyEl.style.cursor = "grab";
+    } else {
+      bodyEl.style.cursor = "";
+    }
+
+    if (!panMode) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      // Only left button
+      if (e.button !== 0) return;
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      if (!headerInstance) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const opt = headerInstance.getOption() as any;
+      const dz = opt?.dataZoom?.[0];
+      if (!dz) return;
+
+      dragState.current = {
+        startX: e.clientX,
+        startPct: dz.start,
+        span: dz.end - dz.start,
+        dragging: true,
+      };
+      bodyEl.style.cursor = "grabbing";
+      e.preventDefault();
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragState.current.dragging) return;
+      const dx = e.clientX - dragState.current.startX;
+      // Convert px delta to % of dataZoom range
+      const chartWidth = bodyEl.clientWidth;
+      const pctDelta = -(dx / chartWidth) * dragState.current.span * 1.5;
+      let start = dragState.current.startPct + pctDelta;
+      start = Math.max(0, Math.min(100 - dragState.current.span, start));
+      const end = start + dragState.current.span;
+
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+      [headerInstance, bodyInstance].forEach((inst) => {
+        inst?.dispatchAction({ type: "dataZoom", start, end });
+      });
+    };
+
+    const handleMouseUp = () => {
+      if (dragState.current.dragging) {
+        dragState.current.dragging = false;
+        bodyEl.style.cursor = "grab";
+      }
+    };
+
+    bodyEl.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      bodyEl.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      bodyEl.style.cursor = "";
+    };
+  }, [panMode, workPackages.length]);
+
   // ─── Handle click on bar ───
   const handleClick = useCallback(
     (params: { data?: GanttDataItem }) => {
+      if (panMode) return; // suppress clicks in pan mode
       if (!params.data || !onBarClick) return;
       const wpIdx = params.data[6];
       const wp = allWps[wpIdx];
       if (wp) onBarClick(wp);
     },
-    [allWps, onBarClick]
+    [allWps, onBarClick, panMode]
   );
 
   // ─── Live NOW line + time grid lines — merge-update on body chart ───
@@ -597,6 +742,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
     instance.setOption({
       series: [{
+        type: "custom",
         markLine: {
           silent: true,
           symbol: ["none", "none"],
@@ -652,7 +798,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           style={{ height: bodyHeight, width: "100%" }}
           theme="dark"
           notMerge
-          onEvents={{ click: handleClick }}
+          onEvents={{ click: handleClick, datazoom: handleBodyDataZoom }}
         />
       </div>
     </div>

@@ -106,9 +106,14 @@ export default function AdminSettingsPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          System-wide configuration for demand/capacity models
-        </p>
+        <div>
+          <p className="text-sm text-muted-foreground">
+            System-wide configuration for demand/capacity models
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Individual users can override timezone, date range, and time format in their Settings.
+          </p>
+        </div>
         <Button onClick={handleSave} disabled={saving} size="sm">
           {saving ? (
             <>

@@ -18,6 +18,8 @@ export type ThemePreset =
   | "ruby"
   | "aspen";
 
+export type TimeFormat = "12h" | "24h";
+
 export interface UserPreferences {
   colorMode: ColorMode;
   themePreset: ThemePreset;
@@ -25,6 +27,7 @@ export interface UserPreferences {
   compactMode: boolean;
   defaultTimezone: string;
   defaultDateRange: "1d" | "3d" | "1w";
+  timeFormat: TimeFormat;
   tablePageSize: number;
 }
 
@@ -88,6 +91,7 @@ const defaults: UserPreferences = {
   compactMode: false,
   defaultTimezone: "UTC",
   defaultDateRange: "3d",
+  timeFormat: "24h",
   tablePageSize: 30,
 };
 
@@ -110,6 +114,7 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
           compactMode: data.compactMode ?? false,
           defaultTimezone: data.defaultTimezone ?? defaults.defaultTimezone,
           defaultDateRange: data.defaultDateRange ?? defaults.defaultDateRange,
+          timeFormat: data.timeFormat ?? defaults.timeFormat,
           tablePageSize: data.tablePageSize ?? defaults.tablePageSize,
           loaded: true,
           loading: false,
@@ -146,6 +151,7 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
           compactMode: partial.compactMode ?? prev.compactMode,
           defaultTimezone: partial.defaultTimezone ?? prev.defaultTimezone,
           defaultDateRange: partial.defaultDateRange ?? prev.defaultDateRange,
+          timeFormat: partial.timeFormat ?? prev.timeFormat,
           tablePageSize: partial.tablePageSize ?? prev.tablePageSize,
         }),
       });
@@ -159,6 +165,7 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
           compactMode: prev.compactMode,
           defaultTimezone: prev.defaultTimezone,
           defaultDateRange: prev.defaultDateRange,
+          timeFormat: prev.timeFormat,
           tablePageSize: prev.tablePageSize,
         });
         get().applyTheme();
@@ -169,6 +176,11 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
         colorMode: prev.colorMode,
         themePreset: prev.themePreset,
         accentColor: prev.accentColor,
+        compactMode: prev.compactMode,
+        defaultTimezone: prev.defaultTimezone,
+        defaultDateRange: prev.defaultDateRange,
+        timeFormat: prev.timeFormat,
+        tablePageSize: prev.tablePageSize,
       });
       get().applyTheme();
     }

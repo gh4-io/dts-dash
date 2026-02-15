@@ -36,6 +36,7 @@ function FlightBoardPageInner() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(getStoredExpanded);
   const [viewOpen, setViewOpen] = useState(false);
+  const [panMode, setPanMode] = useState(false);
   const chartRef = useRef<FlightBoardChartHandle>(null);
 
   const { workPackages, isLoading, error } = useWorkPackages();
@@ -187,6 +188,17 @@ function FlightBoardPageInner() {
               <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleFit} title="Fit All Data">
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs" />
               </Button>
+
+              {/* Hand tool (pan mode) */}
+              <Button
+                variant={panMode ? "default" : "ghost"}
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={() => setPanMode((v) => !v)}
+                title={panMode ? "Switch to pointer" : "Hand tool (drag to pan)"}
+              >
+                <i className="fa-solid fa-hand text-xs" />
+              </Button>
             </div>
 
             {/* View toggle button */}
@@ -234,13 +246,14 @@ function FlightBoardPageInner() {
             transformedRegistrations={registrations}
             highlightMap={highlightMap}
             groups={groups}
+            panMode={panMode}
           />
         </div>
       )}
 
       {/* Interaction hints */}
       <p className="text-[11px] text-muted-foreground">
-        Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details
+        Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
       </p>
 
       {/* Legend */}

@@ -29,6 +29,8 @@ export type ThemePreset =
 
 export type DateRange = "1d" | "3d" | "1w";
 
+export type TimeFormat = "12h" | "24h";
+
 export type WpStatus = "New" | "Approved";
 
 export type MHSource = "workpackage" | "default" | "manual";
@@ -107,6 +109,7 @@ export interface FilterActions {
   setTypes: (v: AircraftType[]) => void;
   reset: () => void;
   hydrate: (params: Partial<FilterState>) => void;
+  hydrateDefaults: (dateRange: string, tz: string) => void;
 }
 
 // ─── Capacity & Analytics ───────────────────────────────────────────────────
@@ -206,6 +209,7 @@ export interface UserPreferences {
   compactMode: boolean;
   defaultTimezone: string;
   defaultDateRange: DateRange;
+  timeFormat: TimeFormat;
   tablePageSize: number;
 }
 

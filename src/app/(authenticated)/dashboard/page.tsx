@@ -15,6 +15,7 @@ import { useWorkPackages } from "@/lib/hooks/use-work-packages";
 import { useHourlySnapshots } from "@/lib/hooks/use-hourly-snapshots";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFilters } from "@/lib/hooks/use-filters";
+import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { useEffect } from "react";
 
@@ -23,6 +24,7 @@ function DashboardPageInner() {
   const { snapshots, isLoading: snapshotsLoading } = useHourlySnapshots();
   const { fetch: fetchCustomers } = useCustomers();
   const { timezone } = useFilters();
+  const { timeFormat } = usePreferences();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
 
   useEffect(() => {
@@ -91,7 +93,7 @@ function DashboardPageInner() {
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
               </h3>
-              <CombinedChart snapshots={displaySnapshots} timezone={timezone} />
+              <CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} />
             </div>
 
             {/* Right: Donut */}

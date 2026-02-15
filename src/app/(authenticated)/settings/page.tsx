@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useEffect } from "react";
+import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -13,311 +11,231 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import {
+  usePreferences,
+  type ThemePreset,
+  type ColorMode,
+  type TimeFormat,
+} from "@/lib/hooks/use-preferences";
 
-interface ShiftConfig {
-  name: string;
-  startHour: number;
-  endHour: number;
-  headcount: number;
-}
+const THEME_PRESETS: { value: ThemePreset; label: string; description: string }[] = [
+  { value: "neutral", label: "Neutral", description: "Default zinc/gray tones" },
+  { value: "ocean", label: "Ocean", description: "Cool blue tones" },
+  { value: "purple", label: "Purple", description: "Soft lavender tones" },
+  { value: "black", label: "Black", description: "True-black surfaces" },
+  { value: "vitepress", label: "Vitepress", description: "Green accent, docs style" },
+  { value: "dusk", label: "Dusk", description: "Warm twilight tones" },
+  { value: "catppuccin", label: "Catppuccin", description: "Pastel warm tones" },
+  { value: "solar", label: "Solar", description: "Gold/amber solarized" },
+  { value: "emerald", label: "Emerald", description: "Green forest tones" },
+  { value: "ruby", label: "Ruby", description: "Red/crimson accent" },
+  { value: "aspen", label: "Aspen", description: "Earth tones, natural warmth" },
+];
 
-interface AppConfig {
-  defaultMH: number;
-  wpMHMode: string;
-  theoreticalCapacityPerPerson: number;
-  realCapacityPerPerson: number;
-  shifts: ShiftConfig[];
-  timelineDefaultDays: number;
-  defaultTimezone: string;
-}
+const COLOR_MODES: { value: ColorMode; label: string; icon: string }[] = [
+  { value: "light", label: "Light", icon: "fa-solid fa-sun" },
+  { value: "dark", label: "Dark", icon: "fa-solid fa-moon" },
+  { value: "system", label: "System", icon: "fa-solid fa-circle-half-stroke" },
+];
+
+const DATE_RANGES = [
+  { value: "1d", label: "1 Day" },
+  { value: "3d", label: "3 Days" },
+  { value: "1w", label: "1 Week" },
+];
+
+const PAGE_SIZES = [10, 25, 30, 50, 100];
 
 export default function SettingsPage() {
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  const fetchConfig = useCallback(async () => {
-    try {
-      const res = await fetch("/api/config");
-      if (res.ok) {
-        const data = await res.json();
-        setConfig(data);
-      }
-    } catch {
-      // silently fail
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { setTheme } = useTheme();
+  const prefs = usePreferences();
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
-
-  const handleSave = async () => {
-    if (!config) return;
-    setSaving(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
-      });
-
-      if (res.ok) {
-        setMessage({ type: "success", text: "Settings saved" });
-      } else {
-        const data = await res.json();
-        setMessage({ type: "error", text: data.error ?? "Failed to save" });
-      }
-    } catch {
-      setMessage({ type: "error", text: "Network error" });
-    } finally {
-      setSaving(false);
+    if (!prefs.loaded) {
+      prefs.fetch();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefs.loaded]);
+
+  // Sync color mode with next-themes
+  useEffect(() => {
+    if (prefs.loaded) {
+      setTheme(prefs.colorMode);
+    }
+  }, [prefs.colorMode, prefs.loaded, setTheme]);
+
+  const handleColorModeChange = (mode: ColorMode) => {
+    setTheme(mode);
+    prefs.update({ colorMode: mode });
   };
 
-  const updateShiftHeadcount = (index: number, headcount: number) => {
-    if (!config) return;
-    const shifts = [...config.shifts];
-    shifts[index] = { ...shifts[index], headcount };
-    setConfig({ ...config, shifts });
+  const handlePresetChange = (preset: ThemePreset) => {
+    prefs.update({ themePreset: preset });
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">
-          <i className="fa-solid fa-gear mr-2" />
-          Settings
-        </h1>
-        <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
-          <i className="fa-solid fa-spinner fa-spin text-2xl" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!config) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">
-          <i className="fa-solid fa-gear mr-2" />
-          Settings
-        </h1>
-        <div className="rounded-lg border border-border bg-card p-8 text-center text-destructive">
-          Failed to load settings
-        </div>
-      </div>
-    );
-  }
+  const handleAccentClear = () => {
+    prefs.update({ accentColor: null });
+  };
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          <i className="fa-solid fa-gear mr-2" />
-          Settings
-        </h1>
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? (
-            <>
-              <i className="fa-solid fa-spinner fa-spin mr-2" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <i className="fa-solid fa-floppy-disk mr-2" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
+      <h1 className="text-2xl font-bold">
+        <i className="fa-solid fa-gear mr-2" />
+        Settings
+      </h1>
 
-      {message && (
-        <div
-          className={`rounded-md px-4 py-3 text-sm ${
-            message.type === "success"
-              ? "bg-emerald-500/10 text-emerald-500"
-              : "bg-destructive/10 text-destructive"
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* ─── Demand Model ──────────────────────────────────────────── */}
+      {/* ─── Appearance ─────────────────────────────────────────────── */}
       <section className="rounded-lg border border-border bg-card p-6 space-y-4">
         <h2 className="text-lg font-semibold">
-          <i className="fa-solid fa-calculator mr-2 text-muted-foreground" />
-          Demand Model
+          <i className="fa-solid fa-palette mr-2 text-muted-foreground" />
+          Appearance
         </h2>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Default Man-Hours (MH)</Label>
-            <span className="text-sm font-mono text-muted-foreground">
-              {config.defaultMH.toFixed(1)}
-            </span>
+          <Label>Color Mode</Label>
+          <div className="flex gap-2">
+            {COLOR_MODES.map((mode) => (
+              <Button
+                key={mode.value}
+                variant={prefs.colorMode === mode.value ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleColorModeChange(mode.value)}
+              >
+                <i className={`${mode.icon} mr-2`} />
+                {mode.label}
+              </Button>
+            ))}
           </div>
-          <Slider
-            value={[config.defaultMH]}
-            onValueChange={([v]) => setConfig({ ...config, defaultMH: v })}
-            min={0.5}
-            max={10}
-            step={0.5}
-          />
-          <p className="text-xs text-muted-foreground">
-            Fallback MH when work package has no MH value
-          </p>
         </div>
+
+        <div className="space-y-2">
+          <Label>Theme Preset</Label>
+          <Select value={prefs.themePreset} onValueChange={(v) => handlePresetChange(v as ThemePreset)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {THEME_PRESETS.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  <span className="font-medium">{t.label}</span>
+                  <span className="ml-2 text-muted-foreground text-xs">
+                    {t.description}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {prefs.accentColor && (
+          <div className="space-y-2">
+            <Label>Accent Color Override</Label>
+            <div className="flex items-center gap-2">
+              <div
+                className="h-8 w-8 rounded border border-border"
+                style={{ backgroundColor: `hsl(${prefs.accentColor})` }}
+              />
+              <span className="text-sm text-muted-foreground">{prefs.accentColor}</span>
+              <Button variant="ghost" size="sm" onClick={handleAccentClear}>
+                <i className="fa-solid fa-xmark mr-1" />
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <div>
-            <Label>Include WP Man-Hours</Label>
-            <p className="text-xs text-muted-foreground">
-              Use TotalMH from work packages when available
-            </p>
+            <Label htmlFor="compact-mode">Compact Mode</Label>
+            <p className="text-xs text-muted-foreground">Reduce spacing in tables and lists</p>
           </div>
           <Switch
-            checked={config.wpMHMode === "include"}
-            onCheckedChange={(checked) =>
-              setConfig({ ...config, wpMHMode: checked ? "include" : "exclude" })
-            }
+            id="compact-mode"
+            checked={prefs.compactMode}
+            onCheckedChange={(checked) => prefs.update({ compactMode: checked })}
           />
         </div>
       </section>
 
-      {/* ─── Capacity Model ────────────────────────────────────────── */}
+      {/* ─── Data Display ───────────────────────────────────────────── */}
       <section className="rounded-lg border border-border bg-card p-6 space-y-4">
         <h2 className="text-lg font-semibold">
-          <i className="fa-solid fa-gauge-high mr-2 text-muted-foreground" />
-          Capacity Model
+          <i className="fa-solid fa-table-columns mr-2 text-muted-foreground" />
+          Data Display
         </h2>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Theoretical MH/Person</Label>
-            <Input
-              type="number"
-              value={config.theoreticalCapacityPerPerson}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  theoreticalCapacityPerPerson: parseFloat(e.target.value) || 8.0,
-                })
-              }
-              min={1}
-              max={24}
-              step={0.5}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Real MH/Person</Label>
-            <Input
-              type="number"
-              value={config.realCapacityPerPerson}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  realCapacityPerPerson: parseFloat(e.target.value) || 6.5,
-                })
-              }
-              min={1}
-              max={24}
-              step={0.5}
-            />
-          </div>
+        <div className="space-y-2">
+          <Label>Default Timezone</Label>
+          <Select
+            value={prefs.defaultTimezone}
+            onValueChange={(v) => prefs.update({ defaultTimezone: v })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="UTC">UTC</SelectItem>
+              <SelectItem value="America/New_York">Eastern (America/New_York)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </section>
 
-      {/* ─── Shift Configuration ───────────────────────────────────── */}
-      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">
-          <i className="fa-solid fa-clock mr-2 text-muted-foreground" />
-          Shift Configuration
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Adjust headcount per shift. Shift times are fixed (Day 07-15, Swing 15-23, Night 23-07).
-        </p>
-
-        <div className="space-y-3">
-          {config.shifts.map((shift, i) => (
-            <div
-              key={shift.name}
-              className="flex items-center justify-between rounded-md border border-border bg-background p-3"
-            >
-              <div>
-                <span className="font-medium">{shift.name}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {String(shift.startHour).padStart(2, "0")}:00 – {String(shift.endHour).padStart(2, "0")}:00
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Headcount</Label>
-                <Input
-                  type="number"
-                  value={shift.headcount}
-                  onChange={(e) =>
-                    updateShiftHeadcount(i, parseInt(e.target.value, 10) || 0)
-                  }
-                  min={0}
-                  max={50}
-                  className="w-20"
-                />
-              </div>
-            </div>
-          ))}
+        <div className="space-y-2">
+          <Label>Default Date Range</Label>
+          <Select
+            value={prefs.defaultDateRange}
+            onValueChange={(v) => prefs.update({ defaultDateRange: v as "1d" | "3d" | "1w" })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DATE_RANGES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </section>
 
-      {/* ─── Display ───────────────────────────────────────────────── */}
-      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">
-          <i className="fa-solid fa-display mr-2 text-muted-foreground" />
-          Display
-        </h2>
+        <div className="space-y-2">
+          <Label>Time Format</Label>
+          <Select
+            value={prefs.timeFormat}
+            onValueChange={(v) => prefs.update({ timeFormat: v as TimeFormat })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="12h">12-Hour (2:00 PM)</SelectItem>
+              <SelectItem value="24h">24-Hour (14:00)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Applies to chart axes, bar labels, tooltips, and date pickers
+          </p>
+        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Timeline Default (Days)</Label>
-            <Select
-              value={String(config.timelineDefaultDays)}
-              onValueChange={(v) =>
-                setConfig({ ...config, timelineDefaultDays: parseInt(v, 10) })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 Day</SelectItem>
-                <SelectItem value="3">3 Days</SelectItem>
-                <SelectItem value="7">1 Week</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Default Timezone</Label>
-            <Select
-              value={config.defaultTimezone}
-              onValueChange={(v) =>
-                setConfig({ ...config, defaultTimezone: v })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="UTC">UTC</SelectItem>
-                <SelectItem value="America/New_York">Eastern</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="space-y-2">
+          <Label>Table Page Size</Label>
+          <Select
+            value={String(prefs.tablePageSize)}
+            onValueChange={(v) => prefs.update({ tablePageSize: parseInt(v, 10) })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZES.map((s) => (
+                <SelectItem key={s} value={String(s)}>
+                  {s} rows
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </section>
     </div>

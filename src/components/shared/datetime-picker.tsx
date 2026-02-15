@@ -5,6 +5,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { usePreferences } from "@/lib/hooks/use-preferences";
 
 interface DateTimePickerProps {
   value: string; // ISO 8601
@@ -73,6 +74,7 @@ function wallClockToUtc(
 
 export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" }: DateTimePickerProps) {
   const [open, setOpen] = React.useState(false);
+  const { timeFormat } = usePreferences();
 
   // Wall-clock components in the selected timezone
   const wc = React.useMemo(() => {
@@ -105,8 +107,25 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
     const y = wc.year;
     const mo = (wc.month + 1).toString().padStart(2, "0");
     const d = wc.day.toString().padStart(2, "0");
+
+    if (timeFormat === "12h") {
+      const h = parseInt(wc.hour);
+      const period = h >= 12 ? "PM" : "AM";
+      const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+      return `${y}-${mo}-${d} ${h12}:${wc.minute} ${period}`;
+    }
+
     return `${y}-${mo}-${d} ${wc.hour}:${wc.minute}`;
   };
+
+  // UTC equivalent annotation for non-UTC timezones
+  const utcAnnotation = React.useMemo(() => {
+    if (timezone === "UTC" || !value) return null;
+    const date = new Date(value);
+    const utcH = date.getUTCHours().toString().padStart(2, "0");
+    const utcM = date.getUTCMinutes().toString().padStart(2, "0");
+    return `${utcH}:${utcM}Z`;
+  }, [value, timezone]);
 
   // Create a Date for the Calendar that represents the wall-clock date
   // Use noon to avoid date-boundary issues across browser timezones
@@ -137,9 +156,16 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
           initialFocus
         />
         <div className="border-t p-3">
-          <label className="text-xs text-muted-foreground">
-            Time ({tzLabel})
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-muted-foreground">
+              Time ({tzLabel})
+            </label>
+            {utcAnnotation && (
+              <span className="text-[11px] text-muted-foreground">
+                {utcAnnotation}
+              </span>
+            )}
+          </div>
           <input
             type="time"
             value={`${wc.hour}:${wc.minute}`}

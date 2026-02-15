@@ -71,6 +71,9 @@ export const userPreferences = sqliteTable("user_preferences", {
   defaultDateRange: text("default_date_range", { enum: ["1d", "3d", "1w"] })
     .notNull()
     .default("3d"),
+  timeFormat: text("time_format", { enum: ["12h", "24h"] })
+    .notNull()
+    .default("24h"),
   tablePageSize: integer("table_page_size").notNull().default(30),
 });
 

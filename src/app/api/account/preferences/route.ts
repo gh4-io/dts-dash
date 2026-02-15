@@ -19,6 +19,7 @@ const VALID_PRESETS = [
   "aspen",
 ] as const;
 const VALID_DATE_RANGES = ["1d", "3d", "1w"] as const;
+const VALID_TIME_FORMATS = ["12h", "24h"] as const;
 const VALID_PAGE_SIZES = [10, 25, 30, 50, 100] as const;
 
 /**
@@ -47,6 +48,7 @@ export async function GET() {
         compactMode: false,
         defaultTimezone: "UTC",
         defaultDateRange: "3d",
+        timeFormat: "24h",
         tablePageSize: 30,
       });
     }
@@ -58,6 +60,7 @@ export async function GET() {
       compactMode: prefs.compactMode,
       defaultTimezone: prefs.defaultTimezone,
       defaultDateRange: prefs.defaultDateRange,
+      timeFormat: prefs.timeFormat,
       tablePageSize: prefs.tablePageSize,
     });
   } catch (error) {
@@ -101,6 +104,12 @@ export async function PUT(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (body.timeFormat && !VALID_TIME_FORMATS.includes(body.timeFormat)) {
+      return NextResponse.json(
+        { error: "Invalid time format" },
+        { status: 400 }
+      );
+    }
     if (body.tablePageSize && !VALID_PAGE_SIZES.includes(body.tablePageSize)) {
       return NextResponse.json(
         { error: "Invalid page size" },
@@ -129,6 +138,7 @@ export async function PUT(request: NextRequest) {
       compactMode: body.compactMode ?? false,
       defaultTimezone: body.defaultTimezone ?? "UTC",
       defaultDateRange: body.defaultDateRange ?? "3d",
+      timeFormat: body.timeFormat ?? "24h",
       tablePageSize: body.tablePageSize ?? 30,
     };
 
@@ -144,6 +154,7 @@ export async function PUT(request: NextRequest) {
           compactMode: values.compactMode,
           defaultTimezone: values.defaultTimezone,
           defaultDateRange: values.defaultDateRange,
+          timeFormat: values.timeFormat,
           tablePageSize: values.tablePageSize,
         },
       })

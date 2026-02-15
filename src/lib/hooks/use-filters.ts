@@ -52,16 +52,50 @@ function reinterpretDate(isoStr: string, fromTz: string, toTz: string): string {
   return new Date(tentativeUtc.getTime() + offset).toISOString();
 }
 
+const RANGE_DAYS: Record<string, number> = { "1d": 1, "3d": 3, "1w": 7 };
+
+/** Compute midnight in a timezone as a UTC ISO string */
+function midnightInTz(date: Date, tz: string): string {
+  // Get today's date components in the target timezone
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+  const y = parseInt(get("year"));
+  const m = parseInt(get("month")) - 1;
+  const d = parseInt(get("day"));
+
+  // Convert wall-clock midnight in tz → UTC
+  const tentative = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
+  const check = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(tentative);
+  const cGet = (type: string) => check.find((p) => p.type === type)?.value ?? "00";
+  const wallStr = `${cGet("year")}-${cGet("month")}-${cGet("day")}T${cGet("hour")}:${cGet("minute")}:${cGet("second")}`;
+  const wallAsUtc = new Date(wallStr + "Z");
+  const offset = tentative.getTime() - wallAsUtc.getTime();
+  return new Date(tentative.getTime() + offset).toISOString();
+}
+
+function computeDateRange(rangeName: string, tz: string): { start: string; end: string } {
+  const days = RANGE_DAYS[rangeName] ?? 3;
+  const startIso = midnightInTz(new Date(), tz);
+  const endDate = new Date(startIso);
+  endDate.setUTCDate(endDate.getUTCDate() + days);
+  return { start: startIso, end: endDate.toISOString() };
+}
+
 function getDefaults(): FilterState {
-  const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 3);
+  const { start, end } = computeDateRange("3d", "UTC");
 
   return {
-    start: start.toISOString(),
-    end: end.toISOString(),
+    start,
+    end,
     timezone: "UTC",
     operators: [],
     aircraft: [],
@@ -89,5 +123,9 @@ export const useFilters = create<FilterState & FilterActions>()(
     setTypes: (v: AircraftType[]) => set({ types: v }),
     reset: () => set(getDefaults()),
     hydrate: (params: Partial<FilterState>) => set(params),
+    hydrateDefaults: (dateRange: string, tz: string) => {
+      const { start, end } = computeDateRange(dateRange, tz);
+      set({ start, end, timezone: tz });
+    },
   })
 );

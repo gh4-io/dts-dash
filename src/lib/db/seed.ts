@@ -52,6 +52,7 @@ export async function seed() {
       compact_mode INTEGER NOT NULL DEFAULT 0,
       default_timezone TEXT NOT NULL DEFAULT 'UTC',
       default_date_range TEXT NOT NULL DEFAULT '3d',
+      time_format TEXT NOT NULL DEFAULT '24h',
       table_page_size INTEGER NOT NULL DEFAULT 30
     );
 
@@ -106,6 +107,13 @@ export async function seed() {
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_import_log_imported_at ON import_log(imported_at);
   `);
+
+  // ─── Migration: add time_format column to existing DBs ─────────────────
+  try {
+    sqlite.exec(`ALTER TABLE user_preferences ADD COLUMN time_format TEXT NOT NULL DEFAULT '24h'`);
+  } catch {
+    // Column already exists — ignore
+  }
 
   // ─── Seed Users ──────────────────────────────────────────────────────────
 
