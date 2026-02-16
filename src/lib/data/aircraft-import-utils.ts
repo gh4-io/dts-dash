@@ -24,7 +24,7 @@ import type {
   UpdateDetail,
   CommitResult,
 } from "./master-data-types";
-import type { Aircraft, Customer } from "@/types";
+import type { Aircraft } from "@/types";
 
 // ─── Aircraft Import ────────────────────────────────────────────────────────
 

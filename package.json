@@ -21,7 +21,6 @@
     "db:seed": "npx tsx scripts/db/seed.ts",
     "db:reset": "npx tsx scripts/db/reset.ts",
     "db:create-admin": "npx tsx scripts/db/create-admin.ts",
-    "db:event-reset": "node scripts/reset-event-data.mjs",
     "db:reset-password": "npx tsx scripts/db/reset-password.ts",
     "db:status": "npx tsx scripts/db/status.ts",
     "db:backup": "npx tsx scripts/db/backup.ts",

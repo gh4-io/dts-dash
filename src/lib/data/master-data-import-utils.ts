@@ -6,26 +6,20 @@
 import { db } from "@/lib/db/client";
 import {
   customers,
-  aircraft,
-  manufacturers,
-  aircraftModels,
-  engineTypes,
   masterDataImportLog,
 } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { parseCSV, toCSV } from "@/lib/utils/csv-parser";
 import { parseODataJSON } from "@/lib/utils/odata-parser";
-import { fuzzyMatchCustomer } from "@/lib/utils/fuzzy-match";
 import type {
   CustomerImportRecord,
-  AircraftImportRecord,
   ValidationResult,
   ImportSummary,
   ValidationDetails,
   UpdateDetail,
   CommitResult,
 } from "./master-data-types";
-import type { Customer, Aircraft } from "@/types";
+import type { Customer } from "@/types";
 
 // ─── Color Palette for Auto-Assignment ─────────────────────────────────────
 
