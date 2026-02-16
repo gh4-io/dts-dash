@@ -43,6 +43,7 @@ async function loadConfig(): Promise<AppConfig> {
       ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
       masterDataConformityMode: (configMap.masterDataConformityMode as "strict" | "warning" | "auto-add") ?? "warning",
       masterDataOverwriteConfirmed: (configMap.masterDataOverwriteConfirmed as "allow" | "warn" | "reject") ?? "warn",
+      allowedHostnames: JSON.parse(configMap.allowedHostnames ?? "[]"),
     };
 
     return cachedConfig;
@@ -66,6 +67,7 @@ async function loadConfig(): Promise<AppConfig> {
       ingestMaxSizeMB: 50,
       masterDataConformityMode: "warning",
       masterDataOverwriteConfirmed: "warn",
+      allowedHostnames: [],
     };
     return cachedConfig;
   }

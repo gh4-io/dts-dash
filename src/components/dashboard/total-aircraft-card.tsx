@@ -6,9 +6,10 @@ import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 
 interface TotalAircraftCardProps {
   workPackages: SerializedWorkPackage[];
+  className?: string;
 }
 
-export function TotalAircraftCard({ workPackages }: TotalAircraftCardProps) {
+export function TotalAircraftCard({ workPackages, className }: TotalAircraftCardProps) {
   const { totalAircraft, dateRange } = useMemo(() => {
     const uniqueRegs = new Set(workPackages.map((wp) => wp.aircraftReg));
 
@@ -27,7 +28,7 @@ export function TotalAircraftCard({ workPackages }: TotalAircraftCardProps) {
   }, [workPackages]);
 
   return (
-    <KpiCard title="Total Aircraft" icon="fa-solid fa-plane">
+    <KpiCard title="Total Aircraft" icon="fa-solid fa-plane" className={className}>
       <div>
         <p className="text-4xl font-bold tabular-nums">{totalAircraft}</p>
         {dateRange && (

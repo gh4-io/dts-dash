@@ -591,14 +591,32 @@
 
 ---
 
+## OI-037 | Configurable Allowed Hostnames — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-16 |
+| **Resolved** | 2026-02-16 |
+| **Context** | `AUTH_URL=http://localhost:3000` hardcoded in `.env.local` caused Auth.js to rewrite all callback/redirect URLs to localhost, breaking access from LAN IPs and other hostnames. User requested configurable allowed hostnames with admin UI. |
+| **Resolution** | **Auth fix**: Added `trustHost: true` to NextAuth config, removed `AUTH_URL` from `.env.local`. Auth.js now derives callback URLs from the request's Host header. **Hostname registry**: Added `AllowedHostname` interface and `allowedHostnames` field to `AppConfig`. Stored as JSON array in `app_config` table, seeded with `localhost:3000` default. GET/PUT API routes updated. **next.config.ts**: New `src/lib/db/read-hostnames.ts` sync helper reads enabled hostnames at dev server startup for `allowedDevOrigins`. **Admin UI**: New "Allowed Hostnames" section in Admin > Settings (replaced "Authentication" Coming Soon stub) with add/edit/toggle/delete controls and info callout about server restart requirement. |
+| **Files Created** | `src/lib/db/read-hostnames.ts` |
+| **Files Modified** | `src/lib/auth.ts`, `.env.local`, `src/types/index.ts`, `data/seed/app-config.json`, `src/app/api/config/route.ts`, `next.config.ts`, `src/app/(authenticated)/admin/settings/page.tsx` |
+| **Links** | [DECISIONS.md](DECISIONS.md) D-027 |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 14 |
-| P1 | 0 | 0 | 0 | 11 |
+| P1 | 0 | 0 | 0 | 12 |
 | P2 | 0 | 0 | 0 | 10 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **0** | **2** | **35** |
+| **Total** | **0** | **0** | **2** | **36** |
 
-**Changes this pass (Master Data Import - Complete)**: Resolved OI-036 (all 4 phases implemented: database schema, utilities/parsers, API routes, UI components). 4 commits, 31 new files, ~3,800 lines. Updated summary table.
+**Changes this pass (Allowed Hostnames)**: Resolved OI-037 — configurable allowed hostnames with trustHost fix, admin UI, and allowedDevOrigins integration. D-027 logged.

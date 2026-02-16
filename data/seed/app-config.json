@@ -13,5 +13,9 @@
   { "key": "ingestRateLimitSeconds", "value": "60" },
   { "key": "ingestMaxSizeMB", "value": "50" },
   { "key": "masterDataConformityMode", "value": "warning" },
-  { "key": "masterDataOverwriteConfirmed", "value": "warn" }
+  { "key": "masterDataOverwriteConfirmed", "value": "warn" },
+  {
+    "key": "allowedHostnames",
+    "value": "[{\"id\":\"default-localhost\",\"hostname\":\"localhost\",\"port\":3000,\"protocol\":\"http\",\"enabled\":true,\"label\":\"Local Development\"}]"
+  }
 ]

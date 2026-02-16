@@ -274,3 +274,21 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 
 **Supersedes**: D-016 vNext section ("no implementation in v1" → now implemented)
 **Links**: [REQ_DataImport.md](SPECS/REQ_DataImport.md), [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-034
+
+---
+
+## D-027 | 2026-02-16 | Configurable Allowed Hostnames + trustHost
+
+**Decision**: Replace hardcoded `AUTH_URL=http://localhost:3000` with `trustHost: true` in Auth.js config, and add a configurable allowed hostnames registry stored in `app_config` (SQLite). Admin UI section for add/edit/toggle/delete hostnames. Enabled hostnames feed `allowedDevOrigins` in `next.config.ts` at startup.
+
+**Key design choices:**
+- **trustHost: true**: Auth.js derives callback URLs from the request `Host` header — works for localhost and LAN IPs without configuration
+- **Hostname storage**: JSON array in `app_config` key `"allowedHostnames"` (consistent with `shifts` pattern)
+- **Each entry**: `{ id, hostname, port, protocol, enabled, label }`
+- **next.config.ts**: Synchronous `better-sqlite3` read at dev server startup via `read-hostnames.ts` helper
+- **Admin UI**: New "Allowed Hostnames" section in Admin Settings (replaced "Authentication" Coming Soon stub)
+- **No middleware enforcement**: Local-first app on trusted LAN — hostname validation would add brittleness without security gain
+
+**Rationale**: With `AUTH_URL` hardcoded, accessing the app from any non-localhost address (e.g., LAN IP) caused auth callbacks to redirect to `localhost:3000`. `trustHost: true` is the correct Auth.js setting for trusted network environments. The hostname registry provides admin visibility and drives `allowedDevOrigins` for Next.js dev-mode cross-origin support.
+
+**Links**: [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-037

@@ -40,6 +40,19 @@ export async function GET() {
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
       ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
+      allowedHostnames: JSON.parse(
+        configMap.allowedHostnames ??
+          JSON.stringify([
+            {
+              id: "default-localhost",
+              hostname: "localhost",
+              port: 3000,
+              protocol: "http",
+              enabled: true,
+              label: "Local Development",
+            },
+          ])
+      ),
     };
 
     return NextResponse.json(config);
@@ -78,6 +91,7 @@ export async function PUT(request: NextRequest) {
       "ingestApiKey",
       "ingestRateLimitSeconds",
       "ingestMaxSizeMB",
+      "allowedHostnames",
     ]);
 
     // Update config keys

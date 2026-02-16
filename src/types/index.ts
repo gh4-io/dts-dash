@@ -277,6 +277,17 @@ export interface AnalyticsEvent {
   createdAt: string;
 }
 
+// ─── Allowed Hostnames ──────────────────────────────────────────────────────
+
+export interface AllowedHostname {
+  id: string;
+  hostname: string;
+  port: number | null;
+  protocol: "http" | "https";
+  enabled: boolean;
+  label: string;
+}
+
 // ─── App Config ─────────────────────────────────────────────────────────────
 
 export interface AppConfig {
@@ -292,6 +303,7 @@ export interface AppConfig {
   ingestMaxSizeMB: number;
   masterDataConformityMode: "strict" | "warning" | "auto-add";
   masterDataOverwriteConfirmed: "allow" | "warn" | "reject";
+  allowedHostnames: AllowedHostname[];
 }
 
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────

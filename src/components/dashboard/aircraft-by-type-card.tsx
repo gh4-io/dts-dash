@@ -6,11 +6,12 @@ import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 
 interface AircraftByTypeCardProps {
   workPackages: SerializedWorkPackage[];
+  className?: string;
 }
 
 const CANONICAL_TYPES = ["B777", "B767", "B747", "B757", "B737"];
 
-export function AircraftByTypeCard({ workPackages }: AircraftByTypeCardProps) {
+export function AircraftByTypeCard({ workPackages, className }: AircraftByTypeCardProps) {
   const typeData = useMemo(() => {
     // Count unique registrations per type
     const typeRegs = new Map<string, Set<string>>();
@@ -38,7 +39,7 @@ export function AircraftByTypeCard({ workPackages }: AircraftByTypeCardProps) {
   }, [workPackages]);
 
   return (
-    <KpiCard title="Total Aircraft By Type" icon="fa-solid fa-plane-circle-check">
+    <KpiCard title="Total Aircraft By Type" icon="fa-solid fa-plane-circle-check" className={className}>
       <div className="space-y-1">
         {typeData.map((item) => (
           <div key={item.type} className="flex items-center justify-between text-sm">

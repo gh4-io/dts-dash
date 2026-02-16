@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { Customer } from "@/types";
+import { getCustomerColor } from "@/lib/utils/customer-color-palette";
 
 interface CustomersState {
   customers: Customer[];
@@ -13,8 +14,19 @@ interface CustomersState {
   getTextColor: (customerName: string) => string;
 }
 
-const DEFAULT_COLOR = "#6b7280";
 const DEFAULT_TEXT_COLOR = "#ffffff";
+
+/**
+ * Simple string hash → palette index.
+ * Deterministic: same name always produces the same color.
+ */
+function hashName(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
 
 export const useCustomers = create<CustomersState>()((set, get) => ({
   customers: [],
@@ -43,7 +55,9 @@ export const useCustomers = create<CustomersState>()((set, get) => ({
 
   getColor: (customerName: string) => {
     const customer = get().customers.find((c) => c.name === customerName);
-    return customer?.color ?? DEFAULT_COLOR;
+    if (customer?.color) return customer.color;
+    // Fallback: deterministic palette color based on name hash
+    return getCustomerColor(hashName(customerName));
   },
 
   getTextColor: (customerName: string) => {

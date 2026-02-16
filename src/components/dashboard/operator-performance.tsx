@@ -8,6 +8,7 @@ interface OperatorPerformanceProps {
   workPackages: SerializedWorkPackage[];
   focusedOperator: string | null;
   onOperatorClick: (operator: string | null) => void;
+  className?: string;
 }
 
 interface OperatorRow {
@@ -59,6 +60,7 @@ export function OperatorPerformance({
   workPackages,
   focusedOperator,
   onOperatorClick,
+  className,
 }: OperatorPerformanceProps) {
   const { getColor } = useCustomers();
   const [sortKey, setSortKey] = useState<SortKey>("totalMH");
@@ -118,8 +120,8 @@ export function OperatorPerformance({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+    <div className={`rounded-lg border border-border bg-card overflow-hidden flex flex-col ${className ?? ""}`}>
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
           <i className="fa-solid fa-users" />
           Operator Performance
@@ -133,7 +135,7 @@ export function OperatorPerformance({
           </button>
         )}
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto flex-1 min-h-0">
         <table className="w-full text-sm">
           <thead className="border-b border-border">
             <tr>

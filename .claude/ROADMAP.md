@@ -19,6 +19,9 @@
 
 **All milestones complete. Project is production-ready.**
 
+### Post-M8 Enhancements
+- [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
+
 ## Milestones
 
 | ID | Name | Scope | Status | Size | Dependencies |

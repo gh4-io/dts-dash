@@ -64,7 +64,7 @@ function DashboardPageInner() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3 h-full min-h-0">
       <TopMenuBar title="Dashboard" icon="fa-solid fa-chart-line" />
 
       {/* Data Freshness */}
@@ -73,49 +73,60 @@ function DashboardPageInner() {
       {isLoading || snapshotsLoading ? (
         <LoadingSkeleton variant="page" />
       ) : (
-        <>
-          {/* KPI Cards + Combined Chart + Donut - Main grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3">
-            {/* Left: KPI cards stacked */}
-            <div className="space-y-3 xl:col-span-1">
+        <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1 min-h-[600px]">
+          {/* Left: flex ratios — MH 65%, Type 30%, Total 5% of adjusted height */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="shrink-0">
               <AvgGroundTimeCard workPackages={displayWps} />
-              <MhByOperatorCard
-                workPackages={displayWps}
-                onOperatorClick={handleOperatorFromCard}
-              />
-              <TotalAircraftCard workPackages={displayWps} />
-              <AircraftByTypeCard workPackages={displayWps} />
             </div>
+            <MhByOperatorCard
+              workPackages={displayWps}
+              onOperatorClick={handleOperatorFromCard}
+              className="flex-[13] min-h-[100px]"
+            />
+            <TotalAircraftCard
+              workPackages={displayWps}
+              className="flex-[1] min-h-[60px]"
+            />
+            <AircraftByTypeCard
+              workPackages={displayWps}
+              className="flex-[6] min-h-[80px]"
+            />
+          </div>
 
-            {/* Center: Combined chart */}
-            <div className="rounded-lg border border-border bg-card p-3 xl:col-span-1 min-h-[250px]">
+          {/* Center: chart + operator table — chart takes priority */}
+          <div className="flex flex-col gap-3 min-h-0">
+            <div className="rounded-lg border border-border bg-card p-3 flex-1 flex flex-col min-h-[200px]">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
               </h3>
-              <CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} />
+              <div className="flex-1 min-h-0">
+                <CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} />
+              </div>
             </div>
+            <OperatorPerformance
+              workPackages={workPackages}
+              focusedOperator={focusedOperator}
+              onOperatorClick={handleOperatorClick}
+              className="flex-1 min-h-[150px]"
+            />
+          </div>
 
-            {/* Right: Donut */}
-            <div className="rounded-lg border border-border bg-card p-3 xl:col-span-1">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-                <i className="fa-solid fa-chart-pie" />
-                Aircraft By Customer
-              </h3>
+          {/* Right: Donut stretches to match full height */}
+          <div className="rounded-lg border border-border bg-card p-3 flex flex-col">
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+              <i className="fa-solid fa-chart-pie" />
+              Aircraft By Customer
+            </h3>
+            <div className="flex-1">
               <CustomerDonut
                 workPackages={displayWps}
                 onCustomerClick={handleOperatorFromCard}
               />
             </div>
           </div>
-
-          {/* Operator Performance Table */}
-          <OperatorPerformance
-            workPackages={workPackages}
-            focusedOperator={focusedOperator}
-            onOperatorClick={handleOperatorClick}
-          />
-        </>
+        </div>
       )}
     </div>
   );

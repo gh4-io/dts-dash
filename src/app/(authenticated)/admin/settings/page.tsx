@@ -21,6 +21,15 @@ interface ShiftConfig {
   headcount: number;
 }
 
+interface AllowedHostname {
+  id: string;
+  hostname: string;
+  port: number | null;
+  protocol: "http" | "https";
+  enabled: boolean;
+  label: string;
+}
+
 interface AppConfig {
   defaultMH: number;
   wpMHMode: string;
@@ -32,6 +41,7 @@ interface AppConfig {
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;
+  allowedHostnames: AllowedHostname[];
 }
 
 export default function AdminSettingsPage() {
@@ -42,6 +52,9 @@ export default function AdminSettingsPage() {
   const [lastImport] = useState<{ importedAt: string; recordCount: number; source: string } | null>(null);
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
+  const [newHost, setNewHost] = useState({ hostname: "", port: "3000", protocol: "http" as "http" | "https", label: "" });
+  const [editingHostId, setEditingHostId] = useState<string | null>(null);
+  const [editHost, setEditHost] = useState({ hostname: "", port: "", protocol: "http" as "http" | "https", label: "" });
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -90,6 +103,75 @@ export default function AdminSettingsPage() {
     const shifts = [...config.shifts];
     shifts[index] = { ...shifts[index], headcount };
     setConfig({ ...config, shifts });
+  };
+
+  const addHostname = () => {
+    if (!config || !newHost.hostname.trim()) return;
+    const entry: AllowedHostname = {
+      id: crypto.randomUUID(),
+      hostname: newHost.hostname.trim(),
+      port: newHost.port ? parseInt(newHost.port, 10) : null,
+      protocol: newHost.protocol,
+      enabled: true,
+      label: newHost.label.trim() || newHost.hostname.trim(),
+    };
+    setConfig({
+      ...config,
+      allowedHostnames: [...(config.allowedHostnames ?? []), entry],
+    });
+    setNewHost({ hostname: "", port: "3000", protocol: "http", label: "" });
+  };
+
+  const removeHostname = (id: string) => {
+    if (!config) return;
+    setConfig({
+      ...config,
+      allowedHostnames: config.allowedHostnames.filter((h) => h.id !== id),
+    });
+  };
+
+  const toggleHostname = (id: string) => {
+    if (!config) return;
+    setConfig({
+      ...config,
+      allowedHostnames: config.allowedHostnames.map((h) =>
+        h.id === id ? { ...h, enabled: !h.enabled } : h
+      ),
+    });
+  };
+
+  const startEditHostname = (h: AllowedHostname) => {
+    setEditingHostId(h.id);
+    setEditHost({
+      hostname: h.hostname,
+      port: h.port?.toString() ?? "",
+      protocol: h.protocol,
+      label: h.label,
+    });
+  };
+
+  const saveEditHostname = () => {
+    if (!config || !editingHostId || !editHost.hostname.trim()) return;
+    setConfig({
+      ...config,
+      allowedHostnames: config.allowedHostnames.map((h) =>
+        h.id === editingHostId
+          ? {
+              ...h,
+              hostname: editHost.hostname.trim(),
+              port: editHost.port ? parseInt(editHost.port, 10) : null,
+              protocol: editHost.protocol,
+              label: editHost.label.trim() || editHost.hostname.trim(),
+            }
+          : h
+      ),
+    });
+    setEditingHostId(null);
+  };
+
+  const formatHostUrl = (h: AllowedHostname) => {
+    const base = `${h.protocol}://${h.hostname}`;
+    return h.port ? `${base}:${h.port}` : base;
   };
 
   if (loading) {
@@ -482,10 +564,147 @@ export default function AdminSettingsPage() {
         </div>
       </section>
 
+      {/* Allowed Hostnames */}
+      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <h2 className="text-lg font-semibold">
+          <i className="fa-solid fa-network-wired mr-2 text-muted-foreground" />
+          Allowed Hostnames
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Hostnames from which this dashboard can be accessed. Used for Auth.js callback resolution and cross-origin configuration.
+        </p>
+        <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
+          <i className="fa-solid fa-circle-info mr-1" />
+          Restart the dev server after changes for cross-origin settings to take effect.
+        </div>
+
+        {/* Hostname list */}
+        <div className="space-y-2">
+          {(config.allowedHostnames ?? []).map((h) => (
+            <div
+              key={h.id}
+              className="flex items-center gap-3 rounded-md border border-border bg-background p-3"
+            >
+              <Switch
+                checked={h.enabled}
+                onCheckedChange={() => toggleHostname(h.id)}
+              />
+              {editingHostId === h.id ? (
+                <div className="flex flex-1 items-center gap-2">
+                  <Select
+                    value={editHost.protocol}
+                    onValueChange={(v) => setEditHost({ ...editHost, protocol: v as "http" | "https" })}
+                  >
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="http">http</SelectItem>
+                      <SelectItem value="https">https</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={editHost.hostname}
+                    onChange={(e) => setEditHost({ ...editHost, hostname: e.target.value })}
+                    placeholder="hostname or IP"
+                    className="flex-1"
+                  />
+                  <Input
+                    value={editHost.port}
+                    onChange={(e) => setEditHost({ ...editHost, port: e.target.value })}
+                    placeholder="port"
+                    className="w-20"
+                  />
+                  <Input
+                    value={editHost.label}
+                    onChange={(e) => setEditHost({ ...editHost, label: e.target.value })}
+                    placeholder="label"
+                    className="w-32"
+                  />
+                  <Button size="sm" variant="outline" onClick={saveEditHostname}>
+                    <i className="fa-solid fa-check mr-1" />
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingHostId(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{h.label}</span>
+                      {!h.enabled && (
+                        <span className="text-xs text-muted-foreground">(disabled)</span>
+                      )}
+                    </div>
+                    <code className="text-xs text-muted-foreground">{formatHostUrl(h)}</code>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => startEditHostname(h)}>
+                    <i className="fa-solid fa-pen text-xs" />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeHostname(h.id)}>
+                    <i className="fa-solid fa-trash text-xs" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Add new hostname */}
+        <div className="flex items-end gap-2 rounded-md border border-dashed border-border p-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Protocol</Label>
+            <Select
+              value={newHost.protocol}
+              onValueChange={(v) => setNewHost({ ...newHost, protocol: v as "http" | "https" })}
+            >
+              <SelectTrigger className="w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="http">http</SelectItem>
+                <SelectItem value="https">https</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 space-y-1">
+            <Label className="text-xs">Hostname / IP</Label>
+            <Input
+              value={newHost.hostname}
+              onChange={(e) => setNewHost({ ...newHost, hostname: e.target.value })}
+              placeholder="e.g. 192.168.1.100"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Port</Label>
+            <Input
+              value={newHost.port}
+              onChange={(e) => setNewHost({ ...newHost, port: e.target.value })}
+              placeholder="3000"
+              className="w-20"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Label</Label>
+            <Input
+              value={newHost.label}
+              onChange={(e) => setNewHost({ ...newHost, label: e.target.value })}
+              placeholder="optional"
+              className="w-32"
+            />
+          </div>
+          <Button size="sm" onClick={addHostname} disabled={!newHost.hostname.trim()}>
+            <i className="fa-solid fa-plus mr-1" />
+            Add
+          </Button>
+        </div>
+      </section>
+
       {/* Coming Soon stubs */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         {[
-          { label: "Authentication", icon: "fa-solid fa-lock" },
           { label: "Email", icon: "fa-solid fa-envelope" },
           { label: "Storage", icon: "fa-solid fa-hard-drive" },
         ].map((item) => (

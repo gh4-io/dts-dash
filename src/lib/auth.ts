@@ -6,6 +6,7 @@ import { users } from "./db/schema";
 import { eq, or } from "drizzle-orm";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   pages: {
     signIn: "/login",
   },

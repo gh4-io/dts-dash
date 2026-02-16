@@ -8,9 +8,10 @@ import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 interface MhByOperatorCardProps {
   workPackages: SerializedWorkPackage[];
   onOperatorClick?: (operator: string) => void;
+  className?: string;
 }
 
-export function MhByOperatorCard({ workPackages, onOperatorClick }: MhByOperatorCardProps) {
+export function MhByOperatorCard({ workPackages, onOperatorClick, className }: MhByOperatorCardProps) {
   const { getColor } = useCustomers();
 
   const operatorData = useMemo(() => {
@@ -27,7 +28,7 @@ export function MhByOperatorCard({ workPackages, onOperatorClick }: MhByOperator
   const maxMH = operatorData.length > 0 ? operatorData[0].mh : 1;
 
   return (
-    <KpiCard title="Scheduled Man Hours" icon="fa-solid fa-wrench">
+    <KpiCard title="Scheduled Man Hours" icon="fa-solid fa-wrench" className={className}>
       <div className="space-y-2">
         {operatorData.map((op) => (
           <div key={op.name} className="group">
