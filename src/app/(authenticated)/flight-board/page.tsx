@@ -8,6 +8,7 @@ import { FlightDetailDrawer } from "@/components/flight-board/flight-detail-draw
 import { useWorkPackages, type SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFilters } from "@/lib/hooks/use-filters";
+import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { CustomerBadge } from "@/components/shared/customer-badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ function FlightBoardPageInner() {
   const [selectedWp, setSelectedWp] = useState<SerializedWorkPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const { compactMode: condensed, update: updatePreferences } = usePreferences();
 
   // Sync from localStorage after hydration to avoid mismatch
   useEffect(() => {
@@ -72,9 +74,16 @@ function FlightBoardPageInner() {
     });
   }, []);
 
+  const toggleCondensed = useCallback(() => {
+    updatePreferences({ compactMode: !condensed });
+  }, [condensed, updatePreferences]);
+
+  const handleZoomChange = useCallback(() => setZoomLevel("all"), []);
+
   const handleZoomIn = useCallback(() => {
     const range = chartRef.current?.getZoomRange();
     if (!range) return;
+    setZoomLevel("all");
     const { start, end } = range;
     const span = end - start;
     const shrink = span * 0.25;
@@ -87,6 +96,7 @@ function FlightBoardPageInner() {
   const handleZoomOut = useCallback(() => {
     const range = chartRef.current?.getZoomRange();
     if (!range) return;
+    setZoomLevel("all");
     const { start, end } = range;
     const span = end - start;
     const expand = span * 0.25;
@@ -98,6 +108,7 @@ function FlightBoardPageInner() {
 
   const handleNow = useCallback(() => {
     if (transformedWps.length === 0) return;
+    setZoomLevel("all");
 
     // ✅ STEP 6: Use filter bounds (not data bounds)
     const filterStartMs = new Date(filterStart).getTime();
@@ -121,6 +132,7 @@ function FlightBoardPageInner() {
   }, [transformedWps, filterStart, filterEnd]);
 
   const handleFit = useCallback(() => {
+    setZoomLevel("all");
     chartRef.current?.dispatchZoom(0, 100);
   }, []);
 
@@ -204,6 +216,17 @@ function FlightBoardPageInner() {
                 <i className={cn("fa-solid", isExpanded ? "fa-compress" : "fa-expand")} />
               </Button>
 
+              {/* Condensed view */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={toggleCondensed}
+                title={condensed ? "Normal density" : "Condensed view"}
+              >
+                <i className={cn("fa-solid", condensed ? "fa-bars" : "fa-bars-staggered")} />
+              </Button>
+
               {/* Center on Now */}
               <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleNow} title="Center on Now">
                 <i className="fa-solid fa-clock text-xs" />
@@ -272,7 +295,9 @@ function FlightBoardPageInner() {
             filterStart={filterStart}
             filterEnd={filterEnd}
             isExpanded={isExpanded}
+            condensed={condensed}
             onBarClick={handleBarClick}
+            onZoomChange={handleZoomChange}
             transformedRegistrations={registrations}
             highlightMap={highlightMap}
             groups={groups}

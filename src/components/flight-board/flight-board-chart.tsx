@@ -108,6 +108,10 @@ interface FlightBoardChartProps {
   groups?: { groupedRegistrations: string[]; wpToGroupIndex: Map<number, number> } | null;
   /** When true, click+drag on body chart pans instead of selecting bars */
   panMode?: boolean;
+  /** Condensed view — triples row density, hides bar labels */
+  condensed?: boolean;
+  /** Called when user drags slider or scrolls to zoom (resets preset selection) */
+  onZoomChange?: () => void;
 }
 
 // Data array format: [regIndex, arrivalTs, departureTs, customer, registration, flightId, wpIndex]
@@ -122,7 +126,7 @@ type GanttDataItem = [
 ];
 
 export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardChartProps>(
-  function FlightBoardChart({ workPackages, zoomLevel, timezone, filterStart, filterEnd, isExpanded, onBarClick, transformedRegistrations, highlightMap, groups, panMode }, ref) {
+  function FlightBoardChart({ workPackages, zoomLevel, timezone, filterStart, filterEnd, isExpanded, onBarClick, transformedRegistrations, highlightMap, groups, panMode, condensed, onZoomChange }, ref) {
   const headerChartRef = useRef<ReactEChartsCore>(null);
   const bodyChartRef = useRef<ReactEChartsCore>(null);
   const syncLock = useRef(false);
@@ -489,8 +493,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const visibleStartMs = filterStartMs + (start / 100) * totalMs;
     const dateFmt = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
-      month: "numeric",
+      month: "long",
       day: "numeric",
+      year: "numeric",
     });
     const dateStr = dateFmt.format(new Date(visibleStartMs));
 
@@ -531,7 +536,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         const yPos = api.coord([0, regIndex]);
         if (!yPos) return;
         const centerY = yPos[1];
-        const bandHeight = 24;
+        const bandHeight = condensed ? 16 : 24;
         const bandTop = centerY - bandHeight / 2;
         return {
           type: "group",
@@ -543,7 +548,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             // Bottom border line
             { type: "line", shape: { x1: coordSys.x, y1: bandTop + bandHeight, x2: coordSys.x + coordSys.width, y2: bandTop + bandHeight }, style: { stroke: cc.border, lineWidth: 1 } },
             // Centered bold label
-            { type: "text", style: { text: breakLabel, x: coordSys.x + coordSys.width / 2, y: centerY, fill: cc.fg, fontSize: 12, fontWeight: "bold", align: "center", verticalAlign: "middle" } },
+            { type: "text", style: { text: breakLabel, x: coordSys.x + coordSys.width / 2, y: centerY, fill: cc.fg, fontSize: condensed ? 9 : 12, fontWeight: "bold", align: "center", verticalAlign: "middle" } },
           ],
         } as RenderGroup;
       }
@@ -553,7 +558,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       if (!arrival || !departure) return;
 
       const sizeArr = api.size?.([0, 1]) as number[] | undefined;
-      const barHeight = sizeArr ? sizeArr[1] * 0.6 : 20;
+      const barHeight = sizeArr ? sizeArr[1] * (condensed ? 0.75 : 0.6) : (condensed ? 14 : 20);
 
       // Use highlight color if available, otherwise customer color
       const hlColor = highlightMap?.get(wpIndex);
@@ -583,36 +588,38 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       };
 
       const centerLabel = flightId ? `${registration} · ${flightId}` : registration;
+      const fLg = condensed ? 8 : 10;
+      const fSm = condensed ? 7 : 9;
 
       if (w >= 240) {
         // Full layout: arrival LEFT + center label + departure RIGHT
         children.push(
-          { type: "text", style: { text: fmtTime(arrivalTs), x: x + 6, y: centerY, fill: "rgba(255,255,255,0.85)", fontSize: 9, verticalAlign: "middle" } } as RenderGroup,
-          { type: "text", style: { text: truncate(centerLabel, w - 100, 6.5), x: x + w / 2, y: centerY, fill: "#fff", fontSize: 10, fontWeight: "bold", align: "center", verticalAlign: "middle" } } as RenderGroup,
-          { type: "text", style: { text: fmtTime(departureTs), x: x + w - 6, y: centerY, fill: "rgba(255,255,255,0.85)", fontSize: 9, align: "right", verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: fmtTime(arrivalTs), x: x + 6, y: centerY, fill: "rgba(255,255,255,0.85)", fontSize: fSm, verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: truncate(centerLabel, w - 100, 6.5), x: x + w / 2, y: centerY, fill: "#fff", fontSize: fLg, fontWeight: "bold", align: "center", verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: fmtTime(departureTs), x: x + w - 6, y: centerY, fill: "rgba(255,255,255,0.85)", fontSize: fSm, align: "right", verticalAlign: "middle" } } as RenderGroup,
         );
       } else if (w >= 170) {
         // Center label + departure RIGHT only
         children.push(
-          { type: "text", style: { text: truncate(centerLabel, w - 56, 6.5), x: x + (w - 56) / 2 + 4, y: centerY, fill: "#fff", fontSize: 10, fontWeight: "bold", align: "center", verticalAlign: "middle" } } as RenderGroup,
-          { type: "text", style: { text: fmtTime(departureTs), x: x + w - 6, y: centerY, fill: "rgba(255,255,255,0.85)", fontSize: 9, align: "right", verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: truncate(centerLabel, w - 56, 6.5), x: x + (w - 56) / 2 + 4, y: centerY, fill: "#fff", fontSize: fLg, fontWeight: "bold", align: "center", verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: fmtTime(departureTs), x: x + w - 6, y: centerY, fill: "rgba(255,255,255,0.85)", fontSize: fSm, align: "right", verticalAlign: "middle" } } as RenderGroup,
         );
       } else if (w >= 130) {
         // Full center label only
         children.push(
-          { type: "text", style: { text: centerLabel, x: x + w / 2, y: centerY, fill: "#fff", fontSize: 10, fontWeight: "bold", align: "center", verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: centerLabel, x: x + w / 2, y: centerY, fill: "#fff", fontSize: fLg, fontWeight: "bold", align: "center", verticalAlign: "middle" } } as RenderGroup,
         );
       } else if (w >= 70) {
         // Short center, truncated with ellipsis
         children.push(
-          { type: "text", style: { text: truncate(centerLabel, w - 8, 5.5), x: x + w / 2, y: centerY, fill: "#fff", fontSize: 9, align: "center", verticalAlign: "middle" } } as RenderGroup,
+          { type: "text", style: { text: truncate(centerLabel, w - 8, 5.5), x: x + w / 2, y: centerY, fill: "#fff", fontSize: fSm, align: "center", verticalAlign: "middle" } } as RenderGroup,
         );
       }
       // < 70px: no text, tooltip serves as full detail
 
       return { type: "group", children } as RenderGroup;
     },
-    [colorMap, timeFmt, registrations, highlightMap, cc]
+    [colorMap, timeFmt, registrations, highlightMap, cc, condensed]
   );
 
   // ─── HEADER OPTION (time axis + slider — always visible) ───
@@ -625,7 +632,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           type: "text",
           right: 25,
           top: 6,
-          style: { text: tzLabel, fill: cc.mutedFg, fontSize: 10 },
+          style: { text: tzLabel, fill: cc.mutedFg, fontSize: 20 },
           z: 100,
         },
         {
@@ -635,7 +642,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           style: {
             text: "", // ✅ PATCH #5: Will be updated dynamically by useEffect
             fill: cc.mutedFg,
-            fontSize: 10,
+            fontSize: 20,
           },
           id: "visibleStartDate", // ✅ ID for targeting in setOption
           z: 100,
@@ -808,7 +815,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         inverse: true,
         axisLabel: {
           color: cc.fg,
-          fontSize: 11,
+          fontSize: condensed ? 10 : 11,
           fontWeight: "bold" as const,
           formatter: (value: string) => {
             if (value.startsWith(BREAK_PREFIX)) return "";
@@ -817,7 +824,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         },
         splitLine: {
           show: true,
-          lineStyle: { color: cc.border, opacity: 0.4 },
+          lineStyle: { color: cc.border, opacity: condensed ? 0.3 : 0.4 },
         },
       },
       dataZoom: [
@@ -857,7 +864,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     };
   }, [registrations, chartData, colorMap, allWps, renderFlightBar,
       timeGrid, timezone, timeFormat, zoomRange, cc,
-      hourFormatter, dateFmt, midnightSet]);
+      hourFormatter, dateFmt, midnightSet, condensed]);
 
   // ─── Sync header zoom → body ───
   const handleHeaderDataZoom = useCallback(() => {
@@ -880,10 +887,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           start: dz.start,
           end: dz.end,
         });
+        onZoomChange?.();
       }
     }
     syncLock.current = false;
-  }, []);
+  }, [onZoomChange]);
 
   // ─── Sync body zoom → header ───
   const handleBodyDataZoom = useCallback(() => {
@@ -902,10 +910,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         setTickRecalcTrigger((t) => t + 1);
 
         headerInstance.dispatchAction({ type: "dataZoom", start: dz.start, end: dz.end });
+        onZoomChange?.();
       }
     }
     syncLock.current = false;
-  }, []);
+  }, [onZoomChange]);
 
   // ─── Body chart: Ctrl+Scroll zoom, Shift+Scroll pan ───
   useEffect(() => {
@@ -1128,7 +1137,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     );
   }
 
-  const bodyHeight = Math.max(300, registrations.length * 36 + 38);
+  const rowHeight = condensed ? 20 : 36;
+  const bodyHeight = Math.max(300, registrations.length * rowHeight + 38);
 
   return (
     <div className={cn(
