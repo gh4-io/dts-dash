@@ -13,7 +13,7 @@ Data enters the system from SharePoint OData exports. MVP supports two import me
 |-----------|-------|--------|-------------|
 | File ingest | MVP | Admin | Load JSON file from local filesystem |
 | Paste JSON | MVP | Admin | Paste raw OData JSON into Admin UI |
-| Secure POST | vNext | API key | Authenticated HTTP endpoint for Power Automate |
+| Secure POST | **Implemented** (D-026) | API key | Authenticated HTTP endpoint for Power Automate |
 
 ## MVP: File Ingest
 
@@ -100,17 +100,89 @@ interface ImportLogEntry {
 }
 ```
 
-## vNext: Secure POST Endpoint
+## Secure POST Endpoint (`/api/ingest`) — Implemented (D-026)
 
-A future authenticated endpoint at `/api/ingest` for Power Automate HTTP requests:
+Authenticated HTTP POST endpoint for external automation (Power Automate, curl, etc.).
 
-- **Auth**: Bearer token (API key stored in environment variable)
-- **Rate limit**: 1 request/minute
-- **Audit**: Full import logging (same as admin import)
-- **Validation**: Same schema validation as admin import
-- **Status**: Documented as vNext stub — **no implementation in v1**
+### Request
 
-**Note (D-016)**: Do not assume premium Power Automate. The secure POST is a simple authenticated HTTP endpoint that any automation tool can call.
+```
+POST /api/ingest
+Authorization: Bearer <api-key-from-admin-settings>
+Content-Type: application/json
+Idempotency-Key: <optional-client-uuid>
+
+{ "odata.metadata": "...", "value": [ {...}, {...} ] }
+```
+
+### Authentication
+
+- **API key** stored in SQLite `app_config` table (`ingestApiKey` key) — admin-rotatable via Admin Settings without restart
+- **Verification**: `crypto.timingSafeEqual` constant-time comparison
+- If no key configured → 503 "Ingress endpoint not configured"
+- Missing/malformed `Authorization: Bearer ...` → 401
+- Invalid key → 403
+
+### Rate Limiting
+
+- In-memory Map keyed by `sha256(apiKey)` — raw key never stored in limiter
+- Per-key buckets (future-proof for multiple keys)
+- Configurable window via `ingestRateLimitSeconds` in `app_config` (default 60s)
+- Exceeded → 429 with `Retry-After` header
+
+### Idempotency
+
+- Optional `Idempotency-Key` header → stored in `importLog.idempotencyKey` column
+- 24-hour dedup window: if matching key found in recent logs, returns cached result (same logId, `idempotent: true`)
+- Prevents duplicate imports on Power Automate retries
+
+### Size Limit
+
+- Configurable via `ingestMaxSizeMB` in `app_config` (default 50MB)
+- Exceeded → 413 "Payload exceeds N MB limit"
+
+### Import Attribution
+
+- System user UUID: `00000000-0000-0000-0000-000000000000`
+- Email: `system@internal`, display name: "API Ingest", inactive (cannot log in)
+- Satisfies `importLog.importedBy` FK constraint
+
+### Response Contract
+
+**Success (200):**
+```json
+{
+  "success": true,
+  "logId": "uuid",
+  "summary": { "recordCount": 86, "customerCount": 6, "aircraftCount": 57, "dateRange": { "start": "...", "end": "..." } },
+  "warnings": ["66 records missing TotalMH (will use default 3.0)"]
+}
+```
+
+**Idempotent replay (200):** Same shape, `idempotent: true`, from cached importLog row.
+
+**Errors:**
+
+| Status | Condition | Body |
+|--------|-----------|------|
+| 400 | Empty body | `{ "error": "Request body is empty" }` |
+| 401 | Missing/malformed auth header | `{ "error": "Missing or invalid Authorization header" }` |
+| 403 | Invalid API key | `{ "error": "Invalid API key" }` |
+| 413 | Payload exceeds size limit | `{ "error": "Payload exceeds <N>MB limit" }` |
+| 422 | Validation failed | `{ "error": "Validation failed", "summary": ..., "warnings": [...], "errors": [...] }` |
+| 429 | Rate limited | `{ "error": "Rate limit exceeded" }` + `Retry-After` header |
+| 500 | Server error | `{ "error": "Internal server error" }` |
+| 503 | No API key configured | `{ "error": "Ingress endpoint not configured" }` |
+
+### Admin Settings UI
+
+New "API Integration" card in Admin Settings (`/admin/settings`):
+- Status indicator: green dot "Endpoint active" / red dot "Endpoint disabled"
+- Masked key display (`••••••••<last4>`) when set, "Not configured" when empty
+- Generate/Regenerate key (64-char hex, displayed once for copy)
+- Revoke key (clears → disables endpoint)
+- Rate limit seconds input (min 10, max 3600, default 60)
+- Max payload size MB input (min 1, max 200, default 50)
 
 ## Files
 
@@ -118,15 +190,19 @@ A future authenticated endpoint at `/api/ingest` for Power Automate HTTP request
 |------|---------|
 | `src/app/admin/import/page.tsx` | Data import page |
 | `src/components/admin/data-import.tsx` | File upload, paste JSON, preview, commit |
-| `src/app/api/admin/import/validate/route.ts` | Validation API |
-| `src/app/api/admin/import/commit/route.ts` | Commit API |
+| `src/app/api/admin/import/validate/route.ts` | Validation API (uses shared `import-utils.ts`) |
+| `src/app/api/admin/import/commit/route.ts` | Commit API (uses shared `import-utils.ts`) |
 | `src/app/api/admin/import/history/route.ts` | History API |
-| `src/lib/db/schema.ts` | `import_log` table schema |
+| `src/app/api/ingest/route.ts` | HTTP POST ingest endpoint (D-026) |
+| `src/lib/data/import-utils.ts` | Shared validate + commit logic (admin + ingest) |
+| `src/lib/utils/api-auth.ts` | Bearer token verification against SQLite |
+| `src/lib/utils/rate-limit.ts` | In-memory per-key-hash rate limiter |
+| `src/lib/db/schema.ts` | `import_log` table schema (includes `idempotencyKey` column) |
 
 ## Links
 
-- [DECISIONS.md](../DECISIONS.md) D-016
-- [OPEN_ITEMS.md](../OPEN_ITEMS.md) OI-004 (resolved)
+- [DECISIONS.md](../DECISIONS.md) D-016, D-026
+- [OPEN_ITEMS.md](../OPEN_ITEMS.md) OI-004 (resolved), OI-034 (resolved)
 - [RISKS.md](../DEV/RISKS.md) R15
 - [REQ_Admin.md](REQ_Admin.md) — Admin section navigation
 - [REQ_Logging_Audit.md](REQ_Logging_Audit.md) — Import logging detail

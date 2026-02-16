@@ -273,7 +273,7 @@ See [PLAN.md](PLAN.md) M6 section.
 - [x] Preview shows record count, customer count, aircraft count, date range, warnings
 - [x] Import commits data and logs to `import_log` table
 - [x] Import history displayed on page
-- [ ] vNext Power Automate endpoint documented but not implemented
+- [x] vNext Power Automate endpoint implemented (D-026: `/api/ingest` with Bearer auth, idempotency, rate limiting, admin UI)
 
 ### Key Tasks
 1. Aircraft type editor component + test input

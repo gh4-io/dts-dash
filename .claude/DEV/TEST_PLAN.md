@@ -108,6 +108,29 @@ No automated test framework for v0. Testing is manual with build-time validation
 - [ ] Light mode toggle works
 - [ ] No FOUC on page load
 
+### API Ingest Endpoint (D-026)
+- [ ] No auth header → 401 `{ "error": "Missing or invalid Authorization header" }`
+- [ ] Wrong API key → 403 `{ "error": "Invalid API key" }`
+- [ ] No API key configured in DB → 503 `{ "error": "Ingress endpoint not configured" }`
+- [ ] Empty body → 400 `{ "error": "Request body is empty" }`
+- [ ] Invalid JSON data → 422 with validation errors
+- [ ] Valid OData payload → 200 with `{ success, logId, summary, warnings }`
+- [ ] Same `Idempotency-Key` replayed → 200 with same `logId` and `idempotent: true`
+- [ ] Rapid repeat request → 429 with `Retry-After` header
+- [ ] Payload over size limit → 413 `{ "error": "Payload exceeds N MB limit" }`
+- [ ] Admin Settings: API key generate/copy/revoke works
+- [ ] Admin Settings: Rate limit and max size inputs save correctly
+- [ ] Admin Settings: Status indicator reflects key presence (green active / red disabled)
+- [ ] Import history shows API imports with "API Ingest" user and source "api"
+
+### Admin Settings — API Integration
+- [ ] "Not configured" shown when no key exists
+- [ ] Generate key creates 64-char hex, displayed once for copy
+- [ ] After dismissing key alert, key shows as masked (`••••••••<last4>`)
+- [ ] Revoke key clears the key and disables endpoint
+- [ ] Rate limit input respects min 10 / max 3600
+- [ ] Max payload size input respects min 1 / max 200
+
 ## Future: Automated Testing
 
 When the project matures, add:

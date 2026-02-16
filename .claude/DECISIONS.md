@@ -253,3 +253,24 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 - Detail drawer: Aircraft section, Schedule section, Work Package section (with WP assets link), Notes, Linked Information (filter shortcuts)
 - External links to SharePoint WP assets open in new tab
 **Links**: [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md)
+
+---
+
+## D-026 | 2026-02-15 | HTTP Ingest Endpoint Implemented (`/api/ingest`)
+
+**Decision**: Implement the vNext secure POST endpoint at `/api/ingest` for external automation (Power Automate). Previously documented as "vNext stub" in D-016.
+
+**Key design choices:**
+- **API key storage**: `app_config` table in SQLite — admin-rotatable via Admin Settings without restart
+- **Rate limiting**: In-memory Map keyed by `sha256(apiKey)` — per-key buckets, raw key never stored in limiter
+- **Idempotency**: `Idempotency-Key` header → stored in `importLog.idempotencyKey` column — 24h dedup window prevents duplicate imports on Power Automate retries
+- **Size limit**: Configurable via `app_config` (`ingestMaxSizeMB`), default 50MB
+- **Auth comparison**: `crypto.timingSafeEqual` — prevents timing attacks
+- **Import attribution**: System user (UUID `00000000-0000-0000-0000-000000000000`, email `system@internal`, inactive) satisfies `importLog.importedBy` FK constraint
+- **Admin UI**: New "API Integration" section in Admin Settings — masked key display, generate/revoke, rate limit + size limit controls
+- **Shared utilities**: Extracted `import-utils.ts` (validate + commit) from admin import routes — DRY between admin import and ingest endpoint
+
+**Rationale**: Power Automate retries on failure, so idempotency is essential. Self-hosted deployment requires rate limiting and configurable size limits. Admin-rotatable key (not env var) enables key rotation without restarting the server. Per-key-hash rate limiting future-proofs for multiple keys.
+
+**Supersedes**: D-016 vNext section ("no implementation in v1" → now implemented)
+**Links**: [REQ_DataImport.md](SPECS/REQ_DataImport.md), [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-034

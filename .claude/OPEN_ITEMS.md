@@ -64,8 +64,8 @@
 | **Created** | 2026-02-13 |
 | **Resolved** | 2026-02-13 |
 | **Context** | v0 uses static `data/input.json`. Future needs: How does fresh data get into the system? |
-| **Resolution** | D-016: MVP uses file upload + paste-JSON on `/admin/import` with validate → preview → confirm workflow. vNext: secure POST endpoint at `/api/ingest` for Power Automate integration. Import history logged to SQLite. |
-| **Links** | [DECISIONS.md](DECISIONS.md) D-016, [REQ_Admin.md](SPECS/REQ_Admin.md), [REQ_Logging_Audit.md](SPECS/REQ_Logging_Audit.md) |
+| **Resolution** | D-016: MVP uses file upload + paste-JSON on `/admin/import` with validate → preview → confirm workflow. D-026: `/api/ingest` POST endpoint now implemented with Bearer token auth (admin-rotatable key in SQLite), idempotency support, per-key rate limiting, and configurable size limits. Import history logged to SQLite. |
+| **Links** | [DECISIONS.md](DECISIONS.md) D-016, D-026, [REQ_Admin.md](SPECS/REQ_Admin.md), [REQ_Logging_Audit.md](SPECS/REQ_Logging_Audit.md) |
 
 ---
 
@@ -540,14 +540,30 @@
 
 ---
 
+## OI-034 | HTTP Ingest Endpoint Implemented — 2026-02-15
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-15 |
+| **Resolved** | 2026-02-15 |
+| **Context** | D-016 specified vNext secure POST endpoint at `/api/ingest` for Power Automate automation. All prerequisite milestones (M1-M8) complete. User requested implementation with rate limiting, admin-rotatable API key, idempotency support, and configurable size limits. |
+| **Resolution** | Created 4 new files, modified 8 existing. **New**: `import-utils.ts` (shared validate+commit extracted from admin routes), `api-auth.ts` (Bearer token verification against SQLite `app_config`), `rate-limit.ts` (in-memory per-key-hash limiter), `ingest/route.ts` (POST handler with 7-step flow). **Modified**: schema.ts (idempotencyKey column), seed.ts (migration + system user + config defaults), types/index.ts (AppConfig fields), config route (new keys), transformer.ts (AppConfig defaults), admin import routes (use shared utils), admin settings page (API Integration section), proxy.ts (middleware exclusion). All 6 curl tests passed: 401/403/400/422/200/idempotent-replay. |
+| **Links** | [DECISIONS.md](DECISIONS.md) D-026, [REQ_DataImport.md](SPECS/REQ_DataImport.md) |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 12 |
+| P0 | 0 | 0 | 0 | 13 |
 | P1 | 0 | 0 | 0 | 10 |
 | P2 | 0 | 0 | 0 | 10 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **0** | **2** | **32** |
+| **Total** | **0** | **0** | **2** | **33** |
 
-**Changes this pass (Flight Board Time Axis Overhaul)**: Resolved OI-032 (time filter logic) and OI-033 (time axis alignment). Flight board now: (1) shows only the filtered date range (no extended ±2 days), (2) aligns time ticks to clean intervals from midnight (1h/2h/3h/6h/12h based on range), (3) displays day labels only for days within filter, (4) matches dashboard time axis behavior. Time ticks now show 00:00, 03:00, 06:00 etc. instead of 00:38, 12:38. Lint ✅.
+**Changes this pass (HTTP Ingest Endpoint)**: Added OI-034 (ingest endpoint implemented). Updated OI-004 resolution to reference D-026. Updated summary table.
