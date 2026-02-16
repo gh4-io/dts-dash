@@ -125,6 +125,10 @@ src/lib/utils/               — Date, format, aircraft-type normalization (D-01
 src/types/                   — TypeScript interfaces
 src/middleware.ts            — Route protection (auth + role checks)
 data/                        — dashboard.db + input.json
+data/seed/                   — Seed data JSON files (tracked in git)
+data/backups/                — Timestamped backups (gitignored)
+data/exports/                — Timestamped exports (gitignored)
+scripts/db/                  — Database CLI tools (seed, reset, backup, etc.)
 public/vendor/fontawesome/   — Self-hosted FA assets
 plan/                        — Implementation plans
 .claude/                     — Knowledge base (specs, UI, dev docs)
@@ -161,6 +165,7 @@ plan/                        — Implementation plans
 | [REQ_DataImport.md](.claude/SPECS/REQ_DataImport.md) | Data import — file upload, paste JSON, vNext POST |
 | [REQ_Permissions.md](.claude/SPECS/REQ_Permissions.md) | ~~No auth for v0~~ Superseded by REQ_Auth.md |
 | [REQ_Logging_Audit.md](.claude/SPECS/REQ_Logging_Audit.md) | Error logging, import stats |
+| [REQ_DataReset.md](.claude/SPECS/REQ_DataReset.md) | Database tools — 9 db:* scripts, seed data, backups |
 
 ### UI
 | File | Purpose |

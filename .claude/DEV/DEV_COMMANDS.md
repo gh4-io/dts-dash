@@ -36,6 +36,49 @@ npm install -D drizzle-kit @types/better-sqlite3 @types/bcrypt @types/node
 | `npm run start` | Run production build locally |
 | `npm run lint` | ESLint check — must be clean |
 
+## Database Management
+
+All `db:*` scripts are TypeScript, run via `npx tsx`, and share a common CLI UX via `scripts/db/_cli-utils.ts`. Seed data is loaded from JSON files in `data/seed/`.
+
+| Command | Purpose | Destructive? |
+|---------|---------|:------------:|
+| `npm run db:seed` | Seed database from `data/seed/*.json` (idempotent) | No |
+| `npm run db:migrate` | Run table creation + migrations (idempotent) | No |
+| `npm run db:status` | Show table row counts, file sizes, last import | No |
+| `npm run db:backup` | Snapshot `dashboard.db` + `input.json` to timestamped backup | No |
+| `npm run db:export` | Export all tables as JSON to `data/exports/{timestamp}/` | No |
+| `npm run db:reset-password` | Reset superadmin password (dev=`admin123`, prod/`--random`=random) | No |
+| `npm run db:event-reset` | Clear `input.json` event data, preserve SQLite | Yes |
+| `npm run db:analytics-clear` | Delete all analytics_events rows | Yes |
+| `npm run db:reset` | Delete DB + re-seed from scratch (full factory reset) | Yes |
+
+### Seed Data Architecture
+
+Seed data lives in external JSON files (tracked in git):
+
+```
+data/seed/
+  users.json                  # Default users (passwords hashed at seed time)
+  customers.json              # Customer names, colors, sort order
+  aircraft-type-mappings.json # Pattern → canonical type (24 mappings)
+  aircraft-models.json        # Aircraft model codes + display names
+  manufacturers.json          # Airframe manufacturers
+  engine-types.json           # Engine type reference data
+  app-config.json             # Default app configuration key-values
+```
+
+`src/lib/db/seed-data.ts` loads these via `fs.readFileSync` and exports typed constants. Edit the JSON files to change defaults — no TypeScript changes needed.
+
+### Key Details
+
+- **db:seed** — safe to run multiple times; skips tables that already have data
+- **db:reset** — requires interactive confirmation; spawns fresh process after deleting DB
+- **db:reset-password** — detects `NODE_ENV=production` or `--random` flag for random password; dev mode defaults to `admin123`
+- **db:backup** — runs `PRAGMA wal_checkpoint(TRUNCATE)` first for consistent snapshot
+- **db:export** — warns about password hashes in `users.json` export
+- **db:event-reset** — see [REQ_DataReset.md](../SPECS/REQ_DataReset.md) for Admin UI reset button docs
+- Destructive scripts require interactive `y/N` confirmation (or `--yes`/`-y` for CI)
+
 ## Verification Checklist
 
 After any significant change:
