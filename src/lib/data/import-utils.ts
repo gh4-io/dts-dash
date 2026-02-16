@@ -3,6 +3,9 @@ import { importLog } from "@/lib/db/schema";
 import { invalidateCache } from "@/lib/data/reader";
 import fs from "fs/promises";
 import path from "path";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("import-utils");
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -210,19 +213,17 @@ export async function commitImportData(
       })
       .run();
   } catch (logErr) {
-    console.error("[import-utils] Failed to log import:", logErr);
+    log.error({ err: logErr }, "Failed to log import");
     if ((logErr as Error).message?.includes("FOREIGN KEY")) {
-      console.warn(
-        "[import-utils] Foreign key constraint failed for importedBy"
-      );
+      log.warn("Foreign key constraint failed for importedBy");
     }
   }
 
   // Invalidate reader cache
   invalidateCache();
 
-  console.warn(
-    `[import] Committed ${records.length} records from ${source}, logId=${logId}`
+  log.info(
+    `Committed ${records.length} records from ${source}, logId=${logId}`
   );
 
   return { success: true, logId, recordCount: records.length };

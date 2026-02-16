@@ -5,6 +5,9 @@ import { analyticsEvents } from "@/lib/db/schema";
 import { nanoid } from "nanoid";
 import { desc } from "drizzle-orm";
 import { paginate, parsePaginationParams } from "@/lib/utils/pagination";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/analytics/events");
 
 /**
  * POST /api/analytics/events
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/analytics/events] POST error:", error);
+    log.error({ err: error }, "POST error");
     // Silently fail - never block UI
     return NextResponse.json({ success: false }, { status: 500 });
   }
@@ -69,7 +72,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[api/analytics/events] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

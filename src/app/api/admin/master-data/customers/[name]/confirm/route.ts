@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { customers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/master-data/customers/confirm");
 
 export async function PATCH(
   request: NextRequest,
@@ -38,7 +41,7 @@ export async function PATCH(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[confirm-customer] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         error: "Confirmation failed",

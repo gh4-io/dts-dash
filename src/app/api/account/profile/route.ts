@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/account/profile");
 
 /**
  * GET /api/account/profile
@@ -33,7 +36,7 @@ export async function GET() {
 
     return NextResponse.json(user);
   } catch (error) {
-    console.error("[api/account/profile] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -77,7 +80,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/account/profile] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

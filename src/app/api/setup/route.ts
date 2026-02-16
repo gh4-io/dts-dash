@@ -6,6 +6,9 @@ import {
   validatePassword,
   formatPasswordErrors,
 } from "@/lib/utils/password-validation";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/setup");
 
 /**
  * POST /api/setup
@@ -71,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/setup] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

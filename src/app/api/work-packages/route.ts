@@ -4,6 +4,9 @@ import { readWorkPackages } from "@/lib/data/reader";
 import { transformWorkPackages } from "@/lib/data/transformer";
 import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
 import { paginate, parsePaginationParams } from "@/lib/utils/pagination";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/work-packages");
 
 /**
  * GET /api/work-packages
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[api/work-packages] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

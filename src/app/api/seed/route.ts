@@ -1,6 +1,9 @@
 import { seed } from "@/lib/db/seed";
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/seed");
 
 export async function GET() {
   // Require explicit opt-in via env var
@@ -20,7 +23,7 @@ export async function GET() {
     await seed();
     return NextResponse.json({ success: true, message: "Database seeded successfully" });
   } catch (error) {
-    console.error("Seed error:", error);
+    log.error({ err: error }, "Seed error");
     return NextResponse.json(
       { success: false, error: String(error) },
       { status: 500 },

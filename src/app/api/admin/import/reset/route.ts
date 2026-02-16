@@ -5,6 +5,9 @@ import { db } from "@/lib/db/client";
 import { importLog } from "@/lib/db/schema";
 import fs from "fs/promises";
 import path from "path";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/import/reset");
 
 /**
  * POST /api/admin/import/reset
@@ -76,7 +79,7 @@ export async function POST() {
         })
         .run();
     } catch (logErr) {
-      console.error("[reset] Failed to log reset:", logErr);
+      log.error({ err: logErr }, "Failed to log reset");
     }
 
     return NextResponse.json({
@@ -86,7 +89,7 @@ export async function POST() {
       backupPath: `data/backups/input_${timestamp}.json`,
     });
   } catch (error) {
-    console.error("[reset] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         error: "Failed to reset event data",

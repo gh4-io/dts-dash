@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { importLog } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/data-freshness");
 
 /**
  * GET /api/data-freshness
@@ -32,7 +35,7 @@ export async function GET() {
 
     return NextResponse.json({ importedAt, ageHours });
   } catch (error) {
-    console.error("[api/data-freshness] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

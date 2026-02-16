@@ -3,6 +3,9 @@ import { auth, invalidateUserTokens } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq, and, ne } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/users/[id]");
 
 /**
  * PUT /api/admin/users/[id]
@@ -126,7 +129,7 @@ export async function PUT(
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("[api/admin/users/[id]] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -189,7 +192,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/admin/users/[id]] DELETE error:", error);
+    log.error({ err: error }, "DELETE error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

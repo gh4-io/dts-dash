@@ -10,6 +10,9 @@ import {
 } from "@/lib/data/engines/capacity";
 import { db } from "@/lib/db/client";
 import { appConfig } from "@/lib/db/schema";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/capacity");
 
 /**
  * GET /api/capacity
@@ -66,7 +69,7 @@ export async function GET(request: NextRequest) {
       utilization,
     });
   } catch (error) {
-    console.error("[api/capacity] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

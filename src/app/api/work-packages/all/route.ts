@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { readWorkPackages } from "@/lib/data/reader";
 import { transformWorkPackages } from "@/lib/data/transformer";
 import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/work-packages/all");
 
 /**
  * GET /api/work-packages/all
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
       total: filtered.length,
     });
   } catch (error) {
-    console.error("[api/work-packages/all] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -4,6 +4,9 @@ import { db } from "@/lib/db/client";
 import { customers } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getContrastText, isValidHex } from "@/lib/utils/contrast";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/customers");
 
 /**
  * GET /api/admin/customers
@@ -24,7 +27,7 @@ export async function GET() {
 
     return NextResponse.json(allCustomers);
   } catch (error) {
-    console.error("[api/admin/customers] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -80,7 +83,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true, updated });
   } catch (error) {
-    console.error("[api/admin/customers] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -154,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (error) {
-    console.error("[api/admin/customers] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

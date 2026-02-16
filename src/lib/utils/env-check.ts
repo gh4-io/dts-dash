@@ -1,3 +1,7 @@
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("env-check");
+
 const DEV_DEFAULTS = [
   "dev-secret-change-in-production-minimum-32-chars",
   "changeme",
@@ -21,7 +25,7 @@ export function validateAuthSecret(): void {
         "AUTH_SECRET is not set. Generate one with: npm run generate-secret"
       );
     }
-    console.warn(
+    log.warn(
       "AUTH_SECRET is not set. This is OK for development but must be set in production."
     );
     return;

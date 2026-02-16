@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
 import type { SharePointWorkPackage } from "@/types";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("reader");
 
 /**
  * Work Package Reader
@@ -23,7 +26,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
   const dataPath = path.join(process.cwd(), "data", "input.json");
 
   if (!fs.existsSync(dataPath)) {
-    console.warn(`[reader] data/input.json not found at ${dataPath}`);
+    log.warn(`data/input.json not found at ${dataPath}`);
     cachedData = [];
     shouldInvalidate = false;
     return [];
@@ -41,10 +44,10 @@ export function readWorkPackages(): SharePointWorkPackage[] {
     cachedData = records;
     shouldInvalidate = false;
 
-    console.warn(`[reader] Loaded ${records.length} work packages from input.json`);
+    log.info(`Loaded ${records.length} work packages from input.json`);
     return records;
   } catch (error) {
-    console.error("[reader] Failed to read or parse input.json:", error);
+    log.error({ err: error }, "Failed to read or parse input.json");
     cachedData = [];
     shouldInvalidate = false;
     return [];
@@ -57,7 +60,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
  */
 export function invalidateCache(): void {
   shouldInvalidate = true;
-  console.warn("[reader] Cache invalidated");
+  log.info("Cache invalidated");
 }
 
 /**

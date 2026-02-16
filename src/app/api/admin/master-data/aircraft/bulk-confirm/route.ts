@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { aircraft } from "@/lib/db/schema";
 import { inArray } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/master-data/aircraft/bulk-confirm");
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, count: registrations.length });
   } catch (error) {
-    console.error("[bulk-confirm-aircraft] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         error: "Bulk confirmation failed",

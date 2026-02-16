@@ -5,6 +5,9 @@ import {
   parseAircraftJSON,
   validateAircraftImport,
 } from "@/lib/data/aircraft-import-utils";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/import/aircraft/validate");
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
       errors: validation.details.errors,
     });
   } catch (error) {
-    console.error("[aircraft-validate] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         error: "Validation failed",

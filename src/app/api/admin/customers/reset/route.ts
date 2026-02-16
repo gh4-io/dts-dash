@@ -5,6 +5,9 @@ import { customers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { SEED_CUSTOMERS } from "@/lib/db/seed-data";
 import { getContrastText } from "@/lib/utils/contrast";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/customers/reset");
 
 /**
  * POST /api/admin/customers/reset
@@ -63,7 +66,7 @@ export async function POST() {
 
     return NextResponse.json({ success: true, reset: resetCount });
   } catch (error) {
-    console.error("[api/admin/customers/reset] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

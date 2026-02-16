@@ -5,6 +5,9 @@ import {
   parseCustomerJSON,
   commitCustomerImport,
 } from "@/lib/data/master-data-import-utils";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/import/customers/commit");
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[customer-commit] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         success: false,

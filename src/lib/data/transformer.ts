@@ -1,6 +1,9 @@
 import { db } from "@/lib/db/client";
 import { mhOverrides, appConfig } from "@/lib/db/schema";
 import type { SharePointWorkPackage, WorkPackage, MHSource, AppConfig } from "@/types";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("transformer");
 
 /**
  * Work Package Transformer
@@ -48,7 +51,7 @@ async function loadConfig(): Promise<AppConfig> {
 
     return cachedConfig;
   } catch (error) {
-    console.error("[transformer] Failed to load config:", error);
+    log.error({ err: error }, "Failed to load config");
     // Return defaults
     cachedConfig = {
       defaultMH: 3.0,
@@ -84,10 +87,10 @@ async function loadOverrides(): Promise<Map<number, number>> {
   try {
     const overrides = await db.select().from(mhOverrides);
     cachedOverrides = new Map(overrides.map((o) => [o.workPackageId, o.overrideMH]));
-    console.warn(`[transformer] Loaded ${cachedOverrides.size} MH overrides`);
+    log.info(`Loaded ${cachedOverrides.size} MH overrides`);
     return cachedOverrides;
   } catch (error) {
-    console.error("[transformer] Failed to load overrides:", error);
+    log.error({ err: error }, "Failed to load overrides");
     cachedOverrides = new Map();
     return cachedOverrides;
   }
@@ -99,7 +102,7 @@ async function loadOverrides(): Promise<Map<number, number>> {
 export function invalidateTransformerCache(): void {
   cachedConfig = null;
   cachedOverrides = null;
-  console.warn("[transformer] Cache invalidated");
+  log.info("Cache invalidated");
 }
 
 /**

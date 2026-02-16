@@ -3,6 +3,9 @@
  * Client-side analytics tracking
  * Fire-and-forget (never blocks UI)
  */
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("analytics");
 
 export interface TrackEventProps {
   [key: string]: string | number | boolean | null | undefined;
@@ -19,7 +22,7 @@ export interface TrackEventProps {
 export function trackEvent(eventType: string, props?: TrackEventProps): void {
   // Don't track in development (optional - remove if you want dev tracking)
   if (process.env.NODE_ENV === "development") {
-    console.warn(`[analytics] ${eventType}`, props);
+    log.info({ eventType, props }, `${eventType}`);
     return;
   }
 
@@ -35,7 +38,7 @@ export function trackEvent(eventType: string, props?: TrackEventProps): void {
     }),
   }).catch((error) => {
     // Silently fail - never block UI
-    console.warn("[analytics] Failed to track event:", error);
+    log.warn({ err: error }, "Failed to track event");
   });
 }
 

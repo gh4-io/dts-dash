@@ -8,6 +8,9 @@ import {
   validatePassword,
   formatPasswordErrors,
 } from "@/lib/utils/password-validation";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/account/password");
 
 // Unified error to prevent account enumeration
 const INVALID_CREDENTIALS = "Current password is incorrect";
@@ -115,7 +118,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/account/password] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

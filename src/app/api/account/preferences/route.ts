@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { userPreferences } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/account/preferences");
 
 const VALID_COLOR_MODES = ["light", "dark", "system"] as const;
 const VALID_PRESETS = [
@@ -64,7 +67,7 @@ export async function GET() {
       tablePageSize: prefs.tablePageSize,
     });
   } catch (error) {
-    console.error("[api/account/preferences] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -162,7 +165,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/account/preferences] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

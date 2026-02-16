@@ -11,6 +11,9 @@ import {
   SEED_AIRCRAFT_MODELS,
   SEED_ENGINE_TYPES,
 } from "./seed-data";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("seed");
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -306,7 +309,7 @@ export async function seedData() {
           updatedAt: now,
         })
         .run();
-      console.warn("  Seeded admin user from INITIAL_ADMIN_EMAIL env var.");
+      log.info("Seeded admin user from INITIAL_ADMIN_EMAIL env var.");
     } else if (!isProd) {
       // Development only: use seed file defaults
       const regularUsers = SEED_USERS.filter((u) => u.password !== "");
@@ -326,13 +329,13 @@ export async function seedData() {
             }))
           )
           .run();
-        console.warn(
-          `  Seeded ${regularUsers.length} dev users. Default passwords — change after first login.`
+        log.info(
+          `Seeded ${regularUsers.length} dev users. Default passwords — change after first login.`
         );
       }
     } else {
-      console.warn(
-        "  No INITIAL_ADMIN_EMAIL/PASSWORD set. Skipping user seed — use /setup for first-run."
+      log.warn(
+        "No INITIAL_ADMIN_EMAIL/PASSWORD set. Skipping user seed — use /setup for first-run."
       );
     }
   }
@@ -360,7 +363,7 @@ export async function seedData() {
           updatedAt: now,
         })
         .run();
-      console.warn("  Seeded system user for API ingestion");
+      log.info("Seeded system user for API ingestion");
     }
   }
 
@@ -381,7 +384,7 @@ export async function seedData() {
       )
       .run();
 
-    console.warn(`  Seeded ${SEED_CUSTOMERS.length} customers with colors`);
+    log.info(`Seeded ${SEED_CUSTOMERS.length} customers with colors`);
   }
 
   // ─── Aircraft Type Mappings ───────────────────────────────────────────────
@@ -404,8 +407,8 @@ export async function seedData() {
       )
       .run();
 
-    console.warn(
-      `  Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`
+    log.info(
+      `Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`
     );
   }
 
@@ -417,7 +420,7 @@ export async function seedData() {
     db.insert(schema.appConfig)
       .values(SEED_APP_CONFIG.map((d) => ({ ...d, updatedAt: now })))
       .run();
-    console.warn("  Seeded default app configuration");
+    log.info("Seeded default app configuration");
   } else {
     // Idempotent: add any missing config keys
     for (const d of SEED_APP_CONFIG) {
@@ -430,7 +433,7 @@ export async function seedData() {
         db.insert(schema.appConfig)
           .values({ ...d, updatedAt: now })
           .run();
-        console.warn(`  Seeded config: ${d.key} = ${d.value || "(empty)"}`);
+        log.info(`Seeded config: ${d.key} = ${d.value || "(empty)"}`);
       }
     }
   }
@@ -450,7 +453,7 @@ export async function seedData() {
       )
       .run();
 
-    console.warn(`  Seeded ${SEED_MANUFACTURERS.length} manufacturers`);
+    log.info(`Seeded ${SEED_MANUFACTURERS.length} manufacturers`);
   }
 
   // ─── Aircraft Models ──────────────────────────────────────────────────────
@@ -477,7 +480,7 @@ export async function seedData() {
       )
       .run();
 
-    console.warn(`  Seeded ${SEED_AIRCRAFT_MODELS.length} aircraft models`);
+    log.info(`Seeded ${SEED_AIRCRAFT_MODELS.length} aircraft models`);
   }
 
   // ─── Engine Types ─────────────────────────────────────────────────────────
@@ -495,16 +498,16 @@ export async function seedData() {
       )
       .run();
 
-    console.warn(`  Seeded ${SEED_ENGINE_TYPES.length} engine types`);
+    log.info(`Seeded ${SEED_ENGINE_TYPES.length} engine types`);
   }
 
-  console.warn("Seeding complete.");
+  log.info("Seeding complete.");
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export async function seed() {
-  console.warn("Seeding database...");
+  log.info("Seeding database...");
   createTables();
   runMigrations();
   await seedData();
@@ -512,5 +515,5 @@ export async function seed() {
 
 // Allow running directly
 if (require.main === module) {
-  seed().catch(console.error);
+  seed().catch((err) => log.error({ err }, "Seed failed"));
 }

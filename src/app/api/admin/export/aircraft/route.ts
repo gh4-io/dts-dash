@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { exportAircraftCSV } from "@/lib/data/aircraft-import-utils";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/export/aircraft");
 
 export async function GET() {
   const session = await auth();
@@ -20,7 +23,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error("[export-aircraft] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         error: "Export failed",

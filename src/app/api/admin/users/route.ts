@@ -8,6 +8,9 @@ import {
   validatePassword,
   formatPasswordErrors,
 } from "@/lib/utils/password-validation";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/users");
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -46,7 +49,7 @@ export async function GET() {
 
     return NextResponse.json(allUsers);
   } catch (error) {
-    console.error("[api/admin/users] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -182,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
-    console.error("[api/admin/users] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

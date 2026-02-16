@@ -3,6 +3,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { appConfig } from "@/lib/db/schema";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/config");
 
 /**
  * GET /api/config
@@ -57,7 +60,7 @@ export async function GET() {
 
     return NextResponse.json(config);
   } catch (error) {
-    console.error("[api/config] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -98,7 +101,7 @@ export async function PUT(request: NextRequest) {
     const updates = Object.entries(body)
       .filter(([key]) => {
         if (!ALLOWED_CONFIG_KEYS.has(key)) {
-          console.warn(`[api/config] Rejected unknown config key: ${key}`);
+          log.warn(`Rejected unknown config key: ${key}`);
           return false;
         }
         return true;
@@ -136,7 +139,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/config] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

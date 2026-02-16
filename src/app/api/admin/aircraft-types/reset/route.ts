@@ -4,6 +4,9 @@ import { db } from "@/lib/db/client";
 import { aircraftTypeMappings } from "@/lib/db/schema";
 import { SEED_AIRCRAFT_TYPE_MAPPINGS } from "@/lib/db/seed-data";
 import { invalidateMappingsCache } from "@/lib/utils/aircraft-type";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/aircraft-types/reset");
 
 /**
  * POST /api/admin/aircraft-types/reset
@@ -41,7 +44,7 @@ export async function POST() {
       restored: SEED_AIRCRAFT_TYPE_MAPPINGS.length,
     });
   } catch (error) {
-    console.error("[api/admin/aircraft-types/reset] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

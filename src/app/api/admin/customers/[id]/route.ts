@@ -4,6 +4,9 @@ import { db } from "@/lib/db/client";
 import { customers } from "@/lib/db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { isValidHex, getContrastText } from "@/lib/utils/contrast";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/customers/[id]");
 
 /**
  * PATCH /api/admin/customers/[id]
@@ -92,7 +95,7 @@ export async function PATCH(
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error("[api/admin/customers/[id]] PATCH error:", error);
+    log.error({ err: error }, "PATCH error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -134,7 +137,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/admin/customers/[id]] DELETE error:", error);
+    log.error({ err: error }, "DELETE error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

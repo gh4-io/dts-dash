@@ -4,6 +4,9 @@ import { validateImportData, commitImportData } from "@/lib/data/import-utils";
 import { db } from "@/lib/db/client";
 import { appConfig } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/import/commit");
 
 /**
  * POST /api/admin/import/commit
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[api/admin/import/commit] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

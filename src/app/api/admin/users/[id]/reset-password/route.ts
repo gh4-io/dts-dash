@@ -4,6 +4,9 @@ import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { hashSync } from "bcryptjs";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/users/[id]/reset-password");
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -50,7 +53,7 @@ export async function POST(
 
     return NextResponse.json({ tempPassword });
   } catch (error) {
-    console.error("[api/admin/users/[id]/reset-password] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -4,6 +4,9 @@ import { db } from "@/lib/db/client";
 import { aircraftTypeMappings } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { invalidateMappingsCache } from "@/lib/utils/aircraft-type";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/aircraft-types");
 
 /**
  * GET /api/admin/aircraft-types
@@ -24,7 +27,7 @@ export async function GET() {
 
     return NextResponse.json({ mappings });
   } catch (error) {
-    console.error("[api/admin/aircraft-types] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(newMapping, { status: 201 });
   } catch (error) {
-    console.error("[api/admin/aircraft-types] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -136,7 +139,7 @@ export async function PUT(request: NextRequest) {
     invalidateMappingsCache();
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/admin/aircraft-types] PUT error:", error);
+    log.error({ err: error }, "PUT error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -166,7 +169,7 @@ export async function DELETE(request: NextRequest) {
     invalidateMappingsCache();
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[api/admin/aircraft-types] DELETE error:", error);
+    log.error({ err: error }, "DELETE error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

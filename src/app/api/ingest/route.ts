@@ -5,6 +5,9 @@ import { validateImportData, commitImportData } from "@/lib/data/import-utils";
 import { db } from "@/lib/db/client";
 import { appConfig, importLog } from "@/lib/db/schema";
 import { eq, and, gt } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/ingest");
 
 const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
 
@@ -142,7 +145,7 @@ export async function POST(request: NextRequest) {
       warnings: validation.warnings,
     });
   } catch (error) {
-    console.error("[api/ingest] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

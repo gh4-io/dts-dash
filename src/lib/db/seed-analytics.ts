@@ -4,6 +4,9 @@
  */
 import { db } from "./client";
 import { analyticsEvents, users } from "./schema";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("seed-analytics");
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -39,12 +42,12 @@ const PAGES = [
 ];
 
 async function seedAnalytics() {
-  console.warn("Seeding analytics events...");
+  log.info("Seeding analytics events...");
 
   // Get first user ID
   const allUsers = db.select().from(users).all();
   if (allUsers.length === 0) {
-    console.error("No users found. Run the main seed first: npx tsx src/lib/db/seed.ts");
+    log.error("No users found. Run the main seed first: npx tsx src/lib/db/seed.ts");
     process.exit(1);
   }
 
@@ -95,8 +98,8 @@ async function seedAnalytics() {
   // Insert in batch
   db.insert(analyticsEvents).values(events).run();
 
-  console.warn(`  Seeded ${events.length} analytics events across 14 days`);
-  console.warn("Done.");
+  log.info(`Seeded ${events.length} analytics events across 14 days`);
+  log.info("Done.");
 }
 
-seedAnalytics().catch(console.error);
+seedAnalytics().catch((err) => log.error({ err }, "Seed analytics failed"));

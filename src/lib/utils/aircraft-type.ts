@@ -2,6 +2,9 @@ import { db } from "@/lib/db/client";
 import { aircraftTypeMappings } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import type { AircraftTypeMapping, NormalizedAircraftType } from "@/types";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("aircraft-type");
 
 /**
  * Aircraft Type Normalization Service (D-015)
@@ -31,10 +34,10 @@ async function loadMappings(): Promise<AircraftTypeMapping[]> {
       description: m.description ?? null,
     }));
 
-    console.warn(`[aircraft-type] Loaded ${cachedMappings.length} active mappings`);
+    log.info(`Loaded ${cachedMappings.length} active mappings`);
     return cachedMappings;
   } catch (error) {
-    console.error("[aircraft-type] Failed to load mappings:", error);
+    log.error({ err: error }, "Failed to load mappings");
     return [];
   }
 }
@@ -44,7 +47,7 @@ async function loadMappings(): Promise<AircraftTypeMapping[]> {
  */
 export function invalidateMappingsCache(): void {
   cachedMappings = null;
-  console.warn("[aircraft-type] Mappings cache invalidated");
+  log.info("Mappings cache invalidated");
 }
 
 /**

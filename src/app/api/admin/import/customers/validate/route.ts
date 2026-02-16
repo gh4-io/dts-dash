@@ -5,6 +5,9 @@ import {
   parseCustomerJSON,
   validateCustomerImport,
 } from "@/lib/data/master-data-import-utils";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/import/customers/validate");
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
       errors: validation.details.errors,
     });
   } catch (error) {
-    console.error("[customer-validate] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       {
         error: "Validation failed",

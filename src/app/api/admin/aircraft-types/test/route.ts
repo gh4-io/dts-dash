@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { normalizeAircraftType } from "@/lib/utils/aircraft-type";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/admin/aircraft-types/test");
 
 /**
  * POST /api/admin/aircraft-types/test
@@ -26,7 +29,7 @@ export async function POST(request: NextRequest) {
     const result = await normalizeAircraftType(rawType);
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[api/admin/aircraft-types/test] POST error:", error);
+    log.error({ err: error }, "POST error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -4,6 +4,9 @@ import { readWorkPackages } from "@/lib/data/reader";
 import { transformWorkPackages } from "@/lib/data/transformer";
 import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
 import { computeHourlySnapshots } from "@/lib/data/engines/hourly-snapshot";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/hourly-snapshots");
 
 /**
  * GET /api/hourly-snapshots
@@ -43,7 +46,7 @@ export async function GET(request: NextRequest) {
       total: snapshots.length,
     });
   } catch (error) {
-    console.error("[api/hourly-snapshots] Error:", error);
+    log.error({ err: error }, "Error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { sql } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/analytics/summary");
 
 /**
  * GET /api/analytics/summary
@@ -73,7 +76,7 @@ export async function GET(request: NextRequest) {
       eventsByType,
     });
   } catch (error) {
-    console.error("[api/analytics/summary] GET error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
