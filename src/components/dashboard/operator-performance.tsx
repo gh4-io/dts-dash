@@ -135,7 +135,7 @@ export function OperatorPerformance({
           </button>
         )}
       </div>
-      <div className="overflow-x-auto flex-1 min-h-0">
+      <div className="overflow-x-auto flex-1">
         <table className="w-full text-sm">
           <thead className="border-b border-border">
             <tr>

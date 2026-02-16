@@ -14,7 +14,7 @@ export function KpiCard({ title, icon, children, className = "" }: KpiCardProps)
         {icon && <i className={icon} />}
         {title}
       </h3>
-      <div className="flex-1 min-h-0">
+      <div className="flex-1">
         {children}
       </div>
     </div>

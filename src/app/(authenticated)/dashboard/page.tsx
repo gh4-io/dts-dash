@@ -64,7 +64,7 @@ function DashboardPageInner() {
   }
 
   return (
-    <div className="flex flex-col gap-3 h-full min-h-0">
+    <div className="flex flex-col gap-3 min-h-full">
       <TopMenuBar title="Dashboard" icon="fa-solid fa-chart-line" />
 
       {/* Data Freshness */}
@@ -73,35 +73,34 @@ function DashboardPageInner() {
       {isLoading || snapshotsLoading ? (
         <LoadingSkeleton variant="page" />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1 min-h-[600px]">
-          {/* Left: flex ratios — MH 65%, Type 30%, Total 5% of adjusted height */}
-          <div className="flex flex-col gap-3 min-h-0">
+        <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1">
+          {/* Left: flex ratios — MH 65%, Type 32% of remaining */}
+          <div className="flex flex-col gap-3">
             <div className="shrink-0">
               <AvgGroundTimeCard workPackages={displayWps} />
             </div>
             <MhByOperatorCard
               workPackages={displayWps}
               onOperatorClick={handleOperatorFromCard}
-              className="flex-[13] min-h-[100px]"
+              className="flex-[2]"
             />
-            <TotalAircraftCard
-              workPackages={displayWps}
-              className="flex-[1] min-h-[60px]"
-            />
+            <div className="shrink-0">
+              <TotalAircraftCard workPackages={displayWps} />
+            </div>
             <AircraftByTypeCard
               workPackages={displayWps}
-              className="flex-[6] min-h-[80px]"
+              className="flex-[3]"
             />
           </div>
 
-          {/* Center: chart + operator table — chart takes priority */}
-          <div className="flex flex-col gap-3 min-h-0">
-            <div className="rounded-lg border border-border bg-card p-3 flex-1 flex flex-col min-h-[200px]">
+          {/* Center: chart + operator table */}
+          <div className="flex flex-col gap-3">
+            <div className="rounded-lg border border-border bg-card p-3 flex-1 flex flex-col">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
               </h3>
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-[250px]">
                 <CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} />
               </div>
             </div>
@@ -109,7 +108,7 @@ function DashboardPageInner() {
               workPackages={workPackages}
               focusedOperator={focusedOperator}
               onOperatorClick={handleOperatorClick}
-              className="flex-1 min-h-[150px]"
+              className="flex-1"
             />
           </div>
 
