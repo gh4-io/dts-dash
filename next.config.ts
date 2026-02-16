@@ -41,6 +41,7 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   serverExternalPackages: ["better-sqlite3"],
   transpilePackages: ["echarts", "zrender"],
   turbopack: {},

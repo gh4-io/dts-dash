@@ -8,7 +8,9 @@ import path from "path";
  */
 export function readAllowedDevOrigins(): string[] {
   try {
-    const dbPath = path.join(process.cwd(), "data", "dashboard.db");
+    const dbPath =
+      process.env.DATABASE_PATH ||
+      path.join(process.cwd(), "data", "dashboard.db");
     const db = new Database(dbPath, { readonly: true });
     const row = db
       .prepare("SELECT value FROM app_config WHERE key = ?")
