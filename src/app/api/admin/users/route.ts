@@ -4,6 +4,10 @@ import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { hashSync } from "bcryptjs";
+import {
+  validatePassword,
+  formatPasswordErrors,
+} from "@/lib/utils/password-validation";
 
 function generateTempPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -127,6 +131,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { error: "A user with this username already exists" },
           { status: 409 }
+        );
+      }
+    }
+
+    if (password) {
+      const validation = validatePassword(password);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: formatPasswordErrors(validation.errors) },
+          { status: 400 }
         );
       }
     }

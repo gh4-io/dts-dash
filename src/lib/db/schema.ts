@@ -21,6 +21,7 @@ export const users = sqliteTable("users", {
   forcePasswordChange: integer("force_password_change", { mode: "boolean" })
     .notNull()
     .default(false),
+  tokenVersion: integer("token_version").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
@@ -33,6 +34,7 @@ export const users = sqliteTable("users", {
 
 export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
+  sessionToken: text("session_token").unique(),
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),

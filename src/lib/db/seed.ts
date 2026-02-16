@@ -248,6 +248,14 @@ export function runMigrations(): MigrationResult[] {
       name: "Add updated_by to customers",
       sql: "ALTER TABLE customers ADD COLUMN updated_by TEXT REFERENCES users(id)",
     },
+    {
+      name: "Add token_version to users",
+      sql: "ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0",
+    },
+    {
+      name: "Add session_token to sessions",
+      sql: "ALTER TABLE sessions ADD COLUMN session_token TEXT UNIQUE",
+    },
   ];
 
   const results: MigrationResult[] = [];
@@ -279,27 +287,53 @@ export async function seedData() {
     .get();
 
   if (!existingAdmin) {
-    const regularUsers = SEED_USERS.filter((u) => u.password !== "");
-    if (regularUsers.length > 0) {
-      db.insert(schema.users)
-        .values(
-          regularUsers.map((u) => ({
-            id: u.id || generateId(),
-            email: u.email,
-            username: u.username,
-            displayName: u.displayName,
-            passwordHash: hashSync(u.password, 10),
-            role: u.role,
-            isActive: u.isActive,
-            createdAt: now,
-            updatedAt: now,
-          }))
-        )
-        .run();
+    const isProd = process.env.NODE_ENV === "production";
+    const envEmail = process.env.INITIAL_ADMIN_EMAIL;
+    const envPassword = process.env.INITIAL_ADMIN_PASSWORD;
 
-    console.warn(
-      `  Seeded ${regularUsers.length} users. Default passwords in use — change after first login.`
-    );
+    if (envEmail && envPassword) {
+      // Use env-provided credentials
+      db.insert(schema.users)
+        .values({
+          id: generateId(),
+          email: envEmail.toLowerCase(),
+          username: null,
+          displayName: "Admin",
+          passwordHash: hashSync(envPassword, 10),
+          role: "superadmin" as const,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      console.warn("  Seeded admin user from INITIAL_ADMIN_EMAIL env var.");
+    } else if (!isProd) {
+      // Development only: use seed file defaults
+      const regularUsers = SEED_USERS.filter((u) => u.password !== "");
+      if (regularUsers.length > 0) {
+        db.insert(schema.users)
+          .values(
+            regularUsers.map((u) => ({
+              id: u.id || generateId(),
+              email: u.email,
+              username: u.username,
+              displayName: u.displayName,
+              passwordHash: hashSync(u.password, 10),
+              role: u.role,
+              isActive: u.isActive,
+              createdAt: now,
+              updatedAt: now,
+            }))
+          )
+          .run();
+        console.warn(
+          `  Seeded ${regularUsers.length} dev users. Default passwords — change after first login.`
+        );
+      }
+    } else {
+      console.warn(
+        "  No INITIAL_ADMIN_EMAIL/PASSWORD set. Skipping user seed — use /setup for first-run."
+      );
     }
   }
 

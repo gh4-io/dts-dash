@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, invalidateUserTokens } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq, and, ne } from "drizzle-orm";
@@ -101,6 +101,13 @@ export async function PUT(
 
     db.update(users).set(updates).where(eq(users.id, id)).run();
 
+    // Invalidate tokens if role changed or user deactivated
+    const roleChanged = body.role !== undefined && body.role !== existing.role;
+    const deactivated = body.isActive === false && existing.isActive;
+    if (roleChanged || deactivated) {
+      invalidateUserTokens(id);
+    }
+
     // Return updated user
     const updated = db
       .select({
@@ -177,6 +184,8 @@ export async function DELETE(
       .set({ isActive: false, updatedAt: new Date().toISOString() })
       .where(eq(users.id, id))
       .run();
+
+    invalidateUserTokens(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

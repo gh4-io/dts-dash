@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, invalidateUserTokens } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -44,6 +44,9 @@ export async function POST(
       })
       .where(eq(users.id, id))
       .run();
+
+    // Force user to re-login with temp password
+    invalidateUserTokens(id);
 
     return NextResponse.json({ tempPassword });
   } catch (error) {

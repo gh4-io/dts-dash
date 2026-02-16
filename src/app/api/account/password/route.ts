@@ -4,12 +4,20 @@ import { db } from "@/lib/db/client";
 import { users, sessions } from "@/lib/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { compareSync, hashSync } from "bcryptjs";
+import {
+  validatePassword,
+  formatPasswordErrors,
+} from "@/lib/utils/password-validation";
+
+// Unified error to prevent account enumeration
+const INVALID_CREDENTIALS = "Current password is incorrect";
 
 /**
  * PUT /api/account/password
  * Change current user's password.
  * Requires current password verification.
- * Invalidates all other sessions on success.
+ * Bumps tokenVersion to invalidate all other JWT tokens.
+ * Deletes other DB sessions (keeps current session alive).
  */
 export async function PUT(request: NextRequest) {
   try {
@@ -28,9 +36,17 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (typeof newPassword !== "string" || newPassword.length < 8) {
+    if (typeof newPassword !== "string") {
       return NextResponse.json(
-        { error: "New password must be at least 8 characters" },
+        { error: "New password is required" },
+        { status: 400 }
+      );
+    }
+
+    const validation = validatePassword(newPassword);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: formatPasswordErrors(validation.errors) },
         { status: 400 }
       );
     }
@@ -42,7 +58,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Fetch user with password hash
+    // Fetch user
     const user = db
       .select()
       .from(users)
@@ -50,38 +66,52 @@ export async function PUT(request: NextRequest) {
       .get();
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      // Unified error — don't reveal whether user exists
+      return NextResponse.json(
+        { error: INVALID_CREDENTIALS },
+        { status: 403 }
+      );
     }
 
     // Verify current password
     const isValid = compareSync(currentPassword, user.passwordHash);
     if (!isValid) {
       return NextResponse.json(
-        { error: "Current password is incorrect" },
+        { error: INVALID_CREDENTIALS },
         { status: 403 }
       );
     }
 
-    // Update password
+    // Update password and bump tokenVersion
     const newHash = hashSync(newPassword, 10);
     db.update(users)
       .set({
         passwordHash: newHash,
+        tokenVersion: user.tokenVersion + 1,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(users.id, session.user.id))
       .run();
 
-    // Invalidate other sessions (not the current one)
-    // Auth.js JWT strategy doesn't use the sessions table, but clear it for safety
-    db.delete(sessions)
-      .where(
-        and(
-          eq(sessions.userId, session.user.id),
-          ne(sessions.id, session.user.id) // best-effort — JWT doesn't track session IDs here
+    // Delete other DB sessions (keep current session alive via JWT)
+    // The tokenVersion bump will invalidate other JWT tokens on their next request
+    const currentSessionId = (session as unknown as { sessionId?: string })
+      .sessionId;
+    if (currentSessionId) {
+      db.delete(sessions)
+        .where(
+          and(
+            eq(sessions.userId, session.user.id),
+            ne(sessions.id, currentSessionId)
+          )
         )
-      )
-      .run();
+        .run();
+    } else {
+      // Fallback: delete all sessions for user
+      db.delete(sessions)
+        .where(eq(sessions.userId, session.user.id))
+        .run();
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

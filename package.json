@@ -24,7 +24,8 @@
     "db:backup": "npx tsx scripts/db/backup.ts",
     "db:analytics-clear": "npx tsx scripts/db/analytics-clear.ts",
     "db:migrate": "npx tsx scripts/db/migrate.ts",
-    "db:export": "npx tsx scripts/db/export.ts"
+    "db:export": "npx tsx scripts/db/export.ts",
+    "generate-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\""
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",

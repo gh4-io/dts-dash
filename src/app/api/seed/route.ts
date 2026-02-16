@@ -3,7 +3,12 @@ import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 export async function GET() {
-  // Only allow in development, or by superadmin in production
+  // Require explicit opt-in via env var
+  if (process.env.ENABLE_SEED_ENDPOINT !== "true") {
+    return NextResponse.json(null, { status: 404 });
+  }
+
+  // In production, require superadmin auth
   if (process.env.NODE_ENV === "production") {
     const session = await auth();
     if (!session || session.user.role !== "superadmin") {

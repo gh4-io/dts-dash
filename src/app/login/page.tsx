@@ -25,7 +25,11 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid username/email or password");
+      if (result.error.includes("Too many login attempts")) {
+        setError("Too many login attempts. Try again in 15 minutes.");
+      } else {
+        setError("Invalid username/email or password");
+      }
     } else {
       router.push("/dashboard");
       router.refresh();
@@ -102,7 +106,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground">
-          Default: admin / admin123
+          CVG Line Maintenance Operations
         </p>
       </div>
     </div>
