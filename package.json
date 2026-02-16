@@ -17,6 +17,7 @@
     "validate": "npm run typecheck && npm run lint && npm run test && npm run build",
     "db:seed": "npx tsx scripts/db/seed.ts",
     "db:reset": "npx tsx scripts/db/reset.ts",
+    "db:create-admin": "npx tsx scripts/db/create-admin.ts",
     "db:event-reset": "node scripts/reset-event-data.mjs",
     "db:reset-password": "npx tsx scripts/db/reset-password.ts",
     "db:status": "npx tsx scripts/db/status.ts",

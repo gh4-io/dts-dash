@@ -1,10 +1,11 @@
 #!/usr/bin/env npx tsx
 /**
- * db:reset — Delete dashboard.db entirely and re-seed from scratch.
+ * db:reset — Delete dashboard.db and recreate empty schema.
  * DESTRUCTIVE: All users, customers, settings, analytics will be lost.
  *
- * Usage: npm run db:reset
- *        npm run db:reset -- --yes   (skip confirmation)
+ * Usage: npm run db:reset              (schema only, no seed data)
+ *        npm run db:reset -- --seed    (also seed demo data)
+ *        npm run db:reset -- --yes     (skip confirmation)
  */
 
 import fs from "fs";
@@ -14,21 +15,28 @@ import { banner, log, success, warn, error, confirm, c } from "./_cli-utils";
 
 const PROJECT_ROOT = process.cwd();
 const DB_PATH = path.join(PROJECT_ROOT, "data", "dashboard.db");
+const args = process.argv.slice(2);
+const withSeed = args.includes("--seed");
 
 async function main() {
   banner("Database Reset");
 
-  warn("This will DELETE dashboard.db and re-create from scratch.");
+  warn("This will DELETE dashboard.db and recreate the schema.");
   log("  All users, customers, settings, analytics will be LOST.");
   log("  Event data (input.json) will NOT be affected.");
+  if (withSeed) {
+    log(`  ${c.yellow}--seed${c.reset} flag: demo data will be inserted after schema creation.`);
+  } else {
+    log("  No seed data will be inserted. Run 'npm run db:seed' separately if needed.");
+  }
   log("");
 
   if (!fs.existsSync(DB_PATH)) {
-    log("  dashboard.db does not exist. Running fresh seed...");
+    log("  dashboard.db does not exist. Will create fresh schema...");
     log("");
   }
 
-  if (!(await confirm("Delete database and re-seed? [y/N]:"))) {
+  if (!(await confirm("Delete database and recreate? [y/N]:"))) {
     log("Cancelled.", "blue");
     process.exit(0);
   }
@@ -44,16 +52,31 @@ async function main() {
   }
   success("Deleted dashboard.db");
 
-  // Re-seed via child process (clean module cache = fresh DB connection)
-  log("Re-seeding database...", "blue");
+  // Recreate schema (tables + migrations) via db:migrate
+  log("Creating schema...", "blue");
   try {
-    execSync("npx tsx scripts/db/seed.ts", {
+    execSync("npx tsx scripts/db/migrate.ts", {
       cwd: PROJECT_ROOT,
       stdio: "inherit",
     });
   } catch {
-    error("Re-seed failed. Run 'npm run db:seed' manually.");
+    error("Schema creation failed. Run 'npm run db:migrate' manually.");
     process.exit(1);
+  }
+
+  // Optionally seed demo data
+  if (withSeed) {
+    log("");
+    log("Seeding demo data...", "blue");
+    try {
+      execSync("npx tsx scripts/db/seed.ts", {
+        cwd: PROJECT_ROOT,
+        stdio: "inherit",
+      });
+    } catch {
+      error("Seed failed. Run 'npm run db:seed' manually.");
+      process.exit(1);
+    }
   }
 
   log("");
@@ -61,9 +84,15 @@ async function main() {
   success("Database reset complete");
   log("═══════════════════════════════════════════════════════════", "green");
   log("");
-  log("Default credentials:", "blue");
-  log(`  Admin: ${c.yellow}admin@cvg.local${c.reset} / ${c.yellow}admin123${c.reset} (superadmin)`);
-  log(`  User:  ${c.yellow}user@cvg.local${c.reset} / ${c.yellow}user123${c.reset}`);
+  if (withSeed) {
+    log("Default credentials:", "blue");
+    log(`  Admin: ${c.yellow}admin@cvg.local${c.reset} / ${c.yellow}admin123${c.reset} (superadmin)`);
+    log(`  User:  ${c.yellow}user@cvg.local${c.reset} / ${c.yellow}user123${c.reset}`);
+  } else {
+    log("Schema created with empty tables. Next steps:", "blue");
+    log("  npm run db:seed        — insert demo/dev data");
+    log("  npm run dev            — start the app (create your first user via admin)");
+  }
   log("");
 }
 
