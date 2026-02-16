@@ -38,6 +38,7 @@ The app ingests SharePoint OData work package data (local JSON), computes derive
 - Prefer clarity over cleverness; avoid over-engineering
 - **Global FilterBar** on all data pages (7 fields): **Start**, **End**, **Station (CVG only)**, **Timezone (UTC/Eastern only)**, **Operator**, **Aircraft**, **Type** → [REQ_Filters.md](.claude/SPECS/REQ_Filters.md)
 - **Import paths (MVP):** load from local JSON file **and** Admin "Paste JSON" importer; future secure POST route for automation.
+- **Semantic Versioning (D-028):** Strict semver. PATCH=bugfix, MINOR=new feature (backwards-compatible), MAJOR=breaking change. **Claude Code must stop and notify before implementing any backwards-incompatible change.** See [REQ_Versioning.md](.claude/SPECS/REQ_Versioning.md)
 
 > **🔴 MANDATORY — EVERY SESSION:**
 > 1. **START**: Read CLAUDE.md → Review `.claude/OPEN_ITEMS.md` for blockers
@@ -166,6 +167,7 @@ plan/                        — Implementation plans
 | [REQ_Permissions.md](.claude/SPECS/REQ_Permissions.md) | ~~No auth for v0~~ Superseded by REQ_Auth.md |
 | [REQ_Logging_Audit.md](.claude/SPECS/REQ_Logging_Audit.md) | Error logging, import stats |
 | [REQ_DataReset.md](.claude/SPECS/REQ_DataReset.md) | Database tools — 9 db:* scripts, seed data, backups |
+| [REQ_Versioning.md](.claude/SPECS/REQ_Versioning.md) | Semver rules, backwards compatibility contract, release procedures (D-028) |
 
 ### UI
 | File | Purpose |

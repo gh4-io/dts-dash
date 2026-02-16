@@ -292,3 +292,20 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 **Rationale**: With `AUTH_URL` hardcoded, accessing the app from any non-localhost address (e.g., LAN IP) caused auth callbacks to redirect to `localhost:3000`. `trustHost: true` is the correct Auth.js setting for trusted network environments. The hostname registry provides admin visibility and drives `allowedDevOrigins` for Next.js dev-mode cross-origin support.
 
 **Links**: [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-037
+
+---
+
+## D-028 | 2026-02-16 | Semantic Versioning with Backwards Compatibility Rules
+
+**Decision**: Adopt strict Semantic Versioning 2.0.0 with explicit backwards compatibility contracts for API endpoints, database schema, environment variables, and configuration. Claude Code must detect and notify on breaking changes before implementing them.
+
+**Key rules:**
+- **PATCH** (0.1.x): bug fixes, security patches, cosmetic fixes — no behavior change
+- **MINOR** (0.x.0): new features, new endpoints, new nullable/defaulted DB columns — backwards-compatible
+- **MAJOR** (x.0.0): breaking changes to API, schema, env vars, auth — requires migration guide
+- **Breaking Change Protocol**: Claude Code stops and notifies before implementing any backwards-incompatible change, suggests alternatives, requires explicit approval and MAJOR version bump
+- **Version lives in `package.json`**, updated on release branch only, never on `dev`
+
+**Rationale**: v0.1.0 is now deployed. Future changes must not break existing deployments without explicit version signaling and migration documentation.
+
+**Links**: [REQ_Versioning.md](SPECS/REQ_Versioning.md), [PROD_RELEASE_PLAN.md](PROD_RELEASE_PLAN.md)

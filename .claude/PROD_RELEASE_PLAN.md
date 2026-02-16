@@ -2,12 +2,12 @@
 
 > **Created:** 2026-02-15
 > **Updated:** 2026-02-16
-> **Status:** In progress — Phases 1-5 pending
-> **Target:** v0.1.0 (production-ready) to `master`
+> **Status:** v0.1.0 RELEASED — published to `master` as orphan commit `3f8220e`
+> **Versioning:** See [REQ_Versioning.md](SPECS/REQ_Versioning.md) for semver rules, backwards compatibility contract, and release procedures (D-028)
 
 ## Context
 
-All 8 development milestones (M0-M8) are complete with zero P0/P1/P2 blockers. The application is feature-complete on the `dev` branch. A preliminary stripped snapshot was published to `master` and will be overwritten by the final v0.1.0 once all 5 phases are complete.
+All 8 development milestones (M0-M8) and 5 production hardening phases are complete. v0.1.0 is published to `master` with GitHub Release and tag. Future releases follow the incremental PR-to-master pattern documented below and the versioning rules in REQ_Versioning.md.
 
 **Release philosophy:** Every release to `master` is **stripped to production minimum**. No documentation, no development scaffolding, no resource material, no helper scripts unrelated to application operation. The `dev` branch is never modified by the release process.
 
