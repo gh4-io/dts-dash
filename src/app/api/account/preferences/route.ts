@@ -43,7 +43,7 @@ export async function GET() {
       // Return defaults
       return NextResponse.json({
         colorMode: "dark",
-        themePreset: "neutral",
+        themePreset: "vitepress",
         accentColor: null,
         compactMode: false,
         defaultTimezone: "UTC",
@@ -133,7 +133,7 @@ export async function PUT(request: NextRequest) {
     const values = {
       userId: session.user.id,
       colorMode: body.colorMode ?? "dark",
-      themePreset: body.themePreset ?? "neutral",
+      themePreset: body.themePreset ?? "vitepress",
       accentColor: body.accentColor ?? null,
       compactMode: body.compactMode ?? false,
       defaultTimezone: body.defaultTimezone ?? "UTC",

@@ -2,13 +2,15 @@
  * Shared seed data constants — used by seed.ts and reset-defaults API.
  */
 
+import { getCustomerColor } from '@/lib/utils/customer-color-palette';
+
 export const SEED_CUSTOMERS = [
-  { name: "CargoJet Airways", displayName: "CargoJet", color: "#22c55e", colorText: "#ffffff", sortOrder: 1 },
-  { name: "Aerologic", displayName: "Aerologic", color: "#8b5cf6", colorText: "#ffffff", sortOrder: 2 },
-  { name: "Kalitta Air", displayName: "Kalitta Air", color: "#f97316", colorText: "#ffffff", sortOrder: 3 },
-  { name: "DHL Air UK", displayName: "DHL Air UK", color: "#ef4444", colorText: "#ffffff", sortOrder: 4 },
-  { name: "Kalitta Charters II", displayName: "Kalitta Chrt II", color: "#06b6d4", colorText: "#ffffff", sortOrder: 5 },
-  { name: "21 Air", displayName: "21 Air", color: "#ec4899", colorText: "#ffffff", sortOrder: 6 },
+  { name: "CargoJet Airways", displayName: "CargoJet", color: getCustomerColor(0), colorText: "#ffffff", sortOrder: 1 },
+  { name: "Aerologic", displayName: "Aerologic", color: getCustomerColor(1), colorText: "#ffffff", sortOrder: 2 },
+  { name: "Kalitta Air", displayName: "Kalitta Air", color: getCustomerColor(2), colorText: "#ffffff", sortOrder: 3 },
+  { name: "DHL Air UK", displayName: "DHL Air UK", color: getCustomerColor(3), colorText: "#ffffff", sortOrder: 4 },
+  { name: "Kalitta Charters II", displayName: "Kalitta Chrt II", color: getCustomerColor(4), colorText: "#ffffff", sortOrder: 5 },
+  { name: "21 Air", displayName: "21 Air", color: getCustomerColor(5), colorText: "#ffffff", sortOrder: 6 },
 ] as const;
 
 export const SEED_AIRCRAFT_TYPE_MAPPINGS = [

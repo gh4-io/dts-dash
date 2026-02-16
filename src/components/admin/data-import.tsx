@@ -17,6 +17,17 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface ValidationSummary {
   recordCount: number;
@@ -67,6 +78,11 @@ export function DataImport() {
   // Import
   const [importing, setImporting] = useState(false);
   const [importSuccess, setImportSuccess] = useState(false);
+
+  // Reset
+  const [resetting, setResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
 
   // History
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -184,6 +200,41 @@ export function DataImport() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const handleReset = async () => {
+    setResetting(true);
+    setResetSuccess(false);
+    setResetMessage(null);
+    setImportSuccess(false);
+
+    try {
+      const res = await fetch("/api/admin/import/reset", {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Reset failed");
+      }
+
+      const result = await res.json();
+      setResetSuccess(true);
+      setResetMessage(result.message);
+      clearForm();
+      fetchHistory(1);
+      setHistoryPage(1);
+
+      // Auto-clear success message after 5 seconds
+      setTimeout(() => {
+        setResetSuccess(false);
+        setResetMessage(null);
+      }, 5000);
+    } catch (err) {
+      setResetMessage("Reset failed: " + (err as Error).message);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const formatDate = (iso: string) => {
     try {
       return new Date(iso).toLocaleString();
@@ -199,6 +250,18 @@ export function DataImport() {
         <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-500">
           <i className="fa-solid fa-circle-check" />
           Data imported successfully. The flight board and dashboard will reflect the new data.
+        </div>
+      )}
+
+      {/* Reset success/error message */}
+      {resetMessage && (
+        <div className={`flex items-center gap-2 rounded-md border px-4 py-3 text-sm ${
+          resetSuccess
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+            : "border-destructive/30 bg-destructive/10 text-destructive"
+        }`}>
+          <i className={`fa-solid ${resetSuccess ? "fa-triangle-exclamation" : "fa-circle-xmark"}`} />
+          {resetMessage}
         </div>
       )}
 
@@ -275,6 +338,66 @@ export function DataImport() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Reset Event Data */}
+      <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium">Reset Event Data</h3>
+          <p className="text-xs text-muted-foreground">
+            Clear all aircraft event data. System data (users, customers, settings) will be preserved. A backup will be created automatically.
+          </p>
+        </div>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="destructive" size="sm" disabled={resetting}>
+              {resetting ? (
+                <><i className="fa-solid fa-spinner fa-spin mr-2" />Resetting...</>
+              ) : (
+                <><i className="fa-solid fa-trash-can mr-2" />Reset Data</>
+              )}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset Event Data?</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>This will permanently delete all aircraft event data (work packages) from the system.</p>
+                <p className="font-medium text-foreground">
+                  <i className="fa-solid fa-triangle-exclamation mr-1 text-amber-500" />
+                  What will be cleared:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>All aircraft ground time events</li>
+                  <li>Flight board data</li>
+                  <li>Dashboard statistics</li>
+                </ul>
+                <p className="font-medium text-foreground">
+                  <i className="fa-solid fa-shield-check mr-1 text-emerald-500" />
+                  What will be preserved:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>User accounts and preferences</li>
+                  <li>Customer configurations</li>
+                  <li>Aircraft type mappings</li>
+                  <li>System settings</li>
+                  <li>Import history log</li>
+                </ul>
+                <p className="text-foreground">A backup will be created before reset.</p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleReset}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                <i className="fa-solid fa-trash-can mr-2" />
+                Reset Data
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
 
       {/* Validation result / preview */}
       {validation && (

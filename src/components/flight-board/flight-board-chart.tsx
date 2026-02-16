@@ -136,6 +136,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
   // Track body chart container width for pixel-based tick computation
   const chartWidthRef = useRef<number>(0);
+  const [chartWidth, setChartWidth] = useState(0);
   const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
   // Track body wrapper container height for row padding computation
   const bodyWrapperRef = useRef<HTMLDivElement>(null);
@@ -143,6 +144,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   const [containerHeight, setContainerHeight] = useState(0);
   // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
   const [nowTimestamp, setNowTimestamp] = useState(0);
+  // ─── Row hover highlight refs (graphic-based, no React re-render) ───
+  const hoveredRowIdxRef = useRef<number>(-1);
+  const rafIdRef = useRef<number>(0);
   const { getColor } = useCustomers();
   const { timeFormat } = usePreferences();
   const { resolvedTheme } = useTheme();
@@ -152,7 +156,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   const cc = useMemo(() => {
     if (typeof document === "undefined") {
       // SSR fallback — dark defaults
-      return { fg: "#e5e5e5", mutedFg: "#a1a1aa", border: "#27272a", popover: "#18181b", popoverFg: "#fafafa", primary15: "rgba(59,130,246,0.15)" };
+      return { fg: "#e5e5e5", mutedFg: "#a1a1aa", border: "#27272a", popover: "#18181b", popoverFg: "#fafafa", primary15: "rgba(59,130,246,0.15)", rowHover: "rgba(255,255,255,0.1)" };
     }
     const s = getComputedStyle(document.documentElement);
     const v = (name: string) => {
@@ -169,6 +173,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         const raw = s.getPropertyValue("--primary").trim();
         return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
       })(),
+      rowHover: resolvedTheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
     };
   }, [resolvedTheme]);
 
@@ -284,7 +289,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     }
 
     // Smart anchor: center on "now" if within filter range, else center of filter
-    const now = Date.now();
+    const now = nowTimestamp || filterStartMs;
     const centerMs = (now >= filterStartMs && now <= filterEndMs)
       ? now
       : filterStartMs + totalMs / 2;
@@ -293,7 +298,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const start = Math.max(0, Math.min(100 - span, centerPct - span / 2));
     const end = start + span;
     return { start, end };
-  }, [workPackages.length, filterStart, filterEnd, zoomLevel]);
+  }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp]);
 
   // ─── Sync realZoomState ref when zoom preset/filter changes ───
   useEffect(() => {
@@ -321,7 +326,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const visibleMs = visibleHours * 3600000;
 
     // Pixel-based interval selection (SSR fallback before DOM is available)
-    const containerWidth = chartWidthRef.current || SSR_FALLBACK_WIDTH;
+    const containerWidth = chartWidth || SSR_FALLBACK_WIDTH;
     const availablePixels = Math.max(containerWidth - GRID_PADDING, 100);
     const intervalMs = computeTickInterval({ availablePixels, visibleMs });
     const intervalHours = intervalMs / 3600000;
@@ -354,7 +359,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       midnightTimestamps: all,
       timeGrid: { intervalMs, axisMin, axisMax, ticks },
     };
-  }, [workPackages.length, filterStart, filterEnd, timezone, zoomLevel]);
+  }, [workPackages.length, filterStart, filterEnd, timezone, zoomLevel, chartWidth]);
 
   // ─── Update NOW timestamp every 60s ───
   useEffect(() => {
@@ -412,27 +417,52 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const headerInstance = headerChartRef.current?.getEchartsInstance();
     if (headerInstance) {
       try {
-        headerInstance.setOption({
-          xAxis: [
-            {
-              // Bottom axis (hidden, for dataZoom sync) — update interval
-              type: "value",
-              position: "bottom",
-              min: timeGrid.axisMin,
-              max: timeGrid.axisMax,
-              interval: intervalMs,
-            },
-            {
-              // Top axis (day labels) — coarser interval, formatter filters to day boundaries
-              type: "value",
-              position: "top",
-              min: timeGrid.axisMin,
-              max: timeGrid.axisMax,
-              interval: topIntervalMs,
-              axisLabel: { show: true },
-            },
-          ],
-        });
+        headerInstance.setOption(
+          {
+            xAxis: [
+              {
+                // Bottom axis (hidden, for dataZoom sync) — update interval
+                type: "value",
+                position: "bottom",
+                min: timeGrid.axisMin,
+                max: timeGrid.axisMax,
+                interval: intervalMs,
+                axisLabel: { show: false },
+                splitLine: { show: false },
+                axisLine: { show: false },
+                axisTick: { show: false },
+              },
+              {
+                // Top axis (day labels) — coarser interval, formatter filters to day boundaries
+                type: "value",
+                position: "top",
+                min: timeGrid.axisMin,
+                max: timeGrid.axisMax,
+                interval: topIntervalMs,
+                axisLabel: {
+                  interval: 0,
+                  color: cc.fg,
+                  fontSize: 12,
+                  fontWeight: "bold" as const,
+                  formatter: (value: number) => {
+                    // Show day name only at midnight OR at the first tick of a new day
+                    if (midnightSet.has(value)) return dayNameFmt.format(new Date(value)).toUpperCase();
+                    const prevDay = dayNameFmt.format(new Date(value - topIntervalMs));
+                    const curDay = dayNameFmt.format(new Date(value));
+                    if (curDay !== prevDay) return curDay.toUpperCase();
+                    // Show on the very first axis tick so viewport always has a day label
+                    if (value === timeGrid.axisMin) return curDay.toUpperCase();
+                    return "";
+                  },
+                },
+                axisLine: { show: false },
+                axisTick: { show: false },
+                splitLine: { show: false },
+              },
+            ],
+          },
+          { replaceMerge: ["xAxis"] }
+        );
       } catch (err) {
         console.warn("[Adaptive Ticks] header setOption error:", err);
       }
@@ -443,48 +473,70 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const bodyInstance = bodyChartRef.current?.getEchartsInstance();
     if (bodyInstance) {
       try {
-        bodyInstance.setOption({
-          xAxis: {
-            type: "value",
-            position: "top",
-            min: timeGrid.axisMin,
-            max: timeGrid.axisMax,
-            interval: intervalMs,
-            axisLabel: {
-              show: true,
-              formatter: (value: number) => {
-                if (midnightSet.has(value)) {
-                  if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
-                  const dateStr = dateFmt.format(new Date(value));
-                  const timeStr = hourFormatter.format(new Date(value));
-                  return `{date|${dateStr}}\n{time|${timeStr}}`;
-                }
-                if (wideView) return "";
-                return `{time|${hourFormatter.format(new Date(value))}}`;
+        bodyInstance.setOption(
+          {
+            xAxis: {
+              type: "value",
+              position: "top",
+              min: timeGrid.axisMin,
+              max: timeGrid.axisMax,
+              interval: intervalMs,
+              axisLabel: {
+                interval: 0,
+                color: cc.fg,
+                fontSize: 12,
+                formatter: (value: number) => {
+                  if (midnightSet.has(value)) {
+                    if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
+                    const dateStr = dateFmt.format(new Date(value));
+                    const timeStr = hourFormatter.format(new Date(value));
+                    return `{date|${dateStr}}\n{time|${timeStr}}`;
+                  }
+                  if (wideView) return "";
+                  return `{time|${hourFormatter.format(new Date(value))}}`;
+                },
+                rich: {
+                  date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
+                  time: { fontSize: 12, lineHeight: 16 },
+                },
+              },
+              axisLine: { show: true, lineStyle: { color: cc.border } },
+              axisTick: {
+                show: true,
+                alignWithLabel: true,
+                length: 6,
+                lineStyle: { color: cc.mutedFg },
+              },
+              splitLine: {
+                show: true,
+                lineStyle: {
+                  color: "rgba(128,128,128,0.25)",
+                  width: 1,
+                  type: "dashed" as const,
+                },
               },
             },
           },
-        });
+          { replaceMerge: ["xAxis"] }
+        );
       } catch (err) {
         console.warn("[Adaptive Ticks] body setOption error:", err);
       }
     }
   }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length,
-      midnightSet, dateFmt, hourFormatter, timeGrid]);
+      midnightSet, dateFmt, hourFormatter, timeGrid, cc, dayNameFmt]);
 
   // ─── Track body chart container width via ResizeObserver ───
   useEffect(() => {
     const dom = bodyChartRef.current?.getEchartsInstance()?.getDom();
     if (!dom) return;
 
-    // Initialize immediately
-    chartWidthRef.current = dom.clientWidth;
-
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const newWidth = entry.contentRect.width;
         if (Math.abs(newWidth - chartWidthRef.current) > 5) {
           chartWidthRef.current = newWidth;
+          setChartWidth(newWidth);
           setTickRecalcTrigger((t) => t + 1);
         }
       }
@@ -570,6 +622,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     return padded;
   }, [registrations, containerHeight, condensed, isExpanded]);
 
+  // ─── Compute body chart height (used by rendering + hover effect) ───
+  const computedBodyHeight = useMemo(() => {
+    const rowH = condensed ? 20 : 36;
+    const contentMin = registrations.length * rowH + 38;
+    if (isExpanded) return Math.max(300, contentMin);
+    if (containerHeight > 0) return Math.max(300, contentMin, containerHeight);
+    return Math.max(300, contentMin);
+  }, [registrations.length, condensed, isExpanded, containerHeight]);
+
   // ─── renderItem for custom flight bars ───
   const renderFlightBar = useCallback(
     (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
@@ -633,7 +694,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const centerY = y + barHeight / 2;
 
       const children: RenderGroup[] = [
-        { type: "rect", shape: { x, y, width: w, height: barHeight, r: barHeight / 2 }, style: { fill: color } } as RenderGroup,
+        { type: "rect", shape: { x, y, width: w, height: barHeight, r: Math.min(6, barHeight / 3) }, style: { fill: color } } as RenderGroup,
       ];
 
       const fmtTime = (ts: number) => timeFmt.format(new Date(ts));
@@ -646,8 +707,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       };
 
       const centerLabel = flightId ? `${registration} · ${flightId}` : registration;
-      const fLg = condensed ? 8 : 10;
-      const fSm = condensed ? 7 : 9;
+      const fLg = condensed ? 9 : 10;
+      const fSm = condensed ? 9 : 9;
 
       if (w >= 240) {
         // Full layout: arrival LEFT + center label + departure RIGHT
@@ -682,6 +743,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
   // ─── HEADER OPTION (time axis + slider — always visible) ───
   const headerOption = useMemo(() => {
+    // Compute initial visible window start date
+    const { start } = zoomRange;
+    const filterStartMs = new Date(filterStart).getTime();
+    const filterEndMs = new Date(filterEnd).getTime();
+    const totalMs = filterEndMs - filterStartMs || 86400000;
+    const visibleStartMs = filterStartMs + (start / 100) * totalMs;
+    const visibleDateFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    const initialDateStr = visibleDateFmt.format(new Date(visibleStartMs));
 
     return {
       backgroundColor: "transparent",
@@ -698,7 +772,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           left: 100,
           top: 6,
           style: {
-            text: "", // ✅ PATCH #5: Will be updated dynamically by useEffect
+            text: initialDateStr, // ✅ Computed on initial render
             fill: cc.mutedFg,
             fontSize: 20,
           },
@@ -779,7 +853,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       ],
       series: [],
     };
-  }, [hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel, timeGrid, zoomRange, cc]);
+  }, [dayNameFmt, midnightSet, tzLabel, timeGrid, zoomRange, cc, filterStart, filterEnd, timezone]);
 
   // ─── BODY OPTION (bars + y-axis, time labels at top) ───
   const bodyOption = useMemo(() => {
@@ -896,6 +970,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           end: zoomRange.end,
         },
       ],
+      // Row hover highlight — initialized hidden, updated by mousemove handler
+      graphic: [{
+        id: "rowHighlight",
+        type: "rect" as const,
+        shape: { x: 0, y: 0, width: 0, height: 0 },
+        style: { fill: "transparent" },
+        silent: true,
+        z: 1,
+      }],
       series: [
         // Marker series — rendered BEHIND bars (lower z)
         {
@@ -1097,6 +1180,110 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     };
   }, [panMode, workPackages.length]);
 
+  // ─── Row hover highlight — track mouse position, update graphic rect ───
+  useEffect(() => {
+    const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
+    if (!bodyEl || paddedRegistrations.length === 0) return;
+
+    // Derive actual grid bounds and band height from ECharts coordinate system
+    const getInstance = () => bodyChartRef.current?.getEchartsInstance();
+
+    const getBandMetrics = () => {
+      const instance = getInstance();
+      if (!instance) return null;
+      try {
+        // Get pixel Y for first two rows to derive band height and actual grid top
+        const [, y0] = instance.convertToPixel("grid", [0, 0]);
+        const bandH = paddedRegistrations.length > 1
+          ? Math.abs((instance.convertToPixel("grid", [0, 1]) as [number, number])[1] - y0)
+          : y0 * 2; // single-row fallback: assume symmetric padding
+        const gridTopPx = y0 - bandH / 2;
+        const gridBottomPx = gridTopPx + bandH * paddedRegistrations.length;
+        return { bandH, gridTopPx, gridBottomPx };
+      } catch {
+        return null;
+      }
+    };
+
+    const updateHighlight = (rowIndex: number) => {
+      const instance = getInstance();
+      if (!instance) return;
+
+      if (rowIndex < 0) {
+        try {
+          instance.setOption({
+            graphic: [{ id: "rowHighlight", type: "rect", shape: { x: 0, y: 0, width: 0, height: 0 }, style: { fill: "transparent" }, silent: true, z: 1 }],
+          });
+        } catch { /* chart transitioning */ }
+        return;
+      }
+
+      try {
+        const [, centerY] = instance.convertToPixel("grid", [0, rowIndex]);
+        const metrics = getBandMetrics();
+        if (!metrics) return;
+        const chartWidth = bodyEl.clientWidth;
+        const y = centerY - metrics.bandH / 2;
+        instance.setOption({
+          graphic: [{ id: "rowHighlight", type: "rect", shape: { x: 0, y, width: chartWidth, height: metrics.bandH }, style: { fill: cc.rowHover }, silent: true, z: 1 }],
+        });
+      } catch { /* chart transitioning */ }
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const mouseY = e.offsetY;
+      const metrics = getBandMetrics();
+      if (!metrics || metrics.bandH <= 0) return;
+
+      const { bandH, gridTopPx, gridBottomPx } = metrics;
+
+      if (mouseY < gridTopPx || mouseY > gridBottomPx) {
+        if (hoveredRowIdxRef.current !== -1) {
+          hoveredRowIdxRef.current = -1;
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = requestAnimationFrame(() => updateHighlight(-1));
+        }
+        return;
+      }
+
+      const rowIndex = Math.min(
+        Math.floor((mouseY - gridTopPx) / bandH),
+        paddedRegistrations.length - 1,
+      );
+
+      // Skip empty padding rows and break separator rows
+      const regName = paddedRegistrations[rowIndex];
+      if (regName?.startsWith(EMPTY_ROW_PREFIX) || regName?.startsWith(BREAK_PREFIX)) {
+        if (hoveredRowIdxRef.current !== -1) {
+          hoveredRowIdxRef.current = -1;
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = requestAnimationFrame(() => updateHighlight(-1));
+        }
+        return;
+      }
+
+      if (rowIndex !== hoveredRowIdxRef.current) {
+        hoveredRowIdxRef.current = rowIndex;
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = requestAnimationFrame(() => updateHighlight(rowIndex));
+      }
+    };
+
+    const handleMouseLeave = () => {
+      hoveredRowIdxRef.current = -1;
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(() => updateHighlight(-1));
+    };
+
+    bodyEl.addEventListener("mousemove", handleMouseMove);
+    bodyEl.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      bodyEl.removeEventListener("mousemove", handleMouseMove);
+      bodyEl.removeEventListener("mouseleave", handleMouseLeave);
+      cancelAnimationFrame(rafIdRef.current);
+    };
+  }, [computedBodyHeight, paddedRegistrations, cc.rowHover, workPackages.length]);
+
   // ─── Handle click on bar ───
   const handleClick = useCallback(
     (params: { data?: GanttDataItem }) => {
@@ -1132,9 +1319,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const midnightLines = midnightTimestamps
       .filter(ts => ts > timeGrid.axisMin && ts < timeGrid.axisMax)
       .map(ts => {
-        const dateFmt = new Intl.DateTimeFormat("en-US", {
-          timeZone: timezone, month: "numeric", day: "numeric",
-        });
         return {
           xAxis: ts,
           lineStyle: { type: "solid" as const, color: "rgba(128,128,128,0.5)", width: 1.5 },
@@ -1196,13 +1380,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     );
   }
 
-  const rowHeight = condensed ? 20 : 36;
-  const contentMinHeight = registrations.length * rowHeight + 38;
-  const bodyHeight = isExpanded
-    ? Math.max(300, contentMinHeight)
-    : containerHeight > 0
-      ? Math.max(300, contentMinHeight, containerHeight)
-      : Math.max(300, contentMinHeight);
+  const bodyHeight = computedBodyHeight;
 
   return (
     <div className={cn(

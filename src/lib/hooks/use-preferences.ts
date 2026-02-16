@@ -86,7 +86,7 @@ function applyThemeToDOM(preset: ThemePreset, accentColor: string | null) {
 
 const defaults: UserPreferences = {
   colorMode: "dark",
-  themePreset: "neutral",
+  themePreset: "vitepress",
   accentColor: null,
   compactMode: false,
   defaultTimezone: "UTC",
