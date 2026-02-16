@@ -41,6 +41,8 @@ echarts.use([
 // ─── Layout constants for pixel-based tick computation ───
 const GRID_PADDING = 120; // grid.left (100) + grid.right (20)
 const SSR_FALLBACK_WIDTH = 1200; // reasonable desktop assumption before DOM is available
+/** Prefix for empty padding rows — no label, no data, just grid lines */
+const EMPTY_ROW_PREFIX = "___empty___";
 
 /**
  * Find midnight boundaries for the filter range in the given timezone
@@ -135,6 +137,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   // Track body chart container width for pixel-based tick computation
   const chartWidthRef = useRef<number>(0);
   const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
+  // Track body wrapper container height for row padding computation
+  const bodyWrapperRef = useRef<HTMLDivElement>(null);
+  const containerHeightRef = useRef<number>(0);
+  const [containerHeight, setContainerHeight] = useState(0);
   // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
   const [nowTimestamp, setNowTimestamp] = useState(0);
   const { getColor } = useCustomers();
@@ -412,12 +418,16 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               // Bottom axis (hidden, for dataZoom sync) — update interval
               type: "value",
               position: "bottom",
+              min: timeGrid.axisMin,
+              max: timeGrid.axisMax,
               interval: intervalMs,
             },
             {
               // Top axis (day labels) — coarser interval, formatter filters to day boundaries
               type: "value",
               position: "top",
+              min: timeGrid.axisMin,
+              max: timeGrid.axisMax,
               interval: topIntervalMs,
               axisLabel: { show: true },
             },
@@ -437,6 +447,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           xAxis: {
             type: "value",
             position: "top",
+            min: timeGrid.axisMin,
+            max: timeGrid.axisMax,
             interval: intervalMs,
             axisLabel: {
               show: true,
@@ -458,7 +470,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       }
     }
   }, [filterStart, filterEnd, zoomLevel, tickRecalcTrigger, workPackages.length,
-      midnightSet, dateFmt, hourFormatter]);
+      midnightSet, dateFmt, hourFormatter, timeGrid]);
 
   // ─── Track body chart container width via ResizeObserver ───
   useEffect(() => {
@@ -481,6 +493,28 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     observer.observe(dom);
     return () => observer.disconnect();
   }, [workPackages.length]);
+
+  // ─── Track body wrapper container height for row padding ───
+  useEffect(() => {
+    const wrapper = bodyWrapperRef.current;
+    if (!wrapper) return;
+
+    containerHeightRef.current = wrapper.clientHeight;
+    setContainerHeight(wrapper.clientHeight);
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newHeight = entry.contentRect.height;
+        if (Math.abs(newHeight - containerHeightRef.current) > 5) {
+          containerHeightRef.current = newHeight;
+          setContainerHeight(newHeight);
+        }
+      }
+    });
+
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, [workPackages.length, isExpanded]);
 
   // ✅ STEP 3b: Update visible window start date label
   useEffect(() => {
@@ -517,6 +551,25 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     }
   }, [filterStart, filterEnd, timezone, tickRecalcTrigger]);
 
+  // ─── Pad registrations with empty rows to fill available container height ───
+  const paddedRegistrations = useMemo(() => {
+    if (isExpanded) return registrations;
+    if (containerHeight <= 0) return registrations;
+
+    const rowH = condensed ? 20 : 36;
+    const gridVerticalPadding = 34 + 2; // grid.top + grid.bottom
+    const availableForRows = containerHeight - gridVerticalPadding;
+    const totalRowsNeeded = Math.max(registrations.length, Math.floor(availableForRows / rowH));
+
+    if (registrations.length >= totalRowsNeeded) return registrations;
+
+    const padded = [...registrations];
+    for (let i = 0; i < totalRowsNeeded - registrations.length; i++) {
+      padded.push(`${EMPTY_ROW_PREFIX}${i}`);
+    }
+    return padded;
+  }, [registrations, containerHeight, condensed, isExpanded]);
+
   // ─── renderItem for custom flight bars ───
   const renderFlightBar = useCallback(
     (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
@@ -528,11 +581,16 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const flightId = api.value(5) as string | null;
       const wpIndex = api.value(6) as number;
 
+      // Check if this row is an empty padding row — render nothing
+      if (paddedRegistrations[regIndex]?.startsWith(EMPTY_ROW_PREFIX)) {
+        return;
+      }
+
       // Check if this row is a break separator — render as thick band
-      if (registrations[regIndex]?.startsWith(BREAK_PREFIX)) {
+      if (paddedRegistrations[regIndex]?.startsWith(BREAK_PREFIX)) {
         const coordSys = (params as unknown as { coordSys?: { x: number; y: number; width: number; height: number } }).coordSys;
         if (!coordSys) return;
-        const breakLabel = registrations[regIndex].slice(BREAK_PREFIX.length);
+        const breakLabel = paddedRegistrations[regIndex].slice(BREAK_PREFIX.length);
         const yPos = api.coord([0, regIndex]);
         if (!yPos) return;
         const centerY = yPos[1];
@@ -619,7 +677,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
       return { type: "group", children } as RenderGroup;
     },
-    [colorMap, timeFmt, registrations, highlightMap, cc, condensed]
+    [colorMap, timeFmt, paddedRegistrations, highlightMap, cc, condensed]
   );
 
   // ─── HEADER OPTION (time axis + slider — always visible) ───
@@ -811,7 +869,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       },
       yAxis: {
         type: "category" as const,
-        data: registrations,
+        data: paddedRegistrations,
         inverse: true,
         axisLabel: {
           color: cc.fg,
@@ -819,6 +877,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           fontWeight: "bold" as const,
           formatter: (value: string) => {
             if (value.startsWith(BREAK_PREFIX)) return "";
+            if (value.startsWith(EMPTY_ROW_PREFIX)) return "";
             return value;
           },
         },
@@ -862,7 +921,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         },
       ],
     };
-  }, [registrations, chartData, colorMap, allWps, renderFlightBar,
+  }, [paddedRegistrations, chartData, colorMap, allWps, renderFlightBar,
       timeGrid, timezone, timeFormat, zoomRange, cc,
       hourFormatter, dateFmt, midnightSet, condensed]);
 
@@ -1138,7 +1197,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
   }
 
   const rowHeight = condensed ? 20 : 36;
-  const bodyHeight = Math.max(300, registrations.length * rowHeight + 38);
+  const contentMinHeight = registrations.length * rowHeight + 38;
+  const bodyHeight = isExpanded
+    ? Math.max(300, contentMinHeight)
+    : containerHeight > 0
+      ? Math.max(300, contentMinHeight, containerHeight)
+      : Math.max(300, contentMinHeight);
 
   return (
     <div className={cn(
@@ -1160,6 +1224,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
       {/* Chart body — scrollable in contained mode (purple zone) */}
       <div
+        ref={bodyWrapperRef}
         className={cn(
           "flex-1 min-h-0",
           !isExpanded && "overflow-y-auto"
