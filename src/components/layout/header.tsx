@@ -117,7 +117,10 @@ export function Header() {
               )}
               <hr className="my-1 border-border" />
               <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
+                onClick={() => {
+                  const origin = typeof window !== "undefined" ? window.location.origin : "";
+                  signOut({ callbackUrl: `${origin}/login` });
+                }}
                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
               >
                 <i className="fa-solid fa-right-from-bracket w-4 text-center" />
