@@ -21,6 +21,7 @@ import {
 
 interface UserFormData {
   email: string;
+  username: string;
   displayName: string;
   role: string;
   password: string;
@@ -30,7 +31,7 @@ interface UserFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
-  initialData?: { id: string; email: string; displayName: string; role: string };
+  initialData?: { id: string; email: string; username?: string | null; displayName: string; role: string };
   onSubmit: (data: UserFormData) => Promise<{ tempPassword?: string } | void>;
 }
 
@@ -43,6 +44,7 @@ export function UserForm({
 }: UserFormProps) {
   const [form, setForm] = useState<UserFormData>({
     email: initialData?.email ?? "",
+    username: initialData?.username ?? "",
     displayName: initialData?.displayName ?? "",
     role: initialData?.role ?? "user",
     password: "",
@@ -57,6 +59,7 @@ export function UserForm({
     if (isOpen) {
       setForm({
         email: initialData?.email ?? "",
+        username: initialData?.username ?? "",
         displayName: initialData?.displayName ?? "",
         role: initialData?.role ?? "user",
         password: "",
@@ -78,6 +81,10 @@ export function UserForm({
     }
     if (mode === "create" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       setError("Invalid email format");
+      return;
+    }
+    if (form.username && (form.username.length < 3 || form.username.length > 30 || !/^[a-zA-Z0-9._-]+$/.test(form.username))) {
+      setError("Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)");
       return;
     }
     if (!form.displayName || form.displayName.length < 2 || form.displayName.length > 50) {
@@ -151,6 +158,19 @@ export function UserForm({
                 disabled={mode === "edit"}
                 type="email"
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Username <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                placeholder="jdoe"
+                maxLength={30}
+              />
+              <p className="text-xs text-muted-foreground">
+                3-30 characters. Used for login alongside email.
+              </p>
             </div>
 
             <div className="space-y-2">

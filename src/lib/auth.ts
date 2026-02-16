@@ -3,7 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import { compareSync } from "bcryptjs";
 import { db } from "./db/client";
 import { users } from "./db/schema";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
@@ -41,21 +41,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Credentials({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
+        login: { label: "Username or Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        const login = credentials?.login as string | undefined;
+        if (!login || !credentials?.password) {
           return null;
         }
 
-        const email = credentials.email as string;
         const password = credentials.password as string;
+        const loginLower = login.toLowerCase();
 
         const user = db
           .select()
           .from(users)
-          .where(eq(users.email, email))
+          .where(
+            or(
+              eq(users.email, loginLower),
+              eq(users.username, loginLower)
+            )
+          )
           .get();
 
         if (!user || !user.isActive) {

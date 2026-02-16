@@ -16,6 +16,7 @@ import {
 interface UserRow {
   id: string;
   email: string;
+  username?: string | null;
   displayName: string;
   role: string;
   isActive: boolean;
@@ -70,7 +71,7 @@ export default function UsersPage() {
     setFormOpen(true);
   };
 
-  const handleFormSubmit = async (data: { email: string; displayName: string; role: string; password: string }) => {
+  const handleFormSubmit = async (data: { email: string; username: string; displayName: string; role: string; password: string }) => {
     setMessage(null);
 
     if (formMode === "create") {
@@ -90,6 +91,7 @@ export default function UsersPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          username: data.username || null,
           displayName: data.displayName,
           role: data.role,
         }),

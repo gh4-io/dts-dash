@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -17,7 +17,7 @@ export default function LoginPage() {
     setLoading(true);
 
     const result = await signIn("credentials", {
-      email,
+      login,
       password,
       redirect: false,
     });
@@ -25,7 +25,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result?.error) {
-      setError("Invalid email or password");
+      setError("Invalid username/email or password");
     } else {
       router.push("/dashboard");
       router.refresh();
@@ -43,17 +43,17 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium text-foreground">
-              Email
+            <label htmlFor="login" className="text-sm font-medium text-foreground">
+              Username or Email
             </label>
             <div className="relative">
-              <i className="fa-solid fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
+              <i className="fa-solid fa-user absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
               <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@cvg.local"
+                id="login"
+                type="text"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                placeholder="admin or admin@cvg.local"
                 required
                 className="w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
@@ -102,7 +102,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-muted-foreground">
-          Default: admin@cvg.local / admin123
+          Default: admin / admin123
         </p>
       </div>
     </div>

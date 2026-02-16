@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +16,18 @@ export function ProfileForm() {
   } | undefined;
 
   const [displayName, setDisplayName] = useState(user?.name ?? "");
+  const [username, setUsername] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetch("/api/account/profile")
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => { if (data?.username !== undefined) setUsername(data.username); })
+        .catch(() => {});
+    }
+  }, [user?.id]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -57,6 +67,20 @@ export function ProfileForm() {
           placeholder="Your display name"
         />
         <p className="text-xs text-muted-foreground">2-50 characters</p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="username">Username</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="username"
+            value={username ?? ""}
+            disabled
+            className="opacity-60 font-mono"
+          />
+          <i className="fa-solid fa-lock text-muted-foreground text-sm" />
+        </div>
+        <p className="text-xs text-muted-foreground">Contact an admin to change your username</p>
       </div>
 
       <div className="space-y-2">

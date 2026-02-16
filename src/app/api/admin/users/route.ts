@@ -28,6 +28,7 @@ export async function GET() {
       .select({
         id: users.id,
         email: users.email,
+        username: users.username,
         displayName: users.displayName,
         role: users.role,
         isActive: users.isActive,
@@ -62,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, displayName, role, password } = body;
+    const { email, username, displayName, role, password } = body;
 
     // Validation
     if (!email || !displayName || !role) {
@@ -75,6 +76,13 @@ export async function POST(request: NextRequest) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
         { error: "Invalid email format" },
+        { status: 400 }
+      );
+    }
+
+    if (username && (username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9._-]+$/.test(username))) {
+      return NextResponse.json(
+        { error: "Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)" },
         { status: 400 }
       );
     }
@@ -94,19 +102,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Check unique email
-    const existing = db
+    const existingEmail = db
       .select()
       .from(users)
-      .where(
-eq(users.email, email.toLowerCase())
-      )
+      .where(eq(users.email, email.toLowerCase()))
       .get();
 
-    if (existing) {
+    if (existingEmail) {
       return NextResponse.json(
         { error: "A user with this email already exists" },
         { status: 409 }
       );
+    }
+
+    // Check unique username
+    if (username) {
+      const existingUsername = db
+        .select()
+        .from(users)
+        .where(eq(users.username, username.toLowerCase()))
+        .get();
+
+      if (existingUsername) {
+        return NextResponse.json(
+          { error: "A user with this username already exists" },
+          { status: 409 }
+        );
+      }
     }
 
     const tempPassword = password || generateTempPassword();
@@ -116,6 +138,7 @@ eq(users.email, email.toLowerCase())
     const newUser = {
       id: crypto.randomUUID(),
       email: email.toLowerCase(),
+      username: username ? username.toLowerCase() : null,
       displayName,
       passwordHash: hashSync(tempPassword, 10),
       role,
@@ -131,6 +154,7 @@ eq(users.email, email.toLowerCase())
     const response: Record<string, unknown> = {
       id: newUser.id,
       email: newUser.email,
+      username: newUser.username,
       displayName: newUser.displayName,
       role: newUser.role,
       isActive: newUser.isActive,

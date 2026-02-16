@@ -14,6 +14,7 @@ import {
 interface UserRow {
   id: string;
   email: string;
+  username?: string | null;
   displayName: string;
   role: string;
   isActive: boolean;
@@ -49,6 +50,7 @@ export function UserTable({
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
+            <TableHead>Username</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Status</TableHead>
@@ -70,6 +72,9 @@ export function UserTable({
                   {isSelf && (
                     <span className="ml-2 text-xs text-muted-foreground">(you)</span>
                   )}
+                </TableCell>
+                <TableCell className="text-muted-foreground font-mono text-xs">
+                  {user.username || <span className="italic opacity-50">—</span>}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {user.email}
@@ -134,7 +139,7 @@ export function UserTable({
           })}
           {users.length === 0 && (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+              <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                 No users found
               </TableCell>
             </TableRow>

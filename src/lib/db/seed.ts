@@ -16,6 +16,7 @@ export async function seed() {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
+      username TEXT UNIQUE,
       display_name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
@@ -47,7 +48,7 @@ export async function seed() {
     CREATE TABLE IF NOT EXISTS user_preferences (
       user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       color_mode TEXT NOT NULL DEFAULT 'dark',
-      theme_preset TEXT NOT NULL DEFAULT 'neutral',
+      theme_preset TEXT NOT NULL DEFAULT 'vitepress',
       accent_color TEXT,
       compact_mode INTEGER NOT NULL DEFAULT 0,
       default_timezone TEXT NOT NULL DEFAULT 'UTC',
@@ -122,6 +123,13 @@ export async function seed() {
     // Column already exists — ignore
   }
 
+  // ─── Migration: add username column to users ──────────────────────────
+  try {
+    sqlite.exec(`ALTER TABLE users ADD COLUMN username TEXT UNIQUE`);
+  } catch {
+    // Column already exists — ignore
+  }
+
   // ─── Seed Users ──────────────────────────────────────────────────────────
 
   const existingAdmin = db
@@ -138,6 +146,7 @@ export async function seed() {
         {
           id: generateId(),
           email: "admin@cvg.local",
+          username: "admin",
           displayName: "Admin",
           passwordHash: hashSync("admin123", 10),
           role: "superadmin",
@@ -148,6 +157,7 @@ export async function seed() {
         {
           id: generateId(),
           email: "user@cvg.local",
+          username: "user",
           displayName: "Test User",
           passwordHash: hashSync("user123", 10),
           role: "user",

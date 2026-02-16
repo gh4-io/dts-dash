@@ -194,6 +194,7 @@ export interface Customer {
 export interface User {
   id: string;
   email: string;
+  username: string | null;
   displayName: string;
   role: UserRole;
   isActive: boolean;

@@ -5,6 +5,7 @@ import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),
+  username: text("username").unique(),
   displayName: text("display_name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role", { enum: ["user", "admin", "superadmin"] })
@@ -62,7 +63,7 @@ export const userPreferences = sqliteTable("user_preferences", {
   colorMode: text("color_mode", { enum: ["light", "dark", "system"] })
     .notNull()
     .default("dark"),
-  themePreset: text("theme_preset").notNull().default("neutral"),
+  themePreset: text("theme_preset").notNull().default("vitepress"),
   accentColor: text("accent_color"),
   compactMode: integer("compact_mode", { mode: "boolean" })
     .notNull()

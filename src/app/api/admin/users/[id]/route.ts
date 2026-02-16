@@ -75,6 +75,29 @@ export async function PUT(
       }
       updates.email = body.email.toLowerCase();
     }
+    if (body.username !== undefined) {
+      const usernameVal = body.username ? body.username.toLowerCase() : null;
+      if (usernameVal) {
+        if (usernameVal.length < 3 || usernameVal.length > 30 || !/^[a-zA-Z0-9._-]+$/.test(usernameVal)) {
+          return NextResponse.json(
+            { error: "Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)" },
+            { status: 400 }
+          );
+        }
+        const usernameConflict = db
+          .select()
+          .from(users)
+          .where(and(eq(users.username, usernameVal), ne(users.id, id)))
+          .get();
+        if (usernameConflict) {
+          return NextResponse.json(
+            { error: "Username already in use" },
+            { status: 409 }
+          );
+        }
+      }
+      updates.username = usernameVal;
+    }
 
     db.update(users).set(updates).where(eq(users.id, id)).run();
 
@@ -83,6 +106,7 @@ export async function PUT(
       .select({
         id: users.id,
         email: users.email,
+        username: users.username,
         displayName: users.displayName,
         role: users.role,
         isActive: users.isActive,
