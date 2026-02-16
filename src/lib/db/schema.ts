@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+} from "drizzle-orm/sqlite-core";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
 
@@ -46,12 +52,33 @@ export const customers = sqliteTable("customers", {
   colorText: text("color_text").notNull().default("#ffffff"),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
+
+  // Extended metadata (from SharePoint cust.json)
+  country: text("country"),
+  established: text("established"), // ISO date string
+  groupParent: text("group_parent"),
+  baseAirport: text("base_airport"),
+  website: text("website"),
+  mocPhone: text("moc_phone"),
+  iataCode: text("iata_code"),
+  icaoCode: text("icao_code"),
+
+  // Source tracking
+  source: text("source", {
+    enum: ["inferred", "imported", "confirmed"],
+  })
+    .notNull()
+    .default("inferred"),
+
+  // Audit fields
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
+  createdBy: text("created_by").references(() => users.id),
+  updatedBy: text("updated_by").references(() => users.id),
 });
 
 // ─── User Preferences ───────────────────────────────────────────────────────
@@ -152,4 +179,114 @@ export const appConfig = sqliteTable("app_config", {
   updatedAt: text("updated_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
+});
+
+// ─── Master Data: Manufacturers ─────────────────────────────────────────────
+
+export const manufacturers = sqliteTable("manufacturers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+});
+
+// ─── Master Data: Aircraft Models ───────────────────────────────────────────
+
+export const aircraftModels = sqliteTable("aircraft_models", {
+  id: text("id").primaryKey(),
+  modelCode: text("model_code").notNull().unique(), // "767-200(F)", "777F"
+  canonicalType: text("canonical_type").notNull(), // B777, B767, etc.
+  manufacturerId: text("manufacturer_id").references(() => manufacturers.id),
+  displayName: text("display_name").notNull(), // "Boeing 767-200 Freighter"
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+});
+
+// ─── Master Data: Engine Types ──────────────────────────────────────────────
+
+export const engineTypes = sqliteTable("engine_types", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(), // "CF6-80C2", "PW4000"
+  manufacturer: text("manufacturer"), // "GE", "Pratt & Whitney"
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+});
+
+// ─── Master Data: Aircraft ──────────────────────────────────────────────────
+
+export const aircraft = sqliteTable(
+  "aircraft",
+  {
+    registration: text("registration").primaryKey(), // e.g., "C-FOIJ"
+
+    // Foreign keys to lookup tables
+    aircraftModelId: text("aircraft_model_id").references(
+      () => aircraftModels.id
+    ),
+    operatorId: text("operator_id").references(() => customers.id),
+    manufacturerId: text("manufacturer_id").references(() => manufacturers.id),
+    engineTypeId: text("engine_type_id").references(() => engineTypes.id),
+
+    // Extended metadata (from SharePoint ac.json)
+    serialNumber: text("serial_number"),
+    age: text("age"), // "41.1 Years" (as-is from SharePoint)
+    lessor: text("lessor"), // field_1 from ac.json
+    category: text("category"), // field_3 from ac.json (e.g., "Cargo")
+
+    // Fuzzy match metadata
+    operatorRaw: text("operator_raw"), // Original operator string before fuzzy match
+    operatorMatchConfidence: integer("operator_match_confidence"), // 0-100
+
+    // Source tracking
+    source: text("source", {
+      enum: ["inferred", "imported", "confirmed"],
+    })
+      .notNull()
+      .default("inferred"),
+
+    // Soft delete
+    isActive: integer("is_active", { mode: "boolean" })
+      .notNull()
+      .default(true),
+
+    // Audit
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    createdBy: text("created_by").references(() => users.id),
+    updatedBy: text("updated_by").references(() => users.id),
+  },
+  (table) => ({
+    operatorIdx: index("aircraft_operator_idx").on(table.operatorId),
+    sourceIdx: index("aircraft_source_idx").on(table.source),
+    modelIdx: index("aircraft_model_idx").on(table.aircraftModelId),
+  })
+);
+
+// ─── Master Data Import Log ─────────────────────────────────────────────────
+
+export const masterDataImportLog = sqliteTable("master_data_import_log", {
+  id: text("id").primaryKey(),
+  importedAt: text("imported_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  dataType: text("data_type", { enum: ["customer", "aircraft"] }).notNull(),
+  source: text("source", { enum: ["file", "paste", "api"] }).notNull(),
+  format: text("format", { enum: ["csv", "json"] }).notNull(),
+  fileName: text("file_name"),
+
+  recordsTotal: integer("records_total").notNull(),
+  recordsAdded: integer("records_added").notNull(),
+  recordsUpdated: integer("records_updated").notNull(),
+  recordsSkipped: integer("records_skipped").notNull(),
+
+  importedBy: text("imported_by")
+    .notNull()
+    .references(() => users.id),
+  status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
+  warnings: text("warnings"), // JSON array
+  errors: text("errors"), // JSON array
 });

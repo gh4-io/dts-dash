@@ -2,16 +2,23 @@ import { db, sqlite } from "./client";
 import * as schema from "./schema";
 import { hashSync } from "bcryptjs";
 import { eq } from "drizzle-orm";
-import { SEED_CUSTOMERS, SEED_AIRCRAFT_TYPE_MAPPINGS } from "./seed-data";
+import {
+  SEED_USERS,
+  SEED_CUSTOMERS,
+  SEED_AIRCRAFT_TYPE_MAPPINGS,
+  SEED_APP_CONFIG,
+  SEED_MANUFACTURERS,
+  SEED_AIRCRAFT_MODELS,
+  SEED_ENGINE_TYPES,
+} from "./seed-data";
 
 function generateId(): string {
   return crypto.randomUUID();
 }
 
-export async function seed() {
-  console.warn("Seeding database...");
+// ─── Table Creation ──────────────────────────────────────────────────────────
 
-  // Create tables using raw SQL (Drizzle push would be better but this works for bootstrap)
+export function createTables() {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -102,35 +109,168 @@ export async function seed() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS manufacturers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS aircraft_models (
+      id TEXT PRIMARY KEY,
+      model_code TEXT NOT NULL UNIQUE,
+      canonical_type TEXT NOT NULL,
+      manufacturer_id TEXT REFERENCES manufacturers(id),
+      display_name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS engine_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      manufacturer TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS aircraft (
+      registration TEXT PRIMARY KEY,
+      aircraft_model_id TEXT REFERENCES aircraft_models(id),
+      operator_id TEXT REFERENCES customers(id),
+      manufacturer_id TEXT REFERENCES manufacturers(id),
+      engine_type_id TEXT REFERENCES engine_types(id),
+      serial_number TEXT,
+      age TEXT,
+      lessor TEXT,
+      category TEXT,
+      operator_raw TEXT,
+      operator_match_confidence INTEGER,
+      source TEXT NOT NULL DEFAULT 'inferred',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      created_by TEXT REFERENCES users(id),
+      updated_by TEXT REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS master_data_import_log (
+      id TEXT PRIMARY KEY,
+      imported_at TEXT NOT NULL,
+      data_type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      format TEXT NOT NULL,
+      file_name TEXT,
+      records_total INTEGER NOT NULL,
+      records_added INTEGER NOT NULL,
+      records_updated INTEGER NOT NULL,
+      records_skipped INTEGER NOT NULL,
+      imported_by TEXT NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL,
+      warnings TEXT,
+      errors TEXT
+    );
+
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_import_log_imported_at ON import_log(imported_at);
+    CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
+    CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
+    CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
   `);
+}
 
-  // ─── Migration: add time_format column to existing DBs ─────────────────
-  try {
-    sqlite.exec(`ALTER TABLE user_preferences ADD COLUMN time_format TEXT NOT NULL DEFAULT '24h'`);
-  } catch {
-    // Column already exists — ignore
+// ─── Migrations ──────────────────────────────────────────────────────────────
+
+export interface MigrationResult {
+  name: string;
+  applied: boolean;
+}
+
+export function runMigrations(): MigrationResult[] {
+  const migrations = [
+    {
+      name: "Add time_format to user_preferences",
+      sql: "ALTER TABLE user_preferences ADD COLUMN time_format TEXT NOT NULL DEFAULT '24h'",
+    },
+    {
+      name: "Add idempotency_key to import_log",
+      sql: "ALTER TABLE import_log ADD COLUMN idempotency_key TEXT",
+    },
+    {
+      name: "Add username to users",
+      sql: "ALTER TABLE users ADD COLUMN username TEXT UNIQUE",
+    },
+    // Master data migrations: extend customers table
+    {
+      name: "Add country to customers",
+      sql: "ALTER TABLE customers ADD COLUMN country TEXT",
+    },
+    {
+      name: "Add established to customers",
+      sql: "ALTER TABLE customers ADD COLUMN established TEXT",
+    },
+    {
+      name: "Add group_parent to customers",
+      sql: "ALTER TABLE customers ADD COLUMN group_parent TEXT",
+    },
+    {
+      name: "Add base_airport to customers",
+      sql: "ALTER TABLE customers ADD COLUMN base_airport TEXT",
+    },
+    {
+      name: "Add website to customers",
+      sql: "ALTER TABLE customers ADD COLUMN website TEXT",
+    },
+    {
+      name: "Add moc_phone to customers",
+      sql: "ALTER TABLE customers ADD COLUMN moc_phone TEXT",
+    },
+    {
+      name: "Add iata_code to customers",
+      sql: "ALTER TABLE customers ADD COLUMN iata_code TEXT",
+    },
+    {
+      name: "Add icao_code to customers",
+      sql: "ALTER TABLE customers ADD COLUMN icao_code TEXT",
+    },
+    {
+      name: "Add source to customers",
+      sql: "ALTER TABLE customers ADD COLUMN source TEXT NOT NULL DEFAULT 'inferred'",
+    },
+    {
+      name: "Add created_by to customers",
+      sql: "ALTER TABLE customers ADD COLUMN created_by TEXT REFERENCES users(id)",
+    },
+    {
+      name: "Add updated_by to customers",
+      sql: "ALTER TABLE customers ADD COLUMN updated_by TEXT REFERENCES users(id)",
+    },
+  ];
+
+  const results: MigrationResult[] = [];
+
+  for (const m of migrations) {
+    try {
+      sqlite.exec(m.sql);
+      results.push({ name: m.name, applied: true });
+    } catch {
+      // Column already exists — skip
+      results.push({ name: m.name, applied: false });
+    }
   }
 
-  // ─── Migration: add idempotency_key column to import_log ────────────────
-  try {
-    sqlite.exec(`ALTER TABLE import_log ADD COLUMN idempotency_key TEXT`);
-  } catch {
-    // Column already exists — ignore
-  }
+  return results;
+}
 
-  // ─── Migration: add username column to users ──────────────────────────
-  try {
-    sqlite.exec(`ALTER TABLE users ADD COLUMN username TEXT UNIQUE`);
-  } catch {
-    // Column already exists — ignore
-  }
+// ─── Seed Data ───────────────────────────────────────────────────────────────
 
-  // ─── Seed Users ──────────────────────────────────────────────────────────
+export async function seedData() {
+  const now = new Date().toISOString();
+
+  // ─── Users ─────────────────────────────────────────────────────────────────
 
   const existingAdmin = db
     .select()
@@ -139,71 +279,62 @@ export async function seed() {
     .get();
 
   if (!existingAdmin) {
-    const now = new Date().toISOString();
+    const regularUsers = SEED_USERS.filter((u) => u.password !== "");
+    if (regularUsers.length > 0) {
+      db.insert(schema.users)
+        .values(
+          regularUsers.map((u) => ({
+            id: u.id || generateId(),
+            email: u.email,
+            username: u.username,
+            displayName: u.displayName,
+            passwordHash: hashSync(u.password, 10),
+            role: u.role,
+            isActive: u.isActive,
+            createdAt: now,
+            updatedAt: now,
+          }))
+        )
+        .run();
 
-    db.insert(schema.users)
-      .values([
-        {
-          id: generateId(),
-          email: "admin@cvg.local",
-          username: "admin",
-          displayName: "Admin",
-          passwordHash: hashSync("admin123", 10),
-          role: "superadmin",
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-        {
-          id: generateId(),
-          email: "user@cvg.local",
-          username: "user",
-          displayName: "Test User",
-          passwordHash: hashSync("user123", 10),
-          role: "user",
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        },
-      ])
-      .run();
-
-    console.warn("  Seeded 2 users (admin@cvg.local, user@cvg.local). Default passwords in use — change after first login.");
+    console.warn(
+      `  Seeded ${regularUsers.length} users. Default passwords in use — change after first login.`
+    );
+    }
   }
 
-  // ─── Seed System User (API Ingest) ─────────────────────────────────────
+  // ─── System User ──────────────────────────────────────────────────────────
 
-  const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
-  const existingSystem = db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, SYSTEM_USER_ID))
-    .get();
+  const systemUser = SEED_USERS.find((u) => u.password === "");
+  if (systemUser) {
+    const existingSystem = db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, systemUser.id!))
+      .get();
 
-  if (!existingSystem) {
-    const now = new Date().toISOString();
-    db.insert(schema.users)
-      .values({
-        id: SYSTEM_USER_ID,
-        email: "system@internal",
-        displayName: "API Ingest",
-        passwordHash: "",
-        role: "user",
-        isActive: false,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-    console.warn("  Seeded system user for API ingestion");
+    if (!existingSystem) {
+      db.insert(schema.users)
+        .values({
+          id: systemUser.id!,
+          email: systemUser.email,
+          displayName: systemUser.displayName,
+          passwordHash: "",
+          role: systemUser.role,
+          isActive: systemUser.isActive,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      console.warn("  Seeded system user for API ingestion");
+    }
   }
 
-  // ─── Seed Customers ──────────────────────────────────────────────────────
+  // ─── Customers ────────────────────────────────────────────────────────────
 
   const existingCustomers = db.select().from(schema.customers).all();
 
   if (existingCustomers.length === 0) {
-    const now = new Date().toISOString();
-
     db.insert(schema.customers)
       .values(
         SEED_CUSTOMERS.map((c) => ({
@@ -216,16 +347,17 @@ export async function seed() {
       )
       .run();
 
-    console.warn("  Seeded 6 customers with colors");
+    console.warn(`  Seeded ${SEED_CUSTOMERS.length} customers with colors`);
   }
 
-  // ─── Seed Aircraft Type Mappings (D-015) ──────────────────────────────────
+  // ─── Aircraft Type Mappings ───────────────────────────────────────────────
 
-  const existingMappings = db.select().from(schema.aircraftTypeMappings).all();
+  const existingMappings = db
+    .select()
+    .from(schema.aircraftTypeMappings)
+    .all();
 
   if (existingMappings.length === 0) {
-    const now = new Date().toISOString();
-
     db.insert(schema.aircraftTypeMappings)
       .values(
         SEED_AIRCRAFT_TYPE_MAPPINGS.map((m) => ({
@@ -238,62 +370,110 @@ export async function seed() {
       )
       .run();
 
-    console.warn(`  Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`);
+    console.warn(
+      `  Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`
+    );
   }
 
-  // ─── Seed Default Config ─────────────────────────────────────────────────
+  // ─── App Config ───────────────────────────────────────────────────────────
 
   const existingConfig = db.select().from(schema.appConfig).all();
 
   if (existingConfig.length === 0) {
-    const now = new Date().toISOString();
-    const defaults = [
-      { key: "defaultMH", value: "3.0" },
-      { key: "wpMHMode", value: "include" },
-      { key: "theoreticalCapacityPerPerson", value: "8.0" },
-      { key: "realCapacityPerPerson", value: "6.5" },
-      { key: "timelineDefaultDays", value: "3" },
-      { key: "defaultTimezone", value: "UTC" },
-      {
-        key: "shifts",
-        value: JSON.stringify([
-          { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
-          { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
-          { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-        ]),
-      },
-    ];
-
     db.insert(schema.appConfig)
-      .values(defaults.map((d) => ({ ...d, updatedAt: now })))
+      .values(SEED_APP_CONFIG.map((d) => ({ ...d, updatedAt: now })))
       .run();
-
     console.warn("  Seeded default app configuration");
-  }
-
-  // ─── Seed Ingest Config Defaults (idempotent) ──────────────────────────
-
-  const ingestDefaults = [
-    { key: "ingestApiKey", value: "" },
-    { key: "ingestRateLimitSeconds", value: "60" },
-    { key: "ingestMaxSizeMB", value: "50" },
-  ];
-
-  for (const d of ingestDefaults) {
-    const existing = db
-      .select()
-      .from(schema.appConfig)
-      .where(eq(schema.appConfig.key, d.key))
-      .get();
-    if (!existing) {
-      db.insert(schema.appConfig)
-        .values({ ...d, updatedAt: new Date().toISOString() })
-        .run();
-      console.warn(`  Seeded config: ${d.key} = ${d.value || "(empty)"}`);
+  } else {
+    // Idempotent: add any missing config keys
+    for (const d of SEED_APP_CONFIG) {
+      const existing = db
+        .select()
+        .from(schema.appConfig)
+        .where(eq(schema.appConfig.key, d.key))
+        .get();
+      if (!existing) {
+        db.insert(schema.appConfig)
+          .values({ ...d, updatedAt: now })
+          .run();
+        console.warn(`  Seeded config: ${d.key} = ${d.value || "(empty)"}`);
+      }
     }
   }
 
+  // ─── Manufacturers ────────────────────────────────────────────────────────
+
+  const existingManufacturers = db.select().from(schema.manufacturers).all();
+
+  if (existingManufacturers.length === 0) {
+    db.insert(schema.manufacturers)
+      .values(
+        SEED_MANUFACTURERS.map((m) => ({
+          id: generateId(),
+          ...m,
+          isActive: true,
+        }))
+      )
+      .run();
+
+    console.warn(`  Seeded ${SEED_MANUFACTURERS.length} manufacturers`);
+  }
+
+  // ─── Aircraft Models ──────────────────────────────────────────────────────
+
+  const existingModels = db.select().from(schema.aircraftModels).all();
+
+  if (existingModels.length === 0) {
+    // Map manufacturer name to ID for FK reference
+    const manufacturerMap = new Map(
+      db.select().from(schema.manufacturers).all().map((m) => [m.name, m.id])
+    );
+
+    db.insert(schema.aircraftModels)
+      .values(
+        SEED_AIRCRAFT_MODELS.map((m) => ({
+          id: generateId(),
+          modelCode: m.modelCode,
+          canonicalType: m.canonicalType,
+          manufacturerId: manufacturerMap.get(m.manufacturer) || null,
+          displayName: m.displayName,
+          sortOrder: m.sortOrder,
+          isActive: true,
+        }))
+      )
+      .run();
+
+    console.warn(`  Seeded ${SEED_AIRCRAFT_MODELS.length} aircraft models`);
+  }
+
+  // ─── Engine Types ─────────────────────────────────────────────────────────
+
+  const existingEngines = db.select().from(schema.engineTypes).all();
+
+  if (existingEngines.length === 0) {
+    db.insert(schema.engineTypes)
+      .values(
+        SEED_ENGINE_TYPES.map((e) => ({
+          id: generateId(),
+          ...e,
+          isActive: true,
+        }))
+      )
+      .run();
+
+    console.warn(`  Seeded ${SEED_ENGINE_TYPES.length} engine types`);
+  }
+
   console.warn("Seeding complete.");
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+
+export async function seed() {
+  console.warn("Seeding database...");
+  createTables();
+  runMigrations();
+  await seedData();
 }
 
 // Allow running directly

@@ -41,6 +41,8 @@ async function loadConfig(): Promise<AppConfig> {
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
       ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
+      masterDataConformityMode: (configMap.masterDataConformityMode as "strict" | "warning" | "auto-add") ?? "warning",
+      masterDataOverwriteConfirmed: (configMap.masterDataOverwriteConfirmed as "allow" | "warn" | "reject") ?? "warn",
     };
 
     return cachedConfig;
@@ -62,6 +64,8 @@ async function loadConfig(): Promise<AppConfig> {
       ingestApiKey: "",
       ingestRateLimitSeconds: 60,
       ingestMaxSizeMB: 50,
+      masterDataConformityMode: "warning",
+      masterDataOverwriteConfirmed: "warn",
     };
     return cachedConfig;
   }

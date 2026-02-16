@@ -177,6 +177,8 @@ export interface PaginatedResponse<T> {
 
 // ─── Customer ───────────────────────────────────────────────────────────────
 
+export type DataSource = "inferred" | "imported" | "confirmed";
+
 export interface Customer {
   id: string;
   name: string;
@@ -185,8 +187,25 @@ export interface Customer {
   colorText: string;
   isActive: boolean;
   sortOrder: number;
+
+  // Extended metadata
+  country: string | null;
+  established: string | null;
+  groupParent: string | null;
+  baseAirport: string | null;
+  website: string | null;
+  mocPhone: string | null;
+  iataCode: string | null;
+  icaoCode: string | null;
+
+  // Source tracking
+  source: DataSource;
+
+  // Audit
   createdAt: string;
   updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
 }
 
 // ─── User & Auth ────────────────────────────────────────────────────────────
@@ -271,4 +290,78 @@ export interface AppConfig {
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;
+  masterDataConformityMode: "strict" | "warning" | "auto-add";
+  masterDataOverwriteConfirmed: "allow" | "warn" | "reject";
+}
+
+// ─── Master Data: Manufacturers ─────────────────────────────────────────────
+
+export interface Manufacturer {
+  id: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// ─── Master Data: Aircraft Models ───────────────────────────────────────────
+
+export interface AircraftModel {
+  id: string;
+  modelCode: string;
+  canonicalType: string;
+  manufacturerId: string | null;
+  displayName: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// ─── Master Data: Engine Types ──────────────────────────────────────────────
+
+export interface EngineType {
+  id: string;
+  name: string;
+  manufacturer: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// ─── Master Data: Aircraft ──────────────────────────────────────────────────
+
+export interface Aircraft {
+  registration: string;
+  aircraftModelId: string | null;
+  operatorId: string | null;
+  manufacturerId: string | null;
+  engineTypeId: string | null;
+  serialNumber: string | null;
+  age: string | null;
+  lessor: string | null;
+  category: string | null;
+  operatorRaw: string | null;
+  operatorMatchConfidence: number | null;
+  source: DataSource;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+  updatedBy: string | null;
+}
+
+// ─── Master Data Import Log ─────────────────────────────────────────────────
+
+export interface MasterDataImportLog {
+  id: string;
+  importedAt: string;
+  dataType: "customer" | "aircraft";
+  source: "file" | "paste" | "api";
+  format: "csv" | "json";
+  fileName: string | null;
+  recordsTotal: number;
+  recordsAdded: number;
+  recordsUpdated: number;
+  recordsSkipped: number;
+  importedBy: string;
+  status: "success" | "partial" | "failed";
+  warnings: string | null;
+  errors: string | null;
 }

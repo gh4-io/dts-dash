@@ -1,55 +1,97 @@
 /**
- * Shared seed data constants — used by seed.ts and reset-defaults API.
+ * Shared seed data constants — loaded from external JSON files in data/seed/.
+ * Used by seed.ts and reset-defaults API routes.
  */
 
-import { getCustomerColor } from '@/lib/utils/customer-color-palette';
+import fs from "fs";
+import path from "path";
 
-export const SEED_CUSTOMERS = [
-  { name: "CargoJet Airways", displayName: "CargoJet", color: getCustomerColor(0), colorText: "#ffffff", sortOrder: 1 },
-  { name: "Aerologic", displayName: "Aerologic", color: getCustomerColor(1), colorText: "#ffffff", sortOrder: 2 },
-  { name: "Kalitta Air", displayName: "Kalitta Air", color: getCustomerColor(2), colorText: "#ffffff", sortOrder: 3 },
-  { name: "DHL Air UK", displayName: "DHL Air UK", color: getCustomerColor(3), colorText: "#ffffff", sortOrder: 4 },
-  { name: "Kalitta Charters II", displayName: "Kalitta Chrt II", color: getCustomerColor(4), colorText: "#ffffff", sortOrder: 5 },
-  { name: "21 Air", displayName: "21 Air", color: getCustomerColor(5), colorText: "#ffffff", sortOrder: 6 },
-] as const;
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-export const SEED_AIRCRAFT_TYPE_MAPPINGS = [
-  // ─── Exact type string matches (highest priority) ───
-  { pattern: "B777", canonicalType: "B777" as const, description: "Exact B777", priority: 100 },
-  { pattern: "B767", canonicalType: "B767" as const, description: "Exact B767", priority: 100 },
-  { pattern: "B747", canonicalType: "B747" as const, description: "Exact B747", priority: 100 },
-  { pattern: "B757", canonicalType: "B757" as const, description: "Exact B757", priority: 100 },
-  { pattern: "B737", canonicalType: "B737" as const, description: "Exact B737", priority: 100 },
+export interface SeedUser {
+  id: string | null;
+  email: string;
+  username: string | null;
+  displayName: string;
+  password: string;
+  role: "user" | "admin" | "superadmin";
+  isActive: boolean;
+}
 
-  // ─── Registration-based patterns (medium-high priority) ───
-  // CargoJet Airways fleet (C-F*, C-G* prefixes) — B767 freighters
-  { pattern: "C-F*", canonicalType: "B767" as const, description: "CargoJet C-F* registration → B767", priority: 80 },
-  { pattern: "C-G*", canonicalType: "B767" as const, description: "CargoJet C-G* registration → B767", priority: 80 },
+export interface SeedCustomer {
+  name: string;
+  displayName: string;
+  color: string;
+  colorText: string;
+  sortOrder: number;
+}
 
-  // Aerologic fleet (D-AA*, D-AER* prefix) — B777F freighters
-  { pattern: "D-AA*", canonicalType: "B777" as const, description: "Aerologic D-AA* registration → B777F", priority: 80 },
-  { pattern: "D-AER*", canonicalType: "B777" as const, description: "Aerologic D-AER* registration → B777F", priority: 80 },
+export interface SeedAircraftTypeMapping {
+  pattern: string;
+  canonicalType: "B777" | "B767" | "B747" | "B757" | "B737" | "Unknown";
+  description: string;
+  priority: number;
+}
 
-  // DHL Air UK fleet (G-DHL*, G-DHM* prefix) — mix of B757/B767 freighters
-  { pattern: "G-DHL*", canonicalType: "B767" as const, description: "DHL Air UK G-DHL* registration → B767 (default)", priority: 80 },
-  { pattern: "G-DHM*", canonicalType: "B767" as const, description: "DHL Air UK G-DHM* registration → B767 (default)", priority: 80 },
+export interface SeedAppConfig {
+  key: string;
+  value: string;
+}
 
-  // Kalitta Air fleet (N7* prefixes) — B747/B767/B777
-  { pattern: "N77?CK", canonicalType: "B777" as const, description: "Kalitta N77xCK → B777", priority: 85 },
-  { pattern: "N76?CK", canonicalType: "B767" as const, description: "Kalitta N76xCK → B767", priority: 85 },
-  { pattern: "N74?CK", canonicalType: "B747" as const, description: "Kalitta N74xCK → B747", priority: 85 },
-  { pattern: "N79?CK", canonicalType: "B747" as const, description: "Kalitta N79xCK → B747", priority: 85 },
-  { pattern: "N78?CK", canonicalType: "B747" as const, description: "Kalitta N78xCK → B747", priority: 85 },
+export interface SeedManufacturer {
+  name: string;
+  sortOrder: number;
+}
 
-  // Kalitta Charters/21 Air (N2*, N3*, N4* catch-all)
-  { pattern: "N2*", canonicalType: "B767" as const, description: "Kalitta N2* → B767 (default)", priority: 70 },
-  { pattern: "N3*", canonicalType: "B767" as const, description: "Kalitta N3* → B767 (default)", priority: 70 },
-  { pattern: "N4*", canonicalType: "B767" as const, description: "Kalitta N4* → B767 (default)", priority: 70 },
+export interface SeedAircraftModel {
+  modelCode: string;
+  canonicalType: string;
+  manufacturer: string;
+  displayName: string;
+  sortOrder: number;
+}
 
-  // ─── Type string substring matches (lower priority) ───
-  { pattern: "*777*", canonicalType: "B777" as const, description: "Contains 777", priority: 50 },
-  { pattern: "*767*", canonicalType: "B767" as const, description: "Contains 767", priority: 50 },
-  { pattern: "*747*", canonicalType: "B747" as const, description: "Contains 747 (incl 747-4R7F, 747F)", priority: 50 },
-  { pattern: "*757*", canonicalType: "B757" as const, description: "Contains 757", priority: 50 },
-  { pattern: "*737*", canonicalType: "B737" as const, description: "Contains 737 (incl 737-200)", priority: 50 },
-] as const;
+export interface SeedEngineType {
+  name: string;
+  manufacturer: string | null;
+  sortOrder: number;
+}
+
+// ─── Loader ───────────────────────────────────────────────────────────────────
+
+function loadSeedFile<T>(filename: string): T {
+  const filePath = path.join(process.cwd(), "data", "seed", filename);
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to load seed file data/seed/${filename}: ${msg}\n` +
+        `Ensure the file exists and contains valid JSON.`
+    );
+  }
+}
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
+
+export const SEED_USERS: readonly SeedUser[] =
+  loadSeedFile<SeedUser[]>("users.json");
+
+export const SEED_CUSTOMERS: readonly SeedCustomer[] =
+  loadSeedFile<SeedCustomer[]>("customers.json");
+
+export const SEED_AIRCRAFT_TYPE_MAPPINGS: readonly SeedAircraftTypeMapping[] =
+  loadSeedFile<SeedAircraftTypeMapping[]>("aircraft-type-mappings.json");
+
+export const SEED_APP_CONFIG: readonly SeedAppConfig[] =
+  loadSeedFile<SeedAppConfig[]>("app-config.json");
+
+export const SEED_MANUFACTURERS: readonly SeedManufacturer[] =
+  loadSeedFile<SeedManufacturer[]>("manufacturers.json");
+
+export const SEED_AIRCRAFT_MODELS: readonly SeedAircraftModel[] =
+  loadSeedFile<SeedAircraftModel[]>("aircraft-models.json");
+
+export const SEED_ENGINE_TYPES: readonly SeedEngineType[] =
+  loadSeedFile<SeedEngineType[]>("engine-types.json");

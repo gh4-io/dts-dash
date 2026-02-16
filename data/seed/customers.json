@@ -1,0 +1,44 @@
+[
+  {
+    "name": "CargoJet Airways",
+    "displayName": "CargoJet",
+    "color": "#EF4444",
+    "colorText": "#ffffff",
+    "sortOrder": 1
+  },
+  {
+    "name": "Aerologic",
+    "displayName": "Aerologic",
+    "color": "#F97316",
+    "colorText": "#ffffff",
+    "sortOrder": 2
+  },
+  {
+    "name": "Kalitta Air",
+    "displayName": "Kalitta Air",
+    "color": "#EABC42",
+    "colorText": "#ffffff",
+    "sortOrder": 3
+  },
+  {
+    "name": "DHL Air UK",
+    "displayName": "DHL Air UK",
+    "color": "#22C55E",
+    "colorText": "#ffffff",
+    "sortOrder": 4
+  },
+  {
+    "name": "Kalitta Charters II",
+    "displayName": "Kalitta Chrt II",
+    "color": "#14B8A6",
+    "colorText": "#ffffff",
+    "sortOrder": 5
+  },
+  {
+    "name": "21 Air",
+    "displayName": "21 Air",
+    "color": "#84CC16",
+    "colorText": "#ffffff",
+    "sortOrder": 6
+  }
+]

@@ -556,14 +556,47 @@
 
 ---
 
+## OI-035 | Event Data Reset Tool Implemented — 2026-02-15
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-15 |
+| **Resolved** | 2026-02-15 |
+| **Context** | User requested a tool to reset only the aircraft event data (work packages) while preserving all system data (users, customers, settings). Use case: corrupted data that needs to be replaced without losing configuration. |
+| **Resolution** | Implemented four components: (1) **NPM Script** (`npm run db:event-reset`) — cross-platform Node.js tool with interactive confirmation, color-coded output, automatic backup creation, restore instructions. (2) **Bash Script** (`scripts/reset_event_data.sh`) — alternative shell-based tool. (3) **Admin API** (`POST /api/admin/import/reset`) — role-enforced (admin/superadmin), creates timestamped backup, clears `input.json`, invalidates cache, logs action to import_log. (4) **Admin UI** — Reset button on `/admin/import` page with AlertDialog confirmation, detailed warnings (what's cleared vs preserved), success/error notifications, auto-refresh import history. Backups stored in `data/backups/`. Build ✅, Lint ✅. |
+| **Files Created** | `scripts/reset-event-data.mjs`, `scripts/reset_event_data.sh`, `src/app/api/admin/import/reset/route.ts`, `src/components/ui/alert-dialog.tsx`, `.claude/SPECS/REQ_DataReset.md` |
+| **Files Modified** | `src/components/admin/data-import.tsx`, `package.json` |
+| **Links** | [REQ_DataReset.md](SPECS/REQ_DataReset.md), [REQ_DataImport.md](SPECS/REQ_DataImport.md), [REQ_Admin.md](SPECS/REQ_Admin.md) |
+
+---
+
+## OI-036 | Master Data Import System — IN PROGRESS
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **In Progress** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-15 |
+| **Context** | Implementing master data import system with lookup tables (manufacturers, models, engines), aircraft master table, customer extensions, CSV/JSON import, fuzzy matching, source tracking (inferred→imported→confirmed), conformity validation, and admin UI. 4 phases: (1) Database schema, (2) Utilities & parsers, (3) API routes, (4) UI components. |
+| **Progress** | ✅ Phase 1 complete: database schema, types, seed data, migrations. Build ✅ Lint ✅ |
+| **Links** | Plan document provided by user |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 13 |
-| P1 | 0 | 0 | 0 | 10 |
+| P0 | 1 | 0 | 0 | 13 |
+| P1 | 0 | 0 | 0 | 11 |
 | P2 | 0 | 0 | 0 | 10 |
 | P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **0** | **2** | **33** |
+| **Total** | **1** | **0** | **2** | **34** |
 
-**Changes this pass (HTTP Ingest Endpoint)**: Added OI-034 (ingest endpoint implemented). Updated OI-004 resolution to reference D-026. Updated summary table.
+**Changes this pass (Master Data Import)**: Added OI-036 (master data import system — in progress). Updated summary table.
