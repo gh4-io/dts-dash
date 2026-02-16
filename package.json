@@ -14,7 +14,16 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "validate": "npm run typecheck && npm run lint && npm run test && npm run build"
+    "validate": "npm run typecheck && npm run lint && npm run test && npm run build",
+    "db:seed": "npx tsx scripts/db/seed.ts",
+    "db:reset": "npx tsx scripts/db/reset.ts",
+    "db:event-reset": "node scripts/reset-event-data.mjs",
+    "db:reset-password": "npx tsx scripts/db/reset-password.ts",
+    "db:status": "npx tsx scripts/db/status.ts",
+    "db:backup": "npx tsx scripts/db/backup.ts",
+    "db:analytics-clear": "npx tsx scripts/db/analytics-clear.ts",
+    "db:migrate": "npx tsx scripts/db/migrate.ts",
+    "db:export": "npx tsx scripts/db/export.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",

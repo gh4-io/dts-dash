@@ -65,6 +65,8 @@ Thumbs.db
 data/dashboard.db
 data/dashboard.db-shm
 data/dashboard.db-wal
+data/backups/
+data/exports/
 
 # Uploads (if any)
 /public/uploads/
