@@ -115,6 +115,13 @@ export async function seed() {
     // Column already exists — ignore
   }
 
+  // ─── Migration: add idempotency_key column to import_log ────────────────
+  try {
+    sqlite.exec(`ALTER TABLE import_log ADD COLUMN idempotency_key TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
+
   // ─── Seed Users ──────────────────────────────────────────────────────────
 
   const existingAdmin = db
@@ -152,6 +159,32 @@ export async function seed() {
       .run();
 
     console.warn("  Seeded 2 users (admin@cvg.local, user@cvg.local). Default passwords in use — change after first login.");
+  }
+
+  // ─── Seed System User (API Ingest) ─────────────────────────────────────
+
+  const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+  const existingSystem = db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, SYSTEM_USER_ID))
+    .get();
+
+  if (!existingSystem) {
+    const now = new Date().toISOString();
+    db.insert(schema.users)
+      .values({
+        id: SYSTEM_USER_ID,
+        email: "system@internal",
+        displayName: "API Ingest",
+        passwordHash: "",
+        role: "user",
+        isActive: false,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    console.warn("  Seeded system user for API ingestion");
   }
 
   // ─── Seed Customers ──────────────────────────────────────────────────────
@@ -226,6 +259,28 @@ export async function seed() {
       .run();
 
     console.warn("  Seeded default app configuration");
+  }
+
+  // ─── Seed Ingest Config Defaults (idempotent) ──────────────────────────
+
+  const ingestDefaults = [
+    { key: "ingestApiKey", value: "" },
+    { key: "ingestRateLimitSeconds", value: "60" },
+    { key: "ingestMaxSizeMB", value: "50" },
+  ];
+
+  for (const d of ingestDefaults) {
+    const existing = db
+      .select()
+      .from(schema.appConfig)
+      .where(eq(schema.appConfig.key, d.key))
+      .get();
+    if (!existing) {
+      db.insert(schema.appConfig)
+        .values({ ...d, updatedAt: new Date().toISOString() })
+        .run();
+      console.warn(`  Seeded config: ${d.key} = ${d.value || "(empty)"}`);
+    }
   }
 
   console.warn("Seeding complete.");

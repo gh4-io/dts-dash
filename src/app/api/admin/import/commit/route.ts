@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { validateImportData, commitImportData } from "@/lib/data/import-utils";
 import { db } from "@/lib/db/client";
-import { importLog } from "@/lib/db/schema";
-import { invalidateCache } from "@/lib/data/reader";
-import fs from "fs/promises";
-import path from "path";
+import { appConfig } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * POST /api/admin/import/commit
@@ -38,69 +37,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Load configurable size limit
+    const sizeRow = db
+      .select()
+      .from(appConfig)
+      .where(eq(appConfig.key, "ingestMaxSizeMB"))
+      .get();
+    const maxSizeMB = parseInt(sizeRow?.value ?? "50", 10);
+
     // Re-validate the JSON
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(jsonContent);
-    } catch {
+    const validation = validateImportData(jsonContent, maxSizeMB);
+    if (!validation.valid || !validation.records) {
       return NextResponse.json(
-        { error: "Invalid JSON format" },
+        { error: validation.errors[0] || "No valid records found" },
         { status: 400 }
       );
     }
 
-    const records = Array.isArray(parsed)
-      ? parsed
-      : (parsed as Record<string, unknown>).value ?? [];
+    // Commit
+    const result = await commitImportData({
+      jsonContent,
+      records: validation.records,
+      source,
+      fileName,
+      importedBy: session.user.id,
+    });
 
-    if (!Array.isArray(records) || records.length === 0) {
-      return NextResponse.json(
-        { error: "No valid records found" },
-        { status: 400 }
-      );
-    }
-
-    // Write to data/input.json
-    const dataPath = path.join(process.cwd(), "data", "input.json");
-    try {
-      await fs.writeFile(dataPath, jsonContent, "utf-8");
-    } catch (writeErr) {
-      console.error("[api/admin/import/commit] Failed to write input.json:", writeErr);
-      return NextResponse.json(
-        { error: "Failed to write data file" },
-        { status: 500 }
-      );
-    }
-
-    // Log to import_log
-    const logId = crypto.randomUUID();
-    try {
-      db.insert(importLog)
-        .values({
-          id: logId,
-          importedAt: new Date().toISOString(),
-          recordCount: records.length,
-          source,
-          fileName: fileName || null,
-          importedBy: session.user.id,
-          status: "success",
-          errors: null,
-        })
-        .run();
-    } catch (logErr) {
-      console.error("[api/admin/import/commit] Failed to log import:", logErr);
-      // If logging fails due to stale user ID, still return success but warn
-      if ((logErr as Error).message?.includes("FOREIGN KEY")) {
-        console.warn("[api/admin/import/commit] Stale user session - import succeeded but logging failed. User should log out and back in.");
-      }
-    }
-
-    // Invalidate reader cache
-    invalidateCache();
-
-    console.warn(`[import] Committed ${records.length} records from ${source}, logId=${logId}`);
-
-    return NextResponse.json({ success: true, logId, recordCount: records.length });
+    return NextResponse.json(result);
   } catch (error) {
     console.error("[api/admin/import/commit] POST error:", error);
     return NextResponse.json(

@@ -37,6 +37,9 @@ export async function GET() {
       ),
       timelineDefaultDays: parseInt(configMap.timelineDefaultDays ?? "3", 10),
       defaultTimezone: configMap.defaultTimezone ?? "UTC",
+      ingestApiKey: configMap.ingestApiKey ?? "",
+      ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
+      ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
     };
 
     return NextResponse.json(config);
@@ -72,6 +75,9 @@ export async function PUT(request: NextRequest) {
       "shifts",
       "timelineDefaultDays",
       "defaultTimezone",
+      "ingestApiKey",
+      "ingestRateLimitSeconds",
+      "ingestMaxSizeMB",
     ]);
 
     // Update config keys

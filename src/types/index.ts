@@ -267,4 +267,7 @@ export interface AppConfig {
   shifts: ShiftDefinition[];
   timelineDefaultDays: number;
   defaultTimezone: string;
+  ingestApiKey: string;
+  ingestRateLimitSeconds: number;
+  ingestMaxSizeMB: number;
 }

@@ -38,6 +38,9 @@ async function loadConfig(): Promise<AppConfig> {
       ),
       timelineDefaultDays: parseInt(configMap.timelineDefaultDays ?? "3", 10),
       defaultTimezone: configMap.defaultTimezone ?? "UTC",
+      ingestApiKey: configMap.ingestApiKey ?? "",
+      ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
+      ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
     };
 
     return cachedConfig;
@@ -56,6 +59,9 @@ async function loadConfig(): Promise<AppConfig> {
       ],
       timelineDefaultDays: 3,
       defaultTimezone: "UTC",
+      ingestApiKey: "",
+      ingestRateLimitSeconds: 60,
+      ingestMaxSizeMB: 50,
     };
     return cachedConfig;
   }

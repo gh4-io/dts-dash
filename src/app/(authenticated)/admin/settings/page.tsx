@@ -29,6 +29,9 @@ interface AppConfig {
   shifts: ShiftConfig[];
   timelineDefaultDays: number;
   defaultTimezone: string;
+  ingestApiKey: string;
+  ingestRateLimitSeconds: number;
+  ingestMaxSizeMB: number;
 }
 
 export default function AdminSettingsPage() {
@@ -37,6 +40,8 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [lastImport] = useState<{ importedAt: string; recordCount: number; source: string } | null>(null);
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null);
+  const [keyCopied, setKeyCopied] = useState(false);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -329,6 +334,152 @@ export default function AdminSettingsPage() {
             No import data available. Use the Data Import page to load work packages.
           </p>
         )}
+      </section>
+
+      {/* API Integration */}
+      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">
+            <i className="fa-solid fa-plug mr-2 text-muted-foreground" />
+            API Integration
+          </h2>
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-block h-2 w-2 rounded-full ${
+                config.ingestApiKey ? "bg-emerald-500" : "bg-red-500"
+              }`}
+            />
+            <span className="text-xs text-muted-foreground">
+              {config.ingestApiKey ? "Endpoint active" : "Endpoint disabled"}
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Configure the <code className="rounded bg-muted px-1">POST /api/ingest</code> endpoint for Power Automate or other automation tools.
+        </p>
+
+        {/* API Key */}
+        <div className="space-y-2">
+          <Label>API Key</Label>
+          {generatedKey ? (
+            <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2">
+              <p className="text-xs font-medium text-emerald-500">
+                <i className="fa-solid fa-triangle-exclamation mr-1" />
+                Copy this key now — it won&apos;t be shown again.
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 rounded bg-muted px-3 py-2 text-xs font-mono break-all select-all">
+                  {generatedKey}
+                </code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(generatedKey);
+                    setKeyCopied(true);
+                    setTimeout(() => setKeyCopied(false), 2000);
+                  }}
+                >
+                  <i className={`fa-solid ${keyCopied ? "fa-check" : "fa-copy"} mr-1`} />
+                  {keyCopied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs"
+                onClick={() => setGeneratedKey(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                value={
+                  config.ingestApiKey
+                    ? `${"•".repeat(12)}${config.ingestApiKey.slice(-4)}`
+                    : ""
+                }
+                placeholder="Not configured"
+                disabled
+                className="font-mono text-sm"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const key = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+                    .map((b) => b.toString(16).padStart(2, "0"))
+                    .join("");
+                  setConfig({ ...config, ingestApiKey: key });
+                  setGeneratedKey(key);
+                  setKeyCopied(false);
+                }}
+              >
+                <i className="fa-solid fa-rotate mr-1" />
+                {config.ingestApiKey ? "Regenerate" : "Generate"}
+              </Button>
+              {config.ingestApiKey && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    setConfig({ ...config, ingestApiKey: "" });
+                    setGeneratedKey(null);
+                  }}
+                >
+                  <i className="fa-solid fa-ban mr-1" />
+                  Revoke
+                </Button>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Use as Bearer token: <code className="rounded bg-muted px-1">Authorization: Bearer &lt;key&gt;</code>
+          </p>
+        </div>
+
+        {/* Rate Limit + Size Limit */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Rate Limit (seconds)</Label>
+            <Input
+              type="number"
+              value={config.ingestRateLimitSeconds}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  ingestRateLimitSeconds: Math.max(10, parseInt(e.target.value, 10) || 60),
+                })
+              }
+              min={10}
+              max={3600}
+            />
+            <p className="text-xs text-muted-foreground">
+              Minimum seconds between requests (default: 60)
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>Max Payload Size (MB)</Label>
+            <Input
+              type="number"
+              value={config.ingestMaxSizeMB}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  ingestMaxSizeMB: Math.max(1, Math.min(200, parseInt(e.target.value, 10) || 50)),
+                })
+              }
+              min={1}
+              max={200}
+            />
+            <p className="text-xs text-muted-foreground">
+              Maximum JSON payload size (default: 50MB)
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* Coming Soon stubs */}

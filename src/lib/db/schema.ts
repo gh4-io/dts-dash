@@ -125,6 +125,7 @@ export const importLog = sqliteTable("import_log", {
     .references(() => users.id),
   status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
   errors: text("errors"),
+  idempotencyKey: text("idempotency_key"),
 });
 
 // ─── Analytics Events ───────────────────────────────────────────────────────
