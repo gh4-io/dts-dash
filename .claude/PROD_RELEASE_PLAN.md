@@ -163,6 +163,10 @@ These are deleted on the release branch only. They remain on `dev`.
 | `.dockerignore` | Docker build exclusions |
 | `ecosystem.config.js` | PM2 process manager config |
 | `.github/workflows/` | CI/CD pipelines |
+| `README.md` | Project overview |
+| `DEPLOYMENT.md` | Deployment guide (Docker, PM2, systemd, reverse proxy) |
+| `BACKUP.md` | Backup procedures and restore steps |
+| `MONITORING.md` | Health checks, log analysis, incident response |
 
 ### package.json Cleanup
 
@@ -424,20 +428,20 @@ git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
 
 > Note: Documentation created during hardening lives on `dev` and is stripped per policy at release time. Operational docs (DEPLOYMENT.md, BACKUP.md, MONITORING.md) are an exception — they ship if they exist at release time. The stripping policy can be amended per-release if specific docs are deemed operational.
 
-### 5.1 Deployment guide — `docs/DEPLOYMENT.md` (M)
+### 5.1 Deployment guide — `DEPLOYMENT.md` (M)
 - Docker step-by-step, bare metal step-by-step, env var reference, first-run setup, reverse proxy (nginx/Caddy + HTTPS), upgrade procedure
 
-### 5.2 Backup procedures — `docs/BACKUP.md` (S)
+### 5.2 Backup procedures — `BACKUP.md` (S)
 - What to back up, script usage, cron setup, restore procedure
 
-### 5.3 Monitoring runbook — `docs/MONITORING.md` (S)
+### 5.3 Monitoring runbook — `MONITORING.md` (S)
 - Health check usage, log analysis, alert conditions, incident response
 
 ### Phase 5 Checklist
 
-- [ ] `docs/DEPLOYMENT.md` — a new team member can deploy using only this guide
-- [ ] `docs/BACKUP.md` — backup and restore tested end-to-end
-- [ ] `docs/MONITORING.md` — covers top 5 failure scenarios
+- [ ] `DEPLOYMENT.md` — a new team member can deploy using only this guide
+- [ ] `BACKUP.md` — backup and restore tested end-to-end
+- [ ] `MONITORING.md` — covers top 5 failure scenarios
 
 ---
 
