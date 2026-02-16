@@ -2,44 +2,122 @@
 
 > **Created:** 2026-02-15
 > **Updated:** 2026-02-16
-> **Status:** In execution — v0.1.0 release
-> **Next target:** v0.1.0 (dev-complete baseline) to `main`
+> **Status:** In progress — Phases 1-5 pending
+> **Target:** v0.1.0 (production-ready) to `master`
 
 ## Context
 
-All 8 development milestones (M0-M8) are complete with zero P0/P1/P2 blockers. The application is feature-complete on the `dev` branch.
+All 8 development milestones (M0-M8) are complete with zero P0/P1/P2 blockers. The application is feature-complete on the `dev` branch. A preliminary stripped snapshot was published to `master` and will be overwritten by the final v0.1.0 once all 5 phases are complete.
 
-**Release philosophy:** Every release to `main` is **stripped to production minimum**. No documentation, no development scaffolding, no resource material, no helper scripts unrelated to application operation. The `dev` branch is never modified by the release process.
+**Release philosophy:** Every release to `master` is **stripped to production minimum**. No documentation, no development scaffolding, no resource material, no helper scripts unrelated to application operation. The `dev` branch is never modified by the release process.
 
-**Deployment targets** (future): Docker (primary), bare metal with PM2 (secondary)
-
-## Versioning
-
-| Version | Scope | Branch |
-|---------|-------|--------|
-| **v0.1.0** | Dev-complete baseline — stripped, as-built from dev | `release/v0.1.0` |
-| **v1.0.0** | Production-hardened (Phases 1-5 complete) | `release/v1.0.0` |
+**Deployment targets**: Docker (primary), bare metal with PM2 (secondary)
 
 ---
 
 ## Branching Strategy
 
-The `dev` branch is **never modified** by the release process. All release work happens on a release branch cut from `dev` (or from the previous release branch for incremental releases). The release branch is merged to `main` and tagged.
+All development and production hardening work happens on `dev`. The `dev` branch is **never modified** by the release process.
+
+### v0.1.0 — Initial Release (orphan commit)
+
+The first release establishes `master` as a clean baseline with **no commit history**. It is published as a single orphan commit (no parent) containing only the final stripped tree.
 
 ```
-dev (untouched) ──> release/v0.1.0 ──> main + tag v0.1.0
-                         │
-                         └──> release/v1.0.0 ──> main + tag v1.0.0
-                               ^ hardening work here
+dev (all work here) ──> release/v0.1.0 ──> strip ──> orphan commit ──> master + tag v0.1.0
 ```
 
-**Dev environment guarantee:** No files outside git tracking are touched. No local dev files, databases, configs, or environment files are modified, moved, or deleted. The release branch is a separate working tree of changes — `dev` stays as-is.
+**v0.1.0 publish procedure** (after stripping is complete on the release branch):
+```bash
+# From dev — no checkout needed
+TREE=$(git rev-parse release/v0.1.0^{tree})
+COMMIT=$(git commit-tree "$TREE" -m "v0.1.0: production-ready release")
+git branch -f master "$COMMIT"
+git tag -f -a v0.1.0 "$COMMIT" -m "v0.1.0: production-ready release"
+git push origin master --force-with-lease
+git push origin v0.1.0 --force
+
+# Create GitHub Release with manual notes (no prior tags to auto-generate from)
+gh release create v0.1.0 --title "v0.1.0" --notes-file RELEASE_NOTES.md
+# (or --generate-notes for auto-generated, or --notes "inline notes")
+```
+
+### Future Releases (v0.2.0+) — PR to master
+
+After v0.1.0 establishes the baseline, all subsequent releases are **incremental updates via PR to `master`**. Only the specific changes for that release are included — no full re-strip required.
+
+```
+master (production baseline)
+  └── release/v0.2.0 (branched from master)
+        ├── cherry-pick or apply targeted changes from dev
+        ├── strip any new dev artifacts if brought over
+        └── PR to master ──> review ──> merge ──> tag v0.2.0
+```
+
+**Future release procedure:**
+```bash
+# 1. Branch from master
+git checkout master
+git checkout -b release/vX.Y.Z
+
+# 2. Apply only the targeted changes from dev
+#    Options: cherry-pick, diff/patch, or manual apply
+git cherry-pick <commit-hash>        # specific commits
+# or: git diff dev -- src/path | git apply   # specific files
+
+# 3. Strip any dev artifacts that came along (if cherry-picking brought any)
+# 4. Verify: npm run build && npm run lint
+
+# 5. Push and create PR
+git push origin release/vX.Y.Z
+gh pr create --base master --title "release: vX.Y.Z" --body "..."
+
+# 6. After PR review and merge — tag and create GitHub Release
+git checkout master && git pull
+git tag -a vX.Y.Z -m "vX.Y.Z: <release description>"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes
+```
+
+This gives full PR review capability — the diff shows only what changed since the last release.
+
+### GitHub Releases & Tags
+
+Every version tag gets a corresponding **GitHub Release** with release notes. This provides a public changelog, downloadable source archives, and a clear history of production changes.
+
+**Release types:**
+- **Production release** (`v0.1.0`) — `gh release create v0.1.0 --title "v0.1.0" --generate-notes`
+- **Pre-release / RC** (`v0.1.0-rc.1`) — `gh release create v0.1.0-rc.1 --prerelease --title "v0.1.0-rc.1" --generate-notes`
+
+**Auto-generated notes** (`--generate-notes`) pull from PR titles and commit messages since the last tag. For the v0.1.0 initial release, write manual notes summarizing the feature set.
+
+**Tag convention:** semver with `v` prefix — `v0.1.0`, `v0.2.0`, `v1.0.0`. Pre-releases: `v0.1.0-rc.1`, `v0.1.0-rc.2`.
+
+### Branch Protection
+
+After v0.1.0 is published, enable branch protection on `master`:
+
+```bash
+gh api repos/{owner}/{repo}/branches/master/protection -X PUT -f \
+  required_pull_request_reviews.required_approving_review_count=0 \
+  enforce_admins=false \
+  restrictions=null \
+  required_status_checks=null
+```
+
+- Require PRs (no direct push) for all future releases
+- Status checks enforced once CI is active (Phase 4)
+- Admins can bypass for the v0.1.0 orphan push only
+
+### Dev environment guarantee
+
+No files outside git tracking are touched. No local dev files, databases, configs, or environment files are modified, moved, or deleted. Release branches are a separate working tree — `dev` stays as-is.
 
 ---
 
 ## Release Stripping Policy
 
-> **Applies to ALL releases.** Every release branch undergoes this stripping process before merge to `main`.
+> **Applies to v0.1.0 (full strip).** Future releases branch from `master` and only bring targeted changes — no full strip needed. The lists below define what belongs in production vs. what stays on `dev` only.
 
 ### REMOVE — not shipped
 
@@ -79,7 +157,12 @@ These are deleted on the release branch only. They remain on `dev`.
 | `components.json` | shadcn/ui configuration |
 | `next-env.d.ts` | Next.js TypeScript declarations |
 | `.gitignore` | Git ignore rules |
-| `src/middleware.ts` | Route protection (if exists) |
+| `.env.example` | Environment variable documentation |
+| `Dockerfile` | Container build |
+| `docker-compose.yml` | Container orchestration |
+| `.dockerignore` | Docker build exclusions |
+| `ecosystem.config.js` | PM2 process manager config |
+| `.github/workflows/` | CI/CD pipelines |
 
 ### package.json Cleanup
 
@@ -126,59 +209,21 @@ git rm scripts/reset-event-data.mjs scripts/reset_event_data.sh
 git rm data/input.json
 
 # 3. Clean package.json (manual edit — remove scripts + devDeps listed above)
+# 4. Clean eslint.config.mjs (remove prettier + vitest references)
 
-# 4. Regenerate lock file
+# 5. Regenerate lock file
 npm install
 
-# 5. Verify build
+# 6. Verify build
 npm run build
 npm run lint
 
-# 6. Commit
+# 7. Commit
 git add -A
 git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
+
+# 8. Publish as orphan commit (see publish procedure above)
 ```
-
----
-
-## v0.1.0 — Dev-Complete Baseline
-
-**Scope:** The application as-built from M0-M8, stripped to production minimum. No hardening, no Docker, no CI/CD. This is the baseline "it works" release.
-
-### v0.1.0 Steps
-
-1. Commit pending `.gitignore` update on `dev`
-2. Cut branch: `git checkout -b release/v0.1.0`
-3. Run verification gates: `npm run build && npm run lint`
-4. Execute stripping procedure (see above)
-5. Verify stripped build: `npm run build && npm run lint`
-6. Commit strip
-7. Merge to `main`: `git checkout main && git merge --no-ff release/v0.1.0`
-8. Tag: `git tag -a v0.1.0 -m "v0.1.0: dev-complete baseline"`
-9. Push: `git push origin main --tags`
-
-### v0.1.0 Checklist
-
-- [ ] `release/v0.1.0` branch created from `dev`
-- [ ] `.claude/`, `plan/`, `docs/` directories removed
-- [ ] All individual dev files removed (see strip list)
-- [ ] `package.json` scripts cleaned (no references to stripped files)
-- [ ] `package.json` devDependencies pruned (no test/format/screenshot deps)
-- [ ] `npm run build` passes on stripped branch
-- [ ] `npm run lint` passes on stripped branch
-- [ ] `dev` branch is completely untouched
-- [ ] No untracked or gitignored files were affected
-- [ ] Merged to `main` with `--no-ff`
-- [ ] Tagged `v0.1.0`
-- [ ] Pushed to origin
-
----
-
-## v1.0.0 — Production Hardened
-
-**Scope:** Security hardening, infrastructure, observability, CI/CD. All 5 phases below are completed on `release/v1.0.0` (cut from `release/v0.1.0` or `main`), then stripped and merged to `main`.
-
-> The phase details below are unchanged from the original plan. They are executed on the release branch, and the stripping policy is applied before final merge.
 
 ---
 
@@ -351,10 +396,10 @@ git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
 **Depends on**: Phase 1 complete, Phase 2 partial (Dockerfile exists)
 
 ### 4.1 CI workflow (M)
-- **Create** `.github/workflows/ci.yml` — on PR/push to main/dev: npm ci, lint, typecheck, build, npm audit
+- **Create** `.github/workflows/ci.yml` — on PR to dev: npm ci, lint, typecheck, build, npm audit
 
 ### 4.2 CD workflow (M)
-- **Create** `.github/workflows/deploy.yml` — on push to main/tags: Docker build + push to GHCR, tagged latest + SHA
+- **Create** `.github/workflows/deploy.yml` — on tag push (v*): Docker build + push to GHCR, tagged latest + semver
 
 ### 4.3 Pre-commit hooks (S, optional)
 - Install husky + lint-staged, eslint --fix on staged files
@@ -362,11 +407,11 @@ git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
 ### Phase 4 Checklist
 
 - [ ] `.github/workflows/ci.yml` exists
-- [ ] PR to main/dev triggers lint + typecheck + build + audit
+- [ ] PR to dev triggers lint + typecheck + build + audit
 - [ ] Failed CI blocks merge (branch protection configured)
 - [ ] `.github/workflows/deploy.yml` exists
-- [ ] Merge to main triggers Docker image push to GHCR
-- [ ] Image tagged with `latest` and commit SHA
+- [ ] Tag push triggers Docker image push to GHCR
+- [ ] Image tagged with `latest` and semver
 - [ ] `npm run audit` script exists in package.json
 - [ ] (Optional) Pre-commit hooks run lint on staged files
 
@@ -377,7 +422,7 @@ git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
 **Priority**: MEDIUM — needed for anyone operating the system
 **Depends on**: Phases 1-4 complete
 
-> Note: Documentation created during hardening lives on the release branch and is stripped per policy before merge. Operational docs (DEPLOYMENT.md, BACKUP.md, MONITORING.md) are an exception — they ship if they exist at release time. The stripping policy can be amended per-release if specific docs are deemed operational.
+> Note: Documentation created during hardening lives on `dev` and is stripped per policy at release time. Operational docs (DEPLOYMENT.md, BACKUP.md, MONITORING.md) are an exception — they ship if they exist at release time. The stripping policy can be amended per-release if specific docs are deemed operational.
 
 ### 5.1 Deployment guide — `docs/DEPLOYMENT.md` (M)
 - Docker step-by-step, bare metal step-by-step, env var reference, first-run setup, reverse proxy (nginx/Caddy + HTTPS), upgrade procedure
@@ -396,9 +441,9 @@ git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
 
 ---
 
-## Release Checklist — v1.0.0 (Final Gate)
+## Release Checklist — v0.1.0 (Final Gate)
 
-This checklist is completed **after all 5 phases** and **after stripping** before merging `release/v1.0.0` to `main`:
+This checklist is completed **after all 5 phases** and **after stripping** before publishing as orphan commit to `master`:
 
 ### Security
 - [ ] No hardcoded credentials in codebase (`grep -r "admin123\|user123\|dev-secret" src/`)
@@ -440,6 +485,12 @@ This checklist is completed **after all 5 phases** and **after stripping** befor
 - [ ] Release stripping policy applied
 - [ ] No dev artifacts remain on release branch
 
+### Release Publishing
+- [ ] Orphan commit published to `master`
+- [ ] Tag `v0.1.0` points to orphan commit
+- [ ] GitHub Release created with release notes
+- [ ] Branch protection enabled on `master` (require PRs for future releases)
+
 ---
 
 ## New Decisions
@@ -464,11 +515,8 @@ This checklist is completed **after all 5 phases** and **after stripping** befor
 ## Execution Order
 
 ```
-v0.1.0 (immediate)
-  dev ──> release/v0.1.0 ──> strip ──> main + tag v0.1.0
-
-v1.0.0 (future)
-  main (or dev) ──> release/v1.0.0
+v0.1.0 (initial — orphan commit, full strip)
+  All work on dev ──> release/v0.1.0 ──> strip ──> orphan commit ──> master + tag v0.1.0
 
   Phase 1 (Security) ─ CRITICAL, blocks all deployment
     1.1 .env.example + AUTH_SECRET validation     (S)
@@ -505,13 +553,14 @@ v1.0.0 (future)
     5.2 Backup procedures          (S)
     5.3 Monitoring runbook         (S)
 
-  ── strip ──> merge to main + tag v1.0.0
+  ── strip ──> orphan commit ──> master + tag v0.1.0
+
+Future releases (v0.2.0+)
+  master ──> release/vX.Y.Z ──> cherry-pick changes ──> PR to master ──> merge ──> tag
 ```
 
 ## Files Summary
 
-**v0.1.0**: No new files. Only removals (stripping) + package.json cleanup.
+**New files (~18)**: `.env.example`, `src/middleware.ts`, `src/lib/utils/env-check.ts`, `src/lib/utils/password-validation.ts`, `src/lib/utils/login-rate-limit.ts`, `src/lib/logger.ts`, `src/lib/error-tracking.ts`, `src/types/next-auth.d.ts`, `src/app/setup/page.tsx`, `src/app/api/setup/route.ts`, `src/app/api/health/route.ts`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `ecosystem.config.js`, `scripts/backup-db.sh`, `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`
 
-**v1.0.0 new files (~18)**: `.env.example`, `src/middleware.ts`, `src/lib/utils/env-check.ts`, `src/lib/utils/password-validation.ts`, `src/lib/utils/login-rate-limit.ts`, `src/lib/logger.ts`, `src/lib/error-tracking.ts`, `src/types/next-auth.d.ts`, `src/app/setup/page.tsx`, `src/app/api/setup/route.ts`, `src/app/api/health/route.ts`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `ecosystem.config.js`, `scripts/backup-db.sh`, `.github/workflows/ci.yml`, `.github/workflows/deploy.yml`
-
-**v1.0.0 key files to modify**: `src/lib/auth.ts`, `src/lib/db/client.ts`, `src/lib/db/schema.ts`, `src/lib/db/seed.ts`, `src/app/api/account/password/route.ts`, `next.config.ts`, `package.json`, `src/app/api/seed/route.ts`, ~25 server files (logging migration)
+**Key files to modify**: `src/lib/auth.ts`, `src/lib/db/client.ts`, `src/lib/db/schema.ts`, `src/lib/db/seed.ts`, `src/app/api/account/password/route.ts`, `next.config.ts`, `package.json`, `src/app/api/seed/route.ts`, ~25 server files (logging migration)
