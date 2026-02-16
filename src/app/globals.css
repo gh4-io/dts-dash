@@ -54,7 +54,8 @@
 /* THEME: Neutral (Default) — Fumadocs Neutral                                */
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
-:root, .theme-neutral {
+:root,
+.theme-neutral {
   --background: 0 0% 100%;
   --foreground: 0 0% 3.9%;
   --card: 0 0% 100%;
@@ -88,7 +89,8 @@
   --chart-5: 27 87% 67%;
 }
 
-.dark, .theme-neutral.dark {
+.dark,
+.theme-neutral.dark {
   --background: 0 0% 3.9%;
   --foreground: 0 0% 98%;
   --card: 0 0% 6%;
@@ -831,6 +833,24 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    background-image: url("/bg-abstract.jpg");
+    background-attachment: fixed;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: hsl(var(--background) / 0.85);
+    pointer-events: none;
+    z-index: -1;
   }
 }

@@ -3,12 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
@@ -28,7 +23,7 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-64 p-0">
         <SheetHeader className="flex h-14 items-center border-b border-border px-4">
-          <SheetTitle className="flex items-center gap-2 font-semibold">
+          <SheetTitle className="flex items-center gap-2 font-semibold text-xl">
             <i className="fa-solid fa-plane-circle-check text-primary" />
             CVG Dashboard
           </SheetTitle>
@@ -45,7 +40,7 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
               >
                 <i className={cn(item.icon, "w-5 text-center")} />
