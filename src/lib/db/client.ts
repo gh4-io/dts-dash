@@ -23,6 +23,7 @@ sqlite.pragma("foreign_keys = ON");
 export const db = drizzle(sqlite, { schema });
 
 export { sqlite };
+export { DB_PATH as dbPath };
 
 // Graceful shutdown — close SQLite on process termination
 function shutdown() {
