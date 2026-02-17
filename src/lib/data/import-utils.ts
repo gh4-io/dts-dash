@@ -1,8 +1,8 @@
 import { db } from "@/lib/db/client";
-import { importLog, workPackages } from "@/lib/db/schema";
+import { importLog, workPackages, users } from "@/lib/db/schema";
 import { invalidateCache } from "@/lib/data/reader";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("import-utils");
@@ -225,6 +225,24 @@ export async function commitImportData(
     },
     "Starting import commit"
   );
+
+  // Ensure the importedBy user exists (auto-create system user if needed)
+  const existingUser = db.select({ id: users.id }).from(users).where(eq(users.id, importedBy)).get();
+  if (!existingUser) {
+    log.info({ importedBy }, "Auto-creating system user for import FK");
+    db.insert(users)
+      .values({
+        id: importedBy,
+        email: `system-${importedBy.slice(0, 8)}@localhost`,
+        displayName: "System (API)",
+        passwordHash: "",
+        role: "user",
+        isActive: false,
+        forcePasswordChange: false,
+        tokenVersion: 0,
+      })
+      .run();
+  }
 
   // Create import log entry first
   try {

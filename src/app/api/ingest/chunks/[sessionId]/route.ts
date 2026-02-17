@@ -210,7 +210,10 @@ export async function PATCH(
     // 12. Short-circuit for empty payloads
     if (!validation.records || validation.records.length === 0) {
       log.info({ sessionId }, "Chunked upload — no records to import (204)");
-      return new NextResponse(null, { status: 204 });
+      return new NextResponse(null, {
+        status: 204,
+        headers: { Range: `bytes=0-${session.expectedSize - 1}` },
+      });
     }
 
     // 13. Commit (UPSERT into work_packages by GUID)
@@ -232,13 +235,20 @@ export async function PATCH(
       "Chunked upload import committed",
     );
 
-    // 14. Response
-    return NextResponse.json({
-      success: true,
-      logId: result.logId,
-      summary: validation.summary,
-      warnings: validation.warnings,
-    });
+    // 14. Response (include Range header — PA expects it on every PATCH response)
+    return NextResponse.json(
+      {
+        success: true,
+        logId: result.logId,
+        summary: validation.summary,
+        warnings: validation.warnings,
+      },
+      {
+        headers: {
+          Range: `bytes=0-${session.expectedSize - 1}`,
+        },
+      },
+    );
   } catch (error) {
     log.error({ err: error }, "Unhandled error in PATCH /api/ingest/chunks");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
