@@ -227,6 +227,49 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
     CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
     CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
+
+    -- Feedback Board
+    CREATE TABLE IF NOT EXISTS feedback_posts (
+      id TEXT PRIMARY KEY,
+      author_id TEXT NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feedback_comments (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL REFERENCES users(id),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feedback_labels (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feedback_post_labels (
+      post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+      label_id TEXT NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
+      PRIMARY KEY (post_id, label_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feedback_posts_author ON feedback_posts(author_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
+    CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
+    CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
+    CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
+    -- End Feedback Board
   `);
 }
 
@@ -238,7 +281,61 @@ export interface MigrationResult {
 }
 
 export function runMigrations(): MigrationResult[] {
-  // All migrations have been folded into createTables() as of the initial schema consolidation.
-  // Future migrations go here when needed after the first official release.
-  return [];
+  const results: MigrationResult[] = [];
+
+  // Migration 001: Feedback Board tables
+  // For existing databases that were created before createTables() included these tables.
+  const hasFeedbackPosts = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback_posts'")
+    .get();
+
+  if (!hasFeedbackPosts) {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS feedback_posts (
+        id TEXT PRIMARY KEY,
+        author_id TEXT NOT NULL REFERENCES users(id),
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'open',
+        is_pinned INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS feedback_comments (
+        id TEXT PRIMARY KEY,
+        post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+        author_id TEXT NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS feedback_labels (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        color TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS feedback_post_labels (
+        post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+        label_id TEXT NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
+        PRIMARY KEY (post_id, label_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_feedback_posts_author ON feedback_posts(author_id);
+      CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
+      CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
+      CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
+      CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
+      CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
+    `);
+    results.push({ name: "001_feedback_board", applied: true });
+  } else {
+    results.push({ name: "001_feedback_board", applied: false });
+  }
+
+  return results;
 }

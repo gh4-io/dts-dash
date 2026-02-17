@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
 
@@ -354,3 +354,86 @@ export const masterDataImportLog = sqliteTable("master_data_import_log", {
   warnings: text("warnings"), // JSON array
   errors: text("errors"), // JSON array
 });
+
+// ─── Feedback Board ──────────────────────────────────────────────────────────
+
+export const feedbackPosts = sqliteTable(
+  "feedback_posts",
+  {
+    id: text("id").primaryKey(),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    status: text("status", {
+      enum: ["open", "under_review", "planned", "in_progress", "done", "wont_fix"],
+    })
+      .notNull()
+      .default("open"),
+    isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    authorIdx: index("idx_feedback_posts_author").on(table.authorId),
+    statusIdx: index("idx_feedback_posts_status").on(table.status),
+    createdIdx: index("idx_feedback_posts_created").on(table.createdAt),
+  }),
+);
+
+export const feedbackComments = sqliteTable(
+  "feedback_comments",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id")
+      .notNull()
+      .references(() => feedbackPosts.id, { onDelete: "cascade" }),
+    authorId: text("author_id")
+      .notNull()
+      .references(() => users.id),
+    body: text("body").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    postIdx: index("idx_feedback_comments_post").on(table.postId),
+  }),
+);
+
+export const feedbackLabels = sqliteTable("feedback_labels", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  color: text("color").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+export const feedbackPostLabels = sqliteTable(
+  "feedback_post_labels",
+  {
+    postId: text("post_id")
+      .notNull()
+      .references(() => feedbackPosts.id, { onDelete: "cascade" }),
+    labelId: text("label_id")
+      .notNull()
+      .references(() => feedbackLabels.id, { onDelete: "cascade" }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.postId, table.labelId] }),
+    postIdx: index("idx_feedback_post_labels_post").on(table.postId),
+    labelIdx: index("idx_feedback_post_labels_label").on(table.labelId),
+  }),
+);
+
+// ─── End Feedback Board ──────────────────────────────────────────────────────

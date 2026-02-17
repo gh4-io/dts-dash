@@ -10,6 +10,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
   { href: "/flight-board", label: "Flight Board", icon: "fa-solid fa-plane-departure" },
   { href: "/capacity", label: "Capacity", icon: "fa-solid fa-gauge-high" },
+  { href: "/feedback", label: "Feedback", icon: "fa-solid fa-comments" },
 ];
 
 interface MobileNavProps {
