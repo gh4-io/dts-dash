@@ -209,13 +209,8 @@ export async function PATCH(
 
     // 12. Short-circuit for empty payloads
     if (!validation.records || validation.records.length === 0) {
-      log.info({ sessionId }, "Chunked upload completed with 0 records");
-      return NextResponse.json({
-        success: true,
-        logId: null,
-        summary: validation.summary,
-        warnings: validation.warnings,
-      });
+      log.info({ sessionId }, "Chunked upload — no records to import (204)");
+      return new NextResponse(null, { status: 204 });
     }
 
     // 13. Commit (UPSERT into work_packages by GUID)

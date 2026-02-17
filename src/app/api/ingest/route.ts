@@ -207,13 +207,8 @@ export async function POST(request: NextRequest) {
 
     // 7. Short-circuit for empty payloads (nothing to commit)
     if (!validation.records || validation.records.length === 0) {
-      log.info("Empty payload accepted (0 records)");
-      return NextResponse.json({
-        success: true,
-        logId: null,
-        summary: validation.summary,
-        warnings: validation.warnings,
-      });
+      log.info("Empty payload — no records to import (204)");
+      return new NextResponse(null, { status: 204 });
     }
 
     // 8. Commit (UPSERT into work_packages by GUID)
