@@ -44,9 +44,17 @@ interface UserFormProps {
     forcePasswordChange: boolean;
   };
   onSubmit: (data: UserFormData) => Promise<{ tempPassword?: string } | void>;
+  onDelete?: () => void;
 }
 
-export function UserForm({ open, onOpenChange, mode, initialData, onSubmit }: UserFormProps) {
+export function UserForm({
+  open,
+  onOpenChange,
+  mode,
+  initialData,
+  onSubmit,
+  onDelete,
+}: UserFormProps) {
   const [form, setForm] = useState<UserFormData>({
     email: initialData?.email ?? "",
     username: initialData?.username ?? "",
@@ -289,7 +297,20 @@ export function UserForm({ open, onOpenChange, mode, initialData, onSubmit }: Us
               </>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="flex-row items-center">
+              {mode === "edit" && onDelete && (
+                <Button
+                  variant="ghost"
+                  className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    handleOpenChange(false);
+                    onDelete();
+                  }}
+                >
+                  <i className="fa-solid fa-trash mr-2" />
+                  Delete User
+                </Button>
+              )}
               <Button variant="outline" onClick={() => handleOpenChange(false)}>
                 Cancel
               </Button>

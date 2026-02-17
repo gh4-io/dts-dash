@@ -251,6 +251,7 @@ export default function UsersPage() {
         mode={formMode}
         initialData={editingUser ?? undefined}
         onSubmit={handleFormSubmit}
+        onDelete={editingUser ? () => handleDeleteUser(editingUser) : undefined}
       />
 
       {/* Reset password dialog */}
