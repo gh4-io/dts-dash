@@ -40,8 +40,6 @@ async function loadConfig(): Promise<AppConfig> {
             { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
           ])
       ),
-      timelineDefaultDays: parseInt(configMap.timelineDefaultDays ?? "3", 10),
-      defaultTimezone: configMap.defaultTimezone ?? "UTC",
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
       ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
@@ -64,8 +62,6 @@ async function loadConfig(): Promise<AppConfig> {
         { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
         { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
       ],
-      timelineDefaultDays: 3,
-      defaultTimezone: "UTC",
       ingestApiKey: "",
       ingestRateLimitSeconds: 60,
       ingestMaxSizeMB: 50,

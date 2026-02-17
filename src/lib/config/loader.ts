@@ -20,6 +20,15 @@ export interface AppFeatures {
   cronEnabled: boolean;
 }
 
+export interface TimelineDefaults {
+  startOffset: number;
+  endOffset: number;
+  defaultZoom: string;
+  defaultCompact: boolean;
+  defaultTimezone: string;
+  defaultDays: number;
+}
+
 interface ServerConfig {
   app?: {
     title?: string;
@@ -30,6 +39,14 @@ interface ServerConfig {
   features?: {
     enableSeedEndpoint?: boolean;
     cronEnabled?: boolean;
+  };
+  timeline?: {
+    startOffset?: number;
+    endOffset?: number;
+    defaultZoom?: string;
+    defaultCompact?: boolean;
+    defaultTimezone?: string;
+    defaultDays?: number;
   };
   passwordSecurity?: Partial<PasswordRequirements>;
   // Future: database, etc.
@@ -42,6 +59,14 @@ const DEFAULT_LOG_LEVEL = "info";
 const DEFAULT_FEATURES: AppFeatures = {
   enableSeedEndpoint: false,
   cronEnabled: true,
+};
+const DEFAULT_TIMELINE: TimelineDefaults = {
+  startOffset: -3,
+  endOffset: 7,
+  defaultZoom: "3d",
+  defaultCompact: false,
+  defaultTimezone: "America/New_York",
+  defaultDays: 3,
 };
 const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
   minLength: 12,
@@ -60,6 +85,7 @@ let inMemoryConfig: PasswordRequirements | null = null;
 let inMemoryAppTitle: string | null = null;
 let inMemoryLogLevel: string | null = null;
 let inMemoryFeatures: AppFeatures | null = null;
+let inMemoryTimeline: TimelineDefaults | null = null;
 
 // ─── YAML Reader ─────────────────────────────────────────────────────────────
 
@@ -110,6 +136,14 @@ export function loadServerConfig(): void {
     enableSeedEndpoint: yaml.features?.enableSeedEndpoint ?? DEFAULT_FEATURES.enableSeedEndpoint,
     cronEnabled: yaml.features?.cronEnabled ?? DEFAULT_FEATURES.cronEnabled,
   };
+  inMemoryTimeline = {
+    startOffset: yaml.timeline?.startOffset ?? DEFAULT_TIMELINE.startOffset,
+    endOffset: yaml.timeline?.endOffset ?? DEFAULT_TIMELINE.endOffset,
+    defaultZoom: yaml.timeline?.defaultZoom ?? DEFAULT_TIMELINE.defaultZoom,
+    defaultCompact: yaml.timeline?.defaultCompact ?? DEFAULT_TIMELINE.defaultCompact,
+    defaultTimezone: yaml.timeline?.defaultTimezone ?? DEFAULT_TIMELINE.defaultTimezone,
+    defaultDays: yaml.timeline?.defaultDays ?? DEFAULT_TIMELINE.defaultDays,
+  };
   inMemoryConfig = {
     ...DEFAULT_PASSWORD_REQUIREMENTS,
     ...yaml.passwordSecurity,
@@ -134,6 +168,12 @@ export function getLogLevel(): string {
 export function getFeatures(): AppFeatures {
   if (inMemoryFeatures === null) loadServerConfig();
   return inMemoryFeatures!;
+}
+
+/** Timeline/filter defaults (start/end offsets, zoom, compact, timezone) */
+export function getTimelineDefaults(): TimelineDefaults {
+  if (inMemoryTimeline === null) loadServerConfig();
+  return inMemoryTimeline!;
 }
 
 /** Password requirements */

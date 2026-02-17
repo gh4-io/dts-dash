@@ -40,8 +40,6 @@ export function PasswordSecurityForm({
     switch (source) {
       case "yaml":
         return "bg-blue-500/10 text-blue-400";
-      case "env":
-        return "bg-amber-500/10 text-amber-400";
       default:
         return "bg-zinc-500/10 text-zinc-400";
     }
@@ -52,8 +50,6 @@ export function PasswordSecurityForm({
     switch (source) {
       case "yaml":
         return "Config File";
-      case "env":
-        return "Environment Variable";
       default:
         return "System Default";
     }

@@ -25,6 +25,26 @@ features:
   # Set to false to disable all scheduled background tasks
   cronEnabled: true
 
+# ─── Timeline Defaults ────────────────────────────────────────────────────────
+timeline:
+  # Days before today the flight board starts (negative integer)
+  startOffset: -3
+
+  # Days ahead of today the flight board ends (positive integer)
+  endOffset: 7
+
+  # Default zoom level: "6h" | "12h" | "1d" | "3d" | "1w" | "all"
+  defaultZoom: "3d"
+
+  # Start flight board in compact mode by default
+  defaultCompact: false
+
+  # Default timezone: "UTC" | "America/New_York" (IANA string)
+  defaultTimezone: "America/New_York"
+
+  # Default number of days shown on the flight board
+  defaultDays: 3
+
 # ─── Password Security ──────────────────────────────────────────────────────
 passwordSecurity:
   # Minimum password length (8-128 characters)

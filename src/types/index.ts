@@ -317,8 +317,6 @@ export interface AppConfig {
   theoreticalCapacityPerPerson: number;
   realCapacityPerPerson: number;
   shifts: ShiftDefinition[];
-  timelineDefaultDays: number;
-  defaultTimezone: string;
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;

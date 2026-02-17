@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { userPreferences, appConfig } from "@/lib/db/schema";
+import { userPreferences } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getTimelineDefaults } from "@/lib/config/loader";
 
 const log = createChildLogger("api/account/preferences");
 
@@ -24,24 +25,6 @@ const VALID_PRESETS = [
 const VALID_DATE_RANGES = ["1d", "3d", "1w"] as const;
 const VALID_ZOOM_LEVELS = ["6h", "12h", "1d", "3d", "1w", "all"] as const;
 
-/** Read timeline defaults from appConfig (DB). Returns hardcoded fallbacks if no rows. */
-function getSystemTimelineConfig(): {
-  defaultTimezone: string;
-  timelineStartOffset: number;
-  timelineEndOffset: number;
-  timelineDefaultZoom: string;
-  timelineDefaultCompact: boolean;
-} {
-  const rows = db.select().from(appConfig).all();
-  const cfg = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  return {
-    defaultTimezone: cfg.defaultTimezone ?? "America/New_York",
-    timelineStartOffset: parseInt(cfg.timelineStartOffset ?? "-3", 10),
-    timelineEndOffset: parseInt(cfg.timelineEndOffset ?? "7", 10),
-    timelineDefaultZoom: cfg.timelineDefaultZoom ?? "3d",
-    timelineDefaultCompact: (cfg.timelineDefaultCompact ?? "false") === "true",
-  };
-}
 const VALID_TIME_FORMATS = ["12h", "24h"] as const;
 const VALID_PAGE_SIZES = [10, 25, 30, 50, 100] as const;
 
@@ -62,7 +45,7 @@ export async function GET() {
       .where(eq(userPreferences.userId, session.user.id))
       .get();
 
-    const sys = getSystemTimelineConfig();
+    const sys = getTimelineDefaults();
 
     if (!prefs) {
       // New user — return system config as defaults
@@ -70,12 +53,12 @@ export async function GET() {
         colorMode: "dark",
         themePreset: "vitepress",
         accentColor: null,
-        compactMode: sys.timelineDefaultCompact,
+        compactMode: sys.defaultCompact,
         defaultTimezone: sys.defaultTimezone,
         defaultDateRange: null,
-        defaultStartOffset: sys.timelineStartOffset,
-        defaultEndOffset: sys.timelineEndOffset,
-        defaultZoom: sys.timelineDefaultZoom,
+        defaultStartOffset: sys.startOffset,
+        defaultEndOffset: sys.endOffset,
+        defaultZoom: sys.defaultZoom,
         timeFormat: "24h",
         tablePageSize: 30,
       });
@@ -88,9 +71,9 @@ export async function GET() {
       compactMode: prefs.compactMode,
       defaultTimezone: prefs.defaultTimezone,
       defaultDateRange: prefs.defaultDateRange ?? null,
-      defaultStartOffset: sys.timelineStartOffset,
-      defaultEndOffset: sys.timelineEndOffset,
-      defaultZoom: prefs.defaultZoom ?? sys.timelineDefaultZoom,
+      defaultStartOffset: sys.startOffset,
+      defaultEndOffset: sys.endOffset,
+      defaultZoom: prefs.defaultZoom ?? sys.defaultZoom,
       timeFormat: prefs.timeFormat,
       tablePageSize: prefs.tablePageSize,
     });

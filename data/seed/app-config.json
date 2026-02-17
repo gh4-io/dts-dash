@@ -3,12 +3,6 @@
   { "key": "wpMHMode", "value": "include" },
   { "key": "theoreticalCapacityPerPerson", "value": "8.0" },
   { "key": "realCapacityPerPerson", "value": "6.5" },
-  { "key": "timelineDefaultDays", "value": "3" },
-  { "key": "timelineStartOffset", "value": "-3" },
-  { "key": "timelineEndOffset", "value": "7" },
-  { "key": "timelineDefaultZoom", "value": "3d" },
-  { "key": "timelineDefaultCompact", "value": "false" },
-  { "key": "defaultTimezone", "value": "America/New_York" },
   {
     "key": "shifts",
     "value": "[{\"name\":\"Day\",\"startHour\":7,\"endHour\":15,\"headcount\":8},{\"name\":\"Swing\",\"startHour\":15,\"endHour\":23,\"headcount\":6},{\"name\":\"Night\",\"startHour\":23,\"endHour\":7,\"headcount\":4}]"
