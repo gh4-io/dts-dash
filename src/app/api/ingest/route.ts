@@ -137,7 +137,12 @@ export async function POST(request: NextRequest) {
         timeoutMs,
       );
 
-      const baseUrl = request.nextUrl.origin;
+      // Resolve public-facing origin (behind reverse proxy, nextUrl.origin is localhost)
+      const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host");
+      const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+      const baseUrl = forwardedHost
+        ? `${forwardedProto}://${forwardedHost}`
+        : request.nextUrl.origin;
       const location = `${baseUrl}/api/ingest/chunks/${session.id}`;
 
       log.info(

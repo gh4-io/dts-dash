@@ -609,14 +609,173 @@
 
 ---
 
+## OI-038 | Interactive Fuzzy Match Resolution (v0.2.0)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Aircraft/customer import with fuzzy operator matching currently auto-rejects matches below 70% confidence threshold. Example: "Singapore" → "Singapore Airlines" scores 22% and fails. Users have no way to confirm/override low-confidence matches or see what was matched during import. CSV export shows operator FK IDs instead of names (not human-readable). |
+| **Proposed Solution** | **CLI (db:import)**: Per-occurrence interactive prompts for low-confidence matches (<70%). Show ranked candidates, allow user to select match/skip/manual entry. `--yes` flag skips prompts (auto-skip all). **Admin UI**: Validation step shows mapping table with dropdowns per row. User can accept/skip/override suggested matches. Bulk actions: "Accept all high-confidence", "Skip all low-confidence". **Both**: Store user confirmations in import session, log which matches were manual vs auto. **CSV Export Fix**: Join with customers table, export operator names instead of UUIDs. |
+| **Current Workarounds** | (1) Lower fuzzy match threshold from 70% to 50-60% (more false positives). (2) Enhance fuzzy matching with substring detection ("Singapore" contained in "Singapore Airlines" → confidence boost). (3) Pre-clean import data to match exact customer names. |
+| **Target Version** | v0.2.0 |
+| **Dependencies** | None (builds on existing D-029 import system) |
+| **Links** | [REQ_DataImport.md](SPECS/REQ_DataImport.md), Fuzzy match logic: `src/lib/utils/fuzzy-match.ts`, Import utils: `src/lib/data/aircraft-import-utils.ts` |
+
+---
+
+## OI-039 | Master Data Imports Not Shown in Import History
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug / UX Gap |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Customer and aircraft imports write to `master_data_import_log` table (separate from work package `import_log`). Admin import history page (`/admin/import`) only queries `import_log`, so master data imports don't appear in the UI. Users have no visibility into customer/aircraft import history via the UI. |
+| **Impact** | Moderate — users can still perform master data imports, but cannot see history/audit trail in the UI. Must query DB directly to see `master_data_import_log` records. |
+| **Workarounds** | (1) Query `master_data_import_log` table directly via `db:status` or SQL. (2) Check `data/exports/` timestamped directories for exported CSVs. |
+| **Proposed Solution** | **Option 1**: Unified import history view that queries both `import_log` and `master_data_import_log`, displays in a single table with "Type" column (Work Packages, Customers, Aircraft). **Option 2**: Tabbed UI with separate tables per import type. **Option 3**: Merge both tables into a single `import_log` with `dataType` discriminator (`work_packages`, `customers`, `aircraft`). |
+| **Related Tables** | `import_log` (work packages), `master_data_import_log` (customers, aircraft) |
+| **Files** | `src/app/(authenticated)/admin/import/page.tsx`, `src/app/api/admin/import/history/route.ts`, `src/lib/db/schema.ts` |
+| **Links** | [REQ_DataImport.md](SPECS/REQ_DataImport.md), [REQ_Admin.md](SPECS/REQ_Admin.md) |
+
+---
+
+## OI-040 | System Settings Configuration File (Static JSON)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Currently all system settings (theme presets, logging config, security settings, allowed hostnames, rate limits, API keys, etc.) are stored in SQLite `app_config` table as key-value pairs. This requires Admin UI access to configure and doesn't support version control or declarative deployment. For server/system-specific settings (not user preferences), a static config file would enable: (1) GitOps-style deployments, (2) Environment-specific overrides (dev/staging/prod), (3) Backup/restore without DB export, (4) Review/audit in PRs. |
+| **Current Behavior** | Settings in `app_config` table: `defaultMH`, `wpMHMode`, `theoreticalCapacityPerPerson`, `realCapacityPerPerson`, `shifts`, `timelineDefaultDays`, `defaultTimezone`, `ingestApiKey`, `ingestRateLimitSeconds`, `ingestMaxSizeMB`, `masterDataConformityMode`, `masterDataOverwriteConfirmed`, `allowedHostnames`. Modified via Admin Settings UI, stored in SQLite, requires DB backup to preserve. |
+| **Proposed Solution** | **Static config file**: `data/config/system.json` (or `.env`-style). **Startup behavior**: Load settings from file into `app_config` table (one-way sync — file is source of truth). **Scope**: Server/system settings only (theme defaults, logging levels, security policies, capacity defaults, API rate limits, allowed hostnames). **Out of scope**: User preferences (remain in `user_preferences` table), customer colors (remain in `customers` table), master data (remain in respective tables). **Admin UI**: Read-only display for file-driven settings with note "Configured via system.json" OR allow UI edits but warn "Changes will be overwritten on server restart". **Environment overrides**: Support `data/config/system.local.json` (gitignored) for local dev overrides. |
+| **Benefits** | (1) Version-controlled system config (track changes in git). (2) Declarative deployment (deploy config file, restart server). (3) Environment-specific config (dev/staging/prod). (4) Easier backup/restore (just the file). (5) Review config changes in PRs. (6) No need to click through Admin UI to configure fresh deployments. |
+| **Examples of System Settings** | Theme default (not user override), logging level/format, security policies (session timeout, password rules), capacity defaults (shift schedules, MH defaults), API rate limits, allowed hostnames, ingest endpoint config, master data conformity mode. |
+| **Examples of Non-System Settings** | User theme preference (stays in `user_preferences`), customer colors (stays in `customers`), aircraft type mappings (stays in `aircraft_type_mappings`), MH overrides (stays in `mh_overrides`). |
+| **Implementation Notes** | (1) Define schema for `data/config/system.json`. (2) On startup (`seed.ts` or separate `load-system-config.ts`), read file and UPSERT into `app_config`. (3) Optionally support env-specific overlays (`system.production.json`). (4) Document in `DEPLOYMENT.md` and `CONFIGURATION.md`. (5) Provide sample file in repo (`system.json.example`). |
+| **Migration Path** | Export current `app_config` rows to initial `system.json`, commit to repo, document in deployment guide. |
+| **Related** | Similar to how Docker Compose uses `docker-compose.yml` for declarative config, or Kubernetes ConfigMaps. |
+| **Links** | `src/lib/db/schema.ts` (`app_config` table), `src/app/api/config/route.ts`, `src/app/(authenticated)/admin/settings/page.tsx`, [DEPLOYMENT.md](../DEPLOYMENT.md) |
+
+---
+
+## OI-041 | Collapsible Sidebar with Icon-Only Condensed Mode
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Current sidebar is fixed-width with full labels (Dashboard, Flight Board, Capacity, Settings, Admin, etc.). No option to collapse or condense. User wants a collapsible sidebar that: (1) Collapses to icon-only mode for space efficiency, (2) Keeps icons visible when collapsed, (3) Keeps Dashboard logo visible when collapsed (scaled/condensed), (4) Toggle button or hover to expand. Common pattern in modern dashboards (e.g., Grafana, Vercel, GitHub). |
+| **Current Behavior** | Sidebar always shows full width with icon + label for each menu item. Logo at top shows full "CVG Line Maintenance Dashboard" text. No collapse mechanism. |
+| **Proposed Solution** | **Collapsed state**: Width ~60-80px, icons only, logo condensed (icon or initials "CVG"), tooltips on hover show full labels. **Expanded state**: Current width (~240px), icons + labels, full logo text. **Toggle**: Chevron button at bottom of sidebar or hamburger icon at top. **Persistence**: Save collapse state to `user_preferences` table (per-user). **Responsive**: Auto-collapse on mobile/tablet, always expanded on desktop unless user toggles. **Smooth transition**: CSS transition for width change (200-300ms ease). |
+| **Reference Examples** | Vercel Dashboard (collapsible sidebar with icons), GitHub sidebar (condensed mode), Grafana (icon-only mode with tooltips), VS Code Activity Bar (always icon-only with hover tooltips). |
+| **Design Details** | **Collapsed**: Icon-only vertical stack, 48px icon buttons with tooltips, logo as icon/initials (e.g., "CVG" in a circle). **Expanded**: Icon + label horizontal layout, full "CVG Line Maintenance Dashboard" logo. **Toggle button**: Fixed at bottom of sidebar or next to logo, chevron left/right icon. **Mobile**: Overlay sidebar (always collapsed to hamburger menu), no in-page collapse. |
+| **User Preferences** | New field in `user_preferences` table: `sidebarCollapsed: boolean`. Default `false` (expanded). |
+| **Components Affected** | `src/components/layout/sidebar.tsx`, `src/components/layout/header.tsx` (mobile hamburger), `src/lib/hooks/use-preferences.ts` (new field), `src/lib/db/schema.ts` (add column), `src/app/api/account/preferences/route.ts` (persist state). |
+| **Benefits** | (1) More horizontal space for content (especially on laptops). (2) Cleaner, less cluttered UI. (3) Common UX pattern users expect. (4) Per-user preference (some users want always-expanded). |
+| **Implementation Notes** | Use Zustand store for client-side state + sync to DB on toggle. CSS transitions for smooth expand/collapse. Tooltips use Radix UI Tooltip component. Logo component accepts `collapsed` prop for alternate rendering. |
+| **Related Patterns** | Similar to compact mode (D-017) but specific to sidebar layout. |
+| **Links** | `src/components/layout/sidebar.tsx`, `src/lib/hooks/use-preferences.ts`, [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md), [UI_COMPONENTS.md](UI/UI_COMPONENTS.md) |
+
+---
+
+## OI-042 | Dashboard Chart Issues & Enhancements
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug + Enhancement |
+| **Status** | **Open** |
+| **Priority** | P1 (bugs), P2 (enhancements) |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Multiple issues identified with dashboard charts (main timeline + pie charts). Some are bugs (broken filtering, theme non-compliance), others are UX enhancements (timezone display, cross-filtering). |
+
+### Bugs (P1)
+
+1. **Aircraft by Customer pie chart labels not theme-compliant**
+   - **Issue**: Pie chart labels don't respect light/dark mode or current theme colors
+   - **Expected**: Labels should use theme-aware text colors (like Flight Board)
+   - **Current**: Hardcoded colors or default chart colors
+   - **File**: Likely `src/components/dashboard/*.tsx` (pie chart component)
+
+2. **Customer filter doesn't filter main timeline graph**
+   - **Issue**: Selecting a customer in FilterBar doesn't filter the main dashboard timeline chart
+   - **Expected**: Main chart should show only work packages for selected customer(s)
+   - **Current**: Chart shows all data regardless of customer filter
+   - **File**: Dashboard page API route or chart data transformation
+
+### Enhancements (P2)
+
+3. **Pie chart interaction: popout instead of single pick**
+   - **Issue**: Current pie chart interaction unclear (what does "single pick" mean?)
+   - **Proposed**: Clicking a pie slice opens a popout/modal with detailed breakdown (list of aircraft, visit counts, etc.) instead of just highlighting
+   - **Alternative**: Tooltip on hover with full details, click to filter/drill-down
+
+4. **Show selected timezone in top-right of main chart (like Flight Board)**
+   - **Issue**: Dashboard main chart doesn't show which timezone is active
+   - **Expected**: Top-right corner shows "UTC" or "America/New_York" (same pattern as Flight Board)
+   - **Current**: No timezone indicator
+   - **File**: Dashboard chart component
+
+5. **Total Aircraft section should show total visits**
+   - **Issue**: "Total Aircraft" KPI card only shows unique aircraft count
+   - **Expected**: Also show total visit count (sum of all work packages)
+   - **Proposed**: Two metrics in same card: "57 Aircraft / 86 Visits" or separate cards
+   - **File**: Dashboard KPI cards component
+
+### Future (v0.3.0+)
+
+6. **Interactive chart filtering (brush selection + customer cross-filter)**
+   - **Proposal**: Click/drag to select a time range on main chart → filters all stats
+   - **Cross-filtering**: Select customer in sidebar → highlights that customer's data on chart
+   - **Brush + filter combination**: Highlight time range, then select customer → shows only that customer in selected range
+   - **Reference**: Grafana/Tableau-style interactive dashboards
+   - **Implementation**: ECharts brush component + Zustand filter state + cross-component sync
+
+| **Resolution** | |
+| **Files** | `src/app/(authenticated)/dashboard/page.tsx`, `src/components/dashboard/*.tsx`, `src/app/api/work-packages/route.ts`, `src/lib/hooks/use-filters.ts` |
+| **Links** | [REQ_Dashboard_UI.md](SPECS/REQ_Dashboard_UI.md), [REQ_Filters.md](SPECS/REQ_Filters.md), Flight Board timezone display (working reference) |
+
+---
+
+## OI-043 | Chunked Upload Location Header Returns Localhost Behind Proxy
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | When Power Automate initiates a chunked upload (`x-ms-transfer-mode: chunked`), the server returns a `Location` header pointing to `https://localhost:5015/api/ingest/chunks/{sessionId}`. PA rejects this: "The location header value returned in the response must be a well formed absolute URI not referencing local host or UNC path." **Root cause**: `request.nextUrl.origin` in Next.js resolves to the internal server address (`localhost:5015`) when behind a reverse proxy (Cloudflare Tunnel), not the public hostname (`cvg.gh4.io`). |
+| **Fix Applied** | Updated `src/app/api/ingest/route.ts` to derive the base URL from `X-Forwarded-Host` / `X-Forwarded-Proto` headers instead of `nextUrl.origin`. Falls back to `nextUrl.origin` if no forwarded headers present. **Committed but not yet deployed/verified.** |
+| **Verification Needed** | (1) Confirm the reverse proxy (Cloudflare Tunnel) sends `X-Forwarded-Host` and `X-Forwarded-Proto` headers. (2) Deploy updated code to Braxton and restart server. (3) Test chunked upload from Power Automate — Location header should now read `https://cvg.gh4.io/api/ingest/chunks/{sessionId}`. |
+| **Related Issue** | Logout button also redirects to `localhost` — same root cause (server-side origin resolution behind proxy). Auth.js `signOut` may construct redirect URLs using the internal origin. Needs separate investigation (Auth.js `AUTH_URL` / `NEXTAUTH_URL` env var, or `trustHost` behavior with forwarded headers). |
+| **Files** | `src/app/api/ingest/route.ts` (lines 140-145), `src/lib/auth.ts` (trustHost config) |
+| **Links** | [REQ_DataImport.md](SPECS/REQ_DataImport.md), OI-034, OI-037 |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 14 |
-| P1 | 0 | 0 | 0 | 12 |
-| P2 | 0 | 0 | 0 | 10 |
-| P3 | 0 | 0 | 2 | 0 |
-| **Total** | **0** | **0** | **2** | **36** |
+| P1 | 2 | 0 | 0 | 12 |
+| P2 | 3 | 0 | 0 | 10 |
+| P3 | 2 | 0 | 2 | 0 |
+| **Total** | **7** | **0** | **2** | **36** |
 
-**Changes this pass (Allowed Hostnames)**: Resolved OI-037 — configurable allowed hostnames with trustHost fix, admin UI, and allowedDevOrigins integration. D-027 logged.
+**Changes this pass (Chunked Upload)**: Added OI-043 — chunked upload Location header returns localhost behind proxy. X-Forwarded-Host fix applied but needs deployment verification.
