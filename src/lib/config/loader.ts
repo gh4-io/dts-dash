@@ -32,6 +32,7 @@ export interface TimelineDefaults {
 interface ServerConfig {
   app?: {
     title?: string;
+    baseUrl?: string;
   };
   logging?: {
     level?: string;
@@ -83,9 +84,11 @@ const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
 
 let inMemoryConfig: PasswordRequirements | null = null;
 let inMemoryAppTitle: string | null = null;
+let inMemoryBaseUrl: string | null = null;
 let inMemoryLogLevel: string | null = null;
 let inMemoryFeatures: AppFeatures | null = null;
 let inMemoryTimeline: TimelineDefaults | null = null;
+let configLoaded = false;
 
 // ─── YAML Reader ─────────────────────────────────────────────────────────────
 
@@ -131,6 +134,7 @@ export function loadServerConfig(): void {
   const yaml = readYamlFile();
 
   inMemoryAppTitle = yaml.app?.title ?? DEFAULT_APP_TITLE;
+  inMemoryBaseUrl = yaml.app?.baseUrl ?? null;
   inMemoryLogLevel = yaml.logging?.level ?? DEFAULT_LOG_LEVEL;
   inMemoryFeatures = {
     enableSeedEndpoint: yaml.features?.enableSeedEndpoint ?? DEFAULT_FEATURES.enableSeedEndpoint,
@@ -156,6 +160,7 @@ export function loadServerConfig(): void {
     ...yaml.passwordSecurity,
   };
 
+  configLoaded = true;
   console.log("[Config Loader] Configuration loaded from server.config.yml");
 }
 
@@ -163,6 +168,12 @@ export function loadServerConfig(): void {
 export function getAppTitle(): string {
   if (inMemoryAppTitle === null) loadServerConfig();
   return inMemoryAppTitle!;
+}
+
+/** Base URL for auth redirects (optional — overrides Host header detection) */
+export function getBaseUrl(): string | null {
+  if (!configLoaded) loadServerConfig();
+  return inMemoryBaseUrl;
 }
 
 /** Pino log level */

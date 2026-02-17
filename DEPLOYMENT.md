@@ -170,6 +170,15 @@ sudo systemctl start cvg-dashboard
 
 The application listens on port 3000. Place a reverse proxy in front for HTTPS.
 
+Auth.js uses `trustHost: true` to derive redirect URLs from the request's `Host` header. If your reverse proxy overwrites the `Host` header (common with Cloudflare Tunnel), set `app.baseUrl` in `server.config.yml`:
+
+```yaml
+app:
+  baseUrl: "https://dashboard.example.com"
+```
+
+This injects `AUTH_URL` at startup so login/logout redirects use the correct origin.
+
 ### Caddy (recommended — auto HTTPS)
 
 ```
@@ -228,3 +237,4 @@ Ensure the data directory is:
 | Health check returns 503 | Database unreachable | Check `DATABASE_PATH`, file permissions |
 | Login page shows but can't log in | No users exist | Visit `/setup` to create initial admin |
 | Port 3000 already in use | Another process | Change `PORT` env var or stop the other process |
+| Login/logout redirects to localhost | Reverse proxy overwrites `Host` header | Set `app.baseUrl` in `server.config.yml` to your public URL |

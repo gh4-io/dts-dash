@@ -8,6 +8,11 @@ app:
   # Default: "Dashboard"
   title: "CVG Dashboard"
 
+  # Base URL for auth redirects (login/logout callbacks)
+  # Required when behind a reverse proxy that overwrites the Host header (e.g. Cloudflare Tunnel)
+  # Leave unset if your proxy forwards the original Host header correctly
+  # baseUrl: "https://example.com"
+
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging:
   # Server-side pino log level
