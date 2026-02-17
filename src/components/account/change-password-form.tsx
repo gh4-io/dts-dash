@@ -1,11 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function ChangePasswordForm() {
+interface ChangePasswordFormProps {
+  forced?: boolean;
+}
+
+export function ChangePasswordForm({ forced = false }: ChangePasswordFormProps) {
+  const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -29,17 +35,30 @@ export function ChangePasswordForm() {
       const res = await fetch("/api/account/password", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          clearForceFlag: forced,
+        }),
       });
 
       if (res.ok) {
         setMessage({
           type: "success",
-          text: "Password changed. Other sessions have been signed out.",
+          text: forced
+            ? "Password changed successfully. Redirecting..."
+            : "Password changed. Other sessions have been signed out.",
         });
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
+
+        // If forced reset, redirect to dashboard after 1.5s
+        if (forced) {
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 1500);
+        }
       } else {
         const data = await res.json();
         setMessage({ type: "error", text: data.error ?? "Failed to change password" });
@@ -53,6 +72,13 @@ export function ChangePasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Forced reset warning banner */}
+      {forced && (
+        <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
+          <i className="fa-solid fa-triangle-exclamation mr-2" />
+          Your administrator requires you to change your password before continuing.
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="current-password">Current Password</Label>
         <Input

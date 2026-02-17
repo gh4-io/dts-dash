@@ -23,7 +23,7 @@ async function main() {
 
   warn("This will DELETE dashboard.db and recreate the schema.");
   log("  All users, customers, settings, analytics will be LOST.");
-  log("  Event data (input.json) will NOT be affected.");
+  log("  Work packages and all other data will be LOST.");
   if (withSeed) {
     log(`  ${c.yellow}--seed${c.reset} flag: demo data will be inserted after schema creation.`);
   } else {
@@ -86,7 +86,9 @@ async function main() {
   log("");
   if (withSeed) {
     log("Default credentials:", "blue");
-    log(`  Admin: ${c.yellow}admin@cvg.local${c.reset} / ${c.yellow}admin123${c.reset} (superadmin)`);
+    log(
+      `  Admin: ${c.yellow}admin@cvg.local${c.reset} / ${c.yellow}admin123${c.reset} (superadmin)`,
+    );
     log(`  User:  ${c.yellow}user@cvg.local${c.reset} / ${c.yellow}user123${c.reset}`);
   } else {
     log("Schema created with empty tables. Next steps:", "blue");

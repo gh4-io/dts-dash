@@ -26,6 +26,7 @@ function main() {
     sessions: schema.sessions,
     customers: schema.customers,
     user_preferences: schema.userPreferences,
+    work_packages: schema.workPackages,
     mh_overrides: schema.mhOverrides,
     aircraft_type_mappings: schema.aircraftTypeMappings,
     manufacturers: schema.manufacturers,
@@ -42,18 +43,12 @@ function main() {
 
   for (const [name, table] of Object.entries(tables)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rows = db.select().from(table as any).all();
+    const t = table as any;
+    const rows = db.select().from(t).all();
     const filePath = path.join(exportDir, `${name}.json`);
     const content = JSON.stringify(rows, null, 2);
     fs.writeFileSync(filePath, content, "utf-8");
     log(`  ${padRight(name + ".json", 30)} ${rows.length} rows (${formatBytes(content.length)})`);
-  }
-
-  // Copy input.json
-  const inputPath = path.join(PROJECT_ROOT, "data", "input.json");
-  if (fs.existsSync(inputPath)) {
-    fs.copyFileSync(inputPath, path.join(exportDir, "input.json"));
-    log(`  ${padRight("input.json", 30)} copied (${formatBytes(fs.statSync(inputPath).size)})`);
   }
 
   log("");

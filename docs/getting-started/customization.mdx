@@ -1,0 +1,340 @@
+---
+title: UI Customization
+description: Customize themes, background images, and visual appearance
+---
+
+# UI Customization
+
+Customize the visual appearance of the dashboard with themes, background images, and styling options.
+
+## Theme System
+
+The dashboard includes 11 built-in theme presets from Fumadocs:
+
+- **Neutral** (default) - Balanced grayscale
+- **Ocean** - Cool blue tones
+- **Purple** - Soft lavender
+- **Black** - Deep true-black
+- **Vitepress** - Green accent, documentation style
+- **Dusk** - Warm twilight tones
+- **Catppuccin** - Pastel warmth
+- **Solar** - Warm gold/amber (Solarized-inspired)
+- **Emerald** - Forest green accent
+- **Ruby** - Red/crimson accent
+- **Aspen** - Earth tones, natural warmth
+
+Each theme supports both light and dark modes. Users can select their preferred theme from **Account > Preferences**.
+
+## Background Image
+
+The dashboard supports an optional background image that displays behind all content across all pages.
+
+<Callout type="info">
+  The background image is **disabled by default** for optimal performance and readability.
+</Callout>
+
+### Features
+
+- **Fixed positioning** - stays in same position across all pages and during scrolling
+- **Consistent display** - maintains appearance from login through all authenticated pages
+- **Subtle overlay** - semi-transparent layer ensures text readability
+- **Theme-aware** - automatically adapts to light/dark mode
+
+### Enabling the Background
+
+<Steps>
+
+<Step>
+
+Open `src/app/globals.css` and locate the `@layer base` section near the bottom.
+
+</Step>
+
+<Step>
+
+Uncomment the background image properties in the `body` selector:
+
+```css
+body {
+  background-image: url("/bg-abstract.jpg");
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+```
+
+</Step>
+
+<Step>
+
+Uncomment the overlay pseudo-element:
+
+```css
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: hsl(var(--background) / 0.85);
+  pointer-events: none;
+  z-index: -1;
+}
+```
+
+</Step>
+
+<Step>
+
+Save the file. The background will appear immediately in dev mode or after rebuilding.
+
+</Step>
+
+</Steps>
+
+### Disabling the Background
+
+Comment out both the `body` background properties and the `body::before` pseudo-element (this is the default state).
+
+## Customizing the Background
+
+### Using Your Own Image
+
+<Steps>
+
+<Step>
+
+Place your image in the `/public/` directory:
+
+```bash
+# Example
+/public/my-background.jpg
+```
+
+</Step>
+
+<Step>
+
+Update the `background-image` URL in `src/app/globals.css`:
+
+```css
+background-image: url("/my-background.jpg");
+```
+
+</Step>
+
+</Steps>
+
+**Supported image formats:**
+
+| Format | Transparency | Compression | Recommendation |
+|--------|--------------|-------------|----------------|
+| JPEG   | ❌ No        | Good        | Standard photos |
+| PNG    | ✅ Yes       | Large files | Transparency needed |
+| WebP   | ✅ Yes       | Excellent   | **Recommended** |
+| AVIF   | ✅ Yes       | Best        | Newer browsers only |
+
+### Adjusting Visibility
+
+Control how prominent the background appears by changing the overlay opacity:
+
+```css
+/* Very subtle (barely visible) */
+background: hsl(var(--background) / 0.95);
+
+/* Default - subtle but visible */
+background: hsl(var(--background) / 0.85);
+
+/* Moderate visibility */
+background: hsl(var(--background) / 0.70);
+
+/* Strong visibility */
+background: hsl(var(--background) / 0.50);
+```
+
+<Callout type="tip">
+  **Lower values** make the image more visible. Start with `0.85` and adjust to taste.
+</Callout>
+
+### Background Positioning
+
+Modify how the image is displayed:
+
+```css
+/* Fill entire viewport (default) */
+background-size: cover;
+background-position: center;
+
+/* Show entire image without cropping */
+background-size: contain;
+
+/* Align to specific position */
+background-position: top left;
+
+/* Scroll with page instead of fixed */
+background-attachment: scroll;
+```
+
+## Performance Considerations
+
+<Callout type="warn">
+  Avoid adding CSS `blur` or `filter` effects to the background. These can cause significant performance issues on mobile devices and older hardware.
+</Callout>
+
+### CSS Effects Warning
+
+```css
+/* ⚠️ NOT RECOMMENDED - causes performance issues */
+body {
+  background-image: url("/bg-abstract.jpg");
+  filter: blur(5px);  /* Expensive operation */
+}
+```
+
+**Performance impact:**
+- Stuttering during scrolling
+- Laggy page transitions
+- High GPU usage
+- Battery drain on mobile
+
+### Best Practices
+
+<Steps>
+
+<Step>
+
+**Pre-blur images** - Apply blur/effects in an image editor (Photoshop, GIMP, Photopea) before adding to the project. This has **zero runtime performance cost**.
+
+</Step>
+
+<Step>
+
+**Optimize file size** - Use WebP format and compress images with tools like:
+- [Squoosh](https://squoosh.app/)
+- [TinyPNG](https://tinypng.com/)
+- [ImageOptim](https://imageoptim.com/)
+
+</Step>
+
+<Step>
+
+**Test on target devices** - Verify performance on mobile and older hardware before deploying.
+
+</Step>
+
+</Steps>
+
+## Using Transparent Images
+
+If you want parts of the image to be transparent:
+
+<Steps>
+
+<Step>
+
+Use PNG or WebP format (JPEG doesn't support transparency)
+
+</Step>
+
+<Step>
+
+Edit your image in a graphics editor to add an alpha channel
+
+</Step>
+
+<Step>
+
+Export as PNG or WebP
+
+</Step>
+
+<Step>
+
+Replace the file in `/public/` and update the CSS path
+
+</Step>
+
+</Steps>
+
+Transparent areas will show through to the theme's background color, creating a layered effect.
+
+## Examples
+
+### Professional Subtle Background
+
+```css
+/* Recommended for production */
+body {
+  background-image: url("/bg-abstract.jpg");
+  background-attachment: fixed;
+  background-size: cover;
+  background-position: center;
+}
+
+body::before {
+  background: hsl(var(--background) / 0.90); /* Very subtle */
+}
+```
+
+### Strong Visual Impact
+
+```css
+/* More prominent for visual interest */
+body::before {
+  background: hsl(var(--background) / 0.60); /* More visible */
+}
+```
+
+### No Overlay
+
+```css
+/* Remove overlay entirely for full image visibility */
+/* Comment out or delete the body::before block */
+/* Warning: May reduce text readability */
+```
+
+## Troubleshooting
+
+### Image Not Appearing
+
+1. Verify the image file exists in `/public/` directory
+2. Check the file path in `background-image: url(...)`
+3. Ensure both `body` and `body::before` styles are uncommented
+4. Clear browser cache (`Ctrl+Shift+R` or `Cmd+Shift+R`)
+5. Check browser console for 404 errors
+
+### Image Too Prominent
+
+Increase the overlay opacity to make it more subtle:
+
+```css
+body::before {
+  background: hsl(var(--background) / 0.95); /* Higher = more subtle */
+}
+```
+
+### Image Shifts Between Pages
+
+Ensure you're using `background-attachment: fixed`:
+
+```css
+body {
+  background-attachment: fixed; /* Not scroll */
+}
+```
+
+### Performance Issues
+
+1. Remove any `filter` or `backdrop-filter` CSS properties
+2. Pre-blur the image in an image editor instead of using CSS
+3. Compress/optimize the image file
+4. Consider using a lower resolution image
+5. Test on mobile devices
+
+## Related Documentation
+
+- [Configuration](/getting-started/configuration) - Environment variables and settings
+- [Themes Specification](/.claude/SPECS/REQ_Themes.md) - Theme system details (dev)
+- [Background Configuration](/.claude/UI/UI_BACKGROUND.md) - Technical details (dev)

@@ -90,7 +90,7 @@ npm run db:backup         # Create timestamped backup
 npm run db:restore        # Restore from backup
 npm run db:export         # Export to JSON
 npm run db:list-backups   # List available backups
-npm run db:create-admin   # Create admin user
+npm run db:superuser      # Create superuser
 npm run db:nuke           # Delete database (destructive)
 npm run db:verify         # Verify database integrity
 ```
@@ -154,7 +154,7 @@ Default credentials for development:
 - **Admin:** `manager` / `manager123`
 - **User:** `viewer` / `viewer123`
 
-Change these in production via the Admin console or `npm run db:create-admin`.
+Change these in production via the Admin console or `npm run db:superuser`.
 
 ## Configuration
 

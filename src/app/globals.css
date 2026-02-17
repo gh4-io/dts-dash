@@ -836,13 +836,21 @@
     font-feature-settings:
       "rlig" 1,
       "calt" 1;
-    background-image: url("/bg-abstract.jpg");
+    /* Background image - disabled by default
+     * To enable: uncomment the lines below
+     * See .claude/UI/UI_BACKGROUND.md for full documentation
+     */
+    /* background-image: url("/bg-abstract.jpg");
     background-attachment: fixed;
     background-size: cover;
     background-position: center;
-    background-repeat: no-repeat;
+    background-repeat: no-repeat; */
   }
-  body::before {
+  /* Background overlay - disabled by default
+   * To enable: uncomment when background-image is enabled
+   * Adjust opacity value (0.85) to control visibility: higher = more subtle
+   */
+  /* body::before {
     content: "";
     position: fixed;
     top: 0;
@@ -852,5 +860,5 @@
     background: hsl(var(--background) / 0.85);
     pointer-events: none;
     z-index: -1;
-  }
+  } */
 }

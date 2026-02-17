@@ -19,6 +19,13 @@ const eslintConfig = defineConfig([
       eqeqeq: ["error", "always", { null: "ignore" }],
     },
   },
+  // CJS Node scripts — allow require() imports
+  {
+    files: ["scripts/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

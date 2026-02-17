@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PasswordSecurityForm } from "@/components/admin/password-security-form";
+import type { PasswordRequirements } from "@/lib/utils/password-validation";
 
 interface ShiftConfig {
   name: string;
@@ -68,6 +70,8 @@ export default function AdminSettingsPage() {
     protocol: "http" as "http" | "https",
     label: "",
   });
+  const [passwordConfig, setPasswordConfig] = useState<PasswordRequirements | null>(null);
+  const [passwordSource, setPasswordSource] = useState<"yaml" | "env" | "default">("default");
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -84,7 +88,21 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     fetchConfig();
+    fetchPasswordConfig();
   }, [fetchConfig]);
+
+  const fetchPasswordConfig = async () => {
+    try {
+      const res = await fetch("/api/admin/password-security");
+      if (res.ok) {
+        const data = await res.json();
+        setPasswordConfig(data.requirements);
+        setPasswordSource(data.source);
+      }
+    } catch {
+      // silently fail
+    }
+  };
 
   const handleSave = async () => {
     if (!config) return;
@@ -185,6 +203,59 @@ export default function AdminSettingsPage() {
   const formatHostUrl = (h: AllowedHostname) => {
     const base = `${h.protocol}://${h.hostname}`;
     return h.port ? `${base}:${h.port}` : base;
+  };
+
+  const handleSavePasswordConfig = async () => {
+    if (!passwordConfig) return;
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/admin/password-security", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requirements: passwordConfig }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPasswordConfig(data.requirements);
+        setPasswordSource(data.source);
+        setMessage({ type: "success", text: "Password security settings saved" });
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error ?? "Failed to save" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetPasswordConfig = async () => {
+    setSaving(true);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/admin/password-security/reset", {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPasswordConfig(data.requirements);
+        setPasswordSource(data.source);
+        setMessage({ type: "success", text: "Password requirements reset to defaults" });
+      } else {
+        const data = await res.json();
+        setMessage({ type: "error", text: data.error ?? "Failed to reset" });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -735,6 +806,47 @@ export default function AdminSettingsPage() {
             Add
           </Button>
         </div>
+      </section>
+
+      {/* Password Security */}
+      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">
+              <i className="fa-solid fa-shield-halved mr-2 text-muted-foreground" />
+              Password Security
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Configure password complexity requirements and security policies
+            </p>
+          </div>
+          <Button onClick={handleSavePasswordConfig} disabled={saving || !passwordConfig} size="sm">
+            {saving ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin mr-2" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-floppy-disk mr-2" />
+                Save Password Settings
+              </>
+            )}
+          </Button>
+        </div>
+
+        {passwordConfig ? (
+          <PasswordSecurityForm
+            requirements={passwordConfig}
+            source={passwordSource}
+            onChange={setPasswordConfig}
+            onReset={handleResetPasswordConfig}
+          />
+        ) : (
+          <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
+            <i className="fa-solid fa-spinner fa-spin text-2xl" />
+          </div>
+        )}
       </section>
 
       {/* Coming Soon stubs */}

@@ -50,6 +50,24 @@ export const proxy = auth((req) => {
     return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   }
 
+  // Forced password reset enforcement
+  const forcePasswordChange = (req.auth?.user as { forcePasswordChange?: boolean } | undefined)
+    ?.forcePasswordChange;
+
+  if (forcePasswordChange) {
+    // Allow only password change page, password change API, and sign out
+    const allowedPaths = ["/account/change-password", "/api/account/password", "/api/auth/signout"];
+
+    const isAllowed = allowedPaths.some((p) => pathname.startsWith(p));
+
+    if (!isAllowed) {
+      // Redirect all other routes to forced password change page
+      const changePasswordUrl = new URL("/account/change-password", req.nextUrl.origin);
+      changePasswordUrl.searchParams.set("forced", "true");
+      return NextResponse.redirect(changePasswordUrl);
+    }
+  }
+
   // Admin route enforcement
   if (isAdmin(pathname)) {
     if (role !== "admin" && role !== "superadmin") {

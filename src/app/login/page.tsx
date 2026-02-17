@@ -31,6 +31,22 @@ export default function LoginPage() {
         setError("Invalid username/email or password");
       }
     } else {
+      // Check if user needs forced password reset
+      try {
+        const forceResetRes = await fetch("/api/auth/check-force-reset");
+        if (forceResetRes.ok) {
+          const data = await forceResetRes.json();
+          if (data.forcePasswordChange) {
+            router.push("/account/change-password?forced=true");
+            router.refresh();
+            return;
+          }
+        }
+      } catch {
+        // Silently fail - middleware will catch it anyway
+      }
+
+      // Normal redirect to dashboard
       router.push("/dashboard");
       router.refresh();
     }
@@ -105,9 +121,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-muted-foreground">
-          CVG Line Maintenance Operations
-        </p>
+        <p className="text-center text-xs text-muted-foreground">CVG Line Maintenance Operations</p>
       </div>
     </div>
   );

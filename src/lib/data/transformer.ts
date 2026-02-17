@@ -1,5 +1,6 @@
 import { db } from "@/lib/db/client";
-import { mhOverrides, appConfig } from "@/lib/db/schema";
+import { mhOverrides, appConfig, workPackages } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import type { SharePointWorkPackage, WorkPackage, MHSource, AppConfig } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 
@@ -12,7 +13,7 @@ const log = createChildLogger("transformer");
  */
 
 let cachedConfig: AppConfig | null = null;
-let cachedOverrides: Map<number, number> | null = null;
+let cachedOverrides: Map<string, number> | null = null; // GUID -> overrideMH
 
 /**
  * Load app config from SQLite
@@ -77,16 +78,24 @@ async function loadConfig(): Promise<AppConfig> {
 }
 
 /**
- * Load MH overrides from SQLite
+ * Load MH overrides from SQLite, keyed by work package GUID.
+ * Joins mh_overrides with work_packages to resolve GUID from the auto-increment ID.
  */
-async function loadOverrides(): Promise<Map<number, number>> {
+async function loadOverrides(): Promise<Map<string, number>> {
   if (cachedOverrides) {
     return cachedOverrides;
   }
 
   try {
-    const overrides = await db.select().from(mhOverrides);
-    cachedOverrides = new Map(overrides.map((o) => [o.workPackageId, o.overrideMH]));
+    const rows = await db
+      .select({
+        guid: workPackages.guid,
+        overrideMH: mhOverrides.overrideMH,
+      })
+      .from(mhOverrides)
+      .innerJoin(workPackages, eq(workPackages.id, mhOverrides.workPackageId));
+
+    cachedOverrides = new Map(rows.map((r) => [r.guid, r.overrideMH]));
     log.info(`Loaded ${cachedOverrides.size} MH overrides`);
     return cachedOverrides;
   } catch (error) {
@@ -131,42 +140,45 @@ export async function transformWorkPackages(
     const groundHoursRaw = parseFloat(wp.TotalGroundHours);
     const groundHours = isNaN(groundHoursRaw) ? 0 : groundHoursRaw;
 
-    // Parse IsNotClosedOrCanceled (string "1"/"0" → boolean)
-    const isActive = wp.IsNotClosedOrCanceled === "1";
+    // Parse IsNotClosedOrCanceled (string "1"/"0" → boolean, default true if absent)
+    const isActive = wp.IsNotClosedOrCanceled ? wp.IsNotClosedOrCanceled === "1" : true;
 
-    // Compute effectiveMH
-    const manualOverride = overrides.get(wp.ID) ?? null;
+    // Compute effectiveMH — overrides keyed by GUID
+    const manualOverride = overrides.get(wp.GUID) ?? null;
     const wpMH = wp.TotalMH;
+    const hasWP = wp.HasWorkpackage ?? false;
     const { effectiveMH, mhSource } = computeEffectiveMH(
       manualOverride,
       wpMH,
-      wp.HasWorkpackage,
+      hasWP,
       config.defaultMH,
       config.wpMHMode
     );
 
     return {
-      id: wp.ID,
-      documentSetId: wp.DocumentSetID,
+      id: wp.ID ?? 0,
+      guid: wp.GUID,
       aircraftReg: wp.Aircraft?.Title ?? "Unknown",
-      aircraftId: wp.AircraftId,
       customer: wp.Customer,
-      flightId: wp.FlightId,
+      flightId: wp.FlightId ?? null,
       arrival,
       departure,
       totalMH: wpMH,
       groundHours,
       status: wp.Workpackage_x0020_Status,
-      hasWorkpackage: wp.HasWorkpackage,
-      workpackageNo: wp.WorkpackageNo,
-      calendarComments: wp.CalendarComments,
-      isActive,
-      modified: new Date(wp.Modified),
-      created: new Date(wp.Created),
       effectiveMH,
       mhSource,
       manualMHOverride: manualOverride,
       inferredType: normalizedTypes[idx]?.canonical ?? "Unknown",
+      title: wp.Title ?? null,
+      description: wp.Description ?? null,
+      customerReference: wp.CustomerReference ?? null,
+      hasWorkpackage: hasWP,
+      workpackageNo: wp.WorkpackageNo ?? null,
+      calendarComments: wp.CalendarComments ?? null,
+      isActive,
+      modified: wp.Modified ? new Date(wp.Modified) : null,
+      created: wp.Created ? new Date(wp.Created) : null,
     };
   });
 }

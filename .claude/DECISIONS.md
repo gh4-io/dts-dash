@@ -309,3 +309,22 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 **Rationale**: v0.1.0 is now deployed. Future changes must not break existing deployments without explicit version signaling and migration documentation.
 
 **Links**: [REQ_Versioning.md](SPECS/REQ_Versioning.md), [PROD_RELEASE_PLAN.md](PROD_RELEASE_PLAN.md)
+
+---
+
+## D-029 | 2026-02-16 | Work Packages Move to SQLite (Supersedes D-011 partial)
+
+**Decision**: Work package data moves from file-based `data/input.json` to a `work_packages` SQLite table. All runtime data now flows through the database. Import writes UPSERT by GUID into the DB instead of overwriting a JSON file.
+
+**Key changes:**
+- New `work_packages` table with auto-increment PK, GUID as unique key, SharePoint ID as alternate unique key
+- `mh_overrides` FK now correctly references `work_packages.id` (was broken, keyed by non-existent SP ID)
+- Reader queries DB instead of reading `data/input.json`
+- Import UPSERTs into DB by GUID (idempotent re-import)
+- New `db:import` CLI script for file/stdin import
+- Health check queries `work_packages` count instead of checking file existence
+- Seed data includes sample work packages for development workflow
+
+**Supersedes**: D-011 partial ("Work packages remain file-based JSON") — now ALL data is SQLite-backed.
+**Version impact**: MINOR (backwards-compatible — no API shape changes, internal storage change only)
+**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), [REQ_DataImport.md](SPECS/REQ_DataImport.md)

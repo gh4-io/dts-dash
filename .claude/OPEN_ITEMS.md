@@ -768,6 +768,38 @@
 
 ---
 
+## OI-044 | Generic db:cleanup + Data Retention Policy
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Current `db:cleanup-canceled` script and cron task are single-purpose (only handles canceled WPs). Should be generalized into a `db:cleanup` command that the cron system can orchestrate for multiple cleanup tasks. Additionally, old work package data should be subject to a retention policy — configurable via system config, default 3 months. |
+| **Proposed Solution** | (1) Rename `db:cleanup-canceled` → `db:cleanup` with subcommands or flags (`--canceled`, `--retention`, `--all`). (2) Add `dataRetentionDays` to `appConfig` or `cron_jobs` table (default: 90 days / 3 months). (3) Retention cleanup: delete WPs where `importedAt` is older than retention threshold. (4) Cron task handles both: canceled WP purge (with grace period) AND old data retention (by age). (5) CLI script supports running either or both. |
+| **Current State** | `db:cleanup-canceled` script + `cleanup-canceled` cron job already implemented (commit acaae1c). Cron infrastructure (`cron_jobs` table, `node-cron` manager) is in place. |
+| **Links** | `scripts/db/cleanup-canceled.ts`, `src/lib/cron/tasks/cleanup-canceled.ts`, `src/lib/cron/index.ts`, `src/lib/db/schema.ts` (cronJobs table) |
+
+---
+
+## OI-045 | Canceled WP Visual Treatment on Flight Board
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-16 |
+| **Context** | Currently canceled WPs are filtered out at the query level (`reader.ts` WHERE clause). User preference: instead of hiding them entirely, show canceled WPs on the flight board with a striped "candy-cane" visual treatment so operators can see they exist but know they're canceled. If the visual is too distracting, provide a toggle to filter canceled items off (using the existing filter system). The query-level filter in `reader.ts` needs to be removed/relaxed so canceled WPs flow through to the UI, with the visual distinction happening at the rendering layer. |
+| **Design Options** | (1) **Candy-cane stripes**: CSS diagonal stripe pattern overlay on ECharts Gantt bars for canceled WPs. (2) **Toggle**: Add a "Show canceled" toggle to the flight board toolbar or FilterBar. Default: ON (show with stripes). (3) **Fallback**: If stripes are too distracting, use reduced opacity (0.3-0.4) + dashed border instead. |
+| **Implementation Notes** | ECharts custom series supports `itemStyle` patterns via SVG/canvas. Canceled status is already normalized to "Canceled" during import. Reader filter (`notLike(workPackages.status, "Cancel%")`) must be relaxed to allow canceled WPs through when needed. The toggle state could live in Zustand filter store or a separate UI preference. |
+| **Links** | `src/lib/data/reader.ts` (current filter), `src/components/flight-board/flight-board-chart.tsx` (Gantt rendering), `src/lib/data/import-utils.ts` (status normalization), `src/types/index.ts` (WpStatus type) |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |

@@ -111,3 +111,6 @@ out/
 
 # Serena MCP memories
 .serena/
+
+# Server configuration (instance-specific)
+server.config.yml

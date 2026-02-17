@@ -5,11 +5,7 @@ import { db } from "./db/client";
 import { users, sessions } from "./db/schema";
 import { eq, or, and, ne } from "drizzle-orm";
 import { validateAuthSecret } from "./utils/env-check";
-import {
-  isRateLimited,
-  recordFailedAttempt,
-  clearAttempts,
-} from "./utils/login-rate-limit";
+import { isRateLimited, recordFailedAttempt, clearAttempts } from "./utils/login-rate-limit";
 
 validateAuthSecret();
 
@@ -23,9 +19,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         // Initial login — store user data + tokenVersion in JWT
         token.id = user.id;
-        token.role = (user as { role: string }).role;
-        token.tokenVersion = (user as { tokenVersion: number }).tokenVersion;
-        token.sessionId = (user as { sessionId: string }).sessionId;
+        token.role = (user as unknown as { role: string }).role;
+        token.tokenVersion = (user as unknown as { tokenVersion: number }).tokenVersion;
+        token.forcePasswordChange = (
+          user as unknown as { forcePasswordChange: boolean }
+        ).forcePasswordChange;
+        token.sessionId = (user as unknown as { sessionId: string }).sessionId;
       } else if (token.id) {
         // Subsequent requests — verify tokenVersion is still current
         const dbUser = db
@@ -33,6 +32,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             role: users.role,
             tokenVersion: users.tokenVersion,
             isActive: users.isActive,
+            forcePasswordChange: users.forcePasswordChange,
           })
           .from(users)
           .where(eq(users.id, token.id as string))
@@ -48,8 +48,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return { ...token, invalid: true };
         }
 
-        // Refresh role from DB — instant role changes
+        // Refresh role + forcePasswordChange from DB — instant changes
         token.role = dbUser.role;
+        token.forcePasswordChange = dbUser.forcePasswordChange;
       }
       return token;
     },
@@ -60,7 +61,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       if (session.user) {
         session.user.id = token.id as string;
-        (session.user as { role: string }).role = token.role as string;
+        (session.user as unknown as { role: string }).role = token.role as string;
+        (session.user as unknown as { forcePasswordChange: boolean }).forcePasswordChange =
+          token.forcePasswordChange as boolean;
       }
       return session;
     },
@@ -93,12 +96,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         // Extract client IP for rate limiting
         const forwarded =
-          request?.headers?.get?.("x-forwarded-for") ??
-          request?.headers?.get?.("x-real-ip");
+          request?.headers?.get?.("x-forwarded-for") ?? request?.headers?.get?.("x-real-ip");
         const ip =
-          (typeof forwarded === "string"
-            ? forwarded.split(",")[0].trim()
-            : null) ?? "unknown";
+          (typeof forwarded === "string" ? forwarded.split(",")[0].trim() : null) ?? "unknown";
 
         // Check rate limit before DB lookup
         if (isRateLimited(ip, loginLower)) {
@@ -108,12 +108,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const user = db
           .select()
           .from(users)
-          .where(
-            or(
-              eq(users.email, loginLower),
-              eq(users.username, loginLower)
-            )
-          )
+          .where(or(eq(users.email, loginLower), eq(users.username, loginLower)))
           .get();
 
         if (!user || !user.isActive) {
@@ -132,9 +127,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Create DB session record
         const sessionId = crypto.randomUUID();
         const sessionToken = crypto.randomUUID();
-        const expiresAt = new Date(
-          Date.now() + 30 * 24 * 60 * 60 * 1000
-        ).toISOString(); // 30 days
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
         db.insert(sessions)
           .values({
@@ -151,6 +144,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           name: user.displayName,
           role: user.role,
           tokenVersion: user.tokenVersion,
+          forcePasswordChange: user.forcePasswordChange,
           sessionId,
         };
       },
@@ -187,13 +181,8 @@ export function invalidateUserTokens(userId: string): void {
  * Invalidate all sessions EXCEPT the one with the given sessionId.
  * Used after password change to keep current session alive.
  */
-export function invalidateOtherSessions(
-  userId: string,
-  keepSessionId: string
-): void {
+export function invalidateOtherSessions(userId: string, keepSessionId: string): void {
   db.delete(sessions)
-    .where(
-      and(eq(sessions.userId, userId), ne(sessions.id, keepSessionId))
-    )
+    .where(and(eq(sessions.userId, userId), ne(sessions.id, keepSessionId)))
     .run();
 }

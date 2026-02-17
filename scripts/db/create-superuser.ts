@@ -1,11 +1,11 @@
 #!/usr/bin/env npx tsx
 /**
- * db:create-admin — Create the first superadmin user on a fresh database.
+ * db:superuser — Create the first superadmin user on a fresh database.
  * Intended for production first-run setup where db:seed is not used.
  *
- * Usage: npm run db:create-admin
- *        npm run db:create-admin -- --email admin@example.com --password secret123
- *        npm run db:create-admin -- --email admin@example.com --random
+ * Usage: npm run db:superuser
+ *        npm run db:superuser -- --email admin@example.com --username admin --password secret123
+ *        npm run db:superuser -- --email admin@example.com --username admin --random
  */
 
 import crypto from "crypto";
@@ -72,18 +72,14 @@ function prompt(question: string, hidden = false): Promise<string> {
 }
 
 async function main() {
-  banner("Create Admin User");
+  banner("Create Superuser");
 
   // Ensure schema exists
   createTables();
   runMigrations();
 
   // Check if a superadmin already exists
-  const existingAdmin = db
-    .select()
-    .from(users)
-    .where(eq(users.role, "superadmin"))
-    .get();
+  const existingAdmin = db.select().from(users).where(eq(users.role, "superadmin")).get();
 
   if (existingAdmin) {
     warn("A superadmin already exists:");
@@ -107,15 +103,27 @@ async function main() {
   }
 
   // Check for duplicate email
-  const existingEmail = db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .get();
+  const existingEmail = db.select().from(users).where(eq(users.email, email)).get();
 
   if (existingEmail) {
     error(`A user with email '${email}' already exists.`);
     process.exit(1);
+  }
+
+  // Gather username
+  let username = getArg("--username");
+  if (!username) {
+    username = await prompt("Username (optional, press Enter to skip):");
+  }
+
+  // Check for duplicate username if provided
+  if (username) {
+    const existingUsername = db.select().from(users).where(eq(users.username, username)).get();
+
+    if (existingUsername) {
+      error(`A user with username '${username}' already exists.`);
+      process.exit(1);
+    }
   }
 
   // Gather display name
@@ -154,6 +162,7 @@ async function main() {
     .values({
       id,
       email,
+      username: username || undefined,
       displayName,
       passwordHash: hashSync(password!, 10),
       role: "superadmin",
@@ -169,6 +178,9 @@ async function main() {
   log("═══════════════════════════════════════════════════════════", "green");
   log("");
   log(`  Email:    ${c.yellow}${email}${c.reset}`);
+  if (username) {
+    log(`  Username: ${c.yellow}${username}${c.reset}`);
+  }
   log(`  Name:     ${c.yellow}${displayName}${c.reset}`);
   log(`  Password: ${c.yellow}${password}${c.reset}`);
   log(`  Role:     ${c.cyan}superadmin${c.reset}`);

@@ -68,21 +68,21 @@ function loadSeedFile<T>(filename: string): T {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Failed to load seed file data/seed/${filename}: ${msg}\n` +
-        `Ensure the file exists and contains valid JSON.`
+        `Ensure the file exists and contains valid JSON.`,
     );
   }
 }
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
 
-export const SEED_USERS: readonly SeedUser[] =
-  loadSeedFile<SeedUser[]>("users.json");
+export const SEED_USERS: readonly SeedUser[] = loadSeedFile<SeedUser[]>("users.json");
 
 export const SEED_CUSTOMERS: readonly SeedCustomer[] =
   loadSeedFile<SeedCustomer[]>("customers.json");
 
-export const SEED_AIRCRAFT_TYPE_MAPPINGS: readonly SeedAircraftTypeMapping[] =
-  loadSeedFile<SeedAircraftTypeMapping[]>("aircraft-type-mappings.json");
+export const SEED_AIRCRAFT_TYPE_MAPPINGS: readonly SeedAircraftTypeMapping[] = loadSeedFile<
+  SeedAircraftTypeMapping[]
+>("aircraft-type-mappings.json");
 
 export const SEED_APP_CONFIG: readonly SeedAppConfig[] =
   loadSeedFile<SeedAppConfig[]>("app-config.json");
@@ -95,3 +95,32 @@ export const SEED_AIRCRAFT_MODELS: readonly SeedAircraftModel[] =
 
 export const SEED_ENGINE_TYPES: readonly SeedEngineType[] =
   loadSeedFile<SeedEngineType[]>("engine-types.json");
+
+export interface SeedWorkPackage {
+  GUID: string;
+  Aircraft: { Title: string; field_5?: string };
+  Customer: string;
+  Arrival: string;
+  Departure: string;
+  TotalMH: number | null;
+  TotalGroundHours: string;
+  Workpackage_x0020_Status: string;
+  Title?: string;
+  CustomerReference?: string;
+  Description?: string;
+  FlightId?: string | null;
+  ParentID?: string | null;
+  ID?: number;
+  DocumentSetID?: number;
+  AircraftId?: number;
+  HasWorkpackage?: boolean;
+  WorkpackageNo?: string | null;
+  CalendarComments?: string | null;
+  IsNotClosedOrCanceled?: "1" | "0";
+  Modified?: string;
+  Created?: string;
+  OData__UIVersionString?: string;
+}
+
+export const SEED_WORK_PACKAGES: readonly SeedWorkPackage[] =
+  loadSeedFile<SeedWorkPackage[]>("work-packages.json");

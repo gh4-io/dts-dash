@@ -1,18 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { invalidateCache } from "@/lib/data/reader";
+import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { db } from "@/lib/db/client";
-import { importLog } from "@/lib/db/schema";
-import fs from "fs/promises";
-import path from "path";
+import { importLog, workPackages } from "@/lib/db/schema";
+import { sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/admin/import/reset");
 
 /**
  * POST /api/admin/import/reset
- * Clears event data (input.json) while preserving system data.
- * Creates backup before reset.
+ * Clears all work package data from the database.
  * Admin/superadmin only.
  */
 export async function POST() {
@@ -29,18 +28,14 @@ export async function POST() {
   }
 
   try {
-    const dataPath = path.join(process.cwd(), "data", "input.json");
-    const backupDir = path.join(process.cwd(), "data", "backups");
+    // Count current records
+    const countResult = db
+      .select({ count: sql<number>`count(*)` })
+      .from(workPackages)
+      .get();
+    const currentRecordCount = countResult?.count ?? 0;
 
-    // Check if input.json exists
-    let currentRecordCount = 0;
-    try {
-      const currentData = await fs.readFile(dataPath, "utf-8");
-      const parsed = JSON.parse(currentData);
-      const records = Array.isArray(parsed) ? parsed : parsed.value ?? [];
-      currentRecordCount = records.length;
-    } catch {
-      // File doesn't exist or is invalid — nothing to reset
+    if (currentRecordCount === 0) {
       return NextResponse.json({
         success: true,
         message: "No data to reset",
@@ -48,19 +43,12 @@ export async function POST() {
       });
     }
 
-    // Create backup directory
-    await fs.mkdir(backupDir, { recursive: true });
+    // Delete all work packages
+    db.delete(workPackages).run();
 
-    // Create backup with timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupPath = path.join(backupDir, `input_${timestamp}.json`);
-    await fs.copyFile(dataPath, backupPath);
-
-    // Reset input.json to empty array
-    await fs.writeFile(dataPath, "[]", "utf-8");
-
-    // Invalidate cache
+    // Invalidate caches
     invalidateCache();
+    invalidateTransformerCache();
 
     // Log the reset action
     const logId = crypto.randomUUID();
@@ -86,16 +74,15 @@ export async function POST() {
       success: true,
       message: `Reset complete. Cleared ${currentRecordCount} records.`,
       recordCount: currentRecordCount,
-      backupPath: `data/backups/input_${timestamp}.json`,
     });
   } catch (error) {
     log.error({ err: error }, "Error");
     return NextResponse.json(
       {
-        error: "Failed to reset event data",
+        error: "Failed to reset work package data",
         details: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

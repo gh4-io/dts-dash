@@ -1,0 +1,37 @@
+# Development Server Configuration
+# This file is tracked in git as a template
+# Production instances use server.config.yml (gitignored)
+
+# ─── Password Security ──────────────────────────────────────────────────────
+passwordSecurity:
+  # Minimum password length (8-128 characters)
+  # Development default: 8 for easier testing
+  minLength: 8
+
+  # Maximum password length (8-128 characters)
+  maxLength: 128
+
+  # Character requirements (boolean)
+  requireUppercase: true
+  requireLowercase: true
+  requireDigits: true
+  requireSpecialChars: true
+
+  # Common password prevention (boolean)
+  # When true, blocks passwords from the blocklist
+  preventCommon: true
+
+  # Minimum entropy score (0-100)
+  # 0 = disabled, 30-50 = medium, 70+ = high security
+  # Development default: 30 (lower threshold for testing)
+  minEntropy: 30
+
+# Future sections will be added here:
+# database:
+#   maxConnections: 10
+#   timeout: 5000
+# logging:
+#   level: info
+#   format: json
+# features:
+#   enableAnalytics: true

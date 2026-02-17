@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { sqlite } from "@/lib/db/client";
-import fs from "fs";
-import path from "path";
 
 const startTime = Date.now();
 
 /**
  * GET /api/health
  * No authentication required.
- * Returns system health status with DB and data file checks.
+ * Returns system health status with DB and work package data checks.
  * Returns 503 if database is unreachable.
  */
 export async function GET() {
@@ -18,9 +16,8 @@ export async function GET() {
   // Check database connectivity
   try {
     const result = sqlite.prepare("SELECT 1 as ok").get() as { ok: number };
-    checks.database = result?.ok === 1
-      ? { status: "ok" }
-      : { status: "error", message: "Unexpected query result" };
+    checks.database =
+      result?.ok === 1 ? { status: "ok" } : { status: "error", message: "Unexpected query result" };
   } catch (error) {
     checks.database = {
       status: "error",
@@ -29,15 +26,18 @@ export async function GET() {
     healthy = false;
   }
 
-  // Check data file exists
-  const dataPath = path.join(process.cwd(), "data", "input.json");
+  // Check work packages exist in database
   try {
-    const exists = fs.existsSync(dataPath);
-    checks.dataFile = exists
-      ? { status: "ok" }
-      : { status: "warning", message: "No data file — import data to begin" };
+    const result = sqlite.prepare("SELECT count(*) as count FROM work_packages").get() as {
+      count: number;
+    };
+    const count = result?.count ?? 0;
+    checks.workPackages =
+      count > 0
+        ? { status: "ok", message: `${count} records` }
+        : { status: "warning", message: "No work packages — import data to begin" };
   } catch {
-    checks.dataFile = { status: "warning", message: "Could not check data file" };
+    checks.workPackages = { status: "warning", message: "Could not query work_packages table" };
   }
 
   const uptimeMs = Date.now() - startTime;

@@ -10,7 +10,7 @@ const log = createChildLogger("api/admin/import/commit");
 
 /**
  * POST /api/admin/import/commit
- * Write validated JSON data to data/input.json and log the import
+ * UPSERT validated JSON data into work_packages table and log the import
  */
 export async function POST(request: NextRequest) {
   try {
@@ -27,25 +27,15 @@ export async function POST(request: NextRequest) {
     };
 
     if (!jsonContent || typeof jsonContent !== "string") {
-      return NextResponse.json(
-        { error: "jsonContent is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "jsonContent is required" }, { status: 400 });
     }
 
     if (!source || !["file", "paste"].includes(source)) {
-      return NextResponse.json(
-        { error: "source must be 'file' or 'paste'" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "source must be 'file' or 'paste'" }, { status: 400 });
     }
 
     // Load configurable size limit
-    const sizeRow = db
-      .select()
-      .from(appConfig)
-      .where(eq(appConfig.key, "ingestMaxSizeMB"))
-      .get();
+    const sizeRow = db.select().from(appConfig).where(eq(appConfig.key, "ingestMaxSizeMB")).get();
     const maxSizeMB = parseInt(sizeRow?.value ?? "50", 10);
 
     // Re-validate the JSON
@@ -53,13 +43,12 @@ export async function POST(request: NextRequest) {
     if (!validation.valid || !validation.records) {
       return NextResponse.json(
         { error: validation.errors[0] || "No valid records found" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    // Commit
+    // Commit (UPSERT into work_packages by GUID)
     const result = await commitImportData({
-      jsonContent,
       records: validation.records,
       source,
       fileName,
@@ -69,9 +58,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

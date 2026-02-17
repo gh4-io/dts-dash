@@ -177,6 +177,7 @@ plan/                        — Implementation plans
 | [UI_FILTER_PATTERNS.md](.claude/UI/UI_FILTER_PATTERNS.md) | Filter component patterns, active pills, mobile sheet |
 | [UI_REFERENCE_MAP.md](.claude/UI/UI_REFERENCE_MAP.md) | Reference image analysis — 12 images mapped to specs |
 | [UI_MENUS.md](.claude/UI/UI_MENUS.md) | Dropdown, sidebar, admin nav menu patterns |
+| [UI_BACKGROUND.md](.claude/UI/UI_BACKGROUND.md) | Background image configuration — enable/disable, customization, performance |
 
 ### Dev
 | File | Purpose |

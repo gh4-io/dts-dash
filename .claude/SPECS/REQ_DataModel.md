@@ -224,21 +224,27 @@ See [REQ_Auth.md](REQ_Auth.md) and [REQ_Account.md](REQ_Account.md) for full spe
 
 ## Data Storage
 
-### v0 → v1 Migration
+### Data Storage
 
-| Store | v0 (file-based) | v1 (SQLite) |
-|-------|-----------------|-------------|
-| Work packages | `data/input.json` | `data/input.json` (unchanged — read-only import) |
-| App config | `data/config.json` | `data/dashboard.db` → `config` table |
-| Customers | Hardcoded constant | `data/dashboard.db` → `customers` table |
-| Users | N/A | `data/dashboard.db` → `users` table |
-| Sessions | N/A | `data/dashboard.db` → `sessions` table |
-| Preferences | N/A | `data/dashboard.db` → `user_preferences` table |
-| MH Overrides | TBD (OI-008) | `data/dashboard.db` → `mh_overrides` table |
-| Aircraft Type Mappings | Hardcoded inference | `data/dashboard.db` → `aircraft_type_mappings` table |
-| Import Log | N/A | `data/dashboard.db` → `import_log` table |
+All runtime data stored in SQLite `data/dashboard.db` — local-first, zero-config, included in `.gitignore`.
 
-SQLite database file: `data/dashboard.db` — local-first, zero-config, included in `.gitignore`.
+| Table | Purpose | Key Changes (D-029) |
+|-------|---------|---------------------|
+| `work_packages` | Work package data (was `data/input.json`) | **D-029**: Moved from file to DB. UPSERT by GUID. Auto-increment PK, SP ID as alternate unique key. |
+| `mh_overrides` | Manual MH overrides | **D-029**: FK now references `work_packages.id` (was broken, keyed by non-existent SP ID) |
+| `app_config` | System configuration | Key-value store for settings |
+| `customers` | Customer master data | Admin-editable, color-coded |
+| `users` | User accounts | Auth.js integration |
+| `sessions` | User sessions | Auth.js session store |
+| `user_preferences` | Per-user settings | Theme, timezone, pagination |
+| `aircraft_type_mappings` | Aircraft type normalization | Regex patterns → canonical types |
+| `manufacturers` | Aircraft manufacturers | Master data |
+| `aircraft_models` | Aircraft models | Master data |
+| `engine_types` | Engine types | Master data |
+| `aircraft` | Aircraft registry | Master data with fuzzy operator matching |
+| `import_log` | Work package import history | Tracks imports (file, paste, API, CLI) |
+| `master_data_import_log` | Customer/aircraft import history | Separate from work package imports (OI-039) |
+| `analytics_events` | Usage tracking events | User behavior analytics |
 
 ## Data Warnings
 - `TotalGroundHours` is a **STRING** → `parseFloat()` required, default 0 if NaN
