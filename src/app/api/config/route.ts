@@ -41,6 +41,7 @@ export async function GET() {
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
       ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
+      ingestChunkTimeoutSeconds: parseInt(configMap.ingestChunkTimeoutSeconds ?? "300", 10),
       allowedHostnames: JSON.parse(
         configMap.allowedHostnames ??
           JSON.stringify([
