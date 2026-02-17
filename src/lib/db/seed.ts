@@ -326,6 +326,10 @@ export function runMigrations(): MigrationResult[] {
               updated_at TEXT NOT NULL
             )`,
     },
+    {
+      name: "Add default_zoom to user_preferences",
+      sql: "ALTER TABLE user_preferences ADD COLUMN default_zoom TEXT",
+    },
   ];
 
   const results: MigrationResult[] = [];

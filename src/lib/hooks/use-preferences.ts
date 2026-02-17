@@ -26,7 +26,14 @@ export interface UserPreferences {
   accentColor: string | null;
   compactMode: boolean;
   defaultTimezone: string;
-  defaultDateRange: "1d" | "3d" | "1w";
+  /** null = use system config offset range (defaultStartOffset/defaultEndOffset) */
+  defaultDateRange: "1d" | "3d" | "1w" | null;
+  /** System config offset for range start (days from today, may be negative) */
+  defaultStartOffset: number;
+  /** System config offset for range end (days from today) */
+  defaultEndOffset: number;
+  /** null = use system config default zoom */
+  defaultZoom: string | null;
   timeFormat: TimeFormat;
   tablePageSize: number;
 }
@@ -89,8 +96,11 @@ const defaults: UserPreferences = {
   themePreset: "vitepress",
   accentColor: null,
   compactMode: false,
-  defaultTimezone: "UTC",
-  defaultDateRange: "3d",
+  defaultTimezone: "America/New_York",
+  defaultDateRange: null,
+  defaultStartOffset: -3,
+  defaultEndOffset: 7,
+  defaultZoom: "3d",
   timeFormat: "24h",
   tablePageSize: 30,
 };
@@ -113,7 +123,10 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
           accentColor: data.accentColor ?? null,
           compactMode: data.compactMode ?? false,
           defaultTimezone: data.defaultTimezone ?? defaults.defaultTimezone,
-          defaultDateRange: data.defaultDateRange ?? defaults.defaultDateRange,
+          defaultDateRange: data.defaultDateRange ?? null,
+          defaultStartOffset: data.defaultStartOffset ?? defaults.defaultStartOffset,
+          defaultEndOffset: data.defaultEndOffset ?? defaults.defaultEndOffset,
+          defaultZoom: data.defaultZoom ?? null,
           timeFormat: data.timeFormat ?? defaults.timeFormat,
           tablePageSize: data.tablePageSize ?? defaults.tablePageSize,
           loaded: true,
@@ -144,13 +157,14 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
         body: JSON.stringify({
           colorMode: partial.colorMode ?? prev.colorMode,
           themePreset: partial.themePreset ?? prev.themePreset,
-          accentColor:
-            partial.accentColor !== undefined
-              ? partial.accentColor
-              : prev.accentColor,
+          accentColor: partial.accentColor !== undefined ? partial.accentColor : prev.accentColor,
           compactMode: partial.compactMode ?? prev.compactMode,
           defaultTimezone: partial.defaultTimezone ?? prev.defaultTimezone,
-          defaultDateRange: partial.defaultDateRange ?? prev.defaultDateRange,
+          defaultDateRange:
+            partial.defaultDateRange !== undefined
+              ? partial.defaultDateRange
+              : prev.defaultDateRange,
+          defaultZoom: partial.defaultZoom !== undefined ? partial.defaultZoom : prev.defaultZoom,
           timeFormat: partial.timeFormat ?? prev.timeFormat,
           tablePageSize: partial.tablePageSize ?? prev.tablePageSize,
         }),
@@ -165,6 +179,7 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
           compactMode: prev.compactMode,
           defaultTimezone: prev.defaultTimezone,
           defaultDateRange: prev.defaultDateRange,
+          defaultZoom: prev.defaultZoom,
           timeFormat: prev.timeFormat,
           tablePageSize: prev.tablePageSize,
         });

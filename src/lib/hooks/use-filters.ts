@@ -72,8 +72,14 @@ function midnightInTz(date: Date, tz: string): string {
   // Convert wall-clock midnight in tz → UTC
   const tentative = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
   const check = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
   }).formatToParts(tentative);
   const cGet = (type: string) => check.find((p) => p.type === type)?.value ?? "00";
   const wallStr = `${cGet("year")}-${cGet("month")}-${cGet("day")}T${cGet("hour")}:${cGet("minute")}:${cGet("second")}`;
@@ -90,6 +96,23 @@ function computeDateRange(rangeName: string, tz: string): { start: string; end: 
   return { start: startIso, end: endDate.toISOString() };
 }
 
+/**
+ * Compute an asymmetric date range from today using day offsets.
+ * startOffset may be negative (e.g. -3 = 3 days ago).
+ */
+function computeOffsetRange(
+  startOffset: number,
+  endOffset: number,
+  tz: string,
+): { start: string; end: string } {
+  const todayMidnight = midnightInTz(new Date(), tz);
+  const startDate = new Date(todayMidnight);
+  startDate.setUTCDate(startDate.getUTCDate() + startOffset);
+  const endDate = new Date(todayMidnight);
+  endDate.setUTCDate(endDate.getUTCDate() + endOffset);
+  return { start: startDate.toISOString(), end: endDate.toISOString() };
+}
+
 function getDefaults(): FilterState {
   const { start, end } = computeDateRange("3d", "UTC");
 
@@ -103,29 +126,45 @@ function getDefaults(): FilterState {
   };
 }
 
-export const useFilters = create<FilterState & FilterActions>()(
-  (set) => ({
-    ...getDefaults(),
+export const useFilters = create<FilterState & FilterActions>()((set) => ({
+  ...getDefaults(),
 
-    setStart: (v: string) => set({ start: v }),
-    setEnd: (v: string) => set({ end: v }),
-    setTimezone: (newTz: string) =>
-      set((state) => {
-        if (state.timezone === newTz) return { timezone: newTz };
-        return {
-          timezone: newTz,
-          start: reinterpretDate(state.start, state.timezone, newTz),
-          end: reinterpretDate(state.end, state.timezone, newTz),
-        };
-      }),
-    setOperators: (v: string[]) => set({ operators: v }),
-    setAircraft: (v: string[]) => set({ aircraft: v }),
-    setTypes: (v: AircraftType[]) => set({ types: v }),
-    reset: () => set(getDefaults()),
-    hydrate: (params: Partial<FilterState>) => set(params),
-    hydrateDefaults: (dateRange: string, tz: string) => {
-      const { start, end } = computeDateRange(dateRange, tz);
-      set({ start, end, timezone: tz });
-    },
-  })
-);
+  setStart: (v: string) => set({ start: v }),
+  setEnd: (v: string) => set({ end: v }),
+  setTimezone: (newTz: string) =>
+    set((state) => {
+      if (state.timezone === newTz) return { timezone: newTz };
+      return {
+        timezone: newTz,
+        start: reinterpretDate(state.start, state.timezone, newTz),
+        end: reinterpretDate(state.end, state.timezone, newTz),
+      };
+    }),
+  setOperators: (v: string[]) => set({ operators: v }),
+  setAircraft: (v: string[]) => set({ aircraft: v }),
+  setTypes: (v: AircraftType[]) => set({ types: v }),
+  reset: () => set(getDefaults()),
+  hydrate: (params: Partial<FilterState>) => set(params),
+  hydrateDefaults: (dateRange: string, tz: string) => {
+    const { start, end } = computeDateRange(dateRange, tz);
+    set({ start, end, timezone: tz });
+  },
+  hydrateFromPreferences: (prefs: {
+    defaultDateRange: string | null;
+    defaultStartOffset: number;
+    defaultEndOffset: number;
+    defaultTimezone: string;
+  }) => {
+    if (prefs.defaultDateRange) {
+      const { start, end } = computeDateRange(prefs.defaultDateRange, prefs.defaultTimezone);
+      set({ start, end, timezone: prefs.defaultTimezone });
+    } else {
+      const { start, end } = computeOffsetRange(
+        prefs.defaultStartOffset,
+        prefs.defaultEndOffset,
+        prefs.defaultTimezone,
+      );
+      set({ start, end, timezone: prefs.defaultTimezone });
+    }
+  },
+}));

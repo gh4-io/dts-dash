@@ -111,7 +111,10 @@ export default function SettingsPage() {
 
         <div className="space-y-2">
           <Label>Theme Preset</Label>
-          <Select value={prefs.themePreset} onValueChange={(v) => handlePresetChange(v as ThemePreset)}>
+          <Select
+            value={prefs.themePreset}
+            onValueChange={(v) => handlePresetChange(v as ThemePreset)}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -119,9 +122,7 @@ export default function SettingsPage() {
               {THEME_PRESETS.map((t) => (
                 <SelectItem key={t.value} value={t.value}>
                   <span className="font-medium">{t.label}</span>
-                  <span className="ml-2 text-muted-foreground text-xs">
-                    {t.description}
-                  </span>
+                  <span className="ml-2 text-muted-foreground text-xs">{t.description}</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -184,7 +185,7 @@ export default function SettingsPage() {
         <div className="space-y-2">
           <Label>Default Date Range</Label>
           <Select
-            value={prefs.defaultDateRange}
+            value={prefs.defaultDateRange ?? undefined}
             onValueChange={(v) => prefs.update({ defaultDateRange: v as "1d" | "3d" | "1w" })}
           >
             <SelectTrigger>

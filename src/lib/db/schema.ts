@@ -90,9 +90,8 @@ export const userPreferences = sqliteTable("user_preferences", {
   accentColor: text("accent_color"),
   compactMode: integer("compact_mode", { mode: "boolean" }).notNull().default(false),
   defaultTimezone: text("default_timezone").notNull().default("UTC"),
-  defaultDateRange: text("default_date_range", { enum: ["1d", "3d", "1w"] })
-    .notNull()
-    .default("3d"),
+  defaultDateRange: text("default_date_range", { enum: ["1d", "3d", "1w"] }),
+  defaultZoom: text("default_zoom"),
   timeFormat: text("time_format", { enum: ["12h", "24h"] })
     .notNull()
     .default("24h"),

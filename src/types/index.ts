@@ -125,6 +125,12 @@ export interface FilterActions {
   reset: () => void;
   hydrate: (params: Partial<FilterState>) => void;
   hydrateDefaults: (dateRange: string, tz: string) => void;
+  hydrateFromPreferences: (prefs: {
+    defaultDateRange: string | null;
+    defaultStartOffset: number;
+    defaultEndOffset: number;
+    defaultTimezone: string;
+  }) => void;
 }
 
 // ─── Capacity & Analytics ───────────────────────────────────────────────────

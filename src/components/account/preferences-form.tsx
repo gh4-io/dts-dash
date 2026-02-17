@@ -12,11 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  usePreferences,
-  type ThemePreset,
-  type ColorMode,
-} from "@/lib/hooks/use-preferences";
+import { usePreferences, type ThemePreset, type ColorMode } from "@/lib/hooks/use-preferences";
 
 const THEME_PRESETS: { value: ThemePreset; label: string; description: string }[] = [
   { value: "neutral", label: "Neutral", description: "Default zinc/gray tones" },
@@ -98,7 +94,10 @@ export function PreferencesForm() {
 
         <div className="space-y-2">
           <Label>Theme Preset</Label>
-          <Select value={prefs.themePreset} onValueChange={(v) => handlePresetChange(v as ThemePreset)}>
+          <Select
+            value={prefs.themePreset}
+            onValueChange={(v) => handlePresetChange(v as ThemePreset)}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -106,9 +105,7 @@ export function PreferencesForm() {
               {THEME_PRESETS.map((t) => (
                 <SelectItem key={t.value} value={t.value}>
                   <span className="font-medium">{t.label}</span>
-                  <span className="ml-2 text-muted-foreground text-xs">
-                    {t.description}
-                  </span>
+                  <span className="ml-2 text-muted-foreground text-xs">{t.description}</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -196,7 +193,7 @@ export function PreferencesForm() {
         <div className="space-y-2">
           <Label>Default Date Range</Label>
           <Select
-            value={prefs.defaultDateRange}
+            value={prefs.defaultDateRange ?? undefined}
             onValueChange={(v) => prefs.update({ defaultDateRange: v as "1d" | "3d" | "1w" })}
           >
             <SelectTrigger>

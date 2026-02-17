@@ -4,6 +4,7 @@ import { Suspense, useState, useCallback, useRef, useMemo, useEffect } from "rea
 import dynamic from "next/dynamic";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
+import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { FlightDetailDrawer } from "@/components/flight-board/flight-detail-drawer";
 import { useWorkPackages, type SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 import { useCustomers } from "@/lib/hooks/use-customers";
@@ -16,14 +17,10 @@ import { cn } from "@/lib/utils";
 import type { FlightBoardChartHandle } from "@/components/flight-board/flight-board-chart";
 import type { ActiveChip } from "@/components/shared/active-chips";
 
-
 // Dynamic import — ECharts requires window
 const FlightBoardChart = dynamic(
-  () =>
-    import("@/components/flight-board/flight-board-chart").then(
-      (mod) => mod.FlightBoardChart
-    ),
-  { ssr: false, loading: () => <LoadingSkeleton variant="chart" /> }
+  () => import("@/components/flight-board/flight-board-chart").then((mod) => mod.FlightBoardChart),
+  { ssr: false, loading: () => <LoadingSkeleton variant="chart" /> },
 );
 
 function FlightBoardPageInner() {
@@ -31,7 +28,13 @@ function FlightBoardPageInner() {
   const [selectedWp, setSelectedWp] = useState<SerializedWorkPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
-  const { compactMode: condensed, update: updatePreferences } = usePreferences();
+  const {
+    loaded: prefsLoaded,
+    compactMode: condensed,
+    defaultZoom,
+    update: updatePreferences,
+  } = usePreferences();
+  const zoomInitializedRef = useRef(false);
 
   // Sync from localStorage after hydration to avoid mismatch
   useEffect(() => {
@@ -39,6 +42,14 @@ function FlightBoardPageInner() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
     if (stored === "true") setIsExpanded(true);
   }, []);
+
+  // Initialize zoom from user preference / system config once prefs have loaded
+  useEffect(() => {
+    if (!prefsLoaded || zoomInitializedRef.current) return;
+    zoomInitializedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
+    if (defaultZoom) setZoomLevel(defaultZoom);
+  }, [prefsLoaded, defaultZoom]);
   const [viewOpen, setViewOpen] = useState(false);
   const [panMode, setPanMode] = useState(false);
   const chartRef = useRef<FlightBoardChartHandle>(null);
@@ -55,7 +66,12 @@ function FlightBoardPageInner() {
   }, [filterStart, filterEnd]);
 
   // Apply actions transforms (sort, breaks, highlights, groupBy, status filter)
-  const { data: transformedWps, registrations, highlightMap, groups } = useTransformedData(workPackages);
+  const {
+    data: transformedWps,
+    registrations,
+    highlightMap,
+    groups,
+  } = useTransformedData(workPackages);
 
   const handleBarClick = useCallback((wp: SerializedWorkPackage) => {
     setSelectedWp(wp);
@@ -89,7 +105,7 @@ function FlightBoardPageInner() {
     const shrink = span * 0.25;
     chartRef.current?.dispatchZoom(
       Math.min(start + shrink / 2, 99),
-      Math.max(end - shrink / 2, start + shrink / 2 + 1)
+      Math.max(end - shrink / 2, start + shrink / 2 + 1),
     );
   }, []);
 
@@ -102,7 +118,7 @@ function FlightBoardPageInner() {
     const expand = span * 0.25;
     chartRef.current?.dispatchZoom(
       Math.max(0, start - expand / 2),
-      Math.min(100, end + expand / 2)
+      Math.min(100, end + expand / 2),
     );
   }, []);
 
@@ -149,7 +165,7 @@ function FlightBoardPageInner() {
             },
           ]
         : [],
-    [zoomLevel]
+    [zoomLevel],
   );
 
   const ZOOM_LEVELS = [
@@ -161,10 +177,7 @@ function FlightBoardPageInner() {
   ];
 
   return (
-    <div className={cn(
-      "flex flex-col gap-3",
-      !isExpanded && "h-full min-h-0"
-    )}>
+    <div className={cn("flex flex-col gap-3", !isExpanded && "h-full min-h-0")}>
       <TopMenuBar
         title="Flight Board"
         icon="fa-solid fa-plane-departure"
@@ -175,7 +188,7 @@ function FlightBoardPageInner() {
             <div
               className={cn(
                 "flex items-center gap-1 overflow-hidden transition-all duration-200",
-                viewOpen ? "max-w-[600px] opacity-100" : "max-w-0 opacity-0"
+                viewOpen ? "max-w-[600px] opacity-100" : "max-w-0 opacity-0",
               )}
             >
               {/* Zoom presets */}
@@ -190,10 +203,14 @@ function FlightBoardPageInner() {
                       variant={zoomLevel === level.id ? "default" : "ghost"}
                       size="sm"
                       disabled={disabled} // ✅ Disable when filter span < preset hours
-                      title={disabled ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h` : undefined}
+                      title={
+                        disabled
+                          ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h`
+                          : undefined
+                      }
                       className={cn(
                         "h-7 px-2 text-xs",
-                        zoomLevel !== level.id && "text-muted-foreground"
+                        zoomLevel !== level.id && "text-muted-foreground",
                       )}
                       onClick={() => setZoomLevel(level.id)}
                     >
@@ -204,15 +221,33 @@ function FlightBoardPageInner() {
               </div>
 
               {/* Zoom +/- */}
-              <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleZoomIn} title="Zoom in">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={handleZoomIn}
+                title="Zoom in"
+              >
                 <i className="fa-solid fa-magnifying-glass-plus text-xs" />
               </Button>
-              <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleZoomOut} title="Zoom out">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={handleZoomOut}
+                title="Zoom out"
+              >
                 <i className="fa-solid fa-magnifying-glass-minus text-xs" />
               </Button>
 
               {/* Expand/Collapse */}
-              <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={toggleExpanded} title={isExpanded ? "Collapse" : "Expand"}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={toggleExpanded}
+                title={isExpanded ? "Collapse" : "Expand"}
+              >
                 <i className={cn("fa-solid", isExpanded ? "fa-compress" : "fa-expand")} />
               </Button>
 
@@ -228,12 +263,24 @@ function FlightBoardPageInner() {
               </Button>
 
               {/* Center on Now */}
-              <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleNow} title="Center on Now">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={handleNow}
+                title="Center on Now"
+              >
                 <i className="fa-solid fa-clock text-xs" />
               </Button>
 
               {/* Fit All */}
-              <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleFit} title="Fit All Data">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 shrink-0"
+                onClick={handleFit}
+                title="Fit All Data"
+              >
                 <i className="fa-solid fa-arrows-left-right-to-line text-xs" />
               </Button>
 
@@ -274,6 +321,9 @@ function FlightBoardPageInner() {
         }
       />
 
+      {/* Data Freshness */}
+      <DataFreshnessBadge />
+
       {/* Gantt Chart */}
       {error ? (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
@@ -283,10 +333,12 @@ function FlightBoardPageInner() {
       ) : isLoading ? (
         <LoadingSkeleton variant="chart" />
       ) : (
-        <div className={cn(
-          "rounded-lg border border-border bg-card overflow-hidden",
-          !isExpanded && "flex-1 min-h-0 flex flex-col"
-        )}>
+        <div
+          className={cn(
+            "rounded-lg border border-border bg-card overflow-hidden",
+            !isExpanded && "flex-1 min-h-0 flex flex-col",
+          )}
+        >
           <FlightBoardChart
             ref={chartRef}
             workPackages={transformedWps}
@@ -323,11 +375,7 @@ function FlightBoardPageInner() {
       )}
 
       {/* Detail Drawer */}
-      <FlightDetailDrawer
-        wp={selectedWp}
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      />
+      <FlightDetailDrawer wp={selectedWp} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   );
 }

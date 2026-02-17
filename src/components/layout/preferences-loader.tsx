@@ -7,13 +7,21 @@ import { useFilters } from "@/lib/hooks/use-filters";
 
 /**
  * Loads user preferences from API once authenticated.
- * Applies defaultDateRange + defaultTimezone to filter store on first load
- * (unless the URL already provided explicit date params).
+ * Applies date range + timezone to filter store on first load using
+ * user preferences (symmetric preset) or system config offsets (asymmetric).
+ * URL params take precedence over all defaults.
  * Placed in the root layout so it runs on every page.
  */
 export function PreferencesLoader() {
   const { data: session } = useSession();
-  const { fetch: fetchPrefs, loaded, defaultDateRange, defaultTimezone } = usePreferences();
+  const {
+    fetch: fetchPrefs,
+    loaded,
+    defaultDateRange,
+    defaultStartOffset,
+    defaultEndOffset,
+    defaultTimezone,
+  } = usePreferences();
   const appliedRef = useRef(false);
 
   // Capture initial URL params at mount time, before useFilterUrlSync
@@ -21,7 +29,7 @@ export function PreferencesLoader() {
   const initialUrlRef = useRef(
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search)
-      : new URLSearchParams()
+      : new URLSearchParams(),
   );
 
   useEffect(() => {
@@ -38,8 +46,13 @@ export function PreferencesLoader() {
     // Skip if the URL already had explicit date params at mount time
     if (initialUrlRef.current.has("start") || initialUrlRef.current.has("end")) return;
 
-    useFilters.getState().hydrateDefaults(defaultDateRange, defaultTimezone);
-  }, [loaded, defaultDateRange, defaultTimezone]);
+    useFilters.getState().hydrateFromPreferences({
+      defaultDateRange,
+      defaultStartOffset,
+      defaultEndOffset,
+      defaultTimezone,
+    });
+  }, [loaded, defaultDateRange, defaultStartOffset, defaultEndOffset, defaultTimezone]);
 
   return null;
 }
