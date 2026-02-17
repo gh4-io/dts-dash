@@ -29,6 +29,7 @@ interface UserTableProps {
   onEdit: (user: UserRow) => void;
   onResetPassword: (user: UserRow) => void;
   onToggleActive: (user: UserRow) => void;
+  onDelete: (user: UserRow) => void;
 }
 
 const ROLE_COLORS: Record<string, string> = {
@@ -43,6 +44,7 @@ export function UserTable({
   onEdit,
   onResetPassword,
   onToggleActive,
+  onDelete,
 }: UserTableProps) {
   return (
     <div className="rounded-lg border border-border">
@@ -55,7 +57,7 @@ export function UserTable({
             <TableHead>Role</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Created</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="text-right">Quick Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -65,25 +67,19 @@ export function UserTable({
             return (
               <TableRow
                 key={user.id}
-                className={isSelf ? "bg-primary/5" : undefined}
+                className={`cursor-pointer ${isSelf ? "bg-primary/5" : ""}`}
+                onClick={() => onEdit(user)}
               >
                 <TableCell className="font-medium">
                   {user.displayName}
-                  {isSelf && (
-                    <span className="ml-2 text-xs text-muted-foreground">(you)</span>
-                  )}
+                  {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
                 </TableCell>
                 <TableCell className="text-muted-foreground font-mono text-xs">
                   {user.username || <span className="italic opacity-50">—</span>}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {user.email}
-                </TableCell>
+                <TableCell className="text-muted-foreground">{user.email}</TableCell>
                 <TableCell>
-                  <Badge
-                    variant="outline"
-                    className={ROLE_COLORS[user.role] ?? ""}
-                  >
+                  <Badge variant="outline" className={ROLE_COLORS[user.role] ?? ""}>
                     {user.role}
                   </Badge>
                 </TableCell>
@@ -106,15 +102,10 @@ export function UserTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onEdit(user)}
-                      title="Edit user"
-                    >
-                      <i className="fa-solid fa-pen-to-square" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onResetPassword(user)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onResetPassword(user);
+                      }}
                       title="Reset password"
                     >
                       <i className="fa-solid fa-key" />
@@ -122,15 +113,32 @@ export function UserTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onToggleActive(user)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleActive(user);
+                      }}
                       disabled={isSelf}
                       title={user.isActive ? "Disable user" : "Enable user"}
                     >
                       <i
                         className={`fa-solid ${
-                          user.isActive ? "fa-user-slash text-destructive" : "fa-user-check text-emerald-500"
+                          user.isActive
+                            ? "fa-user-slash text-destructive"
+                            : "fa-user-check text-emerald-500"
                         }`}
                       />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(user);
+                      }}
+                      disabled={isSelf}
+                      title="Delete user"
+                    >
+                      <i className="fa-solid fa-trash text-destructive" />
                     </Button>
                   </div>
                 </TableCell>

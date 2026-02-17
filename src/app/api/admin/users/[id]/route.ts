@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hashSync } from "bcryptjs";
 import { auth, invalidateUserTokens } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { validatePassword } from "@/lib/utils/password-validation";
 
 const log = createChildLogger("api/admin/users/[id]");
 
@@ -12,10 +14,7 @@ const log = createChildLogger("api/admin/users/[id]");
  * Update a user (displayName, role, isActive, email)
  * Admin only
  */
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
@@ -39,22 +38,18 @@ export async function PUT(
         .all().length;
 
       if (superadminCount <= 1) {
-        return NextResponse.json(
-          { error: "Cannot demote the last superadmin" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Cannot demote the last superadmin" }, { status: 400 });
       }
     }
 
     // Prevent self-deactivation
     if (id === session.user.id && body.isActive === false) {
-      return NextResponse.json(
-        { error: "Cannot deactivate your own account" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Cannot deactivate your own account" }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
+    let shouldInvalidateTokens = false;
+
     if (body.displayName !== undefined) updates.displayName = body.displayName;
     if (body.role !== undefined) {
       if (!["user", "admin", "superadmin"].includes(body.role)) {
@@ -63,6 +58,9 @@ export async function PUT(
       updates.role = body.role;
     }
     if (body.isActive !== undefined) updates.isActive = body.isActive;
+    if (body.forcePasswordChange !== undefined) {
+      updates.forcePasswordChange = body.forcePasswordChange;
+    }
     if (body.email !== undefined) {
       // Check unique email (exclude this user)
       const emailConflict = db
@@ -71,20 +69,24 @@ export async function PUT(
         .where(and(eq(users.email, body.email.toLowerCase()), ne(users.id, id)))
         .get();
       if (emailConflict) {
-        return NextResponse.json(
-          { error: "Email already in use" },
-          { status: 409 }
-        );
+        return NextResponse.json({ error: "Email already in use" }, { status: 409 });
       }
       updates.email = body.email.toLowerCase();
     }
     if (body.username !== undefined) {
       const usernameVal = body.username ? body.username.toLowerCase() : null;
       if (usernameVal) {
-        if (usernameVal.length < 3 || usernameVal.length > 30 || !/^[a-zA-Z0-9._-]+$/.test(usernameVal)) {
+        if (
+          usernameVal.length < 3 ||
+          usernameVal.length > 30 ||
+          !/^[a-zA-Z0-9._-]+$/.test(usernameVal)
+        ) {
           return NextResponse.json(
-            { error: "Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)" },
-            { status: 400 }
+            {
+              error:
+                "Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)",
+            },
+            { status: 400 },
           );
         }
         const usernameConflict = db
@@ -93,21 +95,26 @@ export async function PUT(
           .where(and(eq(users.username, usernameVal), ne(users.id, id)))
           .get();
         if (usernameConflict) {
-          return NextResponse.json(
-            { error: "Username already in use" },
-            { status: 409 }
-          );
+          return NextResponse.json({ error: "Username already in use" }, { status: 409 });
         }
       }
       updates.username = usernameVal;
     }
+    if (body.newPassword !== undefined && body.newPassword !== "") {
+      const validation = validatePassword(body.newPassword);
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.errors[0] }, { status: 400 });
+      }
+      updates.passwordHash = hashSync(body.newPassword, 12);
+      shouldInvalidateTokens = true;
+    }
 
     db.update(users).set(updates).where(eq(users.id, id)).run();
 
-    // Invalidate tokens if role changed or user deactivated
+    // Invalidate tokens if role changed, user deactivated, or password changed
     const roleChanged = body.role !== undefined && body.role !== existing.role;
     const deactivated = body.isActive === false && existing.isActive;
-    if (roleChanged || deactivated) {
+    if (roleChanged || deactivated || shouldInvalidateTokens) {
       invalidateUserTokens(id);
     }
 
@@ -120,6 +127,7 @@ export async function PUT(
         displayName: users.displayName,
         role: users.role,
         isActive: users.isActive,
+        forcePasswordChange: users.forcePasswordChange,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       })
@@ -130,10 +138,7 @@ export async function PUT(
     return NextResponse.json(updated);
   } catch (error) {
     log.error({ err: error }, "PUT error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -144,7 +149,7 @@ export async function PUT(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await auth();
@@ -156,10 +161,7 @@ export async function DELETE(
 
     // Prevent self-deletion
     if (id === session.user.id) {
-      return NextResponse.json(
-        { error: "Cannot delete your own account" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
     }
 
     const existing = db.select().from(users).where(eq(users.id, id)).get();
@@ -176,10 +178,7 @@ export async function DELETE(
         .all().length;
 
       if (superadminCount <= 1) {
-        return NextResponse.json(
-          { error: "Cannot delete the last superadmin" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Cannot delete the last superadmin" }, { status: 400 });
       }
     }
 
@@ -193,9 +192,6 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "DELETE error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

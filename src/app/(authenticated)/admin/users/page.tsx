@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { UserTable } from "@/components/admin/user-table";
 import { UserForm } from "@/components/admin/user-form";
 import {
@@ -42,6 +43,10 @@ export default function UsersPage() {
   const [confirmToggle, setConfirmToggle] = useState<UserRow | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [deletePhrase, setDeletePhrase] = useState("");
+
   const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/users");
@@ -71,7 +76,16 @@ export default function UsersPage() {
     setFormOpen(true);
   };
 
-  const handleFormSubmit = async (data: { email: string; username: string; displayName: string; role: string; password: string }) => {
+  const handleFormSubmit = async (data: {
+    email: string;
+    username: string;
+    displayName: string;
+    role: string;
+    password: string;
+    newPassword: string;
+    isActive: boolean;
+    forcePasswordChange: boolean;
+  }) => {
     setMessage(null);
 
     if (formMode === "create") {
@@ -94,6 +108,9 @@ export default function UsersPage() {
           username: data.username || null,
           displayName: data.displayName,
           role: data.role,
+          isActive: data.isActive,
+          forcePasswordChange: data.forcePasswordChange,
+          ...(data.newPassword ? { newPassword: data.newPassword } : {}),
         }),
       });
       const body = await res.json();
@@ -153,6 +170,33 @@ export default function UsersPage() {
     }
   };
 
+  const handleDeleteUser = (user: UserRow) => {
+    setDeleteTarget(user);
+    setDeletePhrase("");
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setMessage({ type: "error", text: body.error ?? "Failed to delete user" });
+      } else {
+        setMessage({ type: "success", text: `User ${deleteTarget.email} deleted` });
+        if (editingUser?.id === deleteTarget.id) setFormOpen(false);
+        await fetchUsers();
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
   const copyPassword = async (pw: string) => {
     await navigator.clipboard.writeText(pw);
     setCopied(true);
@@ -197,6 +241,7 @@ export default function UsersPage() {
         onEdit={handleEdit}
         onResetPassword={handleResetPassword}
         onToggleActive={handleToggleActive}
+        onDelete={handleDeleteUser}
       />
 
       {/* Create/Edit dialog */}
@@ -209,10 +254,7 @@ export default function UsersPage() {
       />
 
       {/* Reset password dialog */}
-      <Dialog
-        open={!!resetPasswordDialog}
-        onOpenChange={() => setResetPasswordDialog(null)}
-      >
+      <Dialog open={!!resetPasswordDialog} onOpenChange={() => setResetPasswordDialog(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset Password</DialogTitle>
@@ -254,9 +296,7 @@ export default function UsersPage() {
       <Dialog open={!!confirmToggle} onOpenChange={() => setConfirmToggle(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {confirmToggle?.isActive ? "Disable User" : "Enable User"}
-            </DialogTitle>
+            <DialogTitle>{confirmToggle?.isActive ? "Disable User" : "Enable User"}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {confirmToggle?.isActive
@@ -272,6 +312,48 @@ export default function UsersPage() {
               onClick={confirmToggleActive}
             >
               {confirmToggle?.isActive ? "Disable" : "Enable"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete user confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              This action cannot be undone. Type{" "}
+              <strong className="text-foreground">{deleteTarget?.displayName}</strong> to confirm
+              deletion.
+            </p>
+            <Input
+              value={deletePhrase}
+              onChange={(e) => setDeletePhrase(e.target.value)}
+              placeholder={deleteTarget?.displayName}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  deletePhrase.toLowerCase() === deleteTarget?.displayName.toLowerCase()
+                ) {
+                  confirmDelete();
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deletePhrase.toLowerCase() !== deleteTarget?.displayName.toLowerCase()}
+              onClick={confirmDelete}
+            >
+              <i className="fa-solid fa-trash mr-2" />
+              Delete User
             </Button>
           </DialogFooter>
         </DialogContent>
