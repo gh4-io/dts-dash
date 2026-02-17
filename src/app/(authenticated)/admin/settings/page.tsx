@@ -41,6 +41,7 @@ interface AppConfig {
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;
+  ingestChunkTimeoutSeconds: number;
   allowedHostnames: AllowedHostname[];
 }
 
@@ -49,12 +50,24 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [lastImport] = useState<{ importedAt: string; recordCount: number; source: string } | null>(null);
+  const [lastImport] = useState<{ importedAt: string; recordCount: number; source: string } | null>(
+    null,
+  );
   const [generatedKey, setGeneratedKey] = useState<string | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
-  const [newHost, setNewHost] = useState({ hostname: "", port: "3000", protocol: "http" as "http" | "https", label: "" });
+  const [newHost, setNewHost] = useState({
+    hostname: "",
+    port: "3000",
+    protocol: "http" as "http" | "https",
+    label: "",
+  });
   const [editingHostId, setEditingHostId] = useState<string | null>(null);
-  const [editHost, setEditHost] = useState({ hostname: "", port: "", protocol: "http" as "http" | "https", label: "" });
+  const [editHost, setEditHost] = useState({
+    hostname: "",
+    port: "",
+    protocol: "http" as "http" | "https",
+    label: "",
+  });
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -135,7 +148,7 @@ export default function AdminSettingsPage() {
     setConfig({
       ...config,
       allowedHostnames: config.allowedHostnames.map((h) =>
-        h.id === id ? { ...h, enabled: !h.enabled } : h
+        h.id === id ? { ...h, enabled: !h.enabled } : h,
       ),
     });
   };
@@ -163,7 +176,7 @@ export default function AdminSettingsPage() {
               protocol: editHost.protocol,
               label: editHost.label.trim() || editHost.hostname.trim(),
             }
-          : h
+          : h,
       ),
     });
     setEditingHostId(null);
@@ -332,7 +345,8 @@ export default function AdminSettingsPage() {
               <div>
                 <span className="font-medium">{shift.name}</span>
                 <span className="ml-2 text-xs text-muted-foreground">
-                  {String(shift.startHour).padStart(2, "0")}:00 – {String(shift.endHour).padStart(2, "0")}:00
+                  {String(shift.startHour).padStart(2, "0")}:00 –{" "}
+                  {String(shift.endHour).padStart(2, "0")}:00
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -340,9 +354,7 @@ export default function AdminSettingsPage() {
                 <Input
                   type="number"
                   value={shift.headcount}
-                  onChange={(e) =>
-                    updateShiftHeadcount(i, parseInt(e.target.value, 10) || 0)
-                  }
+                  onChange={(e) => updateShiftHeadcount(i, parseInt(e.target.value, 10) || 0)}
                   min={0}
                   max={50}
                   className="w-20"
@@ -365,9 +377,7 @@ export default function AdminSettingsPage() {
             <Label>Timeline Default (Days)</Label>
             <Select
               value={String(config.timelineDefaultDays)}
-              onValueChange={(v) =>
-                setConfig({ ...config, timelineDefaultDays: parseInt(v, 10) })
-              }
+              onValueChange={(v) => setConfig({ ...config, timelineDefaultDays: parseInt(v, 10) })}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -384,9 +394,7 @@ export default function AdminSettingsPage() {
             <Label>Default Timezone</Label>
             <Select
               value={config.defaultTimezone}
-              onValueChange={(v) =>
-                setConfig({ ...config, defaultTimezone: v })
-              }
+              onValueChange={(v) => setConfig({ ...config, defaultTimezone: v })}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -409,7 +417,8 @@ export default function AdminSettingsPage() {
 
         {lastImport ? (
           <div className="text-sm text-muted-foreground">
-            Last import: {new Date(lastImport.importedAt).toLocaleString()} — {lastImport.recordCount} records via {lastImport.source}
+            Last import: {new Date(lastImport.importedAt).toLocaleString()} —{" "}
+            {lastImport.recordCount} records via {lastImport.source}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -437,7 +446,8 @@ export default function AdminSettingsPage() {
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Configure the <code className="rounded bg-muted px-1">POST /api/ingest</code> endpoint for Power Automate or other automation tools.
+          Configure the <code className="rounded bg-muted px-1">POST /api/ingest</code> endpoint for
+          Power Automate or other automation tools.
         </p>
 
         {/* API Key */}
@@ -480,9 +490,7 @@ export default function AdminSettingsPage() {
               <Input
                 type="text"
                 value={
-                  config.ingestApiKey
-                    ? `${"•".repeat(12)}${config.ingestApiKey.slice(-4)}`
-                    : ""
+                  config.ingestApiKey ? `${"•".repeat(12)}${config.ingestApiKey.slice(-4)}` : ""
                 }
                 placeholder="Not configured"
                 disabled
@@ -519,12 +527,13 @@ export default function AdminSettingsPage() {
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Use as Bearer token: <code className="rounded bg-muted px-1">Authorization: Bearer &lt;key&gt;</code>
+            Use as Bearer token:{" "}
+            <code className="rounded bg-muted px-1">Authorization: Bearer &lt;key&gt;</code>
           </p>
         </div>
 
-        {/* Rate Limit + Size Limit */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Rate Limit + Size Limit + Chunk Timeout */}
+        <div className="grid grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label>Rate Limit (seconds)</Label>
             <Input
@@ -561,6 +570,27 @@ export default function AdminSettingsPage() {
               Maximum JSON payload size (default: 50MB)
             </p>
           </div>
+          <div className="space-y-2">
+            <Label>Chunk Timeout (seconds)</Label>
+            <Input
+              type="number"
+              value={config.ingestChunkTimeoutSeconds}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  ingestChunkTimeoutSeconds: Math.max(
+                    30,
+                    Math.min(3600, parseInt(e.target.value, 10) || 300),
+                  ),
+                })
+              }
+              min={30}
+              max={3600}
+            />
+            <p className="text-xs text-muted-foreground">
+              Max idle time for chunked uploads (default: 300)
+            </p>
+          </div>
         </div>
       </section>
 
@@ -571,7 +601,8 @@ export default function AdminSettingsPage() {
           Allowed Hostnames
         </h2>
         <p className="text-xs text-muted-foreground">
-          Hostnames from which this dashboard can be accessed. Used for Auth.js callback resolution and cross-origin configuration.
+          Hostnames from which this dashboard can be accessed. Used for Auth.js callback resolution
+          and cross-origin configuration.
         </p>
         <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
           <i className="fa-solid fa-circle-info mr-1" />
@@ -585,15 +616,14 @@ export default function AdminSettingsPage() {
               key={h.id}
               className="flex items-center gap-3 rounded-md border border-border bg-background p-3"
             >
-              <Switch
-                checked={h.enabled}
-                onCheckedChange={() => toggleHostname(h.id)}
-              />
+              <Switch checked={h.enabled} onCheckedChange={() => toggleHostname(h.id)} />
               {editingHostId === h.id ? (
                 <div className="flex flex-1 items-center gap-2">
                   <Select
                     value={editHost.protocol}
-                    onValueChange={(v) => setEditHost({ ...editHost, protocol: v as "http" | "https" })}
+                    onValueChange={(v) =>
+                      setEditHost({ ...editHost, protocol: v as "http" | "https" })
+                    }
                   >
                     <SelectTrigger className="w-24">
                       <SelectValue />
@@ -643,7 +673,12 @@ export default function AdminSettingsPage() {
                   <Button size="sm" variant="ghost" onClick={() => startEditHostname(h)}>
                     <i className="fa-solid fa-pen text-xs" />
                   </Button>
-                  <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => removeHostname(h.id)}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => removeHostname(h.id)}
+                  >
                     <i className="fa-solid fa-trash text-xs" />
                   </Button>
                 </>

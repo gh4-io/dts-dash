@@ -26,9 +26,7 @@ export async function GET() {
     const config = {
       defaultMH: parseFloat(configMap.defaultMH ?? "3.0"),
       wpMHMode: configMap.wpMHMode ?? "exclude",
-      theoreticalCapacityPerPerson: parseFloat(
-        configMap.theoreticalCapacityPerPerson ?? "8.0"
-      ),
+      theoreticalCapacityPerPerson: parseFloat(configMap.theoreticalCapacityPerPerson ?? "8.0"),
       realCapacityPerPerson: parseFloat(configMap.realCapacityPerPerson ?? "6.5"),
       shifts: JSON.parse(
         configMap.shifts ??
@@ -36,7 +34,7 @@ export async function GET() {
             { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
             { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
             { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-          ])
+          ]),
       ),
       timelineDefaultDays: parseInt(configMap.timelineDefaultDays ?? "3", 10),
       defaultTimezone: configMap.defaultTimezone ?? "UTC",
@@ -54,17 +52,14 @@ export async function GET() {
               enabled: true,
               label: "Local Development",
             },
-          ])
+          ]),
       ),
     };
 
     return NextResponse.json(config);
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -94,6 +89,7 @@ export async function PUT(request: NextRequest) {
       "ingestApiKey",
       "ingestRateLimitSeconds",
       "ingestMaxSizeMB",
+      "ingestChunkTimeoutSeconds",
       "allowedHostnames",
     ]);
 
@@ -140,9 +136,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "PUT error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

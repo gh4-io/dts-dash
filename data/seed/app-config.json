@@ -12,6 +12,7 @@
   { "key": "ingestApiKey", "value": "" },
   { "key": "ingestRateLimitSeconds", "value": "60" },
   { "key": "ingestMaxSizeMB", "value": "50" },
+  { "key": "ingestChunkTimeoutSeconds", "value": "300" },
   { "key": "masterDataConformityMode", "value": "warning" },
   { "key": "masterDataOverwriteConfirmed", "value": "warn" },
   {

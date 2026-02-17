@@ -72,7 +72,7 @@ export const proxy = auth((req) => {
 
 export const config = {
   matcher: [
-    // Match all routes except static files
-    "/((?!_next/static|_next/image|favicon.ico|vendor/).*)",
+    // Match all routes except static files and API routes with their own auth
+    "/((?!_next/static|_next/image|favicon.ico|vendor/|api/ingest|api/health).*)",
   ],
 };

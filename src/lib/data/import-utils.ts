@@ -1,8 +1,8 @@
 import { db } from "@/lib/db/client";
-import { importLog } from "@/lib/db/schema";
+import { importLog, workPackages } from "@/lib/db/schema";
 import { invalidateCache } from "@/lib/data/reader";
-import fs from "fs/promises";
-import path from "path";
+import { invalidateTransformerCache } from "@/lib/data/transformer";
+import { sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("import-utils");
@@ -25,7 +25,6 @@ export interface ValidationResult {
 }
 
 export interface CommitOptions {
-  jsonContent: string;
   records: unknown[];
   source: "file" | "paste" | "api";
   fileName?: string;
@@ -37,6 +36,7 @@ export interface CommitResult {
   success: boolean;
   logId: string;
   recordCount: number;
+  upsertedCount: number;
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
@@ -91,10 +91,16 @@ export function validateImportData(
 
   if (records.length === 0) {
     return {
-      valid: false,
-      summary: null,
+      valid: true,
+      summary: {
+        recordCount: 0,
+        customerCount: 0,
+        aircraftCount: 0,
+        dateRange: null,
+      },
       warnings: [],
-      errors: ["No records found in JSON data"],
+      errors: [],
+      records: [],
     };
   }
 
@@ -109,6 +115,9 @@ export function validateImportData(
     }
     if (!rec.Arrival && !rec.Departure) {
       errors.push(`Record ${idx + 1}: missing both Arrival and Departure dates`);
+    }
+    if (!rec.GUID) {
+      errors.push(`Record ${idx + 1}: missing GUID (required for upsert)`);
     }
   });
 
@@ -184,25 +193,45 @@ export function validateImportData(
 // ─── Commit ──────────────────────────────────────────────────────────────────
 
 /**
- * Write validated data to data/input.json, log to import_log, invalidate cache.
+ * UPSERT validated records into work_packages table by GUID.
+ * Logs to import_log, invalidates reader + transformer caches.
  */
 export async function commitImportData(
   options: CommitOptions
 ): Promise<CommitResult> {
-  const { jsonContent, records, source, fileName, importedBy, idempotencyKey } =
-    options;
+  const { records, source, fileName, importedBy, idempotencyKey } = options;
 
-  // Write to data/input.json
-  const dataPath = path.join(process.cwd(), "data", "input.json");
-  await fs.writeFile(dataPath, jsonContent, "utf-8");
-
-  // Log to import_log
   const logId = crypto.randomUUID();
+  const importedAt = new Date().toISOString();
+
+  // Compute summary stats for logging
+  const customerSet = new Set<string>();
+  const aircraftSet = new Set<string>();
+  for (const rec of records) {
+    const r = rec as Record<string, unknown>;
+    if (r.Customer) customerSet.add(String(r.Customer));
+    const aircraft = r.Aircraft as Record<string, unknown> | undefined;
+    if (aircraft?.Title) aircraftSet.add(String(aircraft.Title));
+  }
+
+  log.info(
+    {
+      logId,
+      source,
+      recordCount: records.length,
+      customerCount: customerSet.size,
+      aircraftCount: aircraftSet.size,
+      fileName: fileName || null,
+    },
+    "Starting import commit"
+  );
+
+  // Create import log entry first
   try {
     db.insert(importLog)
       .values({
         id: logId,
-        importedAt: new Date().toISOString(),
+        importedAt,
         recordCount: records.length,
         source,
         fileName: fileName || null,
@@ -212,19 +241,109 @@ export async function commitImportData(
         idempotencyKey: idempotencyKey || null,
       })
       .run();
+
+    log.info({ logId, source }, "Import log entry created");
   } catch (logErr) {
-    log.error({ err: logErr }, "Failed to log import");
+    log.error(
+      { err: logErr, logId, importedBy },
+      "Failed to create import log entry"
+    );
     if ((logErr as Error).message?.includes("FOREIGN KEY")) {
-      log.warn("Foreign key constraint failed for importedBy");
+      log.warn(
+        { importedBy, logId },
+        "Foreign key constraint failed — system user may not exist in users table"
+      );
     }
   }
 
-  // Invalidate reader cache
+  // UPSERT records in a single transaction
+  let upsertedCount = 0;
+
+  try {
+    db.transaction(() => {
+      for (const rec of records) {
+        const r = rec as Record<string, unknown>;
+        const aircraft = r.Aircraft as Record<string, unknown> | undefined;
+
+        const values = {
+          guid: String(r.GUID),
+          spId: r.ID != null ? Number(r.ID) : null,
+          title: r.Title != null ? String(r.Title) : null,
+          aircraftReg: String(aircraft?.Title ?? "Unknown"),
+          aircraftType: aircraft?.field_5 != null ? String(aircraft.field_5) : (aircraft?.AircraftType != null ? String(aircraft.AircraftType) : null),
+          customer: String(r.Customer ?? "Unknown"),
+          customerRef: r.CustomerReference != null ? String(r.CustomerReference) : null,
+          flightId: r.FlightId != null ? String(r.FlightId) : null,
+          arrival: String(r.Arrival ?? ""),
+          departure: String(r.Departure ?? ""),
+          totalMH: r.TotalMH != null ? Number(r.TotalMH) : null,
+          totalGroundHours: r.TotalGroundHours != null ? String(r.TotalGroundHours) : null,
+          status: String(r.Workpackage_x0020_Status ?? "New"),
+          description: r.Description != null ? String(r.Description) : null,
+          parentId: r.ParentID != null ? String(r.ParentID) : null,
+          hasWorkpackage: r.HasWorkpackage != null ? Boolean(r.HasWorkpackage) : null,
+          workpackageNo: r.WorkpackageNo != null ? String(r.WorkpackageNo) : null,
+          calendarComments: r.CalendarComments != null ? String(r.CalendarComments) : null,
+          isNotClosedOrCanceled: r.IsNotClosedOrCanceled != null ? String(r.IsNotClosedOrCanceled) : null,
+          documentSetId: r.DocumentSetID != null ? Number(r.DocumentSetID) : null,
+          aircraftSpId: r.AircraftId != null ? Number(r.AircraftId) : null,
+          spModified: r.Modified != null ? String(r.Modified) : null,
+          spCreated: r.Created != null ? String(r.Created) : null,
+          spVersion: r.OData__UIVersionString != null ? String(r.OData__UIVersionString) : null,
+          importLogId: logId,
+          importedAt,
+        };
+
+        db.insert(workPackages)
+          .values(values)
+          .onConflictDoUpdate({
+            target: workPackages.guid,
+            set: {
+              ...values,
+              importLogId: logId,
+              importedAt,
+            },
+          })
+          .run();
+
+        upsertedCount++;
+      }
+    });
+  } catch (err) {
+    log.error(
+      { err, logId, source, recordCount: records.length },
+      "Failed to upsert work packages"
+    );
+
+    // Update import log to failed
+    try {
+      db.run(
+        sql`UPDATE import_log SET status = 'failed', errors = ${(err as Error).message} WHERE id = ${logId}`
+      );
+      log.info({ logId }, "Import log status updated to failed");
+    } catch (updateErr) {
+      log.error({ err: updateErr, logId }, "Failed to update import log status");
+    }
+
+    return { success: false, logId, recordCount: records.length, upsertedCount: 0 };
+  }
+
+  // Invalidate caches
   invalidateCache();
+  invalidateTransformerCache();
+  log.debug("Reader and transformer caches invalidated");
 
   log.info(
-    `Committed ${records.length} records from ${source}, logId=${logId}`
+    {
+      logId,
+      source,
+      recordCount: records.length,
+      upsertedCount,
+      customerCount: customerSet.size,
+      aircraftCount: aircraftSet.size,
+    },
+    "Import committed successfully"
   );
 
-  return { success: true, logId, recordCount: records.length };
+  return { success: true, logId, recordCount: records.length, upsertedCount };
 }
