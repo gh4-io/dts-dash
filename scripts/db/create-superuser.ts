@@ -14,7 +14,7 @@ import { hashSync } from "bcryptjs";
 import { db } from "../../src/lib/db/client";
 import { users } from "../../src/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { createTables, runMigrations } from "../../src/lib/db/seed";
+import { createTables, runMigrations } from "../../src/lib/db/schema-init";
 import { banner, log, success, warn, error, hasFlag, c } from "./_cli-utils";
 
 function getArg(flag: string): string | undefined {

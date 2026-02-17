@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { useAppTitle } from "@/components/layout/app-config-provider";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
@@ -18,6 +19,7 @@ interface MobileNavProps {
 
 export function MobileNav({ open, onOpenChange }: MobileNavProps) {
   const pathname = usePathname();
+  const appTitle = useAppTitle();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -25,7 +27,7 @@ export function MobileNav({ open, onOpenChange }: MobileNavProps) {
         <SheetHeader className="flex h-14 items-center border-b border-border px-4">
           <SheetTitle className="flex items-center gap-2 font-semibold text-xl">
             <i className="fa-solid fa-plane-circle-check text-primary" />
-            CVG Dashboard
+            {appTitle}
           </SheetTitle>
         </SheetHeader>
         <nav className="flex-1 space-y-1 px-2 py-3">

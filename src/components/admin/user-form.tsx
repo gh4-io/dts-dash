@@ -176,7 +176,7 @@ export function UserForm({
               <Input
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="user@cvg.local"
+                placeholder="user@local"
                 disabled={mode === "edit"}
                 type="email"
               />

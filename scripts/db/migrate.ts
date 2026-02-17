@@ -7,7 +7,7 @@
  * Usage: npm run db:migrate
  */
 
-import { createTables, runMigrations } from "../../src/lib/db/seed";
+import { createTables, runMigrations } from "../../src/lib/db/schema-init";
 import { banner, log, success, c } from "./_cli-utils";
 
 function main() {
@@ -34,9 +34,7 @@ function main() {
   }
 
   log("");
-  success(
-    `Migrations complete: ${applied} applied, ${results.length - applied} already present`
-  );
+  success(`Migrations complete: ${applied} applied, ${results.length - applied} already present`);
   log("");
 }
 

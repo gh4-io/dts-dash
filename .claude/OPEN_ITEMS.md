@@ -762,7 +762,7 @@
 | **Context** | When Power Automate initiates a chunked upload (`x-ms-transfer-mode: chunked`), the server returns a `Location` header pointing to `https://localhost:5015/api/ingest/chunks/{sessionId}`. PA rejects this: "The location header value returned in the response must be a well formed absolute URI not referencing local host or UNC path." **Root cause**: `request.nextUrl.origin` in Next.js resolves to the internal server address (`localhost:5015`) when behind a reverse proxy (Cloudflare Tunnel), not the public hostname (`cvg.gh4.io`). |
 | **Fix Applied** | Updated `src/app/api/ingest/route.ts` to derive the base URL from `X-Forwarded-Host` / `X-Forwarded-Proto` headers instead of `nextUrl.origin`. Falls back to `nextUrl.origin` if no forwarded headers present. **Committed but not yet deployed/verified.** |
 | **Verification Needed** | (1) Confirm the reverse proxy (Cloudflare Tunnel) sends `X-Forwarded-Host` and `X-Forwarded-Proto` headers. (2) Deploy updated code to Braxton and restart server. (3) Test chunked upload from Power Automate — Location header should now read `https://cvg.gh4.io/api/ingest/chunks/{sessionId}`. |
-| **Related Issue** | Logout button also redirects to `localhost` — same root cause (server-side origin resolution behind proxy). Auth.js `signOut` may construct redirect URLs using the internal origin. Needs separate investigation (Auth.js `AUTH_URL` / `NEXTAUTH_URL` env var, or `trustHost` behavior with forwarded headers). |
+| **Related Issue** | Logout button also redirects to `localhost` — same root cause. **Fixed 2026-02-17**: Changed `signOut({ callbackUrl: \`${origin}/login\` })` to `signOut({ callbackUrl: "/login" })` in `header.tsx`. Auth.js v5 accepts relative `callbackUrl` values without origin validation; the browser resolves the path against the actual host. |
 | **Files** | `src/app/api/ingest/route.ts` (lines 140-145), `src/lib/auth.ts` (trustHost config) |
 | **Links** | [REQ_DataImport.md](SPECS/REQ_DataImport.md), OI-034, OI-037 |
 
@@ -789,10 +789,11 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **Implemented — Not Tested** |
 | **Priority** | P1 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-16 |
+| **Implemented** | 2026-02-17 (commit `1386d75`) |
 | **Context** | Currently canceled WPs are filtered out at the query level (`reader.ts` WHERE clause). User preference: instead of hiding them entirely, show canceled WPs on the flight board with a striped "candy-cane" visual treatment so operators can see they exist but know they're canceled. If the visual is too distracting, provide a toggle to filter canceled items off (using the existing filter system). The query-level filter in `reader.ts` needs to be removed/relaxed so canceled WPs flow through to the UI, with the visual distinction happening at the rendering layer. |
 | **Design Options** | (1) **Candy-cane stripes**: CSS diagonal stripe pattern overlay on ECharts Gantt bars for canceled WPs. (2) **Toggle**: Add a "Show canceled" toggle to the flight board toolbar or FilterBar. Default: ON (show with stripes). (3) **Fallback**: If stripes are too distracting, use reduced opacity (0.3-0.4) + dashed border instead. |
 | **Implementation Notes** | ECharts custom series supports `itemStyle` patterns via SVG/canvas. Canceled status is already normalized to "Canceled" during import. Reader filter (`notLike(workPackages.status, "Cancel%")`) must be relaxed to allow canceled WPs through when needed. The toggle state could live in Zustand filter store or a separate UI preference. |

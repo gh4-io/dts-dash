@@ -4,6 +4,8 @@ import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthProvider } from "@/components/layout/session-provider";
 import { ThemeScript } from "@/components/layout/theme-script";
 import { PreferencesLoader } from "@/components/layout/preferences-loader";
+import { AppConfigProvider } from "@/components/layout/app-config-provider";
+import { getAppTitle } from "@/lib/config/loader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,34 +18,32 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "CVG Dashboard",
-  description: "CVG Line Maintenance Operations Dashboard",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const appTitle = getAppTitle();
+  return {
+    title: appTitle,
+    description: `${appTitle} — Operations Dashboard`,
+  };
+}
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const appTitle = getAppTitle();
+
   return (
     <html lang="en" className="theme-neutral" suppressHydrationWarning>
       <head>
         <ThemeScript />
-        <link
-          rel="stylesheet"
-          href="/vendor/fontawesome/css/all.min.css"
-        />
+        <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <AuthProvider>
-          <ThemeProvider>
-            <PreferencesLoader />
-            {children}
-          </ThemeProvider>
-        </AuthProvider>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <AppConfigProvider appTitle={appTitle}>
+          <AuthProvider>
+            <ThemeProvider>
+              <PreferencesLoader />
+              {children}
+            </ThemeProvider>
+          </AuthProvider>
+        </AppConfigProvider>
       </body>
     </html>
   );

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
+import { useAppTitle } from "@/components/layout/app-config-provider";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
@@ -12,6 +13,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const appTitle = useAppTitle();
 
   return (
     <aside className="hidden md:flex md:w-60 md:flex-col md:border-r border-sidebar-border bg-sidebar">
@@ -21,7 +23,7 @@ export function Sidebar() {
           className="flex items-center gap-2 font-semibold text-sidebar-foreground"
         >
           <i className="fa-solid fa-plane-circle-check text-primary text-xl" />
-          <span className="text-xl">CVG Dashboard</span>
+          <span className="text-xl">{appTitle}</span>
         </Link>
       </div>
       <nav className="flex-1 space-y-1 px-2 py-3">

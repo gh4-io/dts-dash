@@ -81,6 +81,23 @@ The app ingests SharePoint OData work package data (local JSON), computes derive
 
 Full data model → [REQ_DataModel.md](.claude/SPECS/REQ_DataModel.md)
 
+## System Configuration
+
+**`server.config.yml` is the canonical home for all server-side system settings.**
+
+| Setting | Key | Default | Notes |
+|---------|-----|---------|-------|
+| Site title | `app.title` | `"Dashboard"` | Shown in browser tab, sidebar, login page, nav |
+| Password policy | `passwordSecurity.*` | (see file) | Min/max length, character requirements, entropy |
+
+Rules:
+- All new system-level settings (non-secret, non-env) go in `server.config.yml`
+- Loaded at startup via `src/lib/config/loader.ts` → `loadServerConfig()`
+- Exposed to server components via `getAppTitle()`, `getPasswordRequirements()`, etc.
+- Exposed to client components via `AppConfigProvider` (context) in `src/components/layout/app-config-provider.tsx`
+- `server.config.dev.yml` is the git-tracked dev template; `server.config.yml` is the live file (gitignored in production)
+- **Do not use env vars for settings that belong in config** — env vars are for secrets and deployment-specific values only
+
 ## Customer Colors
 
 Customer colors are **admin-configurable** and stored in SQLite. Do **not** hardcode colors in docs or UI.
@@ -119,12 +136,16 @@ src/components/capacity/     — Utilization chart, tables
 src/components/account/      — Profile, preferences, security forms
 src/components/admin/        — Customer editor, user table, user form, analytics dashboard
 src/lib/auth.ts              — Auth.js configuration
+src/lib/config/loader.ts     — System config loader (server.config.yml → memory → client via AppConfigProvider)
 src/lib/db/                  — SQLite connection, Drizzle schema, seed, seed-analytics
 src/lib/data/                — Reader, transformer, engines
 src/lib/hooks/               — Zustand stores (filters, customers, prefs)
 src/lib/utils/               — Date, format, aircraft-type normalization (D-015), contrast helpers
 src/types/                   — TypeScript interfaces
 src/middleware.ts            — Route protection (auth + role checks)
+src/components/layout/app-config-provider.tsx — Client context for system config (useAppTitle, etc.)
+server.config.yml            — Live system config (gitignored; app title, password policy, future settings)
+server.config.dev.yml        — Dev template for server.config.yml (git-tracked)
 data/                        — dashboard.db + input.json
 data/seed/                   — Seed data JSON files (tracked in git)
 data/backups/                — Timestamped backups (gitignored)

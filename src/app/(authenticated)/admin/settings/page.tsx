@@ -39,6 +39,10 @@ interface AppConfig {
   realCapacityPerPerson: number;
   shifts: ShiftConfig[];
   timelineDefaultDays: number;
+  timelineStartOffset: number;
+  timelineEndOffset: number;
+  timelineDefaultZoom: string;
+  timelineDefaultCompact: boolean;
   defaultTimezone: string;
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
@@ -71,7 +75,7 @@ export default function AdminSettingsPage() {
     label: "",
   });
   const [passwordConfig, setPasswordConfig] = useState<PasswordRequirements | null>(null);
-  const [passwordSource, setPasswordSource] = useState<"yaml" | "env" | "default">("default");
+  const [passwordSource, setPasswordSource] = useState<"yaml" | "default">("default");
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -445,23 +449,6 @@ export default function AdminSettingsPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>Timeline Default (Days)</Label>
-            <Select
-              value={String(config.timelineDefaultDays)}
-              onValueChange={(v) => setConfig({ ...config, timelineDefaultDays: parseInt(v, 10) })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 Day</SelectItem>
-                <SelectItem value="3">3 Days</SelectItem>
-                <SelectItem value="7">1 Week</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
             <Label>Default Timezone</Label>
             <Select
               value={config.defaultTimezone}
@@ -476,6 +463,71 @@ export default function AdminSettingsPage() {
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <Label>Default Zoom Level</Label>
+            <Select
+              value={config.timelineDefaultZoom}
+              onValueChange={(v) => setConfig({ ...config, timelineDefaultZoom: v })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1d">1 Day</SelectItem>
+                <SelectItem value="3d">3 Days</SelectItem>
+                <SelectItem value="7d">1 Week</SelectItem>
+                <SelectItem value="14d">2 Weeks</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Timeline Start Offset (days from today)</Label>
+            <Input
+              type="number"
+              value={config.timelineStartOffset}
+              onChange={(e) =>
+                setConfig({ ...config, timelineStartOffset: parseInt(e.target.value, 10) || -3 })
+              }
+              min={-30}
+              max={0}
+            />
+            <p className="text-xs text-muted-foreground">
+              Negative = days before today (e.g. -3 = 3 days ago)
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Timeline End Offset (days from today)</Label>
+            <Input
+              type="number"
+              value={config.timelineEndOffset}
+              onChange={(e) =>
+                setConfig({ ...config, timelineEndOffset: parseInt(e.target.value, 10) || 7 })
+              }
+              min={0}
+              max={90}
+            />
+            <p className="text-xs text-muted-foreground">
+              Positive = days ahead (e.g. 7 = one week forward)
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Compact View by Default</Label>
+            <p className="text-xs text-muted-foreground">
+              Show flight board in compact mode for new sessions
+            </p>
+          </div>
+          <Switch
+            checked={config.timelineDefaultCompact}
+            onCheckedChange={(checked) => setConfig({ ...config, timelineDefaultCompact: checked })}
+          />
         </div>
       </section>
 

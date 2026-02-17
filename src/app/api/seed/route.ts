@@ -2,12 +2,13 @@ import { seed } from "@/lib/db/seed";
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { createChildLogger } from "@/lib/logger";
+import { getFeatures } from "@/lib/config/loader";
 
 const log = createChildLogger("api/seed");
 
 export async function GET() {
-  // Require explicit opt-in via env var
-  if (process.env.ENABLE_SEED_ENDPOINT !== "true") {
+  // Require explicit opt-in via server.config.yml features.enableSeedEndpoint
+  if (!getFeatures().enableSeedEndpoint) {
     return NextResponse.json(null, { status: 404 });
   }
 
@@ -24,9 +25,6 @@ export async function GET() {
     return NextResponse.json({ success: true, message: "Database seeded successfully" });
   } catch (error) {
     log.error({ err: error }, "Seed error");
-    return NextResponse.json(
-      { success: false, error: String(error) },
-      { status: 500 },
-    );
+    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
   }
 }

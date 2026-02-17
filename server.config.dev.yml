@@ -2,6 +2,29 @@
 # This file is tracked in git as a template
 # Production instances use server.config.yml (gitignored)
 
+# ─── Application ─────────────────────────────────────────────────────────────
+app:
+  # Site title shown in browser tab, sidebar, login page, and nav
+  # Default: "Dashboard"
+  title: "CVG Dashboard"
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  # Server-side pino log level
+  # Values: trace | debug | info | warn | error | fatal
+  # Development default: debug | Production recommended: info
+  level: "debug"
+
+# ─── Features ─────────────────────────────────────────────────────────────────
+features:
+  # Enable the /api/seed endpoint for programmatic seeding
+  # ⚠️  Always false in production
+  enableSeedEndpoint: false
+
+  # Enable the in-app cron scheduler
+  # Set to false to disable all scheduled background tasks
+  cronEnabled: true
+
 # ─── Password Security ──────────────────────────────────────────────────────
 passwordSecurity:
   # Minimum password length (8-128 characters)

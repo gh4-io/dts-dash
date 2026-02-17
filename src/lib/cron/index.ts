@@ -5,6 +5,7 @@ import { cronJobs } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { cleanupCanceledWPs } from "./tasks/cleanup-canceled";
 import { createChildLogger } from "@/lib/logger";
+import { getFeatures } from "@/lib/config/loader";
 
 const log = createChildLogger("cron");
 
@@ -44,10 +45,9 @@ const taskHandlers: Record<string, (graceHours: number) => void> = {
  * Guards against double-registration.
  */
 export function startCron(): void {
-  // Check system-level kill switch
-  const cronEnabled = process.env.CRON_ENABLED?.toLowerCase();
-  if (cronEnabled === "false" || cronEnabled === "0") {
-    log.info("Cron disabled via CRON_ENABLED env var");
+  // Check system-level kill switch from server.config.yml
+  if (!getFeatures().cronEnabled) {
+    log.info("Cron disabled via server.config.yml features.cronEnabled");
     return;
   }
 

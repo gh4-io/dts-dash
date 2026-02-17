@@ -15,13 +15,34 @@ export interface PasswordRequirements {
   minEntropy: number;
 }
 
+export interface AppFeatures {
+  enableSeedEndpoint: boolean;
+  cronEnabled: boolean;
+}
+
 interface ServerConfig {
+  app?: {
+    title?: string;
+  };
+  logging?: {
+    level?: string;
+  };
+  features?: {
+    enableSeedEndpoint?: boolean;
+    cronEnabled?: boolean;
+  };
   passwordSecurity?: Partial<PasswordRequirements>;
-  // Future: database, logging, features, etc.
+  // Future: database, etc.
 }
 
 // ─── Hardcoded Defaults ─────────────────────────────────────────────────────
 
+const DEFAULT_APP_TITLE = "Dashboard";
+const DEFAULT_LOG_LEVEL = "info";
+const DEFAULT_FEATURES: AppFeatures = {
+  enableSeedEndpoint: false,
+  cronEnabled: true,
+};
 const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
   minLength: 12,
   maxLength: 128,
@@ -36,116 +57,39 @@ const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
 // ─── In-Memory State ────────────────────────────────────────────────────────
 
 let inMemoryConfig: PasswordRequirements | null = null;
+let inMemoryAppTitle: string | null = null;
+let inMemoryLogLevel: string | null = null;
+let inMemoryFeatures: AppFeatures | null = null;
 
-// ─── Helper Functions ───────────────────────────────────────────────────────
+// ─── YAML Reader ─────────────────────────────────────────────────────────────
 
-/**
- * Load password requirements from environment variables (fallback tier 2)
- */
-function loadPasswordEnvConfig(): Partial<PasswordRequirements> {
-  const envConfig: Partial<PasswordRequirements> = {};
-
-  if (process.env.PASSWORD_MIN_LENGTH) {
-    const val = parseInt(process.env.PASSWORD_MIN_LENGTH, 10);
-    if (!isNaN(val) && val >= 8 && val <= 128) {
-      envConfig.minLength = val;
-    }
-  }
-
-  if (process.env.PASSWORD_MAX_LENGTH) {
-    const val = parseInt(process.env.PASSWORD_MAX_LENGTH, 10);
-    if (!isNaN(val) && val >= 8 && val <= 128) {
-      envConfig.maxLength = val;
-    }
-  }
-
-  if (process.env.PASSWORD_REQUIRE_UPPERCASE !== undefined) {
-    envConfig.requireUppercase = process.env.PASSWORD_REQUIRE_UPPERCASE !== "false";
-  }
-
-  if (process.env.PASSWORD_REQUIRE_LOWERCASE !== undefined) {
-    envConfig.requireLowercase = process.env.PASSWORD_REQUIRE_LOWERCASE !== "false";
-  }
-
-  if (process.env.PASSWORD_REQUIRE_DIGITS !== undefined) {
-    envConfig.requireDigits = process.env.PASSWORD_REQUIRE_DIGITS !== "false";
-  }
-
-  if (process.env.PASSWORD_REQUIRE_SPECIAL_CHARS !== undefined) {
-    envConfig.requireSpecialChars = process.env.PASSWORD_REQUIRE_SPECIAL_CHARS !== "false";
-  }
-
-  if (process.env.PASSWORD_PREVENT_COMMON !== undefined) {
-    envConfig.preventCommon = process.env.PASSWORD_PREVENT_COMMON !== "false";
-  }
-
-  if (process.env.PASSWORD_MIN_ENTROPY) {
-    const val = parseInt(process.env.PASSWORD_MIN_ENTROPY, 10);
-    if (!isNaN(val) && val >= 0 && val <= 100) {
-      envConfig.minEntropy = val;
-    }
-  }
-
-  return envConfig;
-}
-
-/**
- * Load server config from YAML file (tier 1)
- */
-function loadYamlConfig(): Partial<PasswordRequirements> {
+function readYamlFile(): ServerConfig {
   const configPath = path.join(process.cwd(), "server.config.yml");
-
   try {
-    if (!fs.existsSync(configPath)) {
-      return {};
-    }
-
+    if (!fs.existsSync(configPath)) return {};
     const fileContents = fs.readFileSync(configPath, "utf8");
-    const config = yaml.load(fileContents) as ServerConfig;
-
-    return config.passwordSecurity || {};
+    return (yaml.load(fileContents) as ServerConfig) || {};
   } catch (error) {
-    console.warn("[Config Loader] Failed to load YAML config:", error);
+    console.warn("[Config Loader] Failed to load server.config.yml:", error);
     return {};
   }
 }
 
-/**
- * Write updated password requirements to YAML file
- */
+// ─── YAML Writer (password section only) ────────────────────────────────────
+
 function writeYamlConfig(requirements: PasswordRequirements): void {
   const configPath = path.join(process.cwd(), "server.config.yml");
-
   try {
-    // Load existing config or start fresh
     let config: ServerConfig = {};
     if (fs.existsSync(configPath)) {
       const fileContents = fs.readFileSync(configPath, "utf8");
       config = (yaml.load(fileContents) as ServerConfig) || {};
     }
-
-    // Update passwordSecurity section
-    config.passwordSecurity = {
-      minLength: requirements.minLength,
-      maxLength: requirements.maxLength,
-      requireUppercase: requirements.requireUppercase,
-      requireLowercase: requirements.requireLowercase,
-      requireDigits: requirements.requireDigits,
-      requireSpecialChars: requirements.requireSpecialChars,
-      preventCommon: requirements.preventCommon,
-      minEntropy: requirements.minEntropy,
-    };
-
-    // Write back to file
-    const yamlStr = yaml.dump(config, {
-      indent: 2,
-      lineWidth: 80,
-      noRefs: true,
-    });
-
+    config.passwordSecurity = { ...requirements };
+    const yamlStr = yaml.dump(config, { indent: 2, lineWidth: 80, noRefs: true });
     fs.writeFileSync(configPath, yamlStr, "utf8");
   } catch (error) {
-    console.error("[Config Loader] Failed to write YAML config:", error);
+    console.error("[Config Loader] Failed to write server.config.yml:", error);
     throw error;
   }
 }
@@ -153,46 +97,56 @@ function writeYamlConfig(requirements: PasswordRequirements): void {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * Load server configuration at startup
- * Three-tier fallback: YAML → ENV → Defaults
+ * Load all server configuration from server.config.yml.
+ * Two-tier fallback: YAML → Hardcoded defaults.
+ * Call once at startup; getters auto-load if not yet initialized.
  */
 export function loadServerConfig(): void {
-  const yamlConfig = loadYamlConfig();
-  const envConfig = loadPasswordEnvConfig();
+  const yaml = readYamlFile();
 
-  // Merge with priority: YAML > ENV > Defaults
+  inMemoryAppTitle = yaml.app?.title ?? DEFAULT_APP_TITLE;
+  inMemoryLogLevel = yaml.logging?.level ?? DEFAULT_LOG_LEVEL;
+  inMemoryFeatures = {
+    enableSeedEndpoint: yaml.features?.enableSeedEndpoint ?? DEFAULT_FEATURES.enableSeedEndpoint,
+    cronEnabled: yaml.features?.cronEnabled ?? DEFAULT_FEATURES.cronEnabled,
+  };
   inMemoryConfig = {
     ...DEFAULT_PASSWORD_REQUIREMENTS,
-    ...envConfig,
-    ...yamlConfig,
+    ...yaml.passwordSecurity,
   };
 
-  console.log(
-    "[Config Loader] Password requirements loaded:",
-    JSON.stringify(inMemoryConfig, null, 2),
-  );
+  console.log("[Config Loader] Configuration loaded from server.config.yml");
 }
 
-/**
- * Get current password requirements from in-memory config
- * Call loadServerConfig() first at app startup
- */
-export function getPasswordRequirements(): PasswordRequirements {
-  if (!inMemoryConfig) {
-    // Auto-load if not initialized (should not happen in production)
-    console.warn("[Config Loader] Auto-loading config (should be called at startup)");
-    loadServerConfig();
-  }
+/** Site title for browser tab, sidebar, login page */
+export function getAppTitle(): string {
+  if (inMemoryAppTitle === null) loadServerConfig();
+  return inMemoryAppTitle!;
+}
 
+/** Pino log level */
+export function getLogLevel(): string {
+  if (inMemoryLogLevel === null) loadServerConfig();
+  return inMemoryLogLevel!;
+}
+
+/** Feature flags */
+export function getFeatures(): AppFeatures {
+  if (inMemoryFeatures === null) loadServerConfig();
+  return inMemoryFeatures!;
+}
+
+/** Password requirements */
+export function getPasswordRequirements(): PasswordRequirements {
+  if (inMemoryConfig === null) loadServerConfig();
   return inMemoryConfig!;
 }
 
 /**
- * Update password requirements (updates memory + writes to YAML file)
- * Used by Admin UI when saving settings
+ * Update password requirements — writes to server.config.yml and updates memory.
+ * Used by Admin UI when saving settings.
  */
 export function updatePasswordRequirements(requirements: PasswordRequirements): void {
-  // Validate inputs
   if (
     requirements.minLength < 8 ||
     requirements.minLength > 128 ||
@@ -202,37 +156,25 @@ export function updatePasswordRequirements(requirements: PasswordRequirements): 
   ) {
     throw new Error("Invalid password length requirements (must be 8-128, min <= max)");
   }
-
   if (requirements.minEntropy < 0 || requirements.minEntropy > 100) {
     throw new Error("Invalid minEntropy (must be 0-100)");
   }
 
-  // Update in-memory state (instant application)
   inMemoryConfig = { ...requirements };
-
-  // Persist to YAML file (for next startup)
   writeYamlConfig(requirements);
 
-  console.log(
-    "[Config Loader] Password requirements updated:",
-    JSON.stringify(inMemoryConfig, null, 2),
-  );
+  console.log("[Config Loader] Password requirements updated");
 }
 
 /**
- * Get source metadata (for Admin UI display)
- * Returns which tier provided each setting
+ * Get the source of current password requirements.
+ * Returns "yaml" if any field is set in server.config.yml, otherwise "default".
  */
 export function getPasswordRequirementsSource(): {
-  source: "yaml" | "env" | "default";
-  details: Record<string, "yaml" | "env" | "default">;
+  source: "yaml" | "default";
+  details: Record<string, "yaml" | "default">;
 } {
-  const yamlConfig = loadYamlConfig();
-  const envConfig = loadPasswordEnvConfig();
-
-  const details: Record<string, "yaml" | "env" | "default"> = {};
-
-  // Check source for each field
+  const yamlConfig = readYamlFile().passwordSecurity ?? {};
   const fields: (keyof PasswordRequirements)[] = [
     "minLength",
     "maxLength",
@@ -244,21 +186,11 @@ export function getPasswordRequirementsSource(): {
     "minEntropy",
   ];
 
+  const details: Record<string, "yaml" | "default"> = {};
   for (const field of fields) {
-    if (yamlConfig[field] !== undefined) {
-      details[field] = "yaml";
-    } else if (envConfig[field] !== undefined) {
-      details[field] = "env";
-    } else {
-      details[field] = "default";
-    }
+    details[field] = yamlConfig[field] !== undefined ? "yaml" : "default";
   }
 
-  // Determine overall source (if any field is from YAML, return YAML)
   const hasYaml = Object.values(details).some((s) => s === "yaml");
-  const hasEnv = Object.values(details).some((s) => s === "env");
-
-  const source: "yaml" | "env" | "default" = hasYaml ? "yaml" : hasEnv ? "env" : "default";
-
-  return { source, details };
+  return { source: hasYaml ? "yaml" : "default", details };
 }

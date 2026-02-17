@@ -16,7 +16,7 @@ export function Header() {
   const mounted = useSyncExternalStore(
     () => () => {},
     () => true,
-    () => false
+    () => false,
   );
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -48,7 +48,7 @@ export function Header() {
         ? "fa-solid fa-sun"
         : "fa-solid fa-circle-half-stroke";
 
-  const themeLabel = mounted ? theme ?? "system" : "system";
+  const themeLabel = mounted ? (theme ?? "system") : "system";
 
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin" || role === "superadmin";
@@ -118,8 +118,7 @@ export function Header() {
               <hr className="my-1 border-border" />
               <button
                 onClick={() => {
-                  const origin = typeof window !== "undefined" ? window.location.origin : "";
-                  signOut({ callbackUrl: `${origin}/login` });
+                  signOut({ callbackUrl: "/login" });
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
               >

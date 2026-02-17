@@ -86,10 +86,8 @@ async function main() {
   log("");
   if (withSeed) {
     log("Default credentials:", "blue");
-    log(
-      `  Admin: ${c.yellow}admin@cvg.local${c.reset} / ${c.yellow}admin123${c.reset} (superadmin)`,
-    );
-    log(`  User:  ${c.yellow}user@cvg.local${c.reset} / ${c.yellow}user123${c.reset}`);
+    log(`  Admin: ${c.yellow}admin@local${c.reset} / ${c.yellow}admin123${c.reset} (superadmin)`);
+    log(`  User:  ${c.yellow}user@local${c.reset} / ${c.yellow}user123${c.reset}`);
   } else {
     log("Schema created with empty tables. Next steps:", "blue");
     log("  npm run db:seed        — insert demo/dev data");

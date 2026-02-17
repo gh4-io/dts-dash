@@ -9,7 +9,7 @@ import type { PasswordRequirements } from "@/lib/utils/password-validation";
 
 interface PasswordSecurityFormProps {
   requirements: PasswordRequirements;
-  source: "yaml" | "env" | "default";
+  source: "yaml" | "default";
   onChange: (requirements: PasswordRequirements) => void;
   onReset: () => void;
 }

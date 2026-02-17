@@ -3,9 +3,11 @@
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAppTitle } from "@/components/layout/app-config-provider";
 
 export default function LoginPage() {
   const router = useRouter();
+  const appTitle = useAppTitle();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -57,7 +59,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <i className="fa-solid fa-plane-circle-check text-4xl text-primary mb-4" />
-          <h1 className="text-2xl font-bold text-foreground">CVG Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground">{appTitle}</h1>
           <p className="text-sm text-muted-foreground">Line Maintenance Operations</p>
         </div>
 
@@ -73,7 +75,7 @@ export default function LoginPage() {
                 type="text"
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
-                placeholder="admin or admin@cvg.local"
+                placeholder="johnd or johnd@dash.com"
                 required
                 className="w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
@@ -121,7 +123,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-muted-foreground">CVG Line Maintenance Operations</p>
+        <p className="text-center text-xs text-muted-foreground">Line Maintenance Operations</p>
       </div>
     </div>
   );

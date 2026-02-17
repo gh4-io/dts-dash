@@ -1,7 +1,7 @@
 [
   {
     "id": null,
-    "email": "admin@cvg.local",
+    "email": "admin@local",
     "username": "admin",
     "displayName": "Admin",
     "password": "admin123",
@@ -10,7 +10,7 @@
   },
   {
     "id": null,
-    "email": "user@cvg.local",
+    "email": "user@local",
     "username": "user",
     "displayName": "Test User",
     "password": "user123",
