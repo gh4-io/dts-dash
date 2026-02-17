@@ -61,8 +61,8 @@ const DEFAULT_FEATURES: AppFeatures = {
   cronEnabled: true,
 };
 const DEFAULT_TIMELINE: TimelineDefaults = {
-  startOffset: -3,
-  endOffset: 7,
+  startOffset: -0.5,
+  endOffset: 2.5, // derived: startOffset + defaultDays (-0.5 + 3)
   defaultZoom: "3d",
   defaultCompact: false,
   defaultTimezone: "America/New_York",
@@ -136,13 +136,20 @@ export function loadServerConfig(): void {
     enableSeedEndpoint: yaml.features?.enableSeedEndpoint ?? DEFAULT_FEATURES.enableSeedEndpoint,
     cronEnabled: yaml.features?.cronEnabled ?? DEFAULT_FEATURES.cronEnabled,
   };
+  const yamlTl = yaml.timeline ?? {};
+  const startOffset = yamlTl.startOffset ?? DEFAULT_TIMELINE.startOffset;
+  const defaultDays = yamlTl.defaultDays ?? DEFAULT_TIMELINE.defaultDays;
+  // If BOTH offsets are explicitly set, use them and ignore defaultDays.
+  // Otherwise derive endOffset = startOffset + defaultDays.
+  const bothExplicit = yamlTl.startOffset !== undefined && yamlTl.endOffset !== undefined;
+  const endOffset = bothExplicit ? yamlTl.endOffset! : startOffset + defaultDays;
   inMemoryTimeline = {
-    startOffset: yaml.timeline?.startOffset ?? DEFAULT_TIMELINE.startOffset,
-    endOffset: yaml.timeline?.endOffset ?? DEFAULT_TIMELINE.endOffset,
-    defaultZoom: yaml.timeline?.defaultZoom ?? DEFAULT_TIMELINE.defaultZoom,
-    defaultCompact: yaml.timeline?.defaultCompact ?? DEFAULT_TIMELINE.defaultCompact,
-    defaultTimezone: yaml.timeline?.defaultTimezone ?? DEFAULT_TIMELINE.defaultTimezone,
-    defaultDays: yaml.timeline?.defaultDays ?? DEFAULT_TIMELINE.defaultDays,
+    startOffset,
+    endOffset,
+    defaultZoom: yamlTl.defaultZoom ?? DEFAULT_TIMELINE.defaultZoom,
+    defaultCompact: yamlTl.defaultCompact ?? DEFAULT_TIMELINE.defaultCompact,
+    defaultTimezone: yamlTl.defaultTimezone ?? DEFAULT_TIMELINE.defaultTimezone,
+    defaultDays,
   };
   inMemoryConfig = {
     ...DEFAULT_PASSWORD_REQUIREMENTS,

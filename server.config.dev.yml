@@ -27,11 +27,16 @@ features:
 
 # ─── Timeline Defaults ────────────────────────────────────────────────────────
 timeline:
-  # Days before today the flight board starts (negative integer)
-  startOffset: -3
+  # Days before today the flight board starts (supports fractions: -0.5 = 12 hours ago)
+  startOffset: -0.5
 
-  # Days ahead of today the flight board ends (positive integer)
-  endOffset: 7
+  # Default number of days the window spans from startOffset
+  # endOffset is derived: startOffset + defaultDays (e.g. -0.5 + 3 = 2.5)
+  # To override: set BOTH startOffset AND endOffset explicitly — defaultDays is then ignored
+  defaultDays: 3
+
+  # Explicit end override — uncomment to pin end independently of defaultDays
+  # endOffset: 7
 
   # Default zoom level: "6h" | "12h" | "1d" | "3d" | "1w" | "all"
   defaultZoom: "3d"
@@ -41,9 +46,6 @@ timeline:
 
   # Default timezone: "UTC" | "America/New_York" (IANA string)
   defaultTimezone: "America/New_York"
-
-  # Default number of days shown on the flight board
-  defaultDays: 3
 
 # ─── Password Security ──────────────────────────────────────────────────────
 passwordSecurity:

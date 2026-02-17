@@ -97,20 +97,24 @@ function computeDateRange(rangeName: string, tz: string): { start: string; end: 
 }
 
 /**
- * Compute an asymmetric date range from today using day offsets.
- * startOffset may be negative (e.g. -3 = 3 days ago).
+ * Compute an asymmetric date range from now using day offsets.
+ * startOffset may be negative or fractional (e.g. -0.5 = 12 hours ago from now).
+ * Base is the current time (rolling), not midnight — so the window always
+ * reflects the last N hours relative to right now.
+ * Results are floored to the nearest hour for clean boundary alignment.
  */
 function computeOffsetRange(
   startOffset: number,
   endOffset: number,
-  tz: string,
 ): { start: string; end: string } {
-  const todayMidnight = midnightInTz(new Date(), tz);
-  const startDate = new Date(todayMidnight);
-  startDate.setUTCDate(startDate.getUTCDate() + startOffset);
-  const endDate = new Date(todayMidnight);
-  endDate.setUTCDate(endDate.getUTCDate() + endOffset);
-  return { start: startDate.toISOString(), end: endDate.toISOString() };
+  const MS_PER_DAY = 86400000;
+  const MS_PER_HOUR = 3600000;
+  const now = Date.now();
+  const floorHour = (ms: number) => Math.floor(ms / MS_PER_HOUR) * MS_PER_HOUR;
+  return {
+    start: new Date(floorHour(now + startOffset * MS_PER_DAY)).toISOString(),
+    end: new Date(floorHour(now + endOffset * MS_PER_DAY)).toISOString(),
+  };
 }
 
 function getDefaults(): FilterState {
@@ -159,11 +163,7 @@ export const useFilters = create<FilterState & FilterActions>()((set) => ({
       const { start, end } = computeDateRange(prefs.defaultDateRange, prefs.defaultTimezone);
       set({ start, end, timezone: prefs.defaultTimezone });
     } else {
-      const { start, end } = computeOffsetRange(
-        prefs.defaultStartOffset,
-        prefs.defaultEndOffset,
-        prefs.defaultTimezone,
-      );
+      const { start, end } = computeOffsetRange(prefs.defaultStartOffset, prefs.defaultEndOffset);
       set({ start, end, timezone: prefs.defaultTimezone });
     }
   },
