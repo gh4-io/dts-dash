@@ -1,6 +1,5 @@
 import { db } from "@/lib/db/client";
 import { workPackages } from "@/lib/db/schema";
-import { notLike } from "drizzle-orm";
 import type { SharePointWorkPackage, WpStatus } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 
@@ -25,11 +24,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
   }
 
   try {
-    const rows = db
-      .select()
-      .from(workPackages)
-      .where(notLike(workPackages.status, "Cancel%"))
-      .all();
+    const rows = db.select().from(workPackages).all();
 
     cachedData = rows.map((row) => ({
       GUID: row.guid,

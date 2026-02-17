@@ -1,3 +1,5 @@
+import { isCanceled } from "@/lib/utils/status";
+
 /**
  * HTML tooltip formatter for flight board Gantt bars
  */
@@ -27,25 +29,27 @@ export function formatFlightTooltip(data: {
   const departureDate = new Date(data.departure);
 
   // Get timezone abbreviation (e.g., "UTC", "EST", "EDT")
-  const tzLabel = tz === "UTC"
-    ? "UTC"
-    : new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
-        .formatToParts(arrivalDate)
-        .find((p) => p.type === "timeZoneName")?.value ?? "ET";
+  const tzLabel =
+    tz === "UTC"
+      ? "UTC"
+      : (new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
+          .formatToParts(arrivalDate)
+          .find((p) => p.type === "timeZoneName")?.value ?? "ET");
 
   const use12h = data.timeFormat === "12h";
   const fmtDate = (d: Date) =>
     d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) +
     ", " +
-    d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: use12h, timeZone: tz }) +
+    d.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: use12h,
+      timeZone: tz,
+    }) +
     ` ${tzLabel}`;
 
   const mhLabel =
-    data.mhSource === "manual"
-      ? "override"
-      : data.mhSource === "workpackage"
-        ? "WP"
-        : "default";
+    data.mhSource === "manual" ? "override" : data.mhSource === "workpackage" ? "WP" : "default";
 
   // Use CSS variables for theme-aware colors
   const dimColor = "hsl(var(--muted-foreground))";
@@ -75,7 +79,7 @@ export function formatFlightTooltip(data: {
     <div><span style="color:${dimColor};">Ground:</span> ${groundStr}</div>
   </div>
   <div style="border-top:1px solid ${borderColor};padding-top:6px;margin-top:6px;">
-    <div><span style="color:${dimColor};">Status:</span> ${data.status}</div>
+    <div><span style="color:${dimColor};">Status:</span> ${isCanceled(data.status) ? `<span style="color:#ef4444;font-weight:600;">${data.status}</span>` : data.status}</div>
     <div><span style="color:${dimColor};">WP #:</span> ${data.workpackageNo ?? "—"}</div>
     <div><span style="color:${dimColor};">Man-Hours:</span> ${data.effectiveMH} MH (${mhLabel})</div>
   </div>
