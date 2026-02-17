@@ -2,6 +2,7 @@ import { db } from "@/lib/db/client";
 import { importLog, workPackages, users } from "@/lib/db/schema";
 import { invalidateCache } from "@/lib/data/reader";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
+import { isCanceled } from "@/lib/utils/status";
 import { eq, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
@@ -14,6 +15,7 @@ export interface ValidationSummary {
   customerCount: number;
   aircraftCount: number;
   dateRange: { start: string; end: string } | null;
+  canceledCount: number;
 }
 
 export interface ValidationResult {
@@ -37,6 +39,7 @@ export interface CommitResult {
   logId: string;
   recordCount: number;
   upsertedCount: number;
+  canceledCount: number;
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
@@ -97,6 +100,7 @@ export function validateImportData(
         customerCount: 0,
         aircraftCount: 0,
         dateRange: null,
+        canceledCount: 0,
       },
       warnings: [],
       errors: [],
@@ -176,6 +180,15 @@ export function validateImportData(
     );
   }
 
+  const canceledCount = records.filter((r: Record<string, unknown>) =>
+    isCanceled(r.Workpackage_x0020_Status != null ? String(r.Workpackage_x0020_Status) : null)
+  ).length;
+  if (canceledCount > 0) {
+    warnings.push(
+      `${canceledCount} record${canceledCount !== 1 ? "s" : ""} have Canceled status (excluded from views, purged after grace period)`
+    );
+  }
+
   return {
     valid: errors.length === 0,
     summary: {
@@ -183,6 +196,7 @@ export function validateImportData(
       customerCount: customerSet.size,
       aircraftCount: aircraftSet.size,
       dateRange,
+      canceledCount,
     },
     warnings,
     errors,
@@ -276,12 +290,17 @@ export async function commitImportData(
 
   // UPSERT records in a single transaction
   let upsertedCount = 0;
+  let canceledCount = 0;
 
   try {
     db.transaction(() => {
       for (const rec of records) {
         const r = rec as Record<string, unknown>;
         const aircraft = r.Aircraft as Record<string, unknown> | undefined;
+
+        // Normalize canceled status to canonical "Canceled" spelling
+        const rawStatus = String(r.Workpackage_x0020_Status ?? "New");
+        const status = isCanceled(rawStatus) ? "Canceled" : rawStatus;
 
         const values = {
           guid: String(r.GUID),
@@ -296,7 +315,7 @@ export async function commitImportData(
           departure: String(r.Departure ?? ""),
           totalMH: r.TotalMH != null ? Number(r.TotalMH) : null,
           totalGroundHours: r.TotalGroundHours != null ? String(r.TotalGroundHours) : null,
-          status: String(r.Workpackage_x0020_Status ?? "New"),
+          status,
           description: r.Description != null ? String(r.Description) : null,
           parentId: r.ParentID != null ? String(r.ParentID) : null,
           hasWorkpackage: r.HasWorkpackage != null ? Boolean(r.HasWorkpackage) : null,
@@ -325,6 +344,7 @@ export async function commitImportData(
           .run();
 
         upsertedCount++;
+        if (status === "Canceled") canceledCount++;
       }
     });
   } catch (err) {
@@ -343,7 +363,7 @@ export async function commitImportData(
       log.error({ err: updateErr, logId }, "Failed to update import log status");
     }
 
-    return { success: false, logId, recordCount: records.length, upsertedCount: 0 };
+    return { success: false, logId, recordCount: records.length, upsertedCount: 0, canceledCount: 0 };
   }
 
   // Invalidate caches
@@ -351,17 +371,22 @@ export async function commitImportData(
   invalidateTransformerCache();
   log.debug("Reader and transformer caches invalidated");
 
+  if (canceledCount > 0) {
+    log.info({ canceledCount, logId }, "Canceled work packages imported (excluded from views)");
+  }
+
   log.info(
     {
       logId,
       source,
       recordCount: records.length,
       upsertedCount,
+      canceledCount,
       customerCount: customerSet.size,
       aircraftCount: aircraftSet.size,
     },
     "Import committed successfully"
   );
 
-  return { success: true, logId, recordCount: records.length, upsertedCount };
+  return { success: true, logId, recordCount: records.length, upsertedCount, canceledCount };
 }

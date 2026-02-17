@@ -1,13 +1,14 @@
-import fs from "fs";
-import path from "path";
-import type { SharePointWorkPackage } from "@/types";
+import { db } from "@/lib/db/client";
+import { workPackages } from "@/lib/db/schema";
+import { notLike } from "drizzle-orm";
+import type { SharePointWorkPackage, WpStatus } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("reader");
 
 /**
  * Work Package Reader
- * Reads and parses data/input.json (OData format from SharePoint)
+ * Reads work packages from SQLite work_packages table (D-029)
  * Implements module-level caching with invalidation flag
  */
 
@@ -15,39 +16,55 @@ let cachedData: SharePointWorkPackage[] | null = null;
 let shouldInvalidate = false;
 
 /**
- * Read work packages from data/input.json
- * Returns cached data if available, re-reads on invalidation
+ * Read work packages from the database.
+ * Returns cached data if available, re-reads on invalidation.
  */
 export function readWorkPackages(): SharePointWorkPackage[] {
   if (cachedData && !shouldInvalidate) {
     return cachedData;
   }
 
-  const dataPath = path.join(process.cwd(), "data", "input.json");
-
-  if (!fs.existsSync(dataPath)) {
-    log.warn(`data/input.json not found at ${dataPath}`);
-    cachedData = [];
-    shouldInvalidate = false;
-    return [];
-  }
-
   try {
-    const raw = fs.readFileSync(dataPath, "utf-8");
-    const parsed = JSON.parse(raw);
+    const rows = db
+      .select()
+      .from(workPackages)
+      .where(notLike(workPackages.status, "Cancel%"))
+      .all();
 
-    // Handle both OData format { value: [...] } and bare array [...]
-    const records: SharePointWorkPackage[] = Array.isArray(parsed)
-      ? parsed
-      : parsed.value ?? [];
+    cachedData = rows.map((row) => ({
+      GUID: row.guid,
+      ID: row.spId ?? undefined,
+      Aircraft: {
+        Title: row.aircraftReg,
+        field_5: row.aircraftType ?? undefined,
+      },
+      Customer: row.customer,
+      Arrival: row.arrival,
+      Departure: row.departure,
+      TotalMH: row.totalMH,
+      TotalGroundHours: row.totalGroundHours ?? "0",
+      Workpackage_x0020_Status: (row.status ?? "New") as WpStatus,
+      Title: row.title ?? undefined,
+      CustomerReference: row.customerRef ?? undefined,
+      Description: row.description ?? undefined,
+      FlightId: row.flightId,
+      ParentID: row.parentId,
+      HasWorkpackage: row.hasWorkpackage ?? undefined,
+      WorkpackageNo: row.workpackageNo ?? undefined,
+      CalendarComments: row.calendarComments ?? undefined,
+      IsNotClosedOrCanceled: (row.isNotClosedOrCanceled as "1" | "0") ?? undefined,
+      Modified: row.spModified ?? undefined,
+      Created: row.spCreated ?? undefined,
+      DocumentSetID: row.documentSetId ?? undefined,
+      AircraftId: row.aircraftSpId ?? undefined,
+      OData__UIVersionString: row.spVersion ?? undefined,
+    }));
 
-    cachedData = records;
     shouldInvalidate = false;
-
-    log.info(`Loaded ${records.length} work packages from input.json`);
-    return records;
+    log.info(`Loaded ${cachedData.length} work packages from database`);
+    return cachedData;
   } catch (error) {
-    log.error({ err: error }, "Failed to read or parse input.json");
+    log.error({ err: error }, "Failed to read work packages from database");
     cachedData = [];
     shouldInvalidate = false;
     return [];
@@ -56,7 +73,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
 
 /**
  * Invalidate the cache (e.g., after a new import)
- * Next call to readWorkPackages() will re-read from disk
+ * Next call to readWorkPackages() will re-read from database
  */
 export function invalidateCache(): void {
   shouldInvalidate = true;

@@ -2,6 +2,7 @@ import { db, sqlite } from "./client";
 import * as schema from "./schema";
 import { hashSync } from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { isCanceled } from "@/lib/utils/status";
 import {
   SEED_USERS,
   SEED_CUSTOMERS,
@@ -10,6 +11,7 @@ import {
   SEED_MANUFACTURERS,
   SEED_AIRCRAFT_MODELS,
   SEED_ENGINE_TYPES,
+  SEED_WORK_PACKAGES,
 } from "./seed-data";
 import { createChildLogger } from "@/lib/logger";
 
@@ -32,12 +34,14 @@ export function createTables() {
       role TEXT NOT NULL DEFAULT 'user',
       is_active INTEGER NOT NULL DEFAULT 1,
       force_password_change INTEGER NOT NULL DEFAULT 0,
+      token_version INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
+      session_token TEXT UNIQUE,
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
@@ -67,9 +71,39 @@ export function createTables() {
       table_page_size INTEGER NOT NULL DEFAULT 30
     );
 
+    CREATE TABLE IF NOT EXISTS work_packages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guid TEXT NOT NULL UNIQUE,
+      sp_id INTEGER UNIQUE,
+      title TEXT,
+      aircraft_reg TEXT NOT NULL,
+      aircraft_type TEXT,
+      customer TEXT NOT NULL,
+      customer_ref TEXT,
+      flight_id TEXT,
+      arrival TEXT NOT NULL,
+      departure TEXT NOT NULL,
+      total_mh REAL,
+      total_ground_hours TEXT,
+      status TEXT NOT NULL DEFAULT 'New',
+      description TEXT,
+      parent_id TEXT,
+      has_workpackage INTEGER,
+      workpackage_no TEXT,
+      calendar_comments TEXT,
+      is_not_closed_or_canceled TEXT,
+      document_set_id INTEGER,
+      aircraft_sp_id INTEGER,
+      sp_modified TEXT,
+      sp_created TEXT,
+      sp_version TEXT,
+      import_log_id TEXT REFERENCES import_log(id),
+      imported_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS mh_overrides (
       id TEXT PRIMARY KEY,
-      work_package_id INTEGER NOT NULL UNIQUE,
+      work_package_id INTEGER NOT NULL UNIQUE REFERENCES work_packages(id),
       override_mh REAL NOT NULL,
       updated_by TEXT NOT NULL REFERENCES users(id),
       updated_at TEXT NOT NULL
@@ -174,11 +208,30 @@ export function createTables() {
       errors TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS cron_jobs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      schedule TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      grace_hours INTEGER,
+      last_run_at TEXT,
+      last_run_status TEXT,
+      last_run_message TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_import_log_imported_at ON import_log(imported_at);
+    CREATE INDEX IF NOT EXISTS idx_wp_arrival ON work_packages(arrival);
+    CREATE INDEX IF NOT EXISTS idx_wp_departure ON work_packages(departure);
+    CREATE INDEX IF NOT EXISTS idx_wp_customer ON work_packages(customer);
+    CREATE INDEX IF NOT EXISTS idx_wp_aircraft_reg ON work_packages(aircraft_reg);
+    CREATE INDEX IF NOT EXISTS idx_wp_import_log ON work_packages(import_log_id);
+    CREATE INDEX IF NOT EXISTS idx_wp_status ON work_packages(status);
     CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
     CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
     CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
@@ -259,6 +312,20 @@ export function runMigrations(): MigrationResult[] {
       name: "Add session_token to sessions",
       sql: "ALTER TABLE sessions ADD COLUMN session_token TEXT UNIQUE",
     },
+    // D-029: work_packages table — created by createTables() for new DBs.
+    // For existing DBs, the CREATE TABLE IF NOT EXISTS in createTables() handles it.
+    // Migration here drops broken mh_overrides (keyed by non-existent SP ID) and recreates with FK.
+    {
+      name: "D-029: Recreate mh_overrides with work_packages FK",
+      sql: `DROP TABLE IF EXISTS mh_overrides;
+            CREATE TABLE IF NOT EXISTS mh_overrides (
+              id TEXT PRIMARY KEY,
+              work_package_id INTEGER NOT NULL UNIQUE REFERENCES work_packages(id),
+              override_mh REAL NOT NULL,
+              updated_by TEXT NOT NULL REFERENCES users(id),
+              updated_at TEXT NOT NULL
+            )`,
+    },
   ];
 
   const results: MigrationResult[] = [];
@@ -326,16 +393,16 @@ export async function seedData() {
               isActive: u.isActive,
               createdAt: now,
               updatedAt: now,
-            }))
+            })),
           )
           .run();
         log.info(
-          `Seeded ${regularUsers.length} dev users. Default passwords — change after first login.`
+          `Seeded ${regularUsers.length} dev users. Default passwords — change after first login.`,
         );
       }
     } else {
       log.warn(
-        "No INITIAL_ADMIN_EMAIL/PASSWORD set. Skipping user seed — use /setup for first-run."
+        "No INITIAL_ADMIN_EMAIL/PASSWORD set. Skipping user seed — use /setup for first-run.",
       );
     }
   }
@@ -380,7 +447,7 @@ export async function seedData() {
           isActive: true,
           createdAt: now,
           updatedAt: now,
-        }))
+        })),
       )
       .run();
 
@@ -389,10 +456,7 @@ export async function seedData() {
 
   // ─── Aircraft Type Mappings ───────────────────────────────────────────────
 
-  const existingMappings = db
-    .select()
-    .from(schema.aircraftTypeMappings)
-    .all();
+  const existingMappings = db.select().from(schema.aircraftTypeMappings).all();
 
   if (existingMappings.length === 0) {
     db.insert(schema.aircraftTypeMappings)
@@ -403,13 +467,11 @@ export async function seedData() {
           isActive: true,
           createdAt: now,
           updatedAt: now,
-        }))
+        })),
       )
       .run();
 
-    log.info(
-      `Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`
-    );
+    log.info(`Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`);
   }
 
   // ─── App Config ───────────────────────────────────────────────────────────
@@ -438,6 +500,46 @@ export async function seedData() {
     }
   }
 
+  // ─── Cron Jobs ──────────────────────────────────────────────────────────
+
+  const existingCronJobs = db.select().from(schema.cronJobs).all();
+
+  if (existingCronJobs.length === 0) {
+    db.insert(schema.cronJobs)
+      .values({
+        id: "cleanup-canceled",
+        name: "Cleanup Canceled WPs",
+        schedule: "0 */6 * * *",
+        enabled: true,
+        graceHours: 6,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    log.info("Seeded cron job: cleanup-canceled (every 6 hours, 6h grace)");
+  } else {
+    // Ensure cleanup-canceled job exists (idempotent)
+    const existing = db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, "cleanup-canceled"))
+      .get();
+    if (!existing) {
+      db.insert(schema.cronJobs)
+        .values({
+          id: "cleanup-canceled",
+          name: "Cleanup Canceled WPs",
+          schedule: "0 */6 * * *",
+          enabled: true,
+          graceHours: 6,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      log.info("Seeded missing cron job: cleanup-canceled");
+    }
+  }
+
   // ─── Manufacturers ────────────────────────────────────────────────────────
 
   const existingManufacturers = db.select().from(schema.manufacturers).all();
@@ -449,7 +551,7 @@ export async function seedData() {
           id: generateId(),
           ...m,
           isActive: true,
-        }))
+        })),
       )
       .run();
 
@@ -463,7 +565,11 @@ export async function seedData() {
   if (existingModels.length === 0) {
     // Map manufacturer name to ID for FK reference
     const manufacturerMap = new Map(
-      db.select().from(schema.manufacturers).all().map((m) => [m.name, m.id])
+      db
+        .select()
+        .from(schema.manufacturers)
+        .all()
+        .map((m) => [m.name, m.id]),
     );
 
     db.insert(schema.aircraftModels)
@@ -476,7 +582,7 @@ export async function seedData() {
           displayName: m.displayName,
           sortOrder: m.sortOrder,
           isActive: true,
-        }))
+        })),
       )
       .run();
 
@@ -494,11 +600,72 @@ export async function seedData() {
           id: generateId(),
           ...e,
           isActive: true,
-        }))
+        })),
       )
       .run();
 
     log.info(`Seeded ${SEED_ENGINE_TYPES.length} engine types`);
+  }
+
+  // ─── Work Packages (D-029) ────────────────────────────────────────────────
+
+  const existingWPs = db.select().from(schema.workPackages).all();
+
+  // Filter out any canceled WPs from seed data (defensive)
+  const activeWPs = SEED_WORK_PACKAGES.filter((wp) => !isCanceled(wp.Workpackage_x0020_Status));
+
+  if (existingWPs.length === 0 && activeWPs.length > 0) {
+    const now = new Date().toISOString();
+
+    // Create a seed import log entry
+    const seedLogId = generateId();
+    db.insert(schema.importLog)
+      .values({
+        id: seedLogId,
+        importedAt: now,
+        recordCount: activeWPs.length,
+        source: "file",
+        fileName: "work-packages.json (seed)",
+        importedBy: "system",
+        status: "success",
+        errors: null,
+      })
+      .run();
+
+    for (const wp of activeWPs) {
+      db.insert(schema.workPackages)
+        .values({
+          guid: wp.GUID,
+          spId: wp.ID ?? null,
+          title: wp.Title ?? null,
+          aircraftReg: wp.Aircraft.Title,
+          aircraftType: wp.Aircraft.field_5 ?? null,
+          customer: wp.Customer,
+          customerRef: wp.CustomerReference ?? null,
+          flightId: wp.FlightId ?? null,
+          arrival: wp.Arrival,
+          departure: wp.Departure,
+          totalMH: wp.TotalMH ?? null,
+          totalGroundHours: wp.TotalGroundHours ?? null,
+          status: wp.Workpackage_x0020_Status ?? "New",
+          description: wp.Description ?? null,
+          parentId: wp.ParentID ?? null,
+          hasWorkpackage: wp.HasWorkpackage ?? null,
+          workpackageNo: wp.WorkpackageNo ?? null,
+          calendarComments: wp.CalendarComments ?? null,
+          isNotClosedOrCanceled: wp.IsNotClosedOrCanceled ?? null,
+          documentSetId: wp.DocumentSetID ?? null,
+          aircraftSpId: wp.AircraftId ?? null,
+          spModified: wp.Modified ?? null,
+          spCreated: wp.Created ?? null,
+          spVersion: wp.OData__UIVersionString ?? null,
+          importLogId: seedLogId,
+          importedAt: now,
+        })
+        .run();
+    }
+
+    log.info(`Seeded ${activeWPs.length} work packages`);
   }
 
   log.info("Seeding complete.");

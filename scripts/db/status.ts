@@ -8,7 +8,7 @@
 
 import fs from "fs";
 import path from "path";
-import { db } from "../../src/lib/db/client";
+import { db, sqlite } from "../../src/lib/db/client";
 import * as schema from "../../src/lib/db/schema";
 import { desc } from "drizzle-orm";
 import { banner, log, formatBytes, padRight, c } from "./_cli-utils";
@@ -49,6 +49,7 @@ function main() {
     sessions: schema.sessions,
     customers: schema.customers,
     user_preferences: schema.userPreferences,
+    work_packages: schema.workPackages,
     mh_overrides: schema.mhOverrides,
     aircraft_type_mappings: schema.aircraftTypeMappings,
     manufacturers: schema.manufacturers,
@@ -59,12 +60,14 @@ function main() {
     master_data_import_log: schema.masterDataImportLog,
     analytics_events: schema.analyticsEvents,
     app_config: schema.appConfig,
+    cron_jobs: schema.cronJobs,
   };
 
   let totalRows = 0;
   for (const [name, table] of Object.entries(tables)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const count = db.select().from(table as any).all().length;
+    const tbl = table as any;
+    const count = db.select().from(tbl).all().length;
     totalRows += count;
     const countStr = count > 0 ? `${c.yellow}${count}${c.reset}` : `${c.dim}0${c.reset}`;
     log(`  ${padRight(name, 26)} ${countStr}`);
@@ -86,30 +89,35 @@ function main() {
   if (lastImport) {
     log(`  Time:     ${lastImport.importedAt}`);
     log(`  Records:  ${lastImport.recordCount}`);
-    log(`  Source:   ${lastImport.source}${lastImport.fileName ? ` (${lastImport.fileName})` : ""}`);
+    log(
+      `  Source:   ${lastImport.source}${lastImport.fileName ? ` (${lastImport.fileName})` : ""}`,
+    );
     log(`  Status:   ${lastImport.status}`);
   } else {
     log("  No imports recorded.", "dim");
   }
 
-  // ─── Event Data ────────────────────────────────────────────────────────────
+  // ─── Work Packages ─────────────────────────────────────────────────────────
 
   log("");
-  log("Event Data:", "blue");
-  const inputPath = path.join(PROJECT_ROOT, "data", "input.json");
+  log("Work Packages:", "blue");
+  const wpCount = db.select().from(schema.workPackages).all().length;
+  if (wpCount > 0) {
+    log(`  Records:  ${wpCount}`);
 
-  if (fs.existsSync(inputPath)) {
-    const inputStats = fs.statSync(inputPath);
-    log(`  File:     ${formatBytes(inputStats.size)}`);
-    try {
-      const data = JSON.parse(fs.readFileSync(inputPath, "utf-8"));
-      const records = Array.isArray(data) ? data : data.value ?? [];
-      log(`  Records:  ${records.length}`);
-    } catch {
-      log("  Records:  (parse error)", "yellow");
+    // Check for canceled WPs
+    const canceledResult = sqlite
+      .prepare("SELECT count(*) as count FROM work_packages WHERE status LIKE 'Cancel%'")
+      .get() as { count: number } | undefined;
+    const canceledCount = canceledResult?.count ?? 0;
+    if (canceledCount > 0) {
+      log(
+        `  Canceled: ${c.yellow}${canceledCount}${c.reset} (run ${c.cyan}npm run db:cleanup-canceled${c.reset} to purge)`,
+      );
     }
   } else {
-    log("  input.json does not exist.", "dim");
+    log("  No work packages imported yet.", "dim");
+    log("  Run 'npm run db:import -- --file <path>' to import data.", "dim");
   }
 
   // ─── Backups ───────────────────────────────────────────────────────────────

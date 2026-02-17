@@ -1,10 +1,4 @@
-import {
-  sqliteTable,
-  text,
-  integer,
-  real,
-  index,
-} from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
 
@@ -94,9 +88,7 @@ export const userPreferences = sqliteTable("user_preferences", {
     .default("dark"),
   themePreset: text("theme_preset").notNull().default("vitepress"),
   accentColor: text("accent_color"),
-  compactMode: integer("compact_mode", { mode: "boolean" })
-    .notNull()
-    .default(false),
+  compactMode: integer("compact_mode", { mode: "boolean" }).notNull().default(false),
   defaultTimezone: text("default_timezone").notNull().default("UTC"),
   defaultDateRange: text("default_date_range", { enum: ["1d", "3d", "1w"] })
     .notNull()
@@ -107,11 +99,67 @@ export const userPreferences = sqliteTable("user_preferences", {
   tablePageSize: integer("table_page_size").notNull().default(30),
 });
 
+// ─── Work Packages (D-029) ──────────────────────────────────────────────────
+
+export const workPackages = sqliteTable(
+  "work_packages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    guid: text("guid").notNull().unique(),
+    spId: integer("sp_id").unique(),
+
+    // Core fields
+    title: text("title"),
+    aircraftReg: text("aircraft_reg").notNull(),
+    aircraftType: text("aircraft_type"),
+    customer: text("customer").notNull(),
+    customerRef: text("customer_ref"),
+    flightId: text("flight_id"),
+    arrival: text("arrival").notNull(),
+    departure: text("departure").notNull(),
+    totalMH: real("total_mh"),
+    totalGroundHours: text("total_ground_hours"),
+    status: text("status").notNull().default("New"),
+    description: text("description"),
+    parentId: text("parent_id"),
+
+    // Optional fields (present in some SP exports)
+    hasWorkpackage: integer("has_workpackage", { mode: "boolean" }),
+    workpackageNo: text("workpackage_no"),
+    calendarComments: text("calendar_comments"),
+    isNotClosedOrCanceled: text("is_not_closed_or_canceled"),
+    documentSetId: integer("document_set_id"),
+    aircraftSpId: integer("aircraft_sp_id"),
+
+    // SharePoint metadata
+    spModified: text("sp_modified"),
+    spCreated: text("sp_created"),
+    spVersion: text("sp_version"),
+
+    // Import metadata
+    importLogId: text("import_log_id").references(() => importLog.id),
+    importedAt: text("imported_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    arrivalIdx: index("idx_wp_arrival").on(table.arrival),
+    departureIdx: index("idx_wp_departure").on(table.departure),
+    customerIdx: index("idx_wp_customer").on(table.customer),
+    aircraftRegIdx: index("idx_wp_aircraft_reg").on(table.aircraftReg),
+    importLogIdx: index("idx_wp_import_log").on(table.importLogId),
+    statusIdx: index("idx_wp_status").on(table.status),
+  }),
+);
+
 // ─── MH Overrides ───────────────────────────────────────────────────────────
 
 export const mhOverrides = sqliteTable("mh_overrides", {
   id: text("id").primaryKey(),
-  workPackageId: integer("work_package_id").notNull().unique(),
+  workPackageId: integer("work_package_id")
+    .notNull()
+    .unique()
+    .references(() => workPackages.id),
   overrideMH: real("override_mh").notNull(),
   updatedBy: text("updated_by")
     .notNull()
@@ -183,6 +231,25 @@ export const appConfig = sqliteTable("app_config", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+// ─── Cron Jobs ─────────────────────────────────────────────────────────────
+
+export const cronJobs = sqliteTable("cron_jobs", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  schedule: text("schedule").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  graceHours: integer("grace_hours"),
+  lastRunAt: text("last_run_at"),
+  lastRunStatus: text("last_run_status", { enum: ["success", "error"] }),
+  lastRunMessage: text("last_run_message"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────
 
 export const manufacturers = sqliteTable("manufacturers", {
@@ -222,9 +289,7 @@ export const aircraft = sqliteTable(
     registration: text("registration").primaryKey(), // e.g., "C-FOIJ"
 
     // Foreign keys to lookup tables
-    aircraftModelId: text("aircraft_model_id").references(
-      () => aircraftModels.id
-    ),
+    aircraftModelId: text("aircraft_model_id").references(() => aircraftModels.id),
     operatorId: text("operator_id").references(() => customers.id),
     manufacturerId: text("manufacturer_id").references(() => manufacturers.id),
     engineTypeId: text("engine_type_id").references(() => engineTypes.id),
@@ -247,9 +312,7 @@ export const aircraft = sqliteTable(
       .default("inferred"),
 
     // Soft delete
-    isActive: integer("is_active", { mode: "boolean" })
-      .notNull()
-      .default(true),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 
     // Audit
     createdAt: text("created_at")
@@ -265,7 +328,7 @@ export const aircraft = sqliteTable(
     operatorIdx: index("aircraft_operator_idx").on(table.operatorId),
     sourceIdx: index("aircraft_source_idx").on(table.source),
     modelIdx: index("aircraft_model_idx").on(table.aircraftModelId),
-  })
+  }),
 );
 
 // ─── Master Data Import Log ─────────────────────────────────────────────────

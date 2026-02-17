@@ -42,7 +42,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  serverExternalPackages: ["better-sqlite3", "pino", "pino-pretty"],
+  serverExternalPackages: ["better-sqlite3", "pino", "pino-pretty", "node-cron"],
   transpilePackages: ["echarts", "zrender"],
   turbopack: {},
   allowedDevOrigins: readAllowedDevOrigins(),

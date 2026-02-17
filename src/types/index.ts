@@ -31,7 +31,7 @@ export type DateRange = "1d" | "3d" | "1w";
 
 export type TimeFormat = "12h" | "24h";
 
-export type WpStatus = "New" | "Approved";
+export type WpStatus = "New" | "Approved" | "Closed" | "Printed" | "Canceled";
 
 export type MHSource = "workpackage" | "default" | "manual";
 
@@ -40,36 +40,46 @@ export type ConfidenceLevel = "exact" | "pattern" | "fallback";
 // ─── Raw SharePoint Input ───────────────────────────────────────────────────
 
 export interface SharePointWorkPackage {
-  ID: number;
-  DocumentSetID: number;
+  // Always present
+  GUID: string;
   Aircraft: {
-    Title: string;              // Registration e.g. "C-FOIJ"
-    field_5?: string;            // Aircraft type e.g. "777F", "767-300(F)" (if present in SharePoint)
-    AircraftType?: string;       // Alternative type field (rare)
+    Title: string; // Registration e.g. "C-FOIJ"
+    field_5?: string; // Aircraft type e.g. "777F", "767-300(F)" (if present in SharePoint)
+    AircraftType?: string; // Alternative type field (rare)
   };
-  AircraftId: number;
   Customer: string;
-  FlightId: string | null;
   Arrival: string;
   Departure: string;
   TotalMH: number | null;
   TotalGroundHours: string;
   Workpackage_x0020_Status: WpStatus;
-  HasWorkpackage: boolean;
-  WorkpackageNo: string | null;
-  CalendarComments: string | null;
-  IsNotClosedOrCanceled: "1" | "0";
-  Modified: string;
-  Created: string;
+
+  // Present in current exports
+  Title?: string; // SharePoint Title e.g. "AALU/L-160126"
+  CustomerReference?: string; // Customer reference
+  Description?: string; // WP description
+  FlightId?: string | null;
+  ParentID?: string | null;
+
+  // Present in some exports, absent in others
+  ID?: number; // SharePoint ID (not always present)
+  DocumentSetID?: number;
+  AircraftId?: number;
+  HasWorkpackage?: boolean;
+  WorkpackageNo?: string | null;
+  CalendarComments?: string | null;
+  IsNotClosedOrCanceled?: "1" | "0";
+  Modified?: string; // SharePoint last-modified timestamp
+  Created?: string; // SharePoint created timestamp
+  OData__UIVersionString?: string; // SharePoint version e.g. "17.0"
 }
 
 // ─── Normalized Work Package ────────────────────────────────────────────────
 
 export interface WorkPackage {
-  id: number;
-  documentSetId: number;
+  id: number; // Auto-increment DB ID
+  guid: string; // SharePoint GUID
   aircraftReg: string;
-  aircraftId: number;
   customer: string;
   flightId: string | null;
   arrival: Date;
@@ -77,16 +87,21 @@ export interface WorkPackage {
   totalMH: number | null;
   groundHours: number;
   status: WpStatus;
-  hasWorkpackage: boolean;
-  workpackageNo: string | null;
-  calendarComments: string | null;
-  isActive: boolean;
-  modified: Date;
-  created: Date;
   effectiveMH: number;
   mhSource: MHSource;
   manualMHOverride: number | null;
   inferredType: AircraftType;
+
+  // Optional fields (present in some SP exports)
+  title: string | null;
+  description: string | null;
+  customerReference: string | null;
+  hasWorkpackage: boolean;
+  workpackageNo: string | null;
+  calendarComments: string | null;
+  isActive: boolean;
+  modified: Date | null;
+  created: Date | null;
 }
 
 // ─── Filter State ───────────────────────────────────────────────────────────

@@ -11,12 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +29,7 @@ interface ValidationSummary {
   customerCount: number;
   aircraftCount: number;
   dateRange: { start: string; end: string } | null;
+  canceledCount: number;
 }
 
 interface ValidationResult {
@@ -255,12 +251,16 @@ export function DataImport() {
 
       {/* Reset success/error message */}
       {resetMessage && (
-        <div className={`flex items-center gap-2 rounded-md border px-4 py-3 text-sm ${
-          resetSuccess
-            ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
-            : "border-destructive/30 bg-destructive/10 text-destructive"
-        }`}>
-          <i className={`fa-solid ${resetSuccess ? "fa-triangle-exclamation" : "fa-circle-xmark"}`} />
+        <div
+          className={`flex items-center gap-2 rounded-md border px-4 py-3 text-sm ${
+            resetSuccess
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          }`}
+        >
+          <i
+            className={`fa-solid ${resetSuccess ? "fa-triangle-exclamation" : "fa-circle-xmark"}`}
+          />
           {resetMessage}
         </div>
       )}
@@ -302,9 +302,15 @@ export function DataImport() {
                 size="sm"
               >
                 {validating ? (
-                  <><i className="fa-solid fa-spinner fa-spin mr-2" />Validating...</>
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin mr-2" />
+                    Validating...
+                  </>
                 ) : (
-                  <><i className="fa-solid fa-magnifying-glass-chart mr-2" />Validate & Preview</>
+                  <>
+                    <i className="fa-solid fa-magnifying-glass-chart mr-2" />
+                    Validate & Preview
+                  </>
                 )}
               </Button>
             )}
@@ -330,9 +336,15 @@ export function DataImport() {
               size="sm"
             >
               {validating ? (
-                <><i className="fa-solid fa-spinner fa-spin mr-2" />Validating...</>
+                <>
+                  <i className="fa-solid fa-spinner fa-spin mr-2" />
+                  Validating...
+                </>
               ) : (
-                <><i className="fa-solid fa-magnifying-glass-chart mr-2" />Validate & Preview</>
+                <>
+                  <i className="fa-solid fa-magnifying-glass-chart mr-2" />
+                  Validate & Preview
+                </>
               )}
             </Button>
           </div>
@@ -344,16 +356,23 @@ export function DataImport() {
         <div className="space-y-1">
           <h3 className="text-sm font-medium">Reset Event Data</h3>
           <p className="text-xs text-muted-foreground">
-            Clear all aircraft event data. System data (users, customers, settings) will be preserved. A backup will be created automatically.
+            Clear all aircraft event data. System data (users, customers, settings) will be
+            preserved. A backup will be created automatically.
           </p>
         </div>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="destructive" size="sm" disabled={resetting}>
               {resetting ? (
-                <><i className="fa-solid fa-spinner fa-spin mr-2" />Resetting...</>
+                <>
+                  <i className="fa-solid fa-spinner fa-spin mr-2" />
+                  Resetting...
+                </>
               ) : (
-                <><i className="fa-solid fa-trash-can mr-2" />Reset Data</>
+                <>
+                  <i className="fa-solid fa-trash-can mr-2" />
+                  Reset Data
+                </>
               )}
             </Button>
           </AlertDialogTrigger>
@@ -361,7 +380,10 @@ export function DataImport() {
             <AlertDialogHeader>
               <AlertDialogTitle>Reset Event Data?</AlertDialogTitle>
               <AlertDialogDescription className="space-y-2">
-                <p>This will permanently delete all aircraft event data (work packages) from the system.</p>
+                <p>
+                  This will permanently delete all aircraft event data (work packages) from the
+                  system.
+                </p>
                 <p className="font-medium text-foreground">
                   <i className="fa-solid fa-triangle-exclamation mr-1 text-amber-500" />
                   What will be cleared:
@@ -437,6 +459,12 @@ export function DataImport() {
                 <i className="fa-solid fa-plane mr-1" />
                 {validation.summary.aircraftCount} aircraft
               </Badge>
+              {validation.summary.canceledCount > 0 && (
+                <Badge variant="destructive">
+                  <i className="fa-solid fa-ban mr-1" />
+                  {validation.summary.canceledCount} canceled
+                </Badge>
+              )}
               {validation.summary.dateRange && (
                 <Badge variant="outline">
                   <i className="fa-solid fa-calendar mr-1" />
@@ -475,9 +503,15 @@ export function DataImport() {
           {validation.valid && (
             <Button onClick={handleImport} disabled={importing}>
               {importing ? (
-                <><i className="fa-solid fa-spinner fa-spin mr-2" />Importing...</>
+                <>
+                  <i className="fa-solid fa-spinner fa-spin mr-2" />
+                  Importing...
+                </>
               ) : (
-                <><i className="fa-solid fa-file-import mr-2" />Import Data</>
+                <>
+                  <i className="fa-solid fa-file-import mr-2" />
+                  Import Data
+                </>
               )}
             </Button>
           )}
@@ -519,11 +553,20 @@ export function DataImport() {
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
                         {row.source === "file" ? (
-                          <><i className="fa-solid fa-file mr-1" />{row.fileName || "file"}</>
+                          <>
+                            <i className="fa-solid fa-file mr-1" />
+                            {row.fileName || "file"}
+                          </>
                         ) : row.source === "paste" ? (
-                          <><i className="fa-solid fa-paste mr-1" />paste</>
+                          <>
+                            <i className="fa-solid fa-paste mr-1" />
+                            paste
+                          </>
                         ) : (
-                          <><i className="fa-solid fa-plug mr-1" />api</>
+                          <>
+                            <i className="fa-solid fa-plug mr-1" />
+                            api
+                          </>
                         )}
                       </Badge>
                     </TableCell>
@@ -531,7 +574,9 @@ export function DataImport() {
                     <TableCell>
                       <Badge
                         variant={row.status === "success" ? "outline" : "destructive"}
-                        className={row.status === "success" ? "border-emerald-500 text-emerald-500" : ""}
+                        className={
+                          row.status === "success" ? "border-emerald-500 text-emerald-500" : ""
+                        }
                       >
                         {row.status}
                       </Badge>
@@ -550,7 +595,8 @@ export function DataImport() {
         {historyPagination && historyPagination.totalPages > 1 && (
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              Page {historyPagination.page} of {historyPagination.totalPages} ({historyPagination.total} total)
+              Page {historyPagination.page} of {historyPagination.totalPages} (
+              {historyPagination.total} total)
             </span>
             <div className="flex gap-2">
               <Button
