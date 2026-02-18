@@ -91,16 +91,51 @@ function applyThemeToDOM(preset: ThemePreset, accentColor: string | null) {
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
+/**
+ * Read YAML timeline defaults from window global (injected by TimelineScript).
+ * Only used as fallback when the prefs API hasn't responded yet or fails.
+ */
+function getTimelineFromWindow(): {
+  startOffset: number;
+  endOffset: number;
+  defaultZoom: string;
+  defaultCompact: boolean;
+  defaultTimezone: string;
+} {
+  if (
+    typeof window !== "undefined" &&
+    (window as unknown as Record<string, unknown>).__TIMELINE_DEFAULTS__
+  ) {
+    return (window as unknown as Record<string, unknown>).__TIMELINE_DEFAULTS__ as {
+      startOffset: number;
+      endOffset: number;
+      defaultZoom: string;
+      defaultCompact: boolean;
+      defaultTimezone: string;
+    };
+  }
+  // Hardcoded fallback — must match DEFAULT_TIMELINE in loader.ts
+  return {
+    startOffset: -0.5,
+    endOffset: 2.5,
+    defaultZoom: "3d",
+    defaultCompact: false,
+    defaultTimezone: "America/New_York",
+  };
+}
+
+const tl = getTimelineFromWindow();
+
 const defaults: UserPreferences = {
   colorMode: "dark",
   themePreset: "vitepress",
   accentColor: null,
-  compactMode: false,
-  defaultTimezone: "America/New_York",
+  compactMode: tl.defaultCompact,
+  defaultTimezone: tl.defaultTimezone,
   defaultDateRange: null,
-  defaultStartOffset: -0.5,
-  defaultEndOffset: 2.5,
-  defaultZoom: "3d",
+  defaultStartOffset: tl.startOffset,
+  defaultEndOffset: tl.endOffset,
+  defaultZoom: tl.defaultZoom,
   timeFormat: "24h",
   tablePageSize: 30,
 };
