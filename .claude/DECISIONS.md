@@ -331,6 +331,62 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 
 ---
 
+## D-031 | 2026-02-17 | DB Performance: PRAGMAs, Batch UPSERTs, Indexes, Aircraft Type Resolution
+
+**Decision**: Apply four categories of database performance improvements:
+
+1. **SQLite PRAGMAs** (`src/lib/db/client.ts`): Added `synchronous=NORMAL`, `cache_size=-65536` (64MB), `temp_store=MEMORY`, `mmap_size=268435456` (256MB). WAL + busy_timeout were already set. These are safe for WAL mode with no durability risk.
+
+2. **Batch UPSERTs** (`src/lib/data/import-utils.ts`): Replaced per-record UPSERT loop (3,770 individual `.run()` calls) with chunked multi-row INSERT using `BATCH_SIZE=250` and `sql\`excluded.col\`` conflict resolution. Expected 5–15× speedup on full imports.
+
+3. **Compound indexes**: Added `idx_wp_arrival_departure`, `idx_wp_customer_arrival` on `work_packages`; `idx_ae_user_created` on `analytics_events`; `idx_sessions_expires` on `sessions`. All added to both `schema.ts` and `schema-init.ts` with M002b migration guard.
+
+4. **Aircraft type resolution priority chain** in `transformer.ts`: (1) `aircraft` master data table (`aircraft.aircraft_type`, populated from ac.json `field_5` during aircraft import) → (2) WP `Aircraft.field_5` → (3) WP `Aircraft.AircraftType` → (4) normalizer (`aircraft_type_mappings` rules). Static import replacing dynamic `await import()`. Cache bug fixed: `invalidateTransformerCache()` now calls `invalidateMappingsCache()`.
+
+**Rationale**: Import of 3,770 WP records was the bottleneck. Batch UPSERTs address it. PRAGMAs reduce I/O. Compound indexes accelerate date-range and customer-filtered queries (most common access patterns). Aircraft type resolution uses master data as truth source — types now show real values instead of "Unknown" when `aircraft_type_mappings` is empty.
+
+**Version impact**: MINOR (additive only — new nullable columns, new indexes, no API shape changes)
+**Links**: [REQ_DataImport.md](SPECS/REQ_DataImport.md), [REQ_AircraftTypes.md](SPECS/REQ_AircraftTypes.md), [REQ_DataModel.md](SPECS/REQ_DataModel.md)
+
+---
+
+## D-032 | 2026-02-17 | Raw Type Fallback: Return Raw String, Not "Unknown"
+
+**Decision**: When `normalizeAircraftType()` finds no matching rule in `aircraft_type_mappings`, return the raw string with `confidence: "raw"` instead of returning `"Unknown"` with `confidence: "fallback"`.
+
+**Effect**: With an empty mappings table, types show as the actual raw strings from data (e.g., `"767-200(F)"`, `"777F"`), which are filterable and countable. `"Unknown"` is now reserved exclusively for genuinely absent type data (null/empty raw value). When admin adds mapping rules, raw types are normalized to canonical names (e.g., `"B767"`, `"B777"`).
+
+**Type change**: `ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback"` — added `"raw"`.
+
+**Rationale**: `"Unknown"` was misleading — the data had type information, it just wasn't mapped yet. Returning the raw string makes the type field useful immediately without requiring the admin to populate mapping rules. Mapping rules are now an optional refinement, not a blocker.
+
+**Links**: [REQ_AircraftTypes.md](SPECS/REQ_AircraftTypes.md), `src/lib/utils/aircraft-type.ts`, `src/types/index.ts`
+
+---
+
+## D-033 | 2026-02-17 | SP ID Linking: aircraft.sp_id + customers.sp_id + aircraft_sp_id FK
+
+**Decision**: Add `sp_id` columns to `aircraft` and `customers` tables to store SharePoint record IDs from source data. Extend `work_packages.aircraft_sp_id` to join to `aircraft.sp_id` (column existed but had no matching FK target). Add `work_packages.customer_sp_id` as a stub (no source in current WP data; WP JSON only has customer name string, not ID).
+
+**SP ID map:**
+```
+work_packages.aircraft_sp_id  →  aircraft.sp_id      (populated from Aircraft.ID in wp.json)
+work_packages.customer_sp_id     stub — no source in current wp.json
+aircraft.sp_id                   populated from ID field in ac.json during aircraft import
+customers.sp_id                  populated from ID field in cust.json during customer import
+```
+
+**Also added**: `aircraft.aircraft_type` column — raw model string from ac.json `field_5` (e.g., `"767-200(F)"`) stored directly on the aircraft master record, used as truth source in transformer type resolution.
+
+**WP import field fix**: `Aircraft.ID` (nested) replaces top-level `AircraftId` (old field name) for `work_packages.aircraft_sp_id` population.
+
+**Rationale**: The dead-end `aircraft_sp_id` on work packages now has a target (`aircraft.sp_id`), enabling join-based queries linking WPs to aircraft master records. Customer SP ID is a stub pending future WP data format changes.
+
+**Version impact**: MINOR (new nullable columns — backwards-compatible; all new columns have `ALTER TABLE ADD COLUMN` migrations)
+**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), [REQ_DataImport.md](SPECS/REQ_DataImport.md)
+
+---
+
 ## D-030 | 2026-02-17 | Cron Jobs: Code Defaults + YAML Override Pattern
 
 **Decision**: Cron job definitions use a two-tier model: built-in jobs are hardcoded in `src/lib/cron/index.ts` with sensible defaults, and `server.config.yml` acts as the override layer. The old `cron_jobs` DB table (which mixed config and runtime state) is replaced by a slim `cron_job_runs` table for runtime state only. Custom jobs can be added via YAML with a `script` path to a `.ts` module exporting `execute()`. Admin UI provides full CRUD + schedule builder + manual trigger.
@@ -339,3 +395,22 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 
 **Version impact**: MINOR (new feature — admin cron management UI + API routes; backwards-compatible)
 **Links**: [REQ_Cron.md](SPECS/REQ_Cron.md), [REQ_Admin.md](SPECS/REQ_Admin.md)
+
+---
+
+## D-034 | 2026-02-18 | Hide Canceled Flights System Preference
+
+**Decision**: Add system-level preferences in `server.config.yml` to control canceled flight visibility and cleanup grace period. Canceled flights are hidden by default with no visual indication — completely excluded at the DB query level.
+
+**Key design choices:**
+- **`flights.hideCanceled`** (default: `true`): When true, `readWorkPackages()` adds `WHERE status NOT LIKE 'Cancel%'` at the DB level. All downstream consumers (flight board, dashboard, capacity) never see canceled WPs.
+- **`flights.cleanupGraceHours`** (default: `6`): Top-level system setting for how long canceled WPs survive before the cleanup cron job deletes them. Feeds the cron job as its base default (cron YAML overrides still take priority).
+- **Admin UI toggle**: Admin Settings > Server tab > "Flight Display" section with Switch toggle and grace period input. Writes to `server.config.yml` via PUT `/api/admin/server/flights`.
+- **Not a filter**: This is a background system preference, not a FilterBar control. No UI indication when flights are hidden.
+- **Cache coherency**: API route invalidates reader + transformer caches on save. Reader also tracks `cachedHideCanceled` as a safety net for config drift.
+- **Visual treatment preserved**: When `hideCanceled: false`, existing stripe/opacity rendering for canceled bars activates automatically.
+
+**Rationale**: Operators reported canceled flights cluttering the flight board after cleanup ran. The cron cleanup has a grace period, so recently-imported canceled WPs persist. Hiding at the query level is the simplest, most efficient approach. Admin toggle provides control without requiring YAML edits.
+
+**Version impact**: MINOR (new system setting, new API route, no API shape changes — backwards-compatible)
+**Links**: [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-045, `src/lib/config/loader.ts`, `src/lib/data/reader.ts`, `src/app/api/admin/server/flights/route.ts`, `src/components/admin/server-tab.tsx`

@@ -52,6 +52,18 @@ timeline:
   # Default timezone: "UTC" | "America/New_York" (IANA string)
   defaultTimezone: "America/New_York"
 
+# ─── Flights ─────────────────────────────────────────────────────────────────
+flights:
+  # Hide canceled work packages from all views (flight board, dashboard, capacity)
+  # When true, canceled WPs are excluded at the database query level
+  # When false, canceled WPs appear with striped/dimmed visual treatment
+  hideCanceled: true
+
+  # Grace period (hours) before the cleanup cron job permanently deletes canceled WPs
+  # Also used as the default for manual cleanup actions
+  # Range: 1-720 (1 hour to 30 days)
+  cleanupGraceHours: 6
+
 # ─── Password Security ──────────────────────────────────────────────────────
 passwordSecurity:
   # Minimum password length (8-128 characters)

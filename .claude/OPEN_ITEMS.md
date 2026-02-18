@@ -791,15 +791,29 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Implemented — Not Tested** |
+| **Status** | **Resolved** |
 | **Priority** | P1 |
 | **Owner** | Claude |
 | **Created** | 2026-02-16 |
-| **Implemented** | 2026-02-17 (commit `1386d75`) |
-| **Context** | Currently canceled WPs are filtered out at the query level (`reader.ts` WHERE clause). User preference: instead of hiding them entirely, show canceled WPs on the flight board with a striped "candy-cane" visual treatment so operators can see they exist but know they're canceled. If the visual is too distracting, provide a toggle to filter canceled items off (using the existing filter system). The query-level filter in `reader.ts` needs to be removed/relaxed so canceled WPs flow through to the UI, with the visual distinction happening at the rendering layer. |
-| **Design Options** | (1) **Candy-cane stripes**: CSS diagonal stripe pattern overlay on ECharts Gantt bars for canceled WPs. (2) **Toggle**: Add a "Show canceled" toggle to the flight board toolbar or FilterBar. Default: ON (show with stripes). (3) **Fallback**: If stripes are too distracting, use reduced opacity (0.3-0.4) + dashed border instead. |
-| **Implementation Notes** | ECharts custom series supports `itemStyle` patterns via SVG/canvas. Canceled status is already normalized to "Canceled" during import. Reader filter (`notLike(workPackages.status, "Cancel%")`) must be relaxed to allow canceled WPs through when needed. The toggle state could live in Zustand filter store or a separate UI preference. |
-| **Links** | `src/lib/data/reader.ts` (current filter), `src/components/flight-board/flight-board-chart.tsx` (Gantt rendering), `src/lib/data/import-utils.ts` (status normalization), `src/types/index.ts` (WpStatus type) |
+| **Implemented** | 2026-02-17 (visual treatment commit `1386d75`), 2026-02-18 (system preference + admin toggle, D-034) |
+| **Context** | Canceled WPs are now controlled by a system preference `flights.hideCanceled` in `server.config.yml` (default: `true`). When hidden, canceled WPs are excluded at the DB query level with no visual indication. When an admin sets `hideCanceled: false`, canceled WPs appear with striped/dimmed treatment. The cleanup grace period (`flights.cleanupGraceHours`) is also a system preference, feeding both the cron job and manual cleanup. Admin UI toggle in Admin Settings > Server tab > Flight Display section. |
+| **Resolution** | System preference approach (D-034). Not a filter — completely invisible when hidden. Admin toggle writes to `server.config.yml`. Grace period is a first-class system setting. |
+| **Links** | D-034, `src/lib/config/loader.ts`, `src/lib/data/reader.ts`, `src/app/api/admin/server/flights/route.ts`, `src/components/admin/server-tab.tsx` |
+
+---
+
+## OI-046 | Customer SP ID in Work Packages — Future Mapping Needed
+
+| Field | Value |
+|-------|-------|
+| **Type** | Limitation / Stub |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-17 |
+| **Context** | `work_packages.customer_sp_id` column added as a stub (D-033). Current WP JSON (`wp.json`) only provides `Customer` as a name string — no SharePoint customer ID is present in the WP record. To populate this column, either the WP export format would need to include the customer SP ID, or a name→ID lookup against `customers.sp_id` would be needed post-import. |
+| **Proposed Solution** | After aircraft/customer master data is imported (and `customers.sp_id` is populated from cust.json), add a post-import backfill step: `UPDATE work_packages SET customer_sp_id = (SELECT sp_id FROM customers WHERE customers.name = work_packages.customer) WHERE customer_sp_id IS NULL`. |
+| **Links** | [DECISIONS.md](DECISIONS.md) D-033, `src/lib/data/import-utils.ts` |
 
 ---
 
@@ -810,7 +824,7 @@
 | P0 | 0 | 0 | 0 | 14 |
 | P1 | 2 | 0 | 0 | 12 |
 | P2 | 3 | 0 | 0 | 10 |
-| P3 | 2 | 0 | 2 | 0 |
-| **Total** | **7** | **0** | **2** | **36** |
+| P3 | 3 | 0 | 2 | 0 |
+| **Total** | **8** | **0** | **2** | **36** |
 
-**Changes this pass (Chunked Upload)**: Added OI-043 — chunked upload Location header returns localhost behind proxy. X-Forwarded-Host fix applied but needs deployment verification.
+**Changes this pass (DB Performance + Aircraft Type Resolution)**: Added D-031, D-032, D-033. Added OI-046 (customer_sp_id stub). Updated REQ_AircraftTypes.md, REQ_DataModel.md, REQ_DataImport.md.

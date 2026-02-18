@@ -6,7 +6,7 @@ import { cronJobRuns } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { cleanupCanceledWPs } from "./tasks/cleanup-canceled";
 import { createChildLogger } from "@/lib/logger";
-import { getFeatures, getCronJobOverrides } from "@/lib/config/loader";
+import { getFeatures, getCronJobOverrides, getFlightSettings } from "@/lib/config/loader";
 
 const log = createChildLogger("cron");
 
@@ -110,6 +110,18 @@ export function getEffectiveJobs(): CronJobConfig[] {
     processedKeys.add(builtin.key);
     const override = overrides[builtin.key];
 
+    // For cleanup-canceled, inject system flight settings as the base graceHours
+    // Priority: code constant < flights.cleanupGraceHours < cron YAML override
+    let baseOptions = { ...builtin.defaultOptions };
+    if (builtin.key === "cleanup-canceled") {
+      try {
+        const { cleanupGraceHours } = getFlightSettings();
+        baseOptions = { ...baseOptions, graceHours: cleanupGraceHours };
+      } catch {
+        // Fall back to code default if config not loaded yet
+      }
+    }
+
     result.push({
       key: builtin.key,
       name: override?.name ?? builtin.name,
@@ -117,7 +129,7 @@ export function getEffectiveJobs(): CronJobConfig[] {
       script: builtin.script, // always from code for built-ins
       schedule: override?.schedule ?? builtin.defaultSchedule,
       enabled: override?.enabled ?? builtin.defaultEnabled,
-      options: { ...builtin.defaultOptions, ...override?.options },
+      options: { ...baseOptions, ...override?.options },
       builtin: true,
     });
   }

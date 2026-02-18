@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,6 +89,14 @@ export function ServerTab() {
   const [actions, setActions] = useState<Record<string, ActionState>>({});
   const [graceHours, setGraceHours] = useState(6);
 
+  // Flight display settings (system-wide)
+  const [flightSettings, setFlightSettings] = useState<{
+    hideCanceled: boolean;
+    cleanupGraceHours: number;
+  } | null>(null);
+  const [flightSettingsLoading, setFlightSettingsLoading] = useState(true);
+  const [flightSettingsDirty, setFlightSettingsDirty] = useState(false);
+
   const getAction = (key: string): ActionState => actions[key] ?? { loading: false, message: null };
 
   const setActionState = (key: string, state: Partial<ActionState>) => {
@@ -116,6 +125,66 @@ export function ServerTab() {
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  // Fetch flight display settings
+  const fetchFlightSettings = useCallback(async () => {
+    setFlightSettingsLoading(true);
+    try {
+      const res = await fetch("/api/admin/server/flights");
+      if (res.ok) {
+        const data = await res.json();
+        setFlightSettings(data.settings);
+        setFlightSettingsDirty(false);
+      }
+    } catch {
+      // silently fail — section shows nothing
+    } finally {
+      setFlightSettingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFlightSettings();
+  }, [fetchFlightSettings]);
+
+  // Sync manual cleanup grace period input with system setting
+  useEffect(() => {
+    if (flightSettings) {
+      setGraceHours(flightSettings.cleanupGraceHours);
+    }
+  }, [flightSettings]);
+
+  // Save flight settings
+  const saveFlightSettings = async () => {
+    if (!flightSettings) return;
+    setActionState("flights", { loading: true, message: null });
+    try {
+      const res = await fetch("/api/admin/server/flights", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: flightSettings }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setActionState("flights", {
+          loading: false,
+          message: { type: "error", text: data.error ?? "Failed to save" },
+        });
+        return;
+      }
+      setFlightSettings(data.settings);
+      setFlightSettingsDirty(false);
+      setActionState("flights", {
+        loading: false,
+        message: { type: "success", text: data.message },
+      });
+    } catch {
+      setActionState("flights", {
+        loading: false,
+        message: { type: "error", text: "Network error" },
+      });
+    }
+  };
 
   // Generic action handler
   const performAction = async (
@@ -265,6 +334,81 @@ export function ServerTab() {
             )}
           </div>
         )}
+      </section>
+
+      {/* ── Flight Display Settings ─────────────────────────────────── */}
+      <section className="rounded-lg border border-border bg-card p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <i className="fa-solid fa-plane text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Flight Display</h3>
+        </div>
+
+        {flightSettingsLoading && !flightSettings ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <i className="fa-solid fa-spinner fa-spin" />
+            Loading settings...
+          </div>
+        ) : flightSettings ? (
+          <div className="space-y-4">
+            {/* Hide Canceled toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium">Hide Canceled Flights</div>
+                <div className="text-xs text-muted-foreground">
+                  When enabled, canceled work packages are completely hidden from all views
+                </div>
+              </div>
+              <Switch
+                checked={flightSettings.hideCanceled}
+                onCheckedChange={(checked) => {
+                  setFlightSettings((prev) => (prev ? { ...prev, hideCanceled: checked } : prev));
+                  setFlightSettingsDirty(true);
+                }}
+              />
+            </div>
+
+            {/* Grace period input */}
+            <div>
+              <label htmlFor="cleanup-grace-sys" className="text-sm font-medium">
+                Cleanup Grace Period (hours)
+              </label>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Hours after import before the cleanup job permanently deletes canceled work packages
+                (1&ndash;720)
+              </div>
+              <input
+                id="cleanup-grace-sys"
+                type="number"
+                min={1}
+                max={720}
+                value={flightSettings.cleanupGraceHours}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(720, Number(e.target.value)));
+                  setFlightSettings((prev) => (prev ? { ...prev, cleanupGraceHours: v } : prev));
+                  setFlightSettingsDirty(true);
+                }}
+                className="mt-1 w-24 rounded-md border border-input bg-background px-2 py-1 text-sm"
+              />
+            </div>
+
+            {/* Save button */}
+            <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                disabled={!flightSettingsDirty || getAction("flights").loading}
+                onClick={saveFlightSettings}
+              >
+                {getAction("flights").loading ? (
+                  <i className="fa-solid fa-spinner fa-spin mr-2" />
+                ) : (
+                  <i className="fa-solid fa-floppy-disk mr-2" />
+                )}
+                Save Settings
+              </Button>
+              <ActionMessage message={getAction("flights").message} />
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {/* ── Server Actions ───────────────────────────────────────────── */}

@@ -29,6 +29,11 @@ export interface TimelineDefaults {
   defaultDays: number;
 }
 
+export interface FlightSettings {
+  hideCanceled: boolean;
+  cleanupGraceHours: number;
+}
+
 /** YAML shape for a single cron job override/custom definition */
 export interface CronJobYamlEntry {
   name?: string;
@@ -59,6 +64,7 @@ interface ServerConfig {
     defaultTimezone?: string;
     defaultDays?: number;
   };
+  flights?: Partial<FlightSettings>;
   passwordSecurity?: Partial<PasswordRequirements>;
   cron?: {
     jobs?: Record<string, CronJobYamlEntry>;
@@ -81,6 +87,10 @@ const DEFAULT_TIMELINE: TimelineDefaults = {
   defaultTimezone: "America/New_York",
   defaultDays: 3,
 };
+const DEFAULT_FLIGHT_SETTINGS: FlightSettings = {
+  hideCanceled: true,
+  cleanupGraceHours: 6,
+};
 const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
   minLength: 12,
   maxLength: 128,
@@ -100,6 +110,7 @@ let inMemoryBaseUrl: string | null = null;
 let inMemoryLogLevel: string | null = null;
 let inMemoryFeatures: AppFeatures | null = null;
 let inMemoryTimeline: TimelineDefaults | null = null;
+let inMemoryFlights: FlightSettings | null = null;
 let configLoaded = false;
 
 // ─── YAML Reader ─────────────────────────────────────────────────────────────
@@ -174,6 +185,11 @@ export function loadServerConfig(): void {
     defaultTimezone: yamlTl.defaultTimezone ?? DEFAULT_TIMELINE.defaultTimezone,
     defaultDays,
   };
+  const yamlFlights = yaml.flights ?? {};
+  inMemoryFlights = {
+    hideCanceled: yamlFlights.hideCanceled ?? DEFAULT_FLIGHT_SETTINGS.hideCanceled,
+    cleanupGraceHours: yamlFlights.cleanupGraceHours ?? DEFAULT_FLIGHT_SETTINGS.cleanupGraceHours,
+  };
   inMemoryConfig = {
     ...DEFAULT_PASSWORD_REQUIREMENTS,
     ...yaml.passwordSecurity,
@@ -211,6 +227,37 @@ export function getFeatures(): AppFeatures {
 export function getTimelineDefaults(): TimelineDefaults {
   if (inMemoryTimeline === null) loadServerConfig();
   return inMemoryTimeline!;
+}
+
+/** Flight display + cleanup settings */
+export function getFlightSettings(): FlightSettings {
+  if (inMemoryFlights === null) loadServerConfig();
+  return inMemoryFlights!;
+}
+
+/**
+ * Update flight settings — writes to server.config.yml and updates memory.
+ * Used by Admin UI when saving settings.
+ */
+export function updateFlightSettings(settings: FlightSettings): void {
+  if (typeof settings.hideCanceled !== "boolean") {
+    throw new Error("hideCanceled must be a boolean");
+  }
+  if (
+    typeof settings.cleanupGraceHours !== "number" ||
+    !Number.isInteger(settings.cleanupGraceHours) ||
+    settings.cleanupGraceHours < 1 ||
+    settings.cleanupGraceHours > 720
+  ) {
+    throw new Error("cleanupGraceHours must be an integer between 1 and 720");
+  }
+
+  inMemoryFlights = { ...settings };
+  writeYamlSection((config) => {
+    config.flights = { ...settings };
+  });
+
+  console.log("[Config Loader] Flight settings updated");
 }
 
 /** Password requirements */

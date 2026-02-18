@@ -1,5 +1,7 @@
 import { db } from "@/lib/db/client";
 import { workPackages } from "@/lib/db/schema";
+import { notLike } from "drizzle-orm";
+import { getFlightSettings } from "@/lib/config/loader";
 import type { SharePointWorkPackage, WpStatus } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 
@@ -13,18 +15,29 @@ const log = createChildLogger("reader");
 
 let cachedData: SharePointWorkPackage[] | null = null;
 let shouldInvalidate = false;
+let cachedHideCanceled: boolean | null = null;
 
 /**
  * Read work packages from the database.
  * Returns cached data if available, re-reads on invalidation.
  */
 export function readWorkPackages(): SharePointWorkPackage[] {
+  const { hideCanceled } = getFlightSettings();
+
+  // Auto-invalidate if hideCanceled setting changed since last cache fill
+  if (cachedData && cachedHideCanceled !== null && cachedHideCanceled !== hideCanceled) {
+    shouldInvalidate = true;
+  }
+
   if (cachedData && !shouldInvalidate) {
     return cachedData;
   }
 
   try {
-    const rows = db.select().from(workPackages).all();
+    const query = db.select().from(workPackages);
+    const rows = hideCanceled
+      ? query.where(notLike(workPackages.status, "Cancel%")).all()
+      : query.all();
 
     cachedData = rows.map((row) => ({
       GUID: row.guid,
@@ -55,12 +68,14 @@ export function readWorkPackages(): SharePointWorkPackage[] {
       OData__UIVersionString: row.spVersion ?? undefined,
     }));
 
+    cachedHideCanceled = hideCanceled;
     shouldInvalidate = false;
-    log.info(`Loaded ${cachedData.length} work packages from database`);
+    log.info(`Loaded ${cachedData.length} work packages from database (hideCanceled=${hideCanceled})`);
     return cachedData;
   } catch (error) {
     log.error({ err: error }, "Failed to read work packages from database");
     cachedData = [];
+    cachedHideCanceled = hideCanceled;
     shouldInvalidate = false;
     return [];
   }
