@@ -43,6 +43,7 @@ export function createTables() {
       moc_phone TEXT,
       iata_code TEXT,
       icao_code TEXT,
+      sp_id INTEGER UNIQUE,
       source TEXT NOT NULL DEFAULT 'inferred',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -98,6 +99,7 @@ export function createTables() {
       is_not_closed_or_canceled TEXT,
       document_set_id INTEGER,
       aircraft_sp_id INTEGER,
+      customer_sp_id INTEGER,
       sp_modified TEXT,
       sp_created TEXT,
       sp_version TEXT,
@@ -166,6 +168,8 @@ export function createTables() {
 
     CREATE TABLE IF NOT EXISTS aircraft (
       registration TEXT PRIMARY KEY,
+      sp_id INTEGER UNIQUE,
+      aircraft_type TEXT,
       aircraft_model_id INTEGER REFERENCES aircraft_models(id),
       operator_id INTEGER REFERENCES customers(id),
       manufacturer_id INTEGER REFERENCES manufacturers(id),
@@ -252,7 +256,9 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_ae_user_created ON analytics_events(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_import_log_imported_at ON import_log(imported_at);
     CREATE INDEX IF NOT EXISTS idx_wp_arrival ON work_packages(arrival);
     CREATE INDEX IF NOT EXISTS idx_wp_departure ON work_packages(departure);
@@ -260,6 +266,8 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_wp_aircraft_reg ON work_packages(aircraft_reg);
     CREATE INDEX IF NOT EXISTS idx_wp_import_log ON work_packages(import_log_id);
     CREATE INDEX IF NOT EXISTS idx_wp_status ON work_packages(status);
+    CREATE INDEX IF NOT EXISTS idx_wp_arrival_departure ON work_packages(arrival, departure);
+    CREATE INDEX IF NOT EXISTS idx_wp_customer_arrival ON work_packages(customer, arrival);
     CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
     CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
     CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
@@ -280,21 +288,8 @@ export interface MigrationResult {
 }
 
 export function runMigrations(): MigrationResult[] {
-  const results: MigrationResult[] = [];
-
-  // M001: Replace cron_jobs (config+state) with cron_job_runs (runtime state only)
-  try {
-    const hasOldTable = sqlite
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cron_jobs'")
-      .get();
-    if (hasOldTable) {
-      sqlite.exec("DROP TABLE IF EXISTS cron_jobs");
-      // cron_job_runs is created by createTables() above
-      results.push({ name: "M001_cron_jobs_to_cron_job_runs", applied: true });
-    }
-  } catch {
-    // Ignore — table may not exist
-  }
-
-  return results;
+  // All prior migrations (M001–M002b) have been rolled into createTables().
+  // Fresh databases get the full schema; no incremental ALTER TABLEs needed.
+  // Add future migrations here if the schema evolves after this baseline.
+  return [];
 }
