@@ -44,23 +44,31 @@ openssl rand -base64 32
 ### 4. Seed the database
 
 ```bash
-npx tsx src/lib/db/seed.ts
+npm run db:seed
 ```
 
 This creates `data/dashboard.db` with:
-- Default admin user (`admin@cvg.local`)
-- Default test user (`user@cvg.local`)
+- Default admin user (`admin@local`, username: `admin`)
+- Default test user (`user@local`, username: `user`)
 - 6 customer color presets
 - Aircraft type mappings
 - Default app configuration
 
-### 5. Add work package data
+### 5. Seed reference data (recommended)
+
+```bash
+npm run db:seed-reference
+```
+
+Populates aircraft type mapping rules, manufacturers, aircraft models, and engine types. Idempotent — safe to re-run after any reset.
+
+### 6. Add work package data
 
 Place your SharePoint OData JSON export at `data/input.json`. The file should be either:
 - A bare JSON array: `[{...}, {...}]`
 - OData format: `{"value": [{...}, {...}]}`
 
-### 6. Start the development server
+### 7. Start the development server
 
 ```bash
 npm run dev

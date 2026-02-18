@@ -28,7 +28,7 @@ npm run dev
 
 # 4. Login
 # URL: http://localhost:3000/login
-# User: admin@cvg.local
+# User: admin@local
 # Pass: admin123
 ```
 
@@ -48,7 +48,7 @@ npm run generate-secret
 nano .env.local  # or your preferred editor
 
 # 4. Set initial admin (optional)
-INITIAL_ADMIN_EMAIL=admin@cvg.local
+INITIAL_ADMIN_EMAIL=admin@local
 INITIAL_ADMIN_PASSWORD=admin123
 
 # 5. Initialize database
@@ -314,7 +314,7 @@ npm run db:status
 # Test login via API
 curl -X POST http://localhost:3000/api/auth/signin/credentials \
   -H "Content-Type: application/json" \
-  -d '{"login":"admin@cvg.local","password":"admin123"}'
+  -d '{"login":"admin@local","password":"admin123"}'
 
 # Should return: session cookie
 ```

@@ -18,9 +18,19 @@ import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("seed");
 
+// ─── Seed Options ─────────────────────────────────────────────────────────────
+
+export interface SeedOptions {
+  /** Seed ALL data (customers, manufacturers, models, engines, work packages).
+   *  When false, seeds only: users, system user, aircraft type mappings, app config.
+   *  @default true */
+  full?: boolean;
+}
+
 // ─── Seed Data ───────────────────────────────────────────────────────────────
 
-export async function seedData() {
+export async function seedData(options: SeedOptions = {}) {
+  const { full = true } = options;
   const now = new Date().toISOString();
 
   // Track system user ID for later FK references
@@ -118,23 +128,25 @@ export async function seedData() {
     }
   }
 
-  // ─── Customers ────────────────────────────────────────────────────────────
+  // ─── Customers (full only) ─────────────────────────────────────────────────
 
-  const existingCustomers = db.select().from(schema.customers).all();
+  if (full) {
+    const existingCustomers = db.select().from(schema.customers).all();
 
-  if (existingCustomers.length === 0) {
-    db.insert(schema.customers)
-      .values(
-        SEED_CUSTOMERS.map((c) => ({
-          ...c,
-          isActive: true,
-          createdAt: now,
-          updatedAt: now,
-        })),
-      )
-      .run();
+    if (existingCustomers.length === 0) {
+      db.insert(schema.customers)
+        .values(
+          SEED_CUSTOMERS.map((c) => ({
+            ...c,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        )
+        .run();
 
-    log.info(`Seeded ${SEED_CUSTOMERS.length} customers with colors`);
+      log.info(`Seeded ${SEED_CUSTOMERS.length} customers with colors`);
+    }
   }
 
   // ─── Aircraft Type Mappings ───────────────────────────────────────────────
@@ -186,142 +198,150 @@ export async function seedData() {
   // Built-in cron jobs are defined in code (src/lib/cron/index.ts),
   // overrides live in server.config.yml. No DB seeding needed.
 
-  // ─── Manufacturers ────────────────────────────────────────────────────────
+  // ─── Manufacturers (full only) ─────────────────────────────────────────────
 
-  const existingManufacturers = db.select().from(schema.manufacturers).all();
+  if (full) {
+    const existingManufacturers = db.select().from(schema.manufacturers).all();
 
-  if (existingManufacturers.length === 0) {
-    db.insert(schema.manufacturers)
-      .values(
-        SEED_MANUFACTURERS.map((m) => ({
-          ...m,
-          isActive: true,
-        })),
-      )
-      .run();
-
-    log.info(`Seeded ${SEED_MANUFACTURERS.length} manufacturers`);
-  }
-
-  // ─── Aircraft Models ──────────────────────────────────────────────────────
-
-  const existingModels = db.select().from(schema.aircraftModels).all();
-
-  if (existingModels.length === 0) {
-    // Map manufacturer name to ID for FK reference
-    const manufacturerMap = new Map(
-      db
-        .select()
-        .from(schema.manufacturers)
-        .all()
-        .map((m) => [m.name, m.id]),
-    );
-
-    db.insert(schema.aircraftModels)
-      .values(
-        SEED_AIRCRAFT_MODELS.map((m) => ({
-          modelCode: m.modelCode,
-          canonicalType: m.canonicalType,
-          manufacturerId: manufacturerMap.get(m.manufacturer) || null,
-          displayName: m.displayName,
-          sortOrder: m.sortOrder,
-          isActive: true,
-        })),
-      )
-      .run();
-
-    log.info(`Seeded ${SEED_AIRCRAFT_MODELS.length} aircraft models`);
-  }
-
-  // ─── Engine Types ─────────────────────────────────────────────────────────
-
-  const existingEngines = db.select().from(schema.engineTypes).all();
-
-  if (existingEngines.length === 0) {
-    db.insert(schema.engineTypes)
-      .values(
-        SEED_ENGINE_TYPES.map((e) => ({
-          ...e,
-          isActive: true,
-        })),
-      )
-      .run();
-
-    log.info(`Seeded ${SEED_ENGINE_TYPES.length} engine types`);
-  }
-
-  // ─── Work Packages (D-029) ────────────────────────────────────────────────
-
-  const existingWPs = db.select().from(schema.workPackages).all();
-
-  // Filter out any canceled WPs from seed data (defensive)
-  const activeWPs = SEED_WORK_PACKAGES.filter((wp) => !isCanceled(wp.Workpackage_x0020_Status));
-
-  if (existingWPs.length === 0 && activeWPs.length > 0) {
-    const now = new Date().toISOString();
-
-    // Resolve system user ID for the import log FK
-    if (!systemUserId) {
-      const sysUser = db
-        .select({ id: schema.users.id })
-        .from(schema.users)
-        .where(eq(schema.users.authId, "00000000-0000-0000-0000-000000000000"))
-        .get();
-      systemUserId = sysUser?.id ?? null;
-    }
-
-    // Create a seed import log entry
-    const logRow = db
-      .insert(schema.importLog)
-      .values({
-        importedAt: now,
-        recordCount: activeWPs.length,
-        source: "file",
-        fileName: "work-packages.json (seed)",
-        importedBy: systemUserId ?? 1,
-        status: "success",
-        errors: null,
-      })
-      .returning({ id: schema.importLog.id })
-      .get();
-
-    for (const wp of activeWPs) {
-      db.insert(schema.workPackages)
-        .values({
-          guid: wp.GUID,
-          spId: wp.ID ?? null,
-          title: wp.Title ?? null,
-          aircraftReg: wp.Aircraft.Title,
-          aircraftType: wp.Aircraft.field_5 ?? null,
-          customer: wp.Customer,
-          customerRef: wp.CustomerReference ?? null,
-          flightId: wp.FlightId ?? null,
-          arrival: wp.Arrival,
-          departure: wp.Departure,
-          totalMH: wp.TotalMH ?? null,
-          totalGroundHours: wp.TotalGroundHours ?? null,
-          status: wp.Workpackage_x0020_Status ?? "New",
-          description: wp.Description ?? null,
-          parentId: wp.ParentID ?? null,
-          hasWorkpackage: wp.HasWorkpackage ?? null,
-          workpackageNo: wp.WorkpackageNo ?? null,
-          calendarComments: wp.CalendarComments ?? null,
-          isNotClosedOrCanceled: wp.IsNotClosedOrCanceled ?? null,
-          documentSetId: wp.DocumentSetID ?? null,
-          aircraftSpId: wp.AircraftId ?? null,
-          spModified: wp.Modified ?? null,
-          spCreated: wp.Created ?? null,
-          spVersion: wp.OData__UIVersionString ?? null,
-          importLogId: logRow.id,
-          importedAt: now,
-        })
+    if (existingManufacturers.length === 0) {
+      db.insert(schema.manufacturers)
+        .values(
+          SEED_MANUFACTURERS.map((m) => ({
+            ...m,
+            isActive: true,
+          })),
+        )
         .run();
-    }
 
-    log.info(`Seeded ${activeWPs.length} work packages`);
+      log.info(`Seeded ${SEED_MANUFACTURERS.length} manufacturers`);
+    }
   }
 
-  log.info("Seeding complete.");
+  // ─── Aircraft Models (full only) ───────────────────────────────────────────
+
+  if (full) {
+    const existingModels = db.select().from(schema.aircraftModels).all();
+
+    if (existingModels.length === 0) {
+      // Map manufacturer name to ID for FK reference
+      const manufacturerMap = new Map(
+        db
+          .select()
+          .from(schema.manufacturers)
+          .all()
+          .map((m) => [m.name, m.id]),
+      );
+
+      db.insert(schema.aircraftModels)
+        .values(
+          SEED_AIRCRAFT_MODELS.map((m) => ({
+            modelCode: m.modelCode,
+            canonicalType: m.canonicalType,
+            manufacturerId: manufacturerMap.get(m.manufacturer) || null,
+            displayName: m.displayName,
+            sortOrder: m.sortOrder,
+            isActive: true,
+          })),
+        )
+        .run();
+
+      log.info(`Seeded ${SEED_AIRCRAFT_MODELS.length} aircraft models`);
+    }
+  }
+
+  // ─── Engine Types (full only) ──────────────────────────────────────────────
+
+  if (full) {
+    const existingEngines = db.select().from(schema.engineTypes).all();
+
+    if (existingEngines.length === 0) {
+      db.insert(schema.engineTypes)
+        .values(
+          SEED_ENGINE_TYPES.map((e) => ({
+            ...e,
+            isActive: true,
+          })),
+        )
+        .run();
+
+      log.info(`Seeded ${SEED_ENGINE_TYPES.length} engine types`);
+    }
+  }
+
+  // ─── Work Packages (full only, D-029) ──────────────────────────────────────
+
+  if (full) {
+    const existingWPs = db.select().from(schema.workPackages).all();
+
+    // Filter out any canceled WPs from seed data (defensive)
+    const activeWPs = SEED_WORK_PACKAGES.filter((wp) => !isCanceled(wp.Workpackage_x0020_Status));
+
+    if (existingWPs.length === 0 && activeWPs.length > 0) {
+      const now = new Date().toISOString();
+
+      // Resolve system user ID for the import log FK
+      if (!systemUserId) {
+        const sysUser = db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.authId, "00000000-0000-0000-0000-000000000000"))
+          .get();
+        systemUserId = sysUser?.id ?? null;
+      }
+
+      // Create a seed import log entry
+      const logRow = db
+        .insert(schema.importLog)
+        .values({
+          importedAt: now,
+          recordCount: activeWPs.length,
+          source: "file",
+          fileName: "work-packages.json (seed)",
+          importedBy: systemUserId ?? 1,
+          status: "success",
+          errors: null,
+        })
+        .returning({ id: schema.importLog.id })
+        .get();
+
+      for (const wp of activeWPs) {
+        db.insert(schema.workPackages)
+          .values({
+            guid: wp.GUID,
+            spId: wp.ID ?? null,
+            title: wp.Title ?? null,
+            aircraftReg: wp.Aircraft.Title,
+            aircraftType: wp.Aircraft.field_5 ?? null,
+            customer: wp.Customer,
+            customerRef: wp.CustomerReference ?? null,
+            flightId: wp.FlightId ?? null,
+            arrival: wp.Arrival,
+            departure: wp.Departure,
+            totalMH: wp.TotalMH ?? null,
+            totalGroundHours: wp.TotalGroundHours ?? null,
+            status: wp.Workpackage_x0020_Status ?? "New",
+            description: wp.Description ?? null,
+            parentId: wp.ParentID ?? null,
+            hasWorkpackage: wp.HasWorkpackage ?? null,
+            workpackageNo: wp.WorkpackageNo ?? null,
+            calendarComments: wp.CalendarComments ?? null,
+            isNotClosedOrCanceled: wp.IsNotClosedOrCanceled ?? null,
+            documentSetId: wp.DocumentSetID ?? null,
+            aircraftSpId: wp.AircraftId ?? null,
+            spModified: wp.Modified ?? null,
+            spCreated: wp.Created ?? null,
+            spVersion: wp.OData__UIVersionString ?? null,
+            importLogId: logRow.id,
+            importedAt: now,
+          })
+          .run();
+      }
+
+      log.info(`Seeded ${activeWPs.length} work packages`);
+    }
+  }
+
+  log.info(full ? "Full seeding complete." : "Minimal seeding complete.");
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -331,6 +351,13 @@ export async function seed() {
   createTables();
   runMigrations();
   await seedData();
+}
+
+export async function devSeed(full = false) {
+  log.info(full ? "Dev-seeding database (full)..." : "Dev-seeding database (minimal)...");
+  createTables();
+  runMigrations();
+  await seedData({ full });
 }
 
 // Allow running directly

@@ -125,8 +125,8 @@ All components that reference customer colors use `useCustomers().getColor(name)
 │ Users                                     [+ Create User] │
 ├──────────────────────────────────────────────────────────┤
 │ Name          │ Email           │ Role    │ Status │ Actions│
-│ Admin         │ admin@cvg.local │ Super   │ Active │ [Edit] │
-│ CVG User      │ user@cvg.local  │ User    │ Active │ [Edit] │
+│ Admin         │ admin@local │ Super   │ Active │ [Edit] │
+│ CVG User      │ user@local  │ User    │ Active │ [Edit] │
 │ ...           │                 │         │        │        │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -228,7 +228,7 @@ Admin-only data ingestion page. MVP supports file upload and paste-JSON (D-016).
 │                                                [Import]    │
 ├──────────────────────────────────────────────────────────┤
 │ IMPORT HISTORY:                                            │
-│   2026-02-13 14:30 — 86 records, admin@cvg.local           │
+│   2026-02-13 14:30 — 86 records, admin@local           │
 │   ...                                                      │
 └──────────────────────────────────────────────────────────┘
 ```

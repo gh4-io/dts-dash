@@ -25,6 +25,15 @@ Data enters the system from SharePoint OData exports. MVP supports two import me
 
 **Cache**: `reader.ts` queries DB and caches results at module level. Cache invalidated after import commits.
 
+**Batch UPSERT** (D-031): Import uses chunked multi-row INSERT with `BATCH_SIZE=250` and `ON CONFLICT DO UPDATE` via `sql\`excluded.col\`` syntax. ~3,770 records → ~15 batch calls (5–15× faster than per-record loops).
+
+**Field mapping notes** (D-033):
+- `work_packages.aircraft_sp_id` ← `Aircraft.ID` (nested in updated wp.json; was incorrectly read from top-level `AircraftId`)
+- `work_packages.customer_sp_id` — stub only; current WP data provides customer as a name string, not an ID
+- `aircraft.sp_id` ← `ID` field in ac.json (populated during aircraft import)
+- `aircraft.aircraft_type` ← `field_5` in ac.json (raw model string; used as truth source in type resolution)
+- `customers.sp_id` ← `ID` field in cust.json (populated during customer import)
+
 ## MVP: Admin Paste JSON (`/admin/import`)
 
 ### Layout
@@ -53,7 +62,7 @@ Data enters the system from SharePoint OData exports. MVP supports two import me
 |                                               [Import]     |
 +----------------------------------------------------------+
 | IMPORT HISTORY:                                            |
-|   2026-02-13 14:30 -- 86 records, admin@cvg.local          |
+|   2026-02-13 14:30 -- 86 records, admin@local          |
 |   ...                                                      |
 +----------------------------------------------------------+
 ```

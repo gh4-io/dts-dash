@@ -94,8 +94,8 @@ For initial setup, seed the database with:
 
 ```typescript
 const SEED_USERS = [
-  { email: "admin@cvg.local", displayName: "Admin", role: "superadmin", password: "admin123" },
-  { email: "user@cvg.local", displayName: "CVG User", role: "user", password: "user123" },
+  { email: "admin@local", username: "admin", displayName: "Admin", role: "superadmin", password: "admin123" },
+  { email: "user@local", username: "user", displayName: "Test User", role: "user", password: "user123" },
 ];
 ```
 
