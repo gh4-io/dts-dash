@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -45,13 +44,6 @@ const PAGE_SIZES = [10, 25, 30, 50, 100];
 export function PreferencesForm() {
   const { setTheme } = useTheme();
   const prefs = usePreferences();
-
-  // Sync color mode with next-themes
-  useEffect(() => {
-    if (prefs.loaded) {
-      setTheme(prefs.colorMode);
-    }
-  }, [prefs.colorMode, prefs.loaded, setTheme]);
 
   const handleColorModeChange = (mode: ColorMode) => {
     setTheme(mode);

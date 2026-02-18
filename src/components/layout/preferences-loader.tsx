@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useTheme } from "next-themes";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useFilters } from "@/lib/hooks/use-filters";
 
@@ -14,9 +15,11 @@ import { useFilters } from "@/lib/hooks/use-filters";
  */
 export function PreferencesLoader() {
   const { data: session } = useSession();
+  const { setTheme } = useTheme();
   const {
     fetch: fetchPrefs,
     loaded,
+    colorMode,
     defaultDateRange,
     defaultStartOffset,
     defaultEndOffset,
@@ -37,6 +40,14 @@ export function PreferencesLoader() {
       fetchPrefs();
     }
   }, [session, loaded, fetchPrefs]);
+
+  // Sync user's color mode to next-themes once preferences are loaded
+  // (also re-syncs if user changes colorMode via settings/account page)
+  useEffect(() => {
+    if (loaded) {
+      setTheme(colorMode);
+    }
+  }, [loaded, colorMode, setTheme]);
 
   // Apply user's default date range & timezone to the filter store once
   useEffect(() => {

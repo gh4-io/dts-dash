@@ -58,13 +58,6 @@ export default function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefs.loaded]);
 
-  // Sync color mode with next-themes
-  useEffect(() => {
-    if (prefs.loaded) {
-      setTheme(prefs.colorMode);
-    }
-  }, [prefs.colorMode, prefs.loaded, setTheme]);
-
   const handleColorModeChange = (mode: ColorMode) => {
     setTheme(mode);
     prefs.update({ colorMode: mode });
