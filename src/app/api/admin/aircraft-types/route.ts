@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { aircraftTypeMappings } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { invalidateMappingsCache } from "@/lib/utils/aircraft-type";
 import { createChildLogger } from "@/lib/logger";
+import { parseIntParam } from "@/lib/utils/route-helpers";
 
 const log = createChildLogger("api/admin/aircraft-types");
 
@@ -28,10 +29,7 @@ export async function GET() {
     return NextResponse.json({ mappings });
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -52,7 +50,7 @@ export async function POST(request: NextRequest) {
     if (!pattern || !canonicalType) {
       return NextResponse.json(
         { error: "pattern and canonicalType are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -60,32 +58,31 @@ export async function POST(request: NextRequest) {
     if (!validTypes.includes(canonicalType)) {
       return NextResponse.json(
         { error: `canonicalType must be one of: ${validTypes.join(", ")}` },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const now = new Date().toISOString();
-    const newMapping = {
-      id: crypto.randomUUID(),
-      pattern,
-      canonicalType,
-      description: description || null,
-      priority: priority ?? 0,
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    };
+    const newMapping = db
+      .insert(aircraftTypeMappings)
+      .values({
+        pattern,
+        canonicalType,
+        description: description || null,
+        priority: priority ?? 0,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
 
-    db.insert(aircraftTypeMappings).values(newMapping).run();
     invalidateMappingsCache();
 
     return NextResponse.json(newMapping, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -103,12 +100,18 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const now = new Date().toISOString();
 
-    // Bulk reorder: { mappings: [{ id, priority }] }
+    // Bulk update: { mappings: [{ id, priority?, isActive?, canonicalType?, ... }] }
     if (Array.isArray(body.mappings)) {
       for (const item of body.mappings) {
-        if (!item.id || item.priority === undefined) continue;
+        if (!item.id) continue;
+        const updates: Record<string, unknown> = { updatedAt: now };
+        if (item.pattern !== undefined) updates.pattern = item.pattern;
+        if (item.canonicalType !== undefined) updates.canonicalType = item.canonicalType;
+        if (item.description !== undefined) updates.description = item.description;
+        if (item.priority !== undefined) updates.priority = item.priority;
+        if (item.isActive !== undefined) updates.isActive = item.isActive;
         db.update(aircraftTypeMappings)
-          .set({ priority: item.priority, updatedAt: now })
+          .set(updates)
           .where(eq(aircraftTypeMappings.id, item.id))
           .run();
       }
@@ -118,10 +121,7 @@ export async function PUT(request: NextRequest) {
 
     // Single edit: { id, pattern?, canonicalType?, description?, priority?, isActive? }
     if (!body.id) {
-      return NextResponse.json(
-        { error: "id is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
     }
 
     const updates: Record<string, unknown> = { updatedAt: now };
@@ -131,19 +131,13 @@ export async function PUT(request: NextRequest) {
     if (body.priority !== undefined) updates.priority = body.priority;
     if (body.isActive !== undefined) updates.isActive = body.isActive;
 
-    db.update(aircraftTypeMappings)
-      .set(updates)
-      .where(eq(aircraftTypeMappings.id, body.id))
-      .run();
+    db.update(aircraftTypeMappings).set(updates).where(eq(aircraftTypeMappings.id, body.id)).run();
 
     invalidateMappingsCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "PUT error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -157,22 +151,34 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const id = request.nextUrl.searchParams.get("id");
-    if (!id) {
-      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    // Bulk delete: JSON body with { ids: number[] }
+    let body: { ids?: number[] } | null = null;
+    try {
+      body = await request.json();
+    } catch {
+      // No body — fall through to single-id path
     }
 
-    db.delete(aircraftTypeMappings)
-      .where(eq(aircraftTypeMappings.id, id))
-      .run();
+    if (body?.ids && Array.isArray(body.ids) && body.ids.length > 0) {
+      db.delete(aircraftTypeMappings).where(inArray(aircraftTypeMappings.id, body.ids)).run();
+      invalidateMappingsCache();
+      return NextResponse.json({ success: true, count: body.ids.length });
+    }
+
+    // Single delete: ?id=xxx
+    const idParam = request.nextUrl.searchParams.get("id");
+    if (!idParam) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+    const numId = parseIntParam(idParam);
+    if (!numId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+
+    db.delete(aircraftTypeMappings).where(eq(aircraftTypeMappings.id, numId)).run();
 
     invalidateMappingsCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "DELETE error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
