@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthProvider } from "@/components/layout/session-provider";
 import { ThemeScript } from "@/components/layout/theme-script";
+import { TimelineScript } from "@/components/layout/timeline-script";
 import { PreferencesLoader } from "@/components/layout/preferences-loader";
 import { AppConfigProvider } from "@/components/layout/app-config-provider";
 import { getAppTitle } from "@/lib/config/loader";
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="theme-neutral" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <TimelineScript />
         <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>

@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { AircraftType, FilterState, FilterActions } from "@/types";
+import type { FilterState, FilterActions } from "@/types";
 
 /**
  * Re-interpret a UTC ISO date string from one timezone to another.
@@ -117,13 +117,38 @@ function computeOffsetRange(
   };
 }
 
+/**
+ * Read YAML timeline defaults injected by TimelineScript into <head>.
+ * Falls back to hardcoded values matching loader.ts DEFAULT_TIMELINE.
+ */
+function getTimelineFromWindow(): {
+  startOffset: number;
+  endOffset: number;
+  defaultTimezone: string;
+} {
+  if (
+    typeof window !== "undefined" &&
+    (window as unknown as Record<string, unknown>).__TIMELINE_DEFAULTS__
+  ) {
+    const tl = (window as unknown as Record<string, unknown>).__TIMELINE_DEFAULTS__ as {
+      startOffset: number;
+      endOffset: number;
+      defaultTimezone: string;
+    };
+    return tl;
+  }
+  // Hardcoded fallback — must match DEFAULT_TIMELINE in loader.ts
+  return { startOffset: -0.5, endOffset: 2.5, defaultTimezone: "America/New_York" };
+}
+
 function getDefaults(): FilterState {
-  const { start, end } = computeDateRange("3d", "UTC");
+  const tl = getTimelineFromWindow();
+  const { start, end } = computeOffsetRange(tl.startOffset, tl.endOffset);
 
   return {
     start,
     end,
-    timezone: "UTC",
+    timezone: tl.defaultTimezone,
     operators: [],
     aircraft: [],
     types: [],
@@ -146,7 +171,7 @@ export const useFilters = create<FilterState & FilterActions>()((set) => ({
     }),
   setOperators: (v: string[]) => set({ operators: v }),
   setAircraft: (v: string[]) => set({ aircraft: v }),
-  setTypes: (v: AircraftType[]) => set({ types: v }),
+  setTypes: (v: string[]) => set({ types: v }),
   reset: () => set(getDefaults()),
   hydrate: (params: Partial<FilterState>) => set(params),
   hydrateDefaults: (dateRange: string, tz: string) => {
