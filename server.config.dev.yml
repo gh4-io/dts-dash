@@ -64,6 +64,19 @@ flights:
   # Range: 1-720 (1 hour to 30 days)
   cleanupGraceHours: 6
 
+# ─── Appearance ──────────────────────────────────────────────────────────────
+appearance:
+  # Default color mode for first-time visitors (before login / localStorage)
+  # Values: "light" | "dark" | "system"
+  # "system" follows OS preference via prefers-color-scheme
+  # Hardcoded fallback (when this section is absent): "system"
+  defaultColorMode: "dark"
+
+  # Default theme preset for first-time visitors
+  # Valid: neutral, ocean, purple, black, vitepress, dusk, catppuccin, solar, emerald, ruby, aspen
+  # Hardcoded fallback (when this section is absent): "neutral"
+  defaultThemePreset: "vitepress"
+
 # ─── Password Security ──────────────────────────────────────────────────────
 passwordSecurity:
   # Minimum password length (8-128 characters)

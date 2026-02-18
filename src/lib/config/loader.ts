@@ -35,6 +35,11 @@ export interface FlightSettings {
   cleanupGraceHours: number;
 }
 
+export interface AppearanceSettings {
+  defaultColorMode: "light" | "dark" | "system";
+  defaultThemePreset: string;
+}
+
 /** YAML shape for a single cron job override/custom definition */
 export interface CronJobYamlEntry {
   name?: string;
@@ -65,6 +70,10 @@ interface ServerConfig {
     defaultTimezone?: string;
     defaultDays?: number;
   };
+  appearance?: {
+    defaultColorMode?: string;
+    defaultThemePreset?: string;
+  };
   flights?: Partial<FlightSettings>;
   passwordSecurity?: Partial<PasswordRequirements>;
   cron?: {
@@ -88,6 +97,24 @@ const DEFAULT_TIMELINE: TimelineDefaults = {
   defaultTimezone: "America/New_York",
   defaultDays: 3,
 };
+const DEFAULT_APPEARANCE_SETTINGS: AppearanceSettings = {
+  defaultColorMode: "system",
+  defaultThemePreset: "neutral",
+};
+const VALID_COLOR_MODES = ["light", "dark", "system"] as const;
+const VALID_THEME_PRESETS = [
+  "neutral",
+  "ocean",
+  "purple",
+  "black",
+  "vitepress",
+  "dusk",
+  "catppuccin",
+  "solar",
+  "emerald",
+  "ruby",
+  "aspen",
+] as const;
 const DEFAULT_FLIGHT_SETTINGS: FlightSettings = {
   hideCanceled: true,
   cleanupGraceHours: DEFAULT_CLEANUP_GRACE_HOURS,
@@ -112,6 +139,7 @@ let inMemoryLogLevel: string | null = null;
 let inMemoryFeatures: AppFeatures | null = null;
 let inMemoryTimeline: TimelineDefaults | null = null;
 let inMemoryFlights: FlightSettings | null = null;
+let inMemoryAppearance: AppearanceSettings | null = null;
 let configLoaded = false;
 
 // ─── YAML Reader ─────────────────────────────────────────────────────────────
@@ -196,6 +224,21 @@ export function loadServerConfig(): void {
     ...yaml.passwordSecurity,
   };
 
+  // ── Appearance ──
+  const yamlAppearance = yaml.appearance ?? {};
+  const rawColorMode = yamlAppearance.defaultColorMode;
+  const rawPreset = yamlAppearance.defaultThemePreset;
+  inMemoryAppearance = {
+    defaultColorMode:
+      rawColorMode && (VALID_COLOR_MODES as readonly string[]).includes(rawColorMode)
+        ? (rawColorMode as AppearanceSettings["defaultColorMode"])
+        : DEFAULT_APPEARANCE_SETTINGS.defaultColorMode,
+    defaultThemePreset:
+      rawPreset && (VALID_THEME_PRESETS as readonly string[]).includes(rawPreset)
+        ? rawPreset
+        : DEFAULT_APPEARANCE_SETTINGS.defaultThemePreset,
+  };
+
   configLoaded = true;
   console.log("[Config Loader] Configuration loaded from server.config.yml");
 }
@@ -234,6 +277,12 @@ export function getTimelineDefaults(): TimelineDefaults {
 export function getFlightSettings(): FlightSettings {
   if (inMemoryFlights === null) loadServerConfig();
   return inMemoryFlights!;
+}
+
+/** System appearance defaults (color mode + theme preset) */
+export function getAppearanceDefaults(): AppearanceSettings {
+  if (inMemoryAppearance === null) loadServerConfig();
+  return inMemoryAppearance!;
 }
 
 /**

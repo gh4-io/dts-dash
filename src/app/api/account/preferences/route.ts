@@ -4,7 +4,8 @@ import { db } from "@/lib/db/client";
 import { userPreferences } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
-import { getTimelineDefaults } from "@/lib/config/loader";
+import { getTimelineDefaults, getAppearanceDefaults } from "@/lib/config/loader";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/account/preferences");
 
@@ -39,19 +40,17 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const prefs = db
-      .select()
-      .from(userPreferences)
-      .where(eq(userPreferences.userId, session.user.id))
-      .get();
+    const userId = getSessionUserId(session);
+    const prefs = db.select().from(userPreferences).where(eq(userPreferences.userId, userId)).get();
 
     const sys = getTimelineDefaults();
+    const appearance = getAppearanceDefaults();
 
     if (!prefs) {
       // New user — return system config as defaults
       return NextResponse.json({
-        colorMode: "dark",
-        themePreset: "vitepress",
+        colorMode: appearance.defaultColorMode,
+        themePreset: appearance.defaultThemePreset,
         accentColor: null,
         compactMode: sys.defaultCompact,
         defaultTimezone: sys.defaultTimezone,
@@ -126,10 +125,12 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid accent color format" }, { status: 400 });
     }
 
+    const userId = getSessionUserId(session);
+    const sysAppearance = getAppearanceDefaults();
     const values = {
-      userId: session.user.id,
-      colorMode: body.colorMode ?? "dark",
-      themePreset: body.themePreset ?? "vitepress",
+      userId,
+      colorMode: body.colorMode ?? sysAppearance.defaultColorMode,
+      themePreset: body.themePreset ?? sysAppearance.defaultThemePreset,
       accentColor: body.accentColor ?? null,
       compactMode: body.compactMode ?? false,
       defaultTimezone: body.defaultTimezone ?? "UTC",

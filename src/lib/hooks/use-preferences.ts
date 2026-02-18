@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import { getTimelineFromWindow } from "@/lib/utils/timeline-defaults";
+import { getAppearanceFromWindow } from "@/lib/utils/appearance-defaults";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -93,10 +94,11 @@ function applyThemeToDOM(preset: ThemePreset, accentColor: string | null) {
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 const tl = getTimelineFromWindow();
+const ap = getAppearanceFromWindow();
 
 const defaults: UserPreferences = {
-  colorMode: "dark",
-  themePreset: "vitepress",
+  colorMode: ap.defaultColorMode as ColorMode,
+  themePreset: ap.defaultThemePreset as ThemePreset,
   accentColor: null,
   compactMode: tl.defaultCompact,
   defaultTimezone: tl.defaultTimezone,
