@@ -29,6 +29,16 @@ export interface TimelineDefaults {
   defaultDays: number;
 }
 
+/** YAML shape for a single cron job override/custom definition */
+export interface CronJobYamlEntry {
+  name?: string;
+  description?: string;
+  script?: string;
+  schedule?: string;
+  enabled?: boolean;
+  options?: Record<string, unknown>;
+}
+
 interface ServerConfig {
   app?: {
     title?: string;
@@ -50,7 +60,9 @@ interface ServerConfig {
     defaultDays?: number;
   };
   passwordSecurity?: Partial<PasswordRequirements>;
-  // Future: database, etc.
+  cron?: {
+    jobs?: Record<string, CronJobYamlEntry>;
+  };
 }
 
 // ─── Hardcoded Defaults ─────────────────────────────────────────────────────
@@ -104,9 +116,10 @@ function readYamlFile(): ServerConfig {
   }
 }
 
-// ─── YAML Writer (password section only) ────────────────────────────────────
+// ─── YAML Writer ─────────────────────────────────────────────────────────────
 
-function writeYamlConfig(requirements: PasswordRequirements): void {
+/** Read-merge-write a section of server.config.yml */
+function writeYamlSection(mutator: (config: ServerConfig) => void): void {
   const configPath = path.join(process.cwd(), "server.config.yml");
   try {
     let config: ServerConfig = {};
@@ -114,13 +127,19 @@ function writeYamlConfig(requirements: PasswordRequirements): void {
       const fileContents = fs.readFileSync(configPath, "utf8");
       config = (yaml.load(fileContents) as ServerConfig) || {};
     }
-    config.passwordSecurity = { ...requirements };
+    mutator(config);
     const yamlStr = yaml.dump(config, { indent: 2, lineWidth: 80, noRefs: true });
     fs.writeFileSync(configPath, yamlStr, "utf8");
   } catch (error) {
     console.error("[Config Loader] Failed to write server.config.yml:", error);
     throw error;
   }
+}
+
+function writeYamlConfig(requirements: PasswordRequirements): void {
+  writeYamlSection((config) => {
+    config.passwordSecurity = { ...requirements };
+  });
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -251,4 +270,36 @@ export function getPasswordRequirementsSource(): {
 
   const hasYaml = Object.values(details).some((s) => s === "yaml");
   return { source: hasYaml ? "yaml" : "default", details };
+}
+
+// ─── Cron Job Overrides ────────────────────────────────────────────────────
+
+/** Get raw cron.jobs overrides from YAML (empty object if none) */
+export function getCronJobOverrides(): Record<string, CronJobYamlEntry> {
+  const yamlConfig = readYamlFile();
+  return yamlConfig.cron?.jobs ?? {};
+}
+
+/**
+ * Write the full cron.jobs section to YAML.
+ * Pass the complete overrides map; it replaces the entire cron.jobs block.
+ */
+export function updateCronJobOverrides(overrides: Record<string, CronJobYamlEntry>): void {
+  writeYamlSection((config) => {
+    if (!config.cron) config.cron = {};
+    // Strip empty objects to keep YAML clean
+    const cleaned: Record<string, CronJobYamlEntry> = {};
+    for (const [key, entry] of Object.entries(overrides)) {
+      if (Object.keys(entry).length > 0) {
+        cleaned[key] = entry;
+      }
+    }
+    if (Object.keys(cleaned).length > 0) {
+      config.cron.jobs = cleaned;
+    } else {
+      delete config.cron.jobs;
+      if (Object.keys(config.cron).length === 0) delete config.cron;
+    }
+  });
+  console.log("[Config Loader] Cron job overrides updated");
 }

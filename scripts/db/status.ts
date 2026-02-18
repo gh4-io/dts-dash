@@ -60,7 +60,7 @@ function main() {
     master_data_import_log: schema.masterDataImportLog,
     analytics_events: schema.analyticsEvents,
     app_config: schema.appConfig,
-    cron_jobs: schema.cronJobs,
+    cron_job_runs: schema.cronJobRuns,
   };
 
   let totalRows = 0;

@@ -62,10 +62,10 @@ passwordSecurity:
   maxLength: 128
 
   # Character requirements (boolean)
-  requireUppercase: true
-  requireLowercase: true
-  requireDigits: true
-  requireSpecialChars: true
+  requireUppercase: false
+  requireLowercase: false
+  requireDigits: false
+  requireSpecialChars: false
 
   # Common password prevention (boolean)
   # When true, blocks passwords from the blocklist
@@ -76,12 +76,25 @@ passwordSecurity:
   # Development default: 30 (lower threshold for testing)
   minEntropy: 30
 
-# Future sections will be added here:
-# database:
-#   maxConnections: 10
-#   timeout: 5000
-# logging:
-#   level: info
-#   format: json
-# features:
-#   enableAnalytics: true
+# ─── Cron Job Overrides ─────────────────────────────────────────────────────
+# Override built-in job settings or define custom jobs.
+# Built-in jobs: only override the fields you want to change.
+# Custom jobs: must include script + schedule at minimum.
+#
+# cron:
+#   jobs:
+#     # Override built-in job (only specify fields to change)
+#     cleanup-canceled:
+#       schedule: "0 */12 * * *"     # every 12h instead of default 6h
+#       options:
+#         graceHours: 12
+#
+#     # Custom job (must include script + schedule)
+#     nightly-backup:
+#       name: "Nightly DB Backup"
+#       description: "Runs a custom backup script at 3 AM"
+#       script: "scripts/cron/nightly-backup.ts"
+#       schedule: "0 3 * * *"
+#       enabled: true
+#       options:
+#         keepDays: 30

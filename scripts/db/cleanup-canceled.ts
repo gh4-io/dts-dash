@@ -72,12 +72,10 @@ async function main() {
     return;
   }
 
-  const result = cleanupCanceledWPs(graceHours);
+  const result = await cleanupCanceledWPs({ graceHours });
 
   log("");
-  success(
-    `Deleted ${result.deletedCount} canceled work package(s), ${result.overridesDeleted} MH override(s).`,
-  );
+  success(result.message);
 }
 
 main().catch((err) => {

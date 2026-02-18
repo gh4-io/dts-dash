@@ -25,14 +25,22 @@ export const db = drizzle(sqlite, { schema });
 export { sqlite };
 export { DB_PATH as dbPath };
 
-// Graceful shutdown — close SQLite on process termination
+// Graceful shutdown — stop cron + close SQLite on process termination
 function shutdown() {
-  try {
-    sqlite.close();
-  } catch {
-    // Already closed or error — ignore
-  }
-  process.exit(0);
+  // Lazy dynamic import to avoid circular imports (cron → db/client → cron)
+  import("@/lib/cron/index")
+    .then(({ stopCron }) => stopCron())
+    .catch(() => {
+      // Cron module may not be loaded yet — ignore
+    })
+    .finally(() => {
+      try {
+        sqlite.close();
+      } catch {
+        // Already closed or error — ignore
+      }
+      process.exit(0);
+    });
 }
 
 process.on("SIGTERM", shutdown);

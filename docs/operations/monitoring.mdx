@@ -73,6 +73,17 @@ sqlite3 data/dashboard.db "PRAGMA integrity_check;"
 sqlite3 data/dashboard.db "SELECT 'users', COUNT(*) FROM users UNION ALL SELECT 'customers', COUNT(*) FROM customers UNION ALL SELECT 'analytics', COUNT(*) FROM analytics_events;"
 ```
 
+## Scheduled Task Health
+
+Monitor cron jobs via **Admin > Cron Jobs**:
+- **Green dot**: Last run succeeded
+- **Red dot**: Last run failed (hover for error message)
+- **Gray dot**: Job suspended
+
+Cron tasks log under the `cron` and `cron:<task-key>` prefixes (e.g., `cron:cleanup-canceled`).
+
+See [Scheduled Tasks](/docs/operations/scheduled-tasks) for full details.
+
 ## Common Issues
 
 | Symptom | Likely Cause | Fix |

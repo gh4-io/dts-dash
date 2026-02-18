@@ -68,6 +68,14 @@ src/
 | `app/api/` | lib/auth, lib/data/, lib/db/ | client hooks |
 | `app/(authenticated)/` | components/ | Nothing |
 
+## Cron Module (`src/lib/cron/`)
+
+In-process task scheduler using `node-cron`. Built-in jobs are defined in `index.ts` with a static handler registry. Custom jobs are loaded via `dynamic import()` of script paths from `server.config.yml`. Runtime state (last run time, status) is tracked in the `cron_job_runs` SQLite table.
+
+Key files:
+- `index.ts` — Orchestrator: built-in registry, YAML merge, start/stop/restart, status API
+- `tasks/cleanup-canceled.ts` — Built-in cleanup task
+
 ## Computation Engines
 
 ### capacity.ts

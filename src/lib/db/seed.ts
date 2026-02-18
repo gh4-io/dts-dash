@@ -18,14 +18,13 @@ import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("seed");
 
-function generateId(): string {
-  return crypto.randomUUID();
-}
-
 // ─── Seed Data ───────────────────────────────────────────────────────────────
 
 export async function seedData() {
   const now = new Date().toISOString();
+
+  // Track system user ID for later FK references
+  let systemUserId: number | null = null;
 
   // ─── Users ─────────────────────────────────────────────────────────────────
 
@@ -44,7 +43,7 @@ export async function seedData() {
       // Use env-provided credentials
       db.insert(schema.users)
         .values({
-          id: generateId(),
+          authId: crypto.randomUUID(),
           email: envEmail.toLowerCase(),
           username: null,
           displayName: "Admin",
@@ -63,7 +62,7 @@ export async function seedData() {
         db.insert(schema.users)
           .values(
             regularUsers.map((u) => ({
-              id: u.id || generateId(),
+              authId: u.authId || crypto.randomUUID(),
               email: u.email,
               username: u.username,
               displayName: u.displayName,
@@ -88,28 +87,34 @@ export async function seedData() {
 
   // ─── System User ──────────────────────────────────────────────────────────
 
-  const systemUser = SEED_USERS.find((u) => u.password === "");
-  if (systemUser) {
+  const systemUserSeed = SEED_USERS.find((u) => u.password === "");
+  if (systemUserSeed) {
+    const systemAuthId = systemUserSeed.authId || "00000000-0000-0000-0000-000000000000";
     const existingSystem = db
       .select()
       .from(schema.users)
-      .where(eq(schema.users.id, systemUser.id!))
+      .where(eq(schema.users.authId, systemAuthId))
       .get();
 
     if (!existingSystem) {
-      db.insert(schema.users)
+      const row = db
+        .insert(schema.users)
         .values({
-          id: systemUser.id!,
-          email: systemUser.email,
-          displayName: systemUser.displayName,
+          authId: systemAuthId,
+          email: systemUserSeed.email,
+          displayName: systemUserSeed.displayName,
           passwordHash: "",
-          role: systemUser.role,
-          isActive: systemUser.isActive,
+          role: systemUserSeed.role,
+          isActive: systemUserSeed.isActive,
           createdAt: now,
           updatedAt: now,
         })
-        .run();
+        .returning({ id: schema.users.id })
+        .get();
+      systemUserId = row.id;
       log.info("Seeded system user for API ingestion");
+    } else {
+      systemUserId = existingSystem.id;
     }
   }
 
@@ -121,7 +126,6 @@ export async function seedData() {
     db.insert(schema.customers)
       .values(
         SEED_CUSTOMERS.map((c) => ({
-          id: generateId(),
           ...c,
           isActive: true,
           createdAt: now,
@@ -141,7 +145,6 @@ export async function seedData() {
     db.insert(schema.aircraftTypeMappings)
       .values(
         SEED_AIRCRAFT_TYPE_MAPPINGS.map((m) => ({
-          id: generateId(),
           ...m,
           isActive: true,
           createdAt: now,
@@ -180,44 +183,8 @@ export async function seedData() {
   }
 
   // ─── Cron Jobs ──────────────────────────────────────────────────────────
-
-  const existingCronJobs = db.select().from(schema.cronJobs).all();
-
-  if (existingCronJobs.length === 0) {
-    db.insert(schema.cronJobs)
-      .values({
-        id: "cleanup-canceled",
-        name: "Cleanup Canceled WPs",
-        schedule: "0 */6 * * *",
-        enabled: true,
-        graceHours: 6,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-    log.info("Seeded cron job: cleanup-canceled (every 6 hours, 6h grace)");
-  } else {
-    // Ensure cleanup-canceled job exists (idempotent)
-    const existing = db
-      .select()
-      .from(schema.cronJobs)
-      .where(eq(schema.cronJobs.id, "cleanup-canceled"))
-      .get();
-    if (!existing) {
-      db.insert(schema.cronJobs)
-        .values({
-          id: "cleanup-canceled",
-          name: "Cleanup Canceled WPs",
-          schedule: "0 */6 * * *",
-          enabled: true,
-          graceHours: 6,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
-      log.info("Seeded missing cron job: cleanup-canceled");
-    }
-  }
+  // Built-in cron jobs are defined in code (src/lib/cron/index.ts),
+  // overrides live in server.config.yml. No DB seeding needed.
 
   // ─── Manufacturers ────────────────────────────────────────────────────────
 
@@ -227,7 +194,6 @@ export async function seedData() {
     db.insert(schema.manufacturers)
       .values(
         SEED_MANUFACTURERS.map((m) => ({
-          id: generateId(),
           ...m,
           isActive: true,
         })),
@@ -254,7 +220,6 @@ export async function seedData() {
     db.insert(schema.aircraftModels)
       .values(
         SEED_AIRCRAFT_MODELS.map((m) => ({
-          id: generateId(),
           modelCode: m.modelCode,
           canonicalType: m.canonicalType,
           manufacturerId: manufacturerMap.get(m.manufacturer) || null,
@@ -276,7 +241,6 @@ export async function seedData() {
     db.insert(schema.engineTypes)
       .values(
         SEED_ENGINE_TYPES.map((e) => ({
-          id: generateId(),
           ...e,
           isActive: true,
         })),
@@ -296,20 +260,30 @@ export async function seedData() {
   if (existingWPs.length === 0 && activeWPs.length > 0) {
     const now = new Date().toISOString();
 
+    // Resolve system user ID for the import log FK
+    if (!systemUserId) {
+      const sysUser = db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.authId, "00000000-0000-0000-0000-000000000000"))
+        .get();
+      systemUserId = sysUser?.id ?? null;
+    }
+
     // Create a seed import log entry
-    const seedLogId = generateId();
-    db.insert(schema.importLog)
+    const logRow = db
+      .insert(schema.importLog)
       .values({
-        id: seedLogId,
         importedAt: now,
         recordCount: activeWPs.length,
         source: "file",
         fileName: "work-packages.json (seed)",
-        importedBy: systemUser?.id ?? "00000000-0000-0000-0000-000000000000",
+        importedBy: systemUserId ?? 1,
         status: "success",
         errors: null,
       })
-      .run();
+      .returning({ id: schema.importLog.id })
+      .get();
 
     for (const wp of activeWPs) {
       db.insert(schema.workPackages)
@@ -338,7 +312,7 @@ export async function seedData() {
           spModified: wp.Modified ?? null,
           spCreated: wp.Created ?? null,
           spVersion: wp.OData__UIVersionString ?? null,
-          importLogId: seedLogId,
+          importLogId: logRow.id,
           importedAt: now,
         })
         .run();

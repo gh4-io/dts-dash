@@ -24,7 +24,7 @@ const TABLE_NAMES = [
   "master_data_import_log",
   "analytics_events",
   "app_config",
-  "cron_jobs",
+  "cron_job_runs",
   "feedback_posts",
   "feedback_comments",
   "feedback_labels",

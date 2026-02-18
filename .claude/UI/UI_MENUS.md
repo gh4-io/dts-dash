@@ -94,10 +94,12 @@ Appears within `/admin/*` routes. Replaces or sits below the main sidebar items.
 | Customers | `/admin/customers` | `fa-solid fa-palette` | Admin+ |
 | Aircraft Types | `/admin/aircraft-types` | `fa-solid fa-plane-circle-check` | Admin+ |
 | Data Import | `/admin/import` | `fa-solid fa-file-import` | Admin+ |
-| Users | `/admin/users` | `fa-solid fa-users` | Admin+ |
-| Settings | `/admin/settings` | `fa-solid fa-sliders` | Admin+ |
+| Users | `/admin/users` | `fa-solid fa-users-gear` | Admin+ |
+| Settings | `/admin/settings` | `fa-solid fa-cogs` | Admin+ |
+| Server | `/admin/server` | `fa-solid fa-server` | Admin+ |
+| Cron Jobs | `/admin/cron` | `fa-solid fa-clock-rotate-left` | Admin+ |
 | Analytics | `/admin/analytics` | `fa-solid fa-chart-bar` | Admin+ |
-| Audit Log | `/admin/audit` | `fa-solid fa-clock-rotate-left` | Admin+ |
+| Audit Log | `/admin/audit` | `fa-solid fa-clipboard-list` | Admin+ |
 
 ---
 

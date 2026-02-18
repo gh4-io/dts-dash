@@ -228,6 +228,46 @@ Ensure the data directory is:
 
 ---
 
+## Scheduled Tasks
+
+The application includes an in-process cron scheduler (`node-cron`). **No external crontab or task scheduler is needed.**
+
+### Built-in Tasks
+
+| Task | Default Schedule | Description |
+|------|-----------------|-------------|
+| Cleanup Canceled WPs | Every 6 hours (`0 */6 * * *`) | Deletes canceled work packages past the grace period |
+
+### Configuration
+
+Schedules and options can be overridden in `server.config.yml`:
+
+```yaml
+cron:
+  jobs:
+    cleanup-canceled:
+      schedule: "0 */12 * * *"   # override: every 12h
+      options:
+        graceHours: 12           # override: 12h grace period
+```
+
+Custom jobs can be added by pointing to a TypeScript module with an `execute()` export:
+
+```yaml
+cron:
+  jobs:
+    nightly-backup:
+      name: "Nightly DB Backup"
+      script: "scripts/cron/nightly-backup.ts"
+      schedule: "0 3 * * *"
+```
+
+### Management
+
+Use the **Admin > Cron Jobs** UI to view, edit, suspend/resume, and manually trigger jobs. The global kill switch `features.cronEnabled: false` in `server.config.yml` disables all scheduled tasks.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |

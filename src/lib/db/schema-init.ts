@@ -5,7 +5,8 @@ import { sqlite } from "./client";
 export function createTables() {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      auth_id TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
       username TEXT UNIQUE,
       display_name TEXT NOT NULL,
@@ -19,15 +20,15 @@ export function createTables() {
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_token TEXT UNIQUE,
-      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS customers (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       display_name TEXT NOT NULL,
       color TEXT NOT NULL,
@@ -45,12 +46,12 @@ export function createTables() {
       source TEXT NOT NULL DEFAULT 'inferred',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      created_by TEXT REFERENCES users(id),
-      updated_by TEXT REFERENCES users(id)
+      created_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS user_preferences (
-      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       color_mode TEXT NOT NULL DEFAULT 'dark',
       theme_preset TEXT NOT NULL DEFAULT 'vitepress',
       accent_color TEXT,
@@ -63,12 +64,12 @@ export function createTables() {
     );
 
     CREATE TABLE IF NOT EXISTS import_log (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       imported_at TEXT NOT NULL,
       record_count INTEGER NOT NULL,
       source TEXT NOT NULL,
       file_name TEXT,
-      imported_by TEXT NOT NULL REFERENCES users(id),
+      imported_by INTEGER NOT NULL REFERENCES users(id),
       status TEXT NOT NULL,
       errors TEXT,
       idempotency_key TEXT
@@ -100,20 +101,20 @@ export function createTables() {
       sp_modified TEXT,
       sp_created TEXT,
       sp_version TEXT,
-      import_log_id TEXT REFERENCES import_log(id),
+      import_log_id INTEGER REFERENCES import_log(id),
       imported_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS mh_overrides (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       work_package_id INTEGER NOT NULL UNIQUE REFERENCES work_packages(id),
       override_mh REAL NOT NULL,
-      updated_by TEXT NOT NULL REFERENCES users(id),
+      updated_by INTEGER NOT NULL REFERENCES users(id),
       updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS aircraft_type_mappings (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       pattern TEXT NOT NULL,
       canonical_type TEXT NOT NULL,
       description TEXT,
@@ -124,8 +125,8 @@ export function createTables() {
     );
 
     CREATE TABLE IF NOT EXISTS analytics_events (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
       event_type TEXT NOT NULL,
       event_data TEXT,
       page TEXT,
@@ -139,24 +140,24 @@ export function createTables() {
     );
 
     CREATE TABLE IF NOT EXISTS manufacturers (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       sort_order INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS aircraft_models (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       model_code TEXT NOT NULL UNIQUE,
       canonical_type TEXT NOT NULL,
-      manufacturer_id TEXT REFERENCES manufacturers(id),
+      manufacturer_id INTEGER REFERENCES manufacturers(id),
       display_name TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS engine_types (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       manufacturer TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
@@ -165,10 +166,10 @@ export function createTables() {
 
     CREATE TABLE IF NOT EXISTS aircraft (
       registration TEXT PRIMARY KEY,
-      aircraft_model_id TEXT REFERENCES aircraft_models(id),
-      operator_id TEXT REFERENCES customers(id),
-      manufacturer_id TEXT REFERENCES manufacturers(id),
-      engine_type_id TEXT REFERENCES engine_types(id),
+      aircraft_model_id INTEGER REFERENCES aircraft_models(id),
+      operator_id INTEGER REFERENCES customers(id),
+      manufacturer_id INTEGER REFERENCES manufacturers(id),
+      engine_type_id INTEGER REFERENCES engine_types(id),
       serial_number TEXT,
       age TEXT,
       lessor TEXT,
@@ -179,12 +180,12 @@ export function createTables() {
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      created_by TEXT REFERENCES users(id),
-      updated_by TEXT REFERENCES users(id)
+      created_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS master_data_import_log (
-      id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       imported_at TEXT NOT NULL,
       data_type TEXT NOT NULL,
       source TEXT NOT NULL,
@@ -194,25 +195,60 @@ export function createTables() {
       records_added INTEGER NOT NULL,
       records_updated INTEGER NOT NULL,
       records_skipped INTEGER NOT NULL,
-      imported_by TEXT NOT NULL REFERENCES users(id),
+      imported_by INTEGER NOT NULL REFERENCES users(id),
       status TEXT NOT NULL,
       warnings TEXT,
       errors TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS cron_jobs (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      schedule TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      grace_hours INTEGER,
+    CREATE TABLE IF NOT EXISTS cron_job_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_key TEXT NOT NULL UNIQUE,
       last_run_at TEXT,
       last_run_status TEXT,
       last_run_message TEXT,
+      run_count INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
+    -- Feedback Board
+    CREATE TABLE IF NOT EXISTS feedback_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feedback_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      post_id INTEGER NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+      parent_id INTEGER REFERENCES feedback_comments(id) ON DELETE CASCADE,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feedback_labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS feedback_post_labels (
+      post_id INTEGER NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
+      label_id INTEGER NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
+      PRIMARY KEY (post_id, label_id)
+    );
+
+    -- Indexes
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
@@ -227,49 +263,12 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
     CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
     CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
-
-    -- Feedback Board
-    CREATE TABLE IF NOT EXISTS feedback_posts (
-      id TEXT PRIMARY KEY,
-      author_id TEXT NOT NULL REFERENCES users(id),
-      title TEXT NOT NULL,
-      body TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'open',
-      is_pinned INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_comments (
-      id TEXT PRIMARY KEY,
-      post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-      author_id TEXT NOT NULL REFERENCES users(id),
-      body TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_labels (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      color TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_post_labels (
-      post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-      label_id TEXT NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
-      PRIMARY KEY (post_id, label_id)
-    );
-
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_author ON feedback_posts(author_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
     CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
-    -- End Feedback Board
   `);
 }
 
@@ -283,58 +282,18 @@ export interface MigrationResult {
 export function runMigrations(): MigrationResult[] {
   const results: MigrationResult[] = [];
 
-  // Migration 001: Feedback Board tables
-  // For existing databases that were created before createTables() included these tables.
-  const hasFeedbackPosts = sqlite
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback_posts'")
-    .get();
-
-  if (!hasFeedbackPosts) {
-    sqlite.exec(`
-      CREATE TABLE IF NOT EXISTS feedback_posts (
-        id TEXT PRIMARY KEY,
-        author_id TEXT NOT NULL REFERENCES users(id),
-        title TEXT NOT NULL,
-        body TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'open',
-        is_pinned INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS feedback_comments (
-        id TEXT PRIMARY KEY,
-        post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-        author_id TEXT NOT NULL REFERENCES users(id),
-        body TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS feedback_labels (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        color TEXT NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS feedback_post_labels (
-        post_id TEXT NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-        label_id TEXT NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
-        PRIMARY KEY (post_id, label_id)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_feedback_posts_author ON feedback_posts(author_id);
-      CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
-      CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
-      CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
-      CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
-      CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
-    `);
-    results.push({ name: "001_feedback_board", applied: true });
-  } else {
-    results.push({ name: "001_feedback_board", applied: false });
+  // M001: Replace cron_jobs (config+state) with cron_job_runs (runtime state only)
+  try {
+    const hasOldTable = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cron_jobs'")
+      .get();
+    if (hasOldTable) {
+      sqlite.exec("DROP TABLE IF EXISTS cron_jobs");
+      // cron_job_runs is created by createTables() above
+      results.push({ name: "M001_cron_jobs_to_cron_job_runs", applied: true });
+    }
+  } catch {
+    // Ignore — table may not exist
   }
 
   return results;

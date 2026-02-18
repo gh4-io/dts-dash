@@ -21,25 +21,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "graceHours must be >= 0" }, { status: 400 });
     }
 
-    const result = cleanupCanceledWPs(graceHours);
+    const result = await cleanupCanceledWPs({ graceHours });
 
     log.info(
       {
         userId: session.user.id,
         userEmail: session.user.email,
         graceHours,
-        ...result,
+        message: result.message,
       },
       "Canceled work packages cleaned up",
     );
 
     return NextResponse.json({
-      message:
-        result.deletedCount > 0
-          ? `Deleted ${result.deletedCount} canceled WP(s) and ${result.overridesDeleted} override(s)`
-          : "No canceled work packages found past the grace period",
-      deletedCount: result.deletedCount,
-      overridesDeleted: result.overridesDeleted,
+      message: result.message,
     });
   } catch (error) {
     log.error({ error }, "Failed to cleanup canceled work packages");

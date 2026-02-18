@@ -118,6 +118,38 @@ docker compose logs dashboard 2>&1 | jq 'select(.level >= 50)'
 | High error rate in logs | `level >= 50` frequency | Review error logs, check for patterns |
 | Login rate limiting triggered | Rate limit log entries | Normal if occasional. Investigate if persistent (possible brute force). |
 | Backup script failures | Cron log errors | Check disk space, database path, sqlite3 availability |
+| Cron job failure | Admin > Cron Jobs shows red status | Check last run message, review `cron:*` logs |
+
+---
+
+## Scheduled Task Health
+
+### Checking Status
+
+1. **Admin UI**: Navigate to **Admin > Cron Jobs** — table shows status dot (green/red/gray), last run time, and error messages.
+2. **Logs**: Cron tasks log under child loggers `cron`, `cron:cleanup-canceled`, etc. Filter for `cron` prefix.
+
+### Log Output
+
+```
+[cron] Cron scheduler started {"jobCount":1}
+[cron:cleanup-canceled] Cron job executing
+[cron:cleanup-canceled] Deleted 3 canceled WP(s), 0 override(s)
+```
+
+### What to Monitor
+
+| Check | Healthy | Unhealthy |
+|-------|---------|-----------|
+| Last run time | Within expected schedule interval | Significantly overdue |
+| Last run status | `success` | `error` (check message) |
+| Run count | Incrementing | Stuck at 0 |
+
+### Troubleshooting
+
+- **Job not running**: Check `features.cronEnabled` in `server.config.yml` (must be `true`). Verify job is not suspended (Admin UI shows gray dot).
+- **Job errors**: Check last run message in Admin UI or `cron:*` log entries.
+- **Missed schedules**: Application restart resets the scheduler. All active jobs re-register on startup.
 
 ---
 

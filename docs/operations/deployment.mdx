@@ -77,6 +77,10 @@ server {
 }
 ```
 
+### Background Tasks
+
+The application includes an in-process cron scheduler. No external crontab is needed — built-in tasks (like cleanup) run automatically. Custom tasks can be added via `server.config.yml` or the Admin UI. See [Scheduled Tasks](/docs/operations/scheduled-tasks) for details.
+
 ### Security Notes
 
 - Change default seed passwords immediately

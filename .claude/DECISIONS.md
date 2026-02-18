@@ -328,3 +328,14 @@ Append-only. Each entry records a confirmed choice with date, decision, rational
 **Supersedes**: D-011 partial ("Work packages remain file-based JSON") — now ALL data is SQLite-backed.
 **Version impact**: MINOR (backwards-compatible — no API shape changes, internal storage change only)
 **Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), [REQ_DataImport.md](SPECS/REQ_DataImport.md)
+
+---
+
+## D-030 | 2026-02-17 | Cron Jobs: Code Defaults + YAML Override Pattern
+
+**Decision**: Cron job definitions use a two-tier model: built-in jobs are hardcoded in `src/lib/cron/index.ts` with sensible defaults, and `server.config.yml` acts as the override layer. The old `cron_jobs` DB table (which mixed config and runtime state) is replaced by a slim `cron_job_runs` table for runtime state only. Custom jobs can be added via YAML with a `script` path to a `.ts` module exporting `execute()`. Admin UI provides full CRUD + schedule builder + manual trigger.
+
+**Rationale**: Consistent with the existing `server.config.yml` override pattern (see password security). Built-in jobs are always present in code, human-readable config in YAML is versionable and diffable, and runtime state is cleanly separated. DB no longer stores configuration that belongs in code/YAML.
+
+**Version impact**: MINOR (new feature — admin cron management UI + API routes; backwards-compatible)
+**Links**: [REQ_Cron.md](SPECS/REQ_Cron.md), [REQ_Admin.md](SPECS/REQ_Admin.md)

@@ -80,6 +80,18 @@ description: Complete list of REST API endpoints
 |--------|------|-------------|
 | PUT | `/api/config` | Update app configuration |
 
+### Cron Jobs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/cron` | List effective jobs + runtime state |
+| POST | `/api/admin/cron` | Add custom job |
+| PUT | `/api/admin/cron/[key]` | Update job overrides |
+| DELETE | `/api/admin/cron/[key]` | Delete custom job (rejects built-in) |
+| POST | `/api/admin/cron/[key]/run` | Manual trigger |
+| POST | `/api/admin/cron/[key]/reset` | Reset built-in to defaults |
+| GET | `/api/admin/cron/builtins` | List built-in definitions with optionsSchema |
+
 ## Analytics APIs
 
 | Method | Path | Description |

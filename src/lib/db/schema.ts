@@ -1,9 +1,11 @@
 import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
+import { relations } from "drizzle-orm";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
 
 export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  authId: text("auth_id").notNull().unique(),
   email: text("email").notNull().unique(),
   username: text("username").unique(),
   displayName: text("display_name").notNull(),
@@ -27,9 +29,9 @@ export const users = sqliteTable("users", {
 // ─── Sessions (Auth.js) ─────────────────────────────────────────────────────
 
 export const sessions = sqliteTable("sessions", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   sessionToken: text("session_token").unique(),
-  userId: text("user_id")
+  userId: integer("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   expiresAt: text("expires_at").notNull(),
@@ -41,7 +43,7 @@ export const sessions = sqliteTable("sessions", {
 // ─── Customers ──────────────────────────────────────────────────────────────
 
 export const customers = sqliteTable("customers", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
   displayName: text("display_name").notNull(),
   color: text("color").notNull(),
@@ -73,14 +75,14 @@ export const customers = sqliteTable("customers", {
   updatedAt: text("updated_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: integer("created_by").references(() => users.id),
+  updatedBy: integer("updated_by").references(() => users.id),
 });
 
 // ─── User Preferences ───────────────────────────────────────────────────────
 
 export const userPreferences = sqliteTable("user_preferences", {
-  userId: text("user_id")
+  userId: integer("user_id")
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   colorMode: text("color_mode", { enum: ["light", "dark", "system"] })
@@ -136,7 +138,7 @@ export const workPackages = sqliteTable(
     spVersion: text("sp_version"),
 
     // Import metadata
-    importLogId: text("import_log_id").references(() => importLog.id),
+    importLogId: integer("import_log_id").references(() => importLog.id),
     importedAt: text("imported_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
@@ -154,13 +156,13 @@ export const workPackages = sqliteTable(
 // ─── MH Overrides ───────────────────────────────────────────────────────────
 
 export const mhOverrides = sqliteTable("mh_overrides", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   workPackageId: integer("work_package_id")
     .notNull()
     .unique()
     .references(() => workPackages.id),
   overrideMH: real("override_mh").notNull(),
-  updatedBy: text("updated_by")
+  updatedBy: integer("updated_by")
     .notNull()
     .references(() => users.id),
   updatedAt: text("updated_at")
@@ -171,7 +173,7 @@ export const mhOverrides = sqliteTable("mh_overrides", {
 // ─── Aircraft Type Mappings (D-015) ─────────────────────────────────────────
 
 export const aircraftTypeMappings = sqliteTable("aircraft_type_mappings", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   pattern: text("pattern").notNull(),
   canonicalType: text("canonical_type", {
     enum: ["B777", "B767", "B747", "B757", "B737", "Unknown"],
@@ -190,14 +192,14 @@ export const aircraftTypeMappings = sqliteTable("aircraft_type_mappings", {
 // ─── Import Log ─────────────────────────────────────────────────────────────
 
 export const importLog = sqliteTable("import_log", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   importedAt: text("imported_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
   recordCount: integer("record_count").notNull(),
   source: text("source", { enum: ["file", "paste", "api"] }).notNull(),
   fileName: text("file_name"),
-  importedBy: text("imported_by")
+  importedBy: integer("imported_by")
     .notNull()
     .references(() => users.id),
   status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
@@ -208,8 +210,8 @@ export const importLog = sqliteTable("import_log", {
 // ─── Analytics Events ───────────────────────────────────────────────────────
 
 export const analyticsEvents = sqliteTable("analytics_events", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userId: integer("user_id")
     .notNull()
     .references(() => users.id),
   eventType: text("event_type").notNull(),
@@ -230,17 +232,15 @@ export const appConfig = sqliteTable("app_config", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-// ─── Cron Jobs ─────────────────────────────────────────────────────────────
+// ─── Cron Job Runs (runtime state only — config lives in code + YAML) ──────
 
-export const cronJobs = sqliteTable("cron_jobs", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  schedule: text("schedule").notNull(),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  graceHours: integer("grace_hours"),
+export const cronJobRuns = sqliteTable("cron_job_runs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  jobKey: text("job_key").notNull().unique(),
   lastRunAt: text("last_run_at"),
   lastRunStatus: text("last_run_status", { enum: ["success", "error"] }),
   lastRunMessage: text("last_run_message"),
+  runCount: integer("run_count").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
@@ -252,7 +252,7 @@ export const cronJobs = sqliteTable("cron_jobs", {
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────
 
 export const manufacturers = sqliteTable("manufacturers", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
@@ -261,10 +261,10 @@ export const manufacturers = sqliteTable("manufacturers", {
 // ─── Master Data: Aircraft Models ───────────────────────────────────────────
 
 export const aircraftModels = sqliteTable("aircraft_models", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   modelCode: text("model_code").notNull().unique(), // "767-200(F)", "777F"
   canonicalType: text("canonical_type").notNull(), // B777, B767, etc.
-  manufacturerId: text("manufacturer_id").references(() => manufacturers.id),
+  manufacturerId: integer("manufacturer_id").references(() => manufacturers.id),
   displayName: text("display_name").notNull(), // "Boeing 767-200 Freighter"
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
@@ -273,7 +273,7 @@ export const aircraftModels = sqliteTable("aircraft_models", {
 // ─── Master Data: Engine Types ──────────────────────────────────────────────
 
 export const engineTypes = sqliteTable("engine_types", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(), // "CF6-80C2", "PW4000"
   manufacturer: text("manufacturer"), // "GE", "Pratt & Whitney"
   sortOrder: integer("sort_order").notNull().default(0),
@@ -288,10 +288,10 @@ export const aircraft = sqliteTable(
     registration: text("registration").primaryKey(), // e.g., "C-FOIJ"
 
     // Foreign keys to lookup tables
-    aircraftModelId: text("aircraft_model_id").references(() => aircraftModels.id),
-    operatorId: text("operator_id").references(() => customers.id),
-    manufacturerId: text("manufacturer_id").references(() => manufacturers.id),
-    engineTypeId: text("engine_type_id").references(() => engineTypes.id),
+    aircraftModelId: integer("aircraft_model_id").references(() => aircraftModels.id),
+    operatorId: integer("operator_id").references(() => customers.id),
+    manufacturerId: integer("manufacturer_id").references(() => manufacturers.id),
+    engineTypeId: integer("engine_type_id").references(() => engineTypes.id),
 
     // Extended metadata (from SharePoint ac.json)
     serialNumber: text("serial_number"),
@@ -320,8 +320,8 @@ export const aircraft = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
-    createdBy: text("created_by").references(() => users.id),
-    updatedBy: text("updated_by").references(() => users.id),
+    createdBy: integer("created_by").references(() => users.id),
+    updatedBy: integer("updated_by").references(() => users.id),
   },
   (table) => ({
     operatorIdx: index("aircraft_operator_idx").on(table.operatorId),
@@ -333,7 +333,7 @@ export const aircraft = sqliteTable(
 // ─── Master Data Import Log ─────────────────────────────────────────────────
 
 export const masterDataImportLog = sqliteTable("master_data_import_log", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   importedAt: text("imported_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
@@ -347,7 +347,7 @@ export const masterDataImportLog = sqliteTable("master_data_import_log", {
   recordsUpdated: integer("records_updated").notNull(),
   recordsSkipped: integer("records_skipped").notNull(),
 
-  importedBy: text("imported_by")
+  importedBy: integer("imported_by")
     .notNull()
     .references(() => users.id),
   status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
@@ -360,8 +360,8 @@ export const masterDataImportLog = sqliteTable("master_data_import_log", {
 export const feedbackPosts = sqliteTable(
   "feedback_posts",
   {
-    id: text("id").primaryKey(),
-    authorId: text("author_id")
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    authorId: integer("author_id")
       .notNull()
       .references(() => users.id),
     title: text("title").notNull(),
@@ -389,11 +389,12 @@ export const feedbackPosts = sqliteTable(
 export const feedbackComments = sqliteTable(
   "feedback_comments",
   {
-    id: text("id").primaryKey(),
-    postId: text("post_id")
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    postId: integer("post_id")
       .notNull()
       .references(() => feedbackPosts.id, { onDelete: "cascade" }),
-    authorId: text("author_id")
+    parentId: integer("parent_id"),
+    authorId: integer("author_id")
       .notNull()
       .references(() => users.id),
     body: text("body").notNull(),
@@ -410,7 +411,7 @@ export const feedbackComments = sqliteTable(
 );
 
 export const feedbackLabels = sqliteTable("feedback_labels", {
-  id: text("id").primaryKey(),
+  id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
   color: text("color").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
@@ -422,10 +423,10 @@ export const feedbackLabels = sqliteTable("feedback_labels", {
 export const feedbackPostLabels = sqliteTable(
   "feedback_post_labels",
   {
-    postId: text("post_id")
+    postId: integer("post_id")
       .notNull()
       .references(() => feedbackPosts.id, { onDelete: "cascade" }),
-    labelId: text("label_id")
+    labelId: integer("label_id")
       .notNull()
       .references(() => feedbackLabels.id, { onDelete: "cascade" }),
   },
@@ -437,3 +438,180 @@ export const feedbackPostLabels = sqliteTable(
 );
 
 // ─── End Feedback Board ──────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Relations — enables Drizzle db.query relational API
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  preferences: one(userPreferences),
+  sessions: many(sessions),
+  analyticsEvents: many(analyticsEvents),
+  importLogs: many(importLog),
+  masterDataImportLogs: many(masterDataImportLog),
+  feedbackPosts: many(feedbackPosts),
+  feedbackComments: many(feedbackComments),
+  mhOverrides: many(mhOverrides),
+  customersCreated: many(customers, { relationName: "customerCreatedBy" }),
+  customersUpdated: many(customers, { relationName: "customerUpdatedBy" }),
+  aircraftCreated: many(aircraft, { relationName: "aircraftCreatedBy" }),
+  aircraftUpdated: many(aircraft, { relationName: "aircraftUpdatedBy" }),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const customersRelations = relations(customers, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [customers.createdBy],
+    references: [users.id],
+    relationName: "customerCreatedBy",
+  }),
+  updatedByUser: one(users, {
+    fields: [customers.updatedBy],
+    references: [users.id],
+    relationName: "customerUpdatedBy",
+  }),
+  aircraft: many(aircraft),
+}));
+
+export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [userPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
+export const importLogRelations = relations(importLog, ({ one, many }) => ({
+  importedByUser: one(users, {
+    fields: [importLog.importedBy],
+    references: [users.id],
+  }),
+  workPackages: many(workPackages),
+}));
+
+export const workPackagesRelations = relations(workPackages, ({ one }) => ({
+  importLogEntry: one(importLog, {
+    fields: [workPackages.importLogId],
+    references: [importLog.id],
+  }),
+  mhOverride: one(mhOverrides),
+}));
+
+export const mhOverridesRelations = relations(mhOverrides, ({ one }) => ({
+  workPackage: one(workPackages, {
+    fields: [mhOverrides.workPackageId],
+    references: [workPackages.id],
+  }),
+  updatedByUser: one(users, {
+    fields: [mhOverrides.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [analyticsEvents.userId],
+    references: [users.id],
+  }),
+}));
+
+export const manufacturersRelations = relations(manufacturers, ({ many }) => ({
+  models: many(aircraftModels),
+  aircraft: many(aircraft),
+}));
+
+export const aircraftModelsRelations = relations(aircraftModels, ({ one, many }) => ({
+  manufacturer: one(manufacturers, {
+    fields: [aircraftModels.manufacturerId],
+    references: [manufacturers.id],
+  }),
+  aircraft: many(aircraft),
+}));
+
+export const engineTypesRelations = relations(engineTypes, ({ many }) => ({
+  aircraft: many(aircraft),
+}));
+
+export const aircraftRelations = relations(aircraft, ({ one }) => ({
+  model: one(aircraftModels, {
+    fields: [aircraft.aircraftModelId],
+    references: [aircraftModels.id],
+  }),
+  operator: one(customers, {
+    fields: [aircraft.operatorId],
+    references: [customers.id],
+  }),
+  manufacturer: one(manufacturers, {
+    fields: [aircraft.manufacturerId],
+    references: [manufacturers.id],
+  }),
+  engineType: one(engineTypes, {
+    fields: [aircraft.engineTypeId],
+    references: [engineTypes.id],
+  }),
+  createdByUser: one(users, {
+    fields: [aircraft.createdBy],
+    references: [users.id],
+    relationName: "aircraftCreatedBy",
+  }),
+  updatedByUser: one(users, {
+    fields: [aircraft.updatedBy],
+    references: [users.id],
+    relationName: "aircraftUpdatedBy",
+  }),
+}));
+
+export const masterDataImportLogRelations = relations(masterDataImportLog, ({ one }) => ({
+  importedByUser: one(users, {
+    fields: [masterDataImportLog.importedBy],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackPostsRelations = relations(feedbackPosts, ({ one, many }) => ({
+  author: one(users, {
+    fields: [feedbackPosts.authorId],
+    references: [users.id],
+  }),
+  comments: many(feedbackComments),
+  postLabels: many(feedbackPostLabels),
+}));
+
+export const feedbackCommentsRelations = relations(feedbackComments, ({ one, many }) => ({
+  post: one(feedbackPosts, {
+    fields: [feedbackComments.postId],
+    references: [feedbackPosts.id],
+  }),
+  parent: one(feedbackComments, {
+    fields: [feedbackComments.parentId],
+    references: [feedbackComments.id],
+    relationName: "commentReplies",
+  }),
+  replies: many(feedbackComments, {
+    relationName: "commentReplies",
+  }),
+  author: one(users, {
+    fields: [feedbackComments.authorId],
+    references: [users.id],
+  }),
+}));
+
+export const feedbackLabelsRelations = relations(feedbackLabels, ({ many }) => ({
+  postLabels: many(feedbackPostLabels),
+}));
+
+export const feedbackPostLabelsRelations = relations(feedbackPostLabels, ({ one }) => ({
+  post: one(feedbackPosts, {
+    fields: [feedbackPostLabels.postId],
+    references: [feedbackPosts.id],
+  }),
+  label: one(feedbackLabels, {
+    fields: [feedbackPostLabels.labelId],
+    references: [feedbackLabels.id],
+  }),
+}));

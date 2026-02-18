@@ -775,14 +775,14 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
-| **Priority** | P1 |
+| **Status** | **Partially Resolved** |
+| **Priority** | P2 |
 | **Owner** | Unassigned |
 | **Created** | 2026-02-16 |
-| **Context** | Current `db:cleanup-canceled` script and cron task are single-purpose (only handles canceled WPs). Should be generalized into a `db:cleanup` command that the cron system can orchestrate for multiple cleanup tasks. Additionally, old work package data should be subject to a retention policy — configurable via system config, default 3 months. |
-| **Proposed Solution** | (1) Rename `db:cleanup-canceled` → `db:cleanup` with subcommands or flags (`--canceled`, `--retention`, `--all`). (2) Add `dataRetentionDays` to `appConfig` or `cron_jobs` table (default: 90 days / 3 months). (3) Retention cleanup: delete WPs where `importedAt` is older than retention threshold. (4) Cron task handles both: canceled WP purge (with grace period) AND old data retention (by age). (5) CLI script supports running either or both. |
-| **Current State** | `db:cleanup-canceled` script + `cleanup-canceled` cron job already implemented (commit acaae1c). Cron infrastructure (`cron_jobs` table, `node-cron` manager) is in place. |
-| **Links** | `scripts/db/cleanup-canceled.ts`, `src/lib/cron/tasks/cleanup-canceled.ts`, `src/lib/cron/index.ts`, `src/lib/db/schema.ts` (cronJobs table) |
+| **Resolved** | 2026-02-17 (cron management system — D-030) |
+| **Context** | Cron job management system now supports built-in + custom jobs via code defaults + YAML overrides. The cleanup-canceled task is the first built-in job with configurable options (graceHours). Additional cleanup tasks (data retention) can be added as new built-in jobs or custom scripts. |
+| **Remaining** | Data retention policy (auto-delete WPs older than N days) not yet implemented as a separate cron task. Can now be added as a built-in job in `src/lib/cron/index.ts` or as a custom script via the Admin Cron UI. |
+| **Links** | [REQ_Cron.md](SPECS/REQ_Cron.md), D-030, `src/lib/cron/index.ts` |
 
 ---
 

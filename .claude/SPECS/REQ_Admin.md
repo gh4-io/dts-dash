@@ -14,6 +14,8 @@ Admin section uses its own sub-navigation (tabs or sidebar):
 | Data Import | `/admin/import` | File upload + paste-JSON (D-016) |
 | User Management | `/admin/users` | Create, edit, enable/disable, delete users (D-021) |
 | System Settings | `/admin/settings` | App-wide configuration |
+| Server | `/admin/server` | Restart, backup, utility actions |
+| Cron Jobs | `/admin/cron` | Scheduled task management (D-030) |
 | Analytics | `/admin/analytics` | System usage analytics (D-019) |
 | Audit Log | `/admin/audit` | Change history (vNext stub) |
 

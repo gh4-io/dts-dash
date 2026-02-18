@@ -1,0 +1,84 @@
+---
+title: Scheduled Tasks
+description: Built-in and custom cron job management
+---
+
+The dashboard includes an in-process cron scheduler for background tasks. No external crontab is required.
+
+## Built-in Tasks
+
+| Task | Key | Default Schedule | Description |
+|------|-----|-----------------|-------------|
+| Cleanup Canceled WPs | `cleanup-canceled` | Every 6 hours | Permanently deletes canceled work packages past the grace period |
+
+Built-in tasks are always present and cannot be deleted. Their schedule, options, and enabled state can be overridden.
+
+## Viewing & Managing Tasks
+
+Navigate to **Admin > Cron Jobs** to:
+
+- View all jobs with status, schedule, last run time, and run count
+- Edit job schedule and options
+- Suspend/resume jobs
+- Manually trigger a job ("Run Now")
+- Reset built-in jobs to their code defaults
+- Add or delete custom jobs
+
+## Overriding Schedules
+
+Override built-in job settings in `server.config.yml` — only specify the fields you want to change:
+
+```yaml
+cron:
+  jobs:
+    cleanup-canceled:
+      schedule: "0 */12 * * *"    # every 12h instead of default 6h
+      options:
+        graceHours: 12            # 12h grace period instead of 6h
+```
+
+## Custom Task Scripts
+
+Custom jobs point to TypeScript modules that export an `execute()` function:
+
+```typescript
+// scripts/cron/my-task.ts
+export async function execute(
+  options: Record<string, unknown>
+): Promise<{ message: string }> {
+  // do work...
+  return { message: "Completed successfully" };
+}
+```
+
+Register custom jobs in `server.config.yml`:
+
+```yaml
+cron:
+  jobs:
+    my-custom-task:
+      name: "My Custom Task"
+      description: "Does something useful"
+      script: "scripts/cron/my-task.ts"
+      schedule: "0 3 * * *"
+      enabled: true
+      options:
+        someOption: "value"
+```
+
+Or add them via the Admin UI (**Admin > Cron Jobs > Add Custom Job**).
+
+## Disabling All Tasks
+
+Set `features.cronEnabled: false` in `server.config.yml` to disable the entire cron scheduler:
+
+```yaml
+features:
+  cronEnabled: false
+```
+
+## Monitoring
+
+- **Admin UI**: Status dots (green = success, red = error, gray = suspended), last run time, error messages
+- **Logs**: Filter for `cron` or `cron:cleanup-canceled` log prefixes
+- **Auto-refresh**: The admin page polls for updates every 30 seconds

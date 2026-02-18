@@ -53,6 +53,25 @@ scripts/backup-db.sh
 
 ## Automated Backups (cron)
 
+### Option A: In-App Cron (Recommended)
+
+Backups can be scheduled as a custom cron job via the **Admin > Cron Jobs** UI. Create a TypeScript script that calls the backup logic and register it in `server.config.yml`:
+
+```yaml
+cron:
+  jobs:
+    nightly-backup:
+      name: "Nightly DB Backup"
+      script: "scripts/cron/nightly-backup.ts"
+      schedule: "0 2 * * *"
+      options:
+        keepDays: 7
+```
+
+See `DEPLOYMENT.md` > "Scheduled Tasks" for the full custom job schema.
+
+### Option B: System Crontab
+
 Add to crontab (`crontab -e`):
 
 ```bash

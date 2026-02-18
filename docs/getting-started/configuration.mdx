@@ -39,6 +39,21 @@ These settings are stored in the `app_config` table and editable via the Admin p
 ]
 ```
 
+## Server Configuration (`server.config.yml`)
+
+System settings are stored in `server.config.yml` (loaded at startup). The dev template is `server.config.dev.yml`.
+
+| Section | Key Settings |
+|---------|-------------|
+| `app` | `title`, `baseUrl` |
+| `logging` | `level` (trace/debug/info/warn/error) |
+| `features` | `enableSeedEndpoint`, `cronEnabled` |
+| `timeline` | `startOffset`, `defaultDays`, `defaultZoom`, `defaultTimezone` |
+| `passwordSecurity` | `minLength`, `maxLength`, character requirements, `minEntropy` |
+| `cron.jobs` | Override built-in job schedules/options, or define custom jobs |
+
+See [Scheduled Tasks](/docs/operations/scheduled-tasks) for the `cron.jobs` schema.
+
 ## User Preferences (Per-User)
 
 Stored in `user_preferences` table, editable via Account page:

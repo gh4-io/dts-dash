@@ -1,22 +1,21 @@
 import { db, sqlite } from "@/lib/db/client";
-import { cronJobs } from "@/lib/db/schema";
 import { invalidateCache } from "@/lib/data/reader";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
-import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import type { CronTaskResult } from "@/lib/cron/index";
 
 const log = createChildLogger("cron:cleanup-canceled");
-
-export interface CleanupResult {
-  deletedCount: number;
-  overridesDeleted: number;
-}
 
 /**
  * Hard-delete canceled work packages that have exceeded the grace period.
  * Also removes orphaned MH overrides to avoid FK violations.
+ *
+ * Conforms to the CronTaskResult interface for the cron orchestrator.
  */
-export function cleanupCanceledWPs(graceHours: number): CleanupResult {
+export async function cleanupCanceledWPs(
+  options: Record<string, unknown>,
+): Promise<CronTaskResult> {
+  const graceHours = typeof options.graceHours === "number" ? options.graceHours : 6;
   const cutoff = new Date(Date.now() - graceHours * 60 * 60 * 1000).toISOString();
 
   // Find canceled WPs past the grace period
@@ -26,7 +25,7 @@ export function cleanupCanceledWPs(graceHours: number): CleanupResult {
 
   if (canceledRows.length === 0) {
     log.debug({ graceHours, cutoff }, "No canceled WPs past grace period");
-    return { deletedCount: 0, overridesDeleted: 0 };
+    return { message: "No canceled WPs to clean up" };
   }
 
   const wpIds = canceledRows.map((r) => r.id);
@@ -49,25 +48,8 @@ export function cleanupCanceledWPs(graceHours: number): CleanupResult {
   invalidateCache();
   invalidateTransformerCache();
 
-  log.info(
-    { deletedCount: wpIds.length, overridesDeleted, graceHours, cutoff },
-    "Canceled work packages purged",
-  );
+  const message = `Deleted ${wpIds.length} canceled WP(s), ${overridesDeleted} override(s)`;
+  log.info({ deletedCount: wpIds.length, overridesDeleted, graceHours, cutoff }, message);
 
-  // Update cron job status
-  try {
-    db.update(cronJobs)
-      .set({
-        lastRunAt: new Date().toISOString(),
-        lastRunStatus: "success",
-        lastRunMessage: `Deleted ${wpIds.length} canceled WP(s), ${overridesDeleted} override(s)`,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(cronJobs.id, "cleanup-canceled"))
-      .run();
-  } catch (err) {
-    log.warn({ err }, "Failed to update cron job status");
-  }
-
-  return { deletedCount: wpIds.length, overridesDeleted };
+  return { message };
 }
