@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { exportToCsv } from "@/lib/utils/csv-export";
+import { usePreferences } from "@/lib/hooks/use-preferences";
 import type { DailyDemand, DailyCapacity, DailyUtilization } from "@/types";
 
 interface CapacityRow {
@@ -101,13 +102,11 @@ function getUtilizationBadge(percent: number, critical: boolean, overtime: boole
   );
 }
 
-export function CapacityTable({
-  demand,
-  capacity,
-  utilization,
-}: CapacityTableProps) {
+export function CapacityTable({ demand, capacity, utilization }: CapacityTableProps) {
+  const { tablePageSize } = usePreferences();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
+  const [pageIndex, setPageIndex] = useState(0);
 
   const rows = useMemo((): CapacityRow[] => {
     const capMap = new Map(capacity.map((c) => [c.date, c]));
@@ -209,11 +208,7 @@ export function CapacityTable({
               </span>
             );
           }
-          return (
-            <span className="font-medium">
-              {formatDate(row.original.date)}
-            </span>
-          );
+          return <span className="font-medium">{formatDate(row.original.date)}</span>;
         },
       },
       {
@@ -229,9 +224,10 @@ export function CapacityTable({
         accessorKey: "demandMH",
         header: "Demand MH",
         cell: ({ row }: { row: Row<CapacityRow> }) => {
-          const val = row.depth > 0
-            ? (row.original as unknown as CapacitySubRow).demandMH
-            : row.original.demandMH;
+          const val =
+            row.depth > 0
+              ? (row.original as unknown as CapacitySubRow).demandMH
+              : row.original.demandMH;
           if (val === 0 && row.depth > 0) return <span className="text-muted-foreground">—</span>;
           return <span className="tabular-nums">{val.toFixed(1)}</span>;
         },
@@ -241,9 +237,10 @@ export function CapacityTable({
         accessorKey: "capacityMH",
         header: "Capacity MH",
         cell: ({ row }: { row: Row<CapacityRow> }) => {
-          const val = row.depth > 0
-            ? (row.original as unknown as CapacitySubRow).capacityMH
-            : row.original.capacityMH;
+          const val =
+            row.depth > 0
+              ? (row.original as unknown as CapacitySubRow).capacityMH
+              : row.original.capacityMH;
           if (val === 0 && row.depth > 0) return <span className="text-muted-foreground">—</span>;
           return <span className="tabular-nums">{val.toFixed(1)}</span>;
         },
@@ -257,7 +254,7 @@ export function CapacityTable({
           return getUtilizationBadge(
             row.original.utilizationPercent,
             row.original.criticalFlag,
-            row.original.overtimeFlag
+            row.original.overtimeFlag,
           );
         },
         size: 110,
@@ -281,24 +278,26 @@ export function CapacityTable({
         size: 130,
       },
     ],
-    []
+    [],
   );
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is safe here
   const table = useReactTable({
     data: rows,
     columns,
-    state: { sorting, expanded },
+    state: { sorting, expanded, pagination: { pageIndex, pageSize: tablePageSize } },
     onSortingChange: setSorting,
     onExpandedChange: setExpanded,
+    onPaginationChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater({ pageIndex, pageSize: tablePageSize }) : updater;
+      setPageIndex(next.pageIndex);
+    },
     getSubRows: (row) => row.subRows as CapacityRow[] | undefined,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
-    initialState: {
-      pagination: { pageSize: 30 },
-    },
   });
 
   const handleExportCsv = useCallback(() => {
@@ -348,10 +347,7 @@ export function CapacityTable({
                     onClick={header.column.getToggleSortingHandler()}
                   >
                     <span className="flex items-center gap-1">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
+                      {flexRender(header.column.columnDef.header, header.getContext())}
                       {header.column.getIsSorted() === "asc" && (
                         <i className="fa-solid fa-sort-up text-[9px]" />
                       )}
@@ -367,7 +363,10 @@ export function CapacityTable({
           <TableBody>
             {table.getRowModel().rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   <i className="fa-solid fa-inbox text-2xl mb-2 block" />
                   No capacity data for selected filters.
                 </TableCell>
@@ -377,19 +376,12 @@ export function CapacityTable({
                 <TableRow
                   key={row.id}
                   className={
-                    row.depth > 0
-                      ? "bg-muted/30"
-                      : row.original.criticalFlag
-                        ? "bg-red-500/5"
-                        : ""
+                    row.depth > 0 ? "bg-muted/30" : row.original.criticalFlag ? "bg-red-500/5" : ""
                   }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-2 text-sm">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -403,8 +395,8 @@ export function CapacityTable({
       {table.getPageCount() > 1 && (
         <div className="flex items-center justify-between p-3 border-t border-border">
           <span className="text-xs text-muted-foreground">
-            Page {table.getState().pagination.pageIndex + 1} of{" "}
-            {table.getPageCount()} ({rows.length} days)
+            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()} (
+            {rows.length} days)
           </span>
           <div className="flex gap-1">
             <Button

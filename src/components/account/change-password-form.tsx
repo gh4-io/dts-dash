@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { usePasswordMinLength } from "@/components/layout/app-config-provider";
 
 interface ChangePasswordFormProps {
   forced?: boolean;
@@ -12,6 +13,7 @@ interface ChangePasswordFormProps {
 
 export function ChangePasswordForm({ forced = false }: ChangePasswordFormProps) {
   const router = useRouter();
+  const minLength = usePasswordMinLength();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,7 +22,7 @@ export function ChangePasswordForm({ forced = false }: ChangePasswordFormProps) 
 
   const isValid =
     currentPassword.length > 0 &&
-    newPassword.length >= 8 &&
+    newPassword.length >= minLength &&
     newPassword === confirmPassword &&
     newPassword !== currentPassword;
 
@@ -99,8 +101,8 @@ export function ChangePasswordForm({ forced = false }: ChangePasswordFormProps) 
           onChange={(e) => setNewPassword(e.target.value)}
           autoComplete="new-password"
         />
-        {newPassword.length > 0 && newPassword.length < 8 && (
-          <p className="text-xs text-destructive">Must be at least 8 characters</p>
+        {newPassword.length > 0 && newPassword.length < minLength && (
+          <p className="text-xs text-destructive">Must be at least {minLength} characters</p>
         )}
         {newPassword.length > 0 && newPassword === currentPassword && (
           <p className="text-xs text-destructive">Must differ from current password</p>

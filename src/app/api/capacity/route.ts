@@ -11,6 +11,11 @@ import {
 import { db } from "@/lib/db/client";
 import { appConfig } from "@/lib/db/schema";
 import { createChildLogger } from "@/lib/logger";
+import {
+  DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
+  DEFAULT_REAL_CAPACITY_PER_PERSON,
+  DEFAULT_SHIFTS_JSON,
+} from "@/lib/data/config-defaults";
 
 const log = createChildLogger("api/capacity");
 
@@ -43,18 +48,13 @@ export async function GET(request: NextRequest) {
     const configMap = Object.fromEntries(configRows.map((r) => [r.key, r.value]));
 
     const config = {
-      shifts: JSON.parse(
-        configMap.shifts ??
-          JSON.stringify([
-            { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
-            { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
-            { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-          ])
-      ),
+      shifts: JSON.parse(configMap.shifts ?? DEFAULT_SHIFTS_JSON),
       theoreticalCapacityPerPerson: parseFloat(
-        configMap.theoreticalCapacityPerPerson ?? "8.0"
+        configMap.theoreticalCapacityPerPerson ?? String(DEFAULT_THEORETICAL_CAPACITY_PER_PERSON),
       ),
-      realCapacityPerPerson: parseFloat(configMap.realCapacityPerPerson ?? "6.5"),
+      realCapacityPerPerson: parseFloat(
+        configMap.realCapacityPerPerson ?? String(DEFAULT_REAL_CAPACITY_PER_PERSON),
+      ),
     };
 
     // Compute demand, capacity, utilization
@@ -70,9 +70,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     log.error({ err: error }, "Error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

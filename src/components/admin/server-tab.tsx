@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { DEFAULT_CLEANUP_GRACE_HOURS } from "@/lib/data/config-defaults";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ export function ServerTab() {
 
   // Per-action states
   const [actions, setActions] = useState<Record<string, ActionState>>({});
-  const [graceHours, setGraceHours] = useState(6);
+  const [graceHours, setGraceHours] = useState(DEFAULT_CLEANUP_GRACE_HOURS);
 
   // Flight display settings (system-wide)
   const [flightSettings, setFlightSettings] = useState<{

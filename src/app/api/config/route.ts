@@ -4,6 +4,15 @@ import { db } from "@/lib/db/client";
 import { appConfig } from "@/lib/db/schema";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { createChildLogger } from "@/lib/logger";
+import {
+  DEFAULT_MH,
+  DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
+  DEFAULT_REAL_CAPACITY_PER_PERSON,
+  DEFAULT_SHIFTS_JSON,
+  DEFAULT_INGEST_RATE_LIMIT_SECONDS,
+  DEFAULT_INGEST_MAX_SIZE_MB,
+  DEFAULT_INGEST_CHUNK_TIMEOUT_SECONDS,
+} from "@/lib/data/config-defaults";
 
 const log = createChildLogger("api/config");
 
@@ -24,22 +33,28 @@ export async function GET() {
 
     // Parse JSON values
     const config = {
-      defaultMH: parseFloat(configMap.defaultMH ?? "3.0"),
+      defaultMH: parseFloat(configMap.defaultMH ?? String(DEFAULT_MH)),
       wpMHMode: configMap.wpMHMode ?? "exclude",
-      theoreticalCapacityPerPerson: parseFloat(configMap.theoreticalCapacityPerPerson ?? "8.0"),
-      realCapacityPerPerson: parseFloat(configMap.realCapacityPerPerson ?? "6.5"),
-      shifts: JSON.parse(
-        configMap.shifts ??
-          JSON.stringify([
-            { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
-            { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
-            { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-          ]),
+      theoreticalCapacityPerPerson: parseFloat(
+        configMap.theoreticalCapacityPerPerson ?? String(DEFAULT_THEORETICAL_CAPACITY_PER_PERSON),
       ),
+      realCapacityPerPerson: parseFloat(
+        configMap.realCapacityPerPerson ?? String(DEFAULT_REAL_CAPACITY_PER_PERSON),
+      ),
+      shifts: JSON.parse(configMap.shifts ?? DEFAULT_SHIFTS_JSON),
       ingestApiKey: configMap.ingestApiKey ?? "",
-      ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
-      ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
-      ingestChunkTimeoutSeconds: parseInt(configMap.ingestChunkTimeoutSeconds ?? "300", 10),
+      ingestRateLimitSeconds: parseInt(
+        configMap.ingestRateLimitSeconds ?? String(DEFAULT_INGEST_RATE_LIMIT_SECONDS),
+        10,
+      ),
+      ingestMaxSizeMB: parseInt(
+        configMap.ingestMaxSizeMB ?? String(DEFAULT_INGEST_MAX_SIZE_MB),
+        10,
+      ),
+      ingestChunkTimeoutSeconds: parseInt(
+        configMap.ingestChunkTimeoutSeconds ?? String(DEFAULT_INGEST_CHUNK_TIMEOUT_SECONDS),
+        10,
+      ),
       allowedHostnames: JSON.parse(
         configMap.allowedHostnames ??
           JSON.stringify([

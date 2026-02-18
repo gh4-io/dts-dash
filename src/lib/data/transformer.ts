@@ -1,8 +1,19 @@
 import { db } from "@/lib/db/client";
-import { mhOverrides, appConfig, workPackages } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { mhOverrides, appConfig, workPackages, aircraft } from "@/lib/db/schema";
+import { eq, isNotNull } from "drizzle-orm";
 import type { SharePointWorkPackage, WorkPackage, MHSource, AppConfig } from "@/types";
 import { createChildLogger } from "@/lib/logger";
+import { normalizeAircraftTypes, invalidateMappingsCache } from "@/lib/utils/aircraft-type";
+import {
+  DEFAULT_MH,
+  DEFAULT_WP_MH_MODE,
+  DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
+  DEFAULT_REAL_CAPACITY_PER_PERSON,
+  DEFAULT_SHIFTS,
+  DEFAULT_SHIFTS_JSON,
+  DEFAULT_INGEST_RATE_LIMIT_SECONDS,
+  DEFAULT_INGEST_MAX_SIZE_MB,
+} from "@/lib/data/config-defaults";
 
 const log = createChildLogger("transformer");
 
@@ -14,6 +25,7 @@ const log = createChildLogger("transformer");
 
 let cachedConfig: AppConfig | null = null;
 let cachedOverrides: Map<string, number> | null = null; // GUID -> overrideMH
+let cachedAircraftTypes: Map<string, string> | null = null; // registration -> aircraftType
 
 /**
  * Load app config from SQLite
@@ -28,21 +40,24 @@ async function loadConfig(): Promise<AppConfig> {
     const configMap = Object.fromEntries(configRows.map((r) => [r.key, r.value]));
 
     cachedConfig = {
-      defaultMH: parseFloat(configMap.defaultMH ?? "3.0"),
-      wpMHMode: (configMap.wpMHMode as "include" | "exclude") ?? "exclude",
-      theoreticalCapacityPerPerson: parseFloat(configMap.theoreticalCapacityPerPerson ?? "8.0"),
-      realCapacityPerPerson: parseFloat(configMap.realCapacityPerPerson ?? "6.5"),
-      shifts: JSON.parse(
-        configMap.shifts ??
-          JSON.stringify([
-            { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
-            { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
-            { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-          ])
+      defaultMH: parseFloat(configMap.defaultMH ?? String(DEFAULT_MH)),
+      wpMHMode: (configMap.wpMHMode as "include" | "exclude") ?? DEFAULT_WP_MH_MODE,
+      theoreticalCapacityPerPerson: parseFloat(
+        configMap.theoreticalCapacityPerPerson ?? String(DEFAULT_THEORETICAL_CAPACITY_PER_PERSON),
       ),
+      realCapacityPerPerson: parseFloat(
+        configMap.realCapacityPerPerson ?? String(DEFAULT_REAL_CAPACITY_PER_PERSON),
+      ),
+      shifts: JSON.parse(configMap.shifts ?? DEFAULT_SHIFTS_JSON),
       ingestApiKey: configMap.ingestApiKey ?? "",
-      ingestRateLimitSeconds: parseInt(configMap.ingestRateLimitSeconds ?? "60", 10),
-      ingestMaxSizeMB: parseInt(configMap.ingestMaxSizeMB ?? "50", 10),
+      ingestRateLimitSeconds: parseInt(
+        configMap.ingestRateLimitSeconds ?? String(DEFAULT_INGEST_RATE_LIMIT_SECONDS),
+        10,
+      ),
+      ingestMaxSizeMB: parseInt(
+        configMap.ingestMaxSizeMB ?? String(DEFAULT_INGEST_MAX_SIZE_MB),
+        10,
+      ),
       masterDataConformityMode: (configMap.masterDataConformityMode as "strict" | "warning" | "auto-add") ?? "warning",
       masterDataOverwriteConfirmed: (configMap.masterDataOverwriteConfirmed as "allow" | "warn" | "reject") ?? "warn",
       allowedHostnames: JSON.parse(configMap.allowedHostnames ?? "[]"),
@@ -53,18 +68,14 @@ async function loadConfig(): Promise<AppConfig> {
     log.error({ err: error }, "Failed to load config");
     // Return defaults
     cachedConfig = {
-      defaultMH: 3.0,
-      wpMHMode: "exclude",
-      theoreticalCapacityPerPerson: 8.0,
-      realCapacityPerPerson: 6.5,
-      shifts: [
-        { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
-        { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
-        { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-      ],
+      defaultMH: DEFAULT_MH,
+      wpMHMode: DEFAULT_WP_MH_MODE,
+      theoreticalCapacityPerPerson: DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
+      realCapacityPerPerson: DEFAULT_REAL_CAPACITY_PER_PERSON,
+      shifts: [...DEFAULT_SHIFTS],
       ingestApiKey: "",
-      ingestRateLimitSeconds: 60,
-      ingestMaxSizeMB: 50,
+      ingestRateLimitSeconds: DEFAULT_INGEST_RATE_LIMIT_SECONDS,
+      ingestMaxSizeMB: DEFAULT_INGEST_MAX_SIZE_MB,
       masterDataConformityMode: "warning",
       masterDataOverwriteConfirmed: "warn",
       allowedHostnames: [],
@@ -102,11 +113,44 @@ async function loadOverrides(): Promise<Map<string, number>> {
 }
 
 /**
- * Invalidate caches (e.g., after config/override changes)
+ * Load aircraft type map from SQLite — keyed by registration.
+ * Only includes rows with a non-null aircraftType.
+ */
+async function loadAircraftTypes(): Promise<Map<string, string>> {
+  if (cachedAircraftTypes) {
+    return cachedAircraftTypes;
+  }
+
+  try {
+    const rows = db
+      .select({
+        registration: aircraft.registration,
+        aircraftType: aircraft.aircraftType,
+      })
+      .from(aircraft)
+      .where(isNotNull(aircraft.aircraftType))
+      .all();
+
+    cachedAircraftTypes = new Map(
+      rows.map((r) => [r.registration, r.aircraftType as string])
+    );
+    log.info(`Loaded ${cachedAircraftTypes.size} aircraft types from master data`);
+    return cachedAircraftTypes;
+  } catch (error) {
+    log.error({ err: error }, "Failed to load aircraft types");
+    cachedAircraftTypes = new Map();
+    return cachedAircraftTypes;
+  }
+}
+
+/**
+ * Invalidate caches (e.g., after config/override changes or import)
  */
 export function invalidateTransformerCache(): void {
   cachedConfig = null;
   cachedOverrides = null;
+  cachedAircraftTypes = null;
+  invalidateMappingsCache(); // ensure type mapping rules are also refreshed
   log.info("Cache invalidated");
 }
 
@@ -119,13 +163,21 @@ export async function transformWorkPackages(
   const config = await loadConfig();
   const overrides = await loadOverrides();
 
-  // Normalize aircraft types in batch
-  // Prefer field_5 (actual type from SharePoint) or AircraftType, fallback to registration
+  // Load aircraft master type map (registration → aircraftType from ac.json field_5)
+  const aircraftTypeMap = await loadAircraftTypes();
+
+  // Resolve type per WP:
+  //   1. Aircraft master data (truth source — populated from ac.json field_5)
+  //   2. WP field_5 (raw type from the work package record itself)
+  //   3. WP AircraftType fallback field
+  //   4. null → normalizer returns raw string or "Unknown" if nothing present
   const rawTypes = raw.map((wp) =>
-    wp.Aircraft?.field_5 ?? wp.Aircraft?.AircraftType ?? wp.Aircraft?.Title ?? null
+    aircraftTypeMap.get(wp.Aircraft?.Title ?? "") ??
+    wp.Aircraft?.field_5 ??
+    wp.Aircraft?.AircraftType ??
+    null
   );
-  const normalizedTypesModule = await import("@/lib/utils/aircraft-type");
-  const normalizedTypes = await normalizedTypesModule.normalizeAircraftTypes(rawTypes);
+  const normalizedTypes = await normalizeAircraftTypes(rawTypes);
 
   return raw.map((wp, idx): WorkPackage => {
     // Parse dates

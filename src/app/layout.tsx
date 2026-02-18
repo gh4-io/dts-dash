@@ -6,7 +6,7 @@ import { ThemeScript } from "@/components/layout/theme-script";
 import { TimelineScript } from "@/components/layout/timeline-script";
 import { PreferencesLoader } from "@/components/layout/preferences-loader";
 import { AppConfigProvider } from "@/components/layout/app-config-provider";
-import { getAppTitle } from "@/lib/config/loader";
+import { getAppTitle, getPasswordRequirements } from "@/lib/config/loader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,6 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const appTitle = getAppTitle();
+  const { minLength: passwordMinLength } = getPasswordRequirements();
 
   return (
     <html lang="en" className="theme-neutral" suppressHydrationWarning>
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AppConfigProvider appTitle={appTitle}>
+        <AppConfigProvider appTitle={appTitle} passwordMinLength={passwordMinLength}>
           <AuthProvider>
             <ThemeProvider>
               <PreferencesLoader />

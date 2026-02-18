@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 import type { FilterState, FilterActions } from "@/types";
+import { getTimelineFromWindow } from "@/lib/utils/timeline-defaults";
 
 /**
  * Re-interpret a UTC ISO date string from one timezone to another.
@@ -115,30 +116,6 @@ function computeOffsetRange(
     start: new Date(floorHour(now + startOffset * MS_PER_DAY)).toISOString(),
     end: new Date(floorHour(now + endOffset * MS_PER_DAY)).toISOString(),
   };
-}
-
-/**
- * Read YAML timeline defaults injected by TimelineScript into <head>.
- * Falls back to hardcoded values matching loader.ts DEFAULT_TIMELINE.
- */
-function getTimelineFromWindow(): {
-  startOffset: number;
-  endOffset: number;
-  defaultTimezone: string;
-} {
-  if (
-    typeof window !== "undefined" &&
-    (window as unknown as Record<string, unknown>).__TIMELINE_DEFAULTS__
-  ) {
-    const tl = (window as unknown as Record<string, unknown>).__TIMELINE_DEFAULTS__ as {
-      startOffset: number;
-      endOffset: number;
-      defaultTimezone: string;
-    };
-    return tl;
-  }
-  // Hardcoded fallback — must match DEFAULT_TIMELINE in loader.ts
-  return { startOffset: -0.5, endOffset: 2.5, defaultTimezone: "America/New_York" };
 }
 
 function getDefaults(): FilterState {

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
+import { DEFAULT_CLEANUP_GRACE_HOURS } from "@/lib/data/config-defaults";
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ const DEFAULT_TIMELINE: TimelineDefaults = {
 };
 const DEFAULT_FLIGHT_SETTINGS: FlightSettings = {
   hideCanceled: true,
-  cleanupGraceHours: 6,
+  cleanupGraceHours: DEFAULT_CLEANUP_GRACE_HOURS,
 };
 const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
   minLength: 12,
