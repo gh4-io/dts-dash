@@ -95,36 +95,40 @@ export async function seedData(options: SeedOptions = {}) {
     }
   }
 
-  // ─── System User ──────────────────────────────────────────────────────────
+  // ─── System User (full only) ──────────────────────────────────────────────
+  // Internal-only user (no password, inactive) used as FK target for
+  // import_log.importedBy when work packages are seeded or ingested via API.
 
-  const systemUserSeed = SEED_USERS.find((u) => u.password === "");
-  if (systemUserSeed) {
-    const systemAuthId = systemUserSeed.authId || "00000000-0000-0000-0000-000000000000";
-    const existingSystem = db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.authId, systemAuthId))
-      .get();
-
-    if (!existingSystem) {
-      const row = db
-        .insert(schema.users)
-        .values({
-          authId: systemAuthId,
-          email: systemUserSeed.email,
-          displayName: systemUserSeed.displayName,
-          passwordHash: "",
-          role: systemUserSeed.role,
-          isActive: systemUserSeed.isActive,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning({ id: schema.users.id })
+  if (full) {
+    const systemUserSeed = SEED_USERS.find((u) => u.password === "");
+    if (systemUserSeed) {
+      const systemAuthId = systemUserSeed.authId || "00000000-0000-0000-0000-000000000000";
+      const existingSystem = db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.authId, systemAuthId))
         .get();
-      systemUserId = row.id;
-      log.info("Seeded system user for API ingestion");
-    } else {
-      systemUserId = existingSystem.id;
+
+      if (!existingSystem) {
+        const row = db
+          .insert(schema.users)
+          .values({
+            authId: systemAuthId,
+            email: systemUserSeed.email,
+            displayName: systemUserSeed.displayName,
+            passwordHash: "",
+            role: systemUserSeed.role,
+            isActive: systemUserSeed.isActive,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: schema.users.id })
+          .get();
+        systemUserId = row.id;
+        log.info("Seeded system user for API ingestion");
+      } else {
+        systemUserId = existingSystem.id;
+      }
     }
   }
 
@@ -168,28 +172,30 @@ export async function seedData(options: SeedOptions = {}) {
     log.info(`Seeded ${SEED_AIRCRAFT_TYPE_MAPPINGS.length} aircraft type mappings`);
   }
 
-  // ─── App Config ───────────────────────────────────────────────────────────
+  // ─── App Config (full only) ────────────────────────────────────────────────
 
-  const existingConfig = db.select().from(schema.appConfig).all();
+  if (full) {
+    const existingConfig = db.select().from(schema.appConfig).all();
 
-  if (existingConfig.length === 0) {
-    db.insert(schema.appConfig)
-      .values(SEED_APP_CONFIG.map((d) => ({ ...d, updatedAt: now })))
-      .run();
-    log.info("Seeded default app configuration");
-  } else {
-    // Idempotent: add any missing config keys
-    for (const d of SEED_APP_CONFIG) {
-      const existing = db
-        .select()
-        .from(schema.appConfig)
-        .where(eq(schema.appConfig.key, d.key))
-        .get();
-      if (!existing) {
-        db.insert(schema.appConfig)
-          .values({ ...d, updatedAt: now })
-          .run();
-        log.info(`Seeded config: ${d.key} = ${d.value || "(empty)"}`);
+    if (existingConfig.length === 0) {
+      db.insert(schema.appConfig)
+        .values(SEED_APP_CONFIG.map((d) => ({ ...d, updatedAt: now })))
+        .run();
+      log.info("Seeded default app configuration");
+    } else {
+      // Idempotent: add any missing config keys
+      for (const d of SEED_APP_CONFIG) {
+        const existing = db
+          .select()
+          .from(schema.appConfig)
+          .where(eq(schema.appConfig.key, d.key))
+          .get();
+        if (!existing) {
+          db.insert(schema.appConfig)
+            .values({ ...d, updatedAt: now })
+            .run();
+          log.info(`Seeded config: ${d.key} = ${d.value || "(empty)"}`);
+        }
       }
     }
   }

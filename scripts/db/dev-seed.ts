@@ -2,7 +2,7 @@
 /**
  * db:dev-seed — Seed database for local development.
  *
- * Default: Seeds users, system user, aircraft type mappings, and app config.
+ * Default: Seeds test users and aircraft type mappings only.
  * --full:  Seeds ALL data (equivalent to db:seed).
  *
  * Idempotent: safe to run multiple times.
@@ -24,7 +24,7 @@ async function main() {
       `  ${c.yellow}--full${c.reset} mode: seeding ALL data (users, customers, work packages, etc.)`,
     );
   } else {
-    log("  Minimal mode: seeding users + aircraft type mappings + app config");
+    log("  Minimal mode: seeding test users + aircraft type mappings");
     log(
       `  Use ${c.yellow}--full${c.reset} to seed all data (customers, work packages, reference tables).`,
     );
@@ -42,12 +42,11 @@ async function main() {
       log("");
       log("Seeded:", "blue");
       log("  - Test users (admin@local, user@local)");
-      log("  - System user (API ingestion)");
       log("  - Aircraft type mappings (31 patterns)");
-      log("  - App config (shift definitions, defaults)");
       log("");
       log("Not seeded (use --full):", "dim");
-      log("  - Customers, manufacturers, aircraft models, engine types");
+      log("  - System user, app config, customers");
+      log("  - Manufacturers, aircraft models, engine types");
       log("  - Work packages (361 records)");
     }
   } catch (err) {
