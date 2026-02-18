@@ -75,6 +75,7 @@ export function parseCustomerCSV(
         mocPhone: row.mocPhone?.trim() || row.moc_phone?.trim(),
         iataCode: row.iataCode?.trim() || row.iata_code?.trim(),
         icaoCode: row.icaoCode?.trim() || row.icao_code?.trim(),
+        guid: row.guid?.trim(),
         source:
           (row.source?.trim() as "imported" | "confirmed" | undefined) ||
           "imported",
@@ -124,6 +125,8 @@ export function parseCustomerJSON(
             : undefined,
           iataCode: record.iata ? String(record.iata).trim() : undefined,
           icaoCode: record.icao ? String(record.icao).trim() : undefined,
+          spId: record.ID != null ? Number(record.ID) : undefined,
+          guid: record.GUID ? String(record.GUID).trim() : undefined,
           source: "imported",
         });
       }
@@ -158,6 +161,7 @@ export function parseCustomerJSON(
           icaoCode: record.icaoCode
             ? String(record.icaoCode).trim()
             : undefined,
+          guid: record.guid ? String(record.guid).trim() : undefined,
           source:
             (record.source as "imported" | "confirmed" | undefined) ||
             "imported",
@@ -209,7 +213,23 @@ export async function validateCustomerImport(
 
   // Fetch existing customers
   const existingCustomers = await db.select().from(customers);
-  const existingMap = new Map(existingCustomers.map((c) => [c.name, c]));
+
+  // Build lookup maps for cascading dedup
+  const guidMap = new Map(
+    existingCustomers.filter((c) => c.guid).map((c) => [c.guid!, c])
+  );
+  const nameMap = new Map(existingCustomers.map((c) => [c.name, c]));
+
+  // Cascading lookup: GUID → name
+  function findExisting(rec: CustomerImportRecord) {
+    // 1. GUID match (highest priority)
+    if (rec.guid) {
+      const byGuid = guidMap.get(rec.guid);
+      if (byGuid) return byGuid;
+    }
+    // 2. Name fallback
+    return nameMap.get(rec.name);
+  }
 
   // Get used colors for auto-assignment
   const usedColors = existingCustomers.map((c) => c.color);
@@ -217,7 +237,7 @@ export async function validateCustomerImport(
   const now = new Date().toISOString();
 
   for (const record of records) {
-    const existing = existingMap.get(record.name);
+    const existing = findExisting(record);
 
     if (!existing) {
       // New customer - assign color if not provided
@@ -225,7 +245,7 @@ export async function validateCustomerImport(
       const colorText = record.colorText || "#ffffff";
 
       toAdd.push({
-        id: crypto.randomUUID(),
+        id: 0, // placeholder — auto-incremented by SQLite on insert
         name: record.name,
         displayName: record.displayName || record.name,
         color,
@@ -240,6 +260,8 @@ export async function validateCustomerImport(
         mocPhone: record.mocPhone || null,
         iataCode: record.iataCode || null,
         icaoCode: record.icaoCode || null,
+        spId: record.spId ?? null,
+        guid: record.guid || null,
         source: record.source || "imported",
         createdAt: now,
         updatedAt: now,
@@ -253,8 +275,25 @@ export async function validateCustomerImport(
       const isConfirmed = existing.source === "confirmed";
       const willOverwrite = isConfirmed && overwriteConfirmedMode !== "allow";
 
+      // Detect name change (found by GUID but name differs)
+      let newName = existing.name;
+      if (record.guid && existing.guid === record.guid && record.name !== existing.name) {
+        const nameConflict = nameMap.get(record.name);
+        if (nameConflict && nameConflict.id !== existing.id) {
+          warnings.push(
+            `Customer GUID "${record.guid}": name changed from "${existing.name}" to "${record.name}" but "${record.name}" already exists — keeping old name`
+          );
+        } else {
+          warnings.push(
+            `Customer GUID "${record.guid}": name changed from "${existing.name}" to "${record.name}"`
+          );
+          newName = record.name;
+        }
+      }
+
       const updated: Customer = {
         ...existing,
+        name: newName,
         displayName: record.displayName || existing.displayName,
         color: record.color || existing.color,
         colorText: record.colorText || existing.colorText,
@@ -266,6 +305,8 @@ export async function validateCustomerImport(
         mocPhone: record.mocPhone || existing.mocPhone,
         iataCode: record.iataCode || existing.iataCode,
         icaoCode: record.icaoCode || existing.icaoCode,
+        spId: record.spId ?? existing.spId,
+        guid: record.guid || existing.guid,
         source: isConfirmed ? "imported" : record.source || "imported", // Downgrade if confirmed
         updatedAt: now,
       };
@@ -316,7 +357,7 @@ export async function commitCustomerImport(
   options: {
     source: "file" | "paste" | "api";
     fileName?: string;
-    userId: string;
+    userId: number;
     overrideConflicts: boolean;
   }
 ): Promise<CommitResult> {
@@ -333,7 +374,7 @@ export async function commitCustomerImport(
   if (!validation.valid && !options.overrideConflicts) {
     return {
       success: false,
-      logId: "",
+      logId: 0,
       summary: { added: 0, updated: 0, skipped: 0 },
       errors: validation.details.errors,
       warnings: validation.details.warnings,
@@ -341,13 +382,12 @@ export async function commitCustomerImport(
   }
 
   const now = new Date().toISOString();
-  const logId = crypto.randomUUID();
 
   try {
-    // Insert new customers
+    // Insert new customers (omit placeholder id — auto-incremented by SQLite)
     if (validation.details.add.length > 0) {
       await db.insert(customers).values(
-        validation.details.add.map((c) => ({
+        validation.details.add.map(({ id: _id, ...c }) => ({
           ...c,
           createdBy: options.userId,
           updatedBy: options.userId,
@@ -371,8 +411,7 @@ export async function commitCustomerImport(
     }
 
     // Log import
-    await db.insert(masterDataImportLog).values({
-      id: logId,
+    const inserted = await db.insert(masterDataImportLog).values({
       importedAt: now,
       dataType: "customer",
       source: options.source,
@@ -390,7 +429,9 @@ export async function commitCustomerImport(
       status: "success",
       warnings: JSON.stringify(validation.details.warnings),
       errors: null,
-    });
+    }).returning({ id: masterDataImportLog.id }).get();
+
+    const logId = inserted.id;
 
     return {
       success: true,
@@ -407,8 +448,7 @@ export async function commitCustomerImport(
       warnings: validation.details.warnings,
     };
   } catch (error) {
-    await db.insert(masterDataImportLog).values({
-      id: logId,
+    const errorInserted = await db.insert(masterDataImportLog).values({
       importedAt: now,
       dataType: "customer",
       source: options.source,
@@ -424,11 +464,11 @@ export async function commitCustomerImport(
       errors: JSON.stringify([
         error instanceof Error ? error.message : String(error),
       ]),
-    });
+    }).returning({ id: masterDataImportLog.id }).get();
 
     return {
       success: false,
-      logId,
+      logId: errorInserted.id,
       summary: { added: 0, updated: 0, skipped: records.length },
       errors: [error instanceof Error ? error.message : String(error)],
     };
@@ -444,6 +484,7 @@ export async function exportCustomersCSV(): Promise<string> {
   const headers = [
     "id",
     "name",
+    "guid",
     "displayName",
     "color",
     "colorText",

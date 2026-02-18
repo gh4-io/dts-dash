@@ -9,7 +9,7 @@ import path from "path";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SeedUser {
-  id: string | null;
+  authId: string | null;
   email: string;
   username: string | null;
   displayName: string;
@@ -24,6 +24,7 @@ export interface SeedCustomer {
   color: string;
   colorText: string;
   sortOrder: number;
+  guid?: string; // SharePoint GUID — optional in seed data
 }
 
 export interface SeedAircraftTypeMapping {

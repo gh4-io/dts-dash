@@ -35,7 +35,7 @@ export type WpStatus = "New" | "Approved" | "Closed" | "Printed" | "Canceled";
 
 export type MHSource = "workpackage" | "default" | "manual";
 
-export type ConfidenceLevel = "exact" | "pattern" | "fallback";
+export type ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback";
 
 // ─── Raw SharePoint Input ───────────────────────────────────────────────────
 
@@ -90,7 +90,7 @@ export interface WorkPackage {
   effectiveMH: number;
   mhSource: MHSource;
   manualMHOverride: number | null;
-  inferredType: AircraftType;
+  inferredType: string; // canonical type name or raw type string (D-032)
 
   // Optional fields (present in some SP exports)
   title: string | null;
@@ -112,7 +112,7 @@ export interface FilterState {
   timezone: string;
   operators: string[];
   aircraft: string[];
-  types: AircraftType[];
+  types: string[]; // canonical type names or raw strings (D-032)
 }
 
 export interface FilterActions {
@@ -121,7 +121,7 @@ export interface FilterActions {
   setTimezone: (v: string) => void;
   setOperators: (v: string[]) => void;
   setAircraft: (v: string[]) => void;
-  setTypes: (v: AircraftType[]) => void;
+  setTypes: (v: string[]) => void;
   reset: () => void;
   hydrate: (params: Partial<FilterState>) => void;
   hydrateDefaults: (dateRange: string, tz: string) => void;
@@ -201,7 +201,7 @@ export interface PaginatedResponse<T> {
 export type DataSource = "inferred" | "imported" | "confirmed";
 
 export interface Customer {
-  id: string;
+  id: number;
   name: string;
   displayName: string;
   color: string;
@@ -219,20 +219,25 @@ export interface Customer {
   iataCode: string | null;
   icaoCode: string | null;
 
+  // SharePoint identifiers
+  spId: number | null;
+  guid: string | null; // SharePoint GUID — primary dedup key when present
+
   // Source tracking
   source: DataSource;
 
   // Audit
   createdAt: string;
   updatedAt: string;
-  createdBy: string | null;
-  updatedBy: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
 }
 
 // ─── User & Auth ────────────────────────────────────────────────────────────
 
 export interface User {
-  id: string;
+  id: number;
+  authId: string;
   email: string;
   username: string | null;
   displayName: string;
@@ -243,7 +248,7 @@ export interface User {
 }
 
 export interface UserPreferences {
-  userId: string;
+  userId: number;
   colorMode: ColorMode;
   themePreset: ThemePreset;
   accentColor: string | null;
@@ -257,7 +262,7 @@ export interface UserPreferences {
 // ─── Aircraft Type Mapping (D-015) ──────────────────────────────────────────
 
 export interface AircraftTypeMapping {
-  id: string;
+  id: number;
   pattern: string;
   canonicalType: AircraftType;
   description: string | null;
@@ -268,21 +273,21 @@ export interface AircraftTypeMapping {
 }
 
 export interface NormalizedAircraftType {
-  canonical: AircraftType;
+  canonical: string; // canonical name if mapped, raw string if unmatched, "Unknown" if no data (D-032)
   raw: string;
   confidence: ConfidenceLevel;
-  mappingId: string | null;
+  mappingId: number | null;
 }
 
 // ─── Import Log ─────────────────────────────────────────────────────────────
 
 export interface ImportLog {
-  id: string;
+  id: number;
   importedAt: string;
   recordCount: number;
   source: "file" | "paste" | "api";
   fileName: string | null;
-  importedBy: string;
+  importedBy: number;
   status: "success" | "partial" | "failed";
   errors: string | null;
 }
@@ -290,8 +295,8 @@ export interface ImportLog {
 // ─── Analytics Event ────────────────────────────────────────────────────────
 
 export interface AnalyticsEvent {
-  id: string;
-  userId: string;
+  id: number;
+  userId: number;
   eventType: string;
   eventData: string | null;
   page: string | null;
@@ -328,7 +333,7 @@ export interface AppConfig {
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────
 
 export interface Manufacturer {
-  id: string;
+  id: number;
   name: string;
   sortOrder: number;
   isActive: boolean;
@@ -337,10 +342,10 @@ export interface Manufacturer {
 // ─── Master Data: Aircraft Models ───────────────────────────────────────────
 
 export interface AircraftModel {
-  id: string;
+  id: number;
   modelCode: string;
   canonicalType: string;
-  manufacturerId: string | null;
+  manufacturerId: number | null;
   displayName: string;
   sortOrder: number;
   isActive: boolean;
@@ -349,7 +354,7 @@ export interface AircraftModel {
 // ─── Master Data: Engine Types ──────────────────────────────────────────────
 
 export interface EngineType {
-  id: string;
+  id: number;
   name: string;
   manufacturer: string | null;
   sortOrder: number;
@@ -359,11 +364,17 @@ export interface EngineType {
 // ─── Master Data: Aircraft ──────────────────────────────────────────────────
 
 export interface Aircraft {
+  id: number;
   registration: string;
-  aircraftModelId: string | null;
-  operatorId: string | null;
-  manufacturerId: string | null;
-  engineTypeId: string | null;
+  // SharePoint identifiers
+  spId: number | null;
+  guid: string | null; // SharePoint GUID — primary dedup key when present
+  // Direct type from ac.json field_5 — truth source for type resolution
+  aircraftType: string | null;
+  aircraftModelId: number | null;
+  operatorId: number | null;
+  manufacturerId: number | null;
+  engineTypeId: number | null;
   serialNumber: string | null;
   age: string | null;
   lessor: string | null;
@@ -374,14 +385,14 @@ export interface Aircraft {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  createdBy: string | null;
-  updatedBy: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
 }
 
 // ─── Master Data Import Log ─────────────────────────────────────────────────
 
 export interface MasterDataImportLog {
-  id: string;
+  id: number;
   importedAt: string;
   dataType: "customer" | "aircraft";
   source: "file" | "paste" | "api";
@@ -391,7 +402,7 @@ export interface MasterDataImportLog {
   recordsAdded: number;
   recordsUpdated: number;
   recordsSkipped: number;
-  importedBy: string;
+  importedBy: number;
   status: "success" | "partial" | "failed";
   warnings: string | null;
   errors: string | null;

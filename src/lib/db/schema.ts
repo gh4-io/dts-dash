@@ -28,17 +28,23 @@ export const users = sqliteTable("users", {
 
 // ─── Sessions (Auth.js) ─────────────────────────────────────────────────────
 
-export const sessions = sqliteTable("sessions", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  sessionToken: text("session_token").unique(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  expiresAt: text("expires_at").notNull(),
-  createdAt: text("created_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-});
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    sessionToken: text("session_token").unique(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    expiresIdx: index("idx_sessions_expires").on(table.expiresAt),
+  }),
+);
 
 // ─── Customers ──────────────────────────────────────────────────────────────
 
@@ -60,6 +66,10 @@ export const customers = sqliteTable("customers", {
   mocPhone: text("moc_phone"),
   iataCode: text("iata_code"),
   icaoCode: text("icao_code"),
+
+  // SharePoint identifiers
+  spId: integer("sp_id").unique(), // from cust.json ID field
+  guid: text("guid").unique(), // SharePoint GUID from cust.json — primary dedup key when present
 
   // Source tracking
   source: text("source", {
@@ -132,6 +142,9 @@ export const workPackages = sqliteTable(
     documentSetId: integer("document_set_id"),
     aircraftSpId: integer("aircraft_sp_id"),
 
+    // SP ID stubs for future linking
+    customerSpId: integer("customer_sp_id"), // stub — no source in wp.json currently
+
     // SharePoint metadata
     spModified: text("sp_modified"),
     spCreated: text("sp_created"),
@@ -150,6 +163,9 @@ export const workPackages = sqliteTable(
     aircraftRegIdx: index("idx_wp_aircraft_reg").on(table.aircraftReg),
     importLogIdx: index("idx_wp_import_log").on(table.importLogId),
     statusIdx: index("idx_wp_status").on(table.status),
+    // Compound indexes for date range and filtered queries
+    arrivalDepartureIdx: index("idx_wp_arrival_departure").on(table.arrival, table.departure),
+    customerArrivalIdx: index("idx_wp_customer_arrival").on(table.customer, table.arrival),
   }),
 );
 
@@ -209,18 +225,24 @@ export const importLog = sqliteTable("import_log", {
 
 // ─── Analytics Events ───────────────────────────────────────────────────────
 
-export const analyticsEvents = sqliteTable("analytics_events", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  eventType: text("event_type").notNull(),
-  eventData: text("event_data"),
-  page: text("page"),
-  createdAt: text("created_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-});
+export const analyticsEvents = sqliteTable(
+  "analytics_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id),
+    eventType: text("event_type").notNull(),
+    eventData: text("event_data"),
+    page: text("page"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    userCreatedIdx: index("idx_ae_user_created").on(table.userId, table.createdAt),
+  }),
+);
 
 // ─── App Config ─────────────────────────────────────────────────────────────
 
@@ -285,9 +307,17 @@ export const engineTypes = sqliteTable("engine_types", {
 export const aircraft = sqliteTable(
   "aircraft",
   {
-    registration: text("registration").primaryKey(), // e.g., "C-FOIJ"
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    registration: text("registration").notNull().unique(), // e.g., "C-FOIJ"
 
-    // Foreign keys to lookup tables
+    // SharePoint identifiers
+    spId: integer("sp_id").unique(), // from ac.json ID field — links work_packages.aircraft_sp_id
+    guid: text("guid").unique(), // SharePoint GUID from ac.json — primary dedup key when present
+
+    // Direct type from ac.json field_5 (e.g. "767-200(F)") — truth source for type resolution
+    aircraftType: text("aircraft_type"),
+
+    // Foreign keys to lookup tables (optional refinement — populated when models/mfr seeded)
     aircraftModelId: integer("aircraft_model_id").references(() => aircraftModels.id),
     operatorId: integer("operator_id").references(() => customers.id),
     manufacturerId: integer("manufacturer_id").references(() => manufacturers.id),

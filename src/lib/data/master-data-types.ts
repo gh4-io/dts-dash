@@ -15,13 +15,17 @@ export interface CustomerImportRecord {
   mocPhone?: string;
   iataCode?: string;
   icaoCode?: string;
+  spId?: number; // SharePoint record ID from cust.json ID field
+  guid?: string; // SharePoint GUID — primary dedup key when present
   source?: "imported" | "confirmed";
 }
 
 export interface AircraftImportRecord {
   registration: string;
-  model: string; // Model code (e.g., "767-300(F)")
+  model: string; // Model code / type (e.g., "767-300(F)") — from field_5
   operator: string; // Customer name (fuzzy matched)
+  spId?: number; // SharePoint record ID from ac.json ID field
+  guid?: string; // SharePoint GUID — primary dedup key when present
   manufacturer?: string;
   engineType?: string;
   serialNumber?: string;
@@ -61,7 +65,7 @@ export interface ValidationDetails<T> {
 
 export interface CommitResult {
   success: boolean;
-  logId: string;
+  logId: number;
   summary: {
     added: number;
     updated: number;

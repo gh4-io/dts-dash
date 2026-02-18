@@ -53,6 +53,7 @@ export function parseAircraftCSV(
         registration: row.registration.trim(),
         model: row.model.trim(),
         operator: row.operator.trim(),
+        guid: row.guid?.trim(),
         manufacturer: row.manufacturer?.trim(),
         engineType: row.engineType?.trim() || row.engine_type?.trim(),
         serialNumber: row.serialNumber?.trim() || row.serial_number?.trim(),
@@ -105,6 +106,8 @@ export function parseAircraftJSON(
           registration,
           model: model || "Unknown",
           operator: operator || "Unknown",
+          spId: record.ID != null ? Number(record.ID) : undefined,
+          guid: record.GUID ? String(record.GUID).trim() : undefined,
           manufacturer: record.field_4
             ? String(record.field_4).trim()
             : undefined,
@@ -129,6 +132,7 @@ export function parseAircraftJSON(
           registration,
           model: model || "Unknown",
           operator: operator || "Unknown",
+          guid: record.guid ? String(record.guid).trim() : undefined,
           manufacturer: record.manufacturer
             ? String(record.manufacturer).trim()
             : undefined,
@@ -201,7 +205,28 @@ export async function validateAircraftImport(
 
   // Fetch existing data
   const existingAircraft = await db.select().from(aircraft);
-  const existingMap = new Map(existingAircraft.map((a) => [a.registration, a]));
+
+  // Build lookup maps for cascading dedup
+  const guidMap = new Map(
+    existingAircraft.filter((a) => a.guid).map((a) => [a.guid!, a])
+  );
+  const regMap = new Map(existingAircraft.map((a) => [a.registration, a]));
+
+  // Cascading lookup: GUID → registration+serialNumber → registration
+  function findExisting(rec: AircraftImportRecord) {
+    // 1. GUID match (highest priority)
+    if (rec.guid) {
+      const byGuid = guidMap.get(rec.guid);
+      if (byGuid) return byGuid;
+    }
+    // 2. Registration + serialNumber heuristic (when both present)
+    if (rec.serialNumber) {
+      const byReg = regMap.get(rec.registration);
+      if (byReg && byReg.serialNumber === rec.serialNumber) return byReg;
+    }
+    // 3. Registration fallback
+    return regMap.get(rec.registration);
+  }
 
   const allCustomers = await db.select().from(customers);
   const allManufacturers = await db.select().from(manufacturers);
@@ -215,7 +240,7 @@ export async function validateAircraftImport(
   const now = new Date().toISOString();
 
   for (const record of records) {
-    const existing = existingMap.get(record.registration);
+    const existing = findExisting(record);
 
     // Fuzzy match operator
     const fuzzyResult = fuzzyMatchCustomer(record.operator, allCustomers);
@@ -246,7 +271,11 @@ export async function validateAircraftImport(
     if (!existing) {
       // New aircraft
       toAdd.push({
+        id: 0, // placeholder — auto-incremented by SQLite on insert
         registration: record.registration,
+        spId: record.spId ?? null,
+        guid: record.guid || null,
+        aircraftType: record.model !== "Unknown" ? record.model : null,
         aircraftModelId: modelId,
         operatorId: fuzzyResult.matched ? fuzzyResult.customerId : null,
         manufacturerId,
@@ -269,8 +298,29 @@ export async function validateAircraftImport(
       const isConfirmed = existing.source === "confirmed";
       const willOverwrite = isConfirmed && overwriteConfirmedMode !== "allow";
 
+      // Detect registration change (found by GUID but registration differs)
+      let newRegistration = existing.registration;
+      if (record.guid && existing.guid === record.guid && record.registration !== existing.registration) {
+        // Check if new registration conflicts with another existing aircraft
+        const regConflict = regMap.get(record.registration);
+        if (regConflict && regConflict.id !== existing.id) {
+          warnings.push(
+            `Aircraft GUID "${record.guid}": registration changed from "${existing.registration}" to "${record.registration}" but "${record.registration}" already exists — keeping old registration`
+          );
+        } else {
+          warnings.push(
+            `Aircraft GUID "${record.guid}": registration changed from "${existing.registration}" to "${record.registration}"`
+          );
+          newRegistration = record.registration;
+        }
+      }
+
       const updated: Aircraft = {
         ...existing,
+        registration: newRegistration,
+        spId: record.spId ?? existing.spId,
+        guid: record.guid || existing.guid,
+        aircraftType: (record.model !== "Unknown" ? record.model : null) ?? existing.aircraftType,
         aircraftModelId: modelId || existing.aircraftModelId,
         operatorId: fuzzyResult.matched
           ? fuzzyResult.customerId
@@ -335,7 +385,7 @@ export async function commitAircraftImport(
   options: {
     source: "file" | "paste" | "api";
     fileName?: string;
-    userId: string;
+    userId: number;
     overrideConflicts: boolean;
   }
 ): Promise<CommitResult> {
@@ -346,7 +396,7 @@ export async function commitAircraftImport(
   if (!validation.valid && !options.overrideConflicts) {
     return {
       success: false,
-      logId: "",
+      logId: 0,
       summary: { added: 0, updated: 0, skipped: 0 },
       errors: validation.details.errors,
       warnings: validation.details.warnings,
@@ -354,13 +404,12 @@ export async function commitAircraftImport(
   }
 
   const now = new Date().toISOString();
-  const logId = crypto.randomUUID();
 
   try {
-    // Insert new aircraft
+    // Insert new aircraft (omit id — auto-incremented by SQLite)
     if (validation.details.add.length > 0) {
       await db.insert(aircraft).values(
-        validation.details.add.map((a) => ({
+        validation.details.add.map(({ id: _id, ...a }) => ({
           ...a,
           createdBy: options.userId,
           updatedBy: options.userId,
@@ -368,7 +417,7 @@ export async function commitAircraftImport(
       );
     }
 
-    // Update existing aircraft
+    // Update existing aircraft (by id, supports registration changes)
     for (const update of validation.details.update) {
       if (update.conflict && !options.overrideConflicts) {
         continue;
@@ -380,12 +429,11 @@ export async function commitAircraftImport(
           ...update.new,
           updatedBy: options.userId,
         })
-        .where(eq(aircraft.registration, update.existing.registration));
+        .where(eq(aircraft.id, update.existing.id));
     }
 
     // Log import
-    await db.insert(masterDataImportLog).values({
-      id: logId,
+    const inserted = await db.insert(masterDataImportLog).values({
       importedAt: now,
       dataType: "aircraft",
       source: options.source,
@@ -409,7 +457,9 @@ export async function commitAircraftImport(
         ),
       ]),
       errors: null,
-    });
+    }).returning({ id: masterDataImportLog.id }).get();
+
+    const logId = inserted.id;
 
     return {
       success: true,
@@ -426,8 +476,7 @@ export async function commitAircraftImport(
       warnings: validation.details.warnings,
     };
   } catch (error) {
-    await db.insert(masterDataImportLog).values({
-      id: logId,
+    const errorInserted = await db.insert(masterDataImportLog).values({
       importedAt: now,
       dataType: "aircraft",
       source: options.source,
@@ -443,11 +492,11 @@ export async function commitAircraftImport(
       errors: JSON.stringify([
         error instanceof Error ? error.message : String(error),
       ]),
-    });
+    }).returning({ id: masterDataImportLog.id }).get();
 
     return {
       success: false,
-      logId,
+      logId: errorInserted.id,
       summary: { added: 0, updated: 0, skipped: records.length },
       errors: [error instanceof Error ? error.message : String(error)],
     };
@@ -462,6 +511,7 @@ export async function exportAircraftCSV(): Promise<string> {
 
   const headers = [
     "registration",
+    "guid",
     "aircraftModelId",
     "operatorId",
     "manufacturerId",

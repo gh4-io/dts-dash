@@ -26,11 +26,7 @@ export async function POST() {
     let resetCount = 0;
 
     for (const seed of SEED_CUSTOMERS) {
-      const existing = db
-        .select()
-        .from(customers)
-        .where(eq(customers.name, seed.name))
-        .get();
+      const existing = db.select().from(customers).where(eq(customers.name, seed.name)).get();
 
       if (existing) {
         db.update(customers)
@@ -49,12 +45,12 @@ export async function POST() {
         // Re-create if it was hard-deleted somehow
         db.insert(customers)
           .values({
-            id: crypto.randomUUID(),
             name: seed.name,
             displayName: seed.displayName,
             color: seed.color,
             colorText: getContrastText(seed.color),
             sortOrder: seed.sortOrder,
+            guid: seed.guid || null,
             isActive: true,
             createdAt: now,
             updatedAt: now,
@@ -67,9 +63,6 @@ export async function POST() {
     return NextResponse.json({ success: true, reset: resetCount });
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
