@@ -78,6 +78,8 @@ The app ingests SharePoint OData work package data (local JSON), computes derive
 - **Customer colors**: Admin-configurable, stored in SQLite, not hardcoded (D-010)
 - **Admin-configurable settings:** customer color coding is configurable via Admin Settings (stored in SQLite). No customer-specific styling should be hardcoded.
 - **Auth**: Role-based — `user`, `admin`, `superadmin`. Admin routes server-enforced (D-009)
+- **Bootstrap**: On startup, `instrumentation.ts` → `bootstrap.ts` auto-creates schema, system user, and default config. No manual `db:seed` required for first run (D-035)
+- **Self-Registration**: First user → superadmin (no invite code). Subsequent users → admin-gated via invite codes in Admin Settings (D-035)
 
 Full data model → [REQ_DataModel.md](.claude/SPECS/REQ_DataModel.md)
 
@@ -120,6 +122,7 @@ Admin routes and UI are role-gated per [REQ_Admin.md](.claude/SPECS/REQ_Admin.md
 ```
 src/app/                     — Next.js App Router pages
 src/app/login/               — Login page
+src/app/register/            — Self-registration page (first-user + invite code)
 src/app/account/             — Account page (profile, prefs, security)
 src/app/admin/               — Admin section (customers, aircraft-types, import, users, settings, analytics, audit)
 src/app/api/                 — API route handlers
@@ -137,7 +140,7 @@ src/components/account/      — Profile, preferences, security forms
 src/components/admin/        — Customer editor, user table, user form, analytics dashboard
 src/lib/auth.ts              — Auth.js configuration
 src/lib/config/loader.ts     — System config loader (server.config.yml → memory → client via AppConfigProvider)
-src/lib/db/                  — SQLite connection, Drizzle schema, seed, seed-analytics
+src/lib/db/                  — SQLite connection, Drizzle schema, seed, seed-analytics, bootstrap
 src/lib/data/                — Reader, transformer, engines
 src/lib/hooks/               — Zustand stores (filters, customers, prefs)
 src/lib/utils/               — Date, format, aircraft-type normalization (D-015), contrast helpers

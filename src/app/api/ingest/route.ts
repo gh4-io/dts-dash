@@ -7,10 +7,9 @@ import { db } from "@/lib/db/client";
 import { appConfig, importLog, users } from "@/lib/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { SYSTEM_AUTH_ID } from "@/lib/constants";
 
 const log = createChildLogger("api/ingest");
-
-const SYSTEM_AUTH_ID = "00000000-0000-0000-0000-000000000000";
 
 function getSystemUserId(): number {
   const row = db.select({ id: users.id }).from(users).where(eq(users.authId, SYSTEM_AUTH_ID)).get();

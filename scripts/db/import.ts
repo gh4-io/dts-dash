@@ -119,7 +119,7 @@ async function main() {
   const { users } = await import("@/lib/db/schema");
   const { eq } = await import("drizzle-orm");
 
-  const SYSTEM_AUTH_ID = "00000000-0000-0000-0000-000000000000";
+  const { SYSTEM_AUTH_ID } = await import("@/lib/constants");
   const systemUser = db
     .select({ id: users.id })
     .from(users)

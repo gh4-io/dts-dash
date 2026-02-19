@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { appConfig, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { SYSTEM_AUTH_ID } from "@/lib/constants";
 import {
   getChunkSession,
   appendChunk,
@@ -14,8 +15,6 @@ import {
 } from "@/lib/utils/chunk-session";
 
 const log = createChildLogger("api/ingest/chunks");
-
-const SYSTEM_AUTH_ID = "00000000-0000-0000-0000-000000000000";
 
 function getSystemUserId(): number {
   const row = db.select({ id: users.id }).from(users).where(eq(users.authId, SYSTEM_AUTH_ID)).get();

@@ -5,6 +5,9 @@
  */
 
 export async function register() {
+  // Skip during production build — only run at server startup
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+
   // Only run on server-side
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { loadServerConfig, getBaseUrl } = await import("@/lib/config/loader");
@@ -19,6 +22,10 @@ export async function register() {
       process.env.AUTH_URL = baseUrl;
       console.log(`[Instrumentation] AUTH_URL set from server.config.yml: ${baseUrl}`);
     }
+
+    // Bootstrap database (schema + system user + default config)
+    const { bootstrapDatabase } = await import("@/lib/db/bootstrap");
+    bootstrapDatabase();
 
     // Start cron scheduler
     const { startCron } = await import("@/lib/cron");

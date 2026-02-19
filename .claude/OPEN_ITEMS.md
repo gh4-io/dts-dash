@@ -999,14 +999,32 @@
 
 ---
 
+## OI-058 | Bootstrap Layer + Self-Registration + Invite Codes
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-18 |
+| **Resolved** | 2026-02-18 |
+| **Context** | Complete bootstrap system + authentication flow for fresh deployments. On startup, system auto-creates SQLite schema, a system service account (SYSTEM_AUTH_ID), and default server configuration. First user registers as superadmin (no invite code required) via `/register`. Subsequent self-registration gated by admin-controlled invite codes. |
+| **Resolution** | **Bootstrap layer** (seed.ts): Idempotent schema creation + system user injection + system defaults. **First-user registration** (/register): Accepts email/password, creates superadmin user, only works when zero users exist. **Admin-gated self-registration** (/register with invite code toggle): Admin controls toggle in Settings. When enabled, admins can generate/revoke invite codes (stored in `invite_codes` table). Users register with email/password + code. **Shared constants**: SYSTEM_AUTH_ID extracted to `src/lib/constants.ts`. **Database migration**: M004 adds `invite_codes` table for existing deployments. **All changes additive**: New endpoints, new nullable columns, new optional settings per D-028 (semantic versioning). **Build**: npm run build passes. **Lint**: npm run lint clean. **Verified**: Fresh DB startup → /register accepts first user as superadmin → second user requires invite code (if enabled). |
+| **Files Created** | `src/lib/constants.ts` (SYSTEM_AUTH_ID constant) |
+| **Files Modified** | `src/lib/db/schema.ts` (invite_codes table, M004 migration), `src/lib/db/seed.ts` (bootstrap system user), `src/app/(unauthenticated)/register/page.tsx` (new route), `src/app/api/auth/register/route.ts` (registration handler), `src/app/(authenticated)/admin/settings/page.tsx` (invite code admin UI), `src/types/index.ts` (AppConfig.selfRegistrationEnabled, InviteCode interface) |
+| **Links** | [REQ_Auth.md](SPECS/REQ_Auth.md), [DECISIONS.md](DECISIONS.md) D-035, [REQ_Versioning.md](SPECS/REQ_Versioning.md) D-028 |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 14 |
+| P0 | 0 | 0 | 0 | 15 |
 | P1 | 4 | 0 | 0 | 12 |
 | P2 | 7 | 0 | 0 | 10 |
 | P3 | 2 | 0 | 2 | 0 |
-| **Total** | **13** | **0** | **2** | **36** |
+| **Total** | **13** | **0** | **2** | **37** |
 
-**Latest additions (2026-02-18)**: Added OI-047 through OI-057 (11 items total). Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), and UX improvements (system preference filter display, admin settings redesign, rate limiting configuration). Mapped to existing specs and decisions.
+**Latest additions (2026-02-18)**: Added OI-047 through OI-058 (12 items total). Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), and authentication bootstrap system (OI-058). Mapped to existing specs and decisions.

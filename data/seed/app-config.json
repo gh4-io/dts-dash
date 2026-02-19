@@ -16,5 +16,6 @@
   {
     "key": "allowedHostnames",
     "value": "[{\"id\":\"default-localhost\",\"hostname\":\"localhost\",\"port\":3000,\"protocol\":\"http\",\"enabled\":true,\"label\":\"Local Development\"}]"
-  }
+  },
+  { "key": "registrationEnabled", "value": "false" }
 ]

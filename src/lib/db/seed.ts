@@ -4,6 +4,7 @@ import * as schema from "./schema";
 import { hashSync } from "bcryptjs";
 import { eq } from "drizzle-orm";
 import { isCanceled } from "@/lib/utils/status";
+import { SYSTEM_AUTH_ID } from "@/lib/constants";
 import {
   SEED_USERS,
   SEED_CUSTOMERS,
@@ -102,7 +103,7 @@ export async function seedData(options: SeedOptions = {}) {
   if (full) {
     const systemUserSeed = SEED_USERS.find((u) => u.password === "");
     if (systemUserSeed) {
-      const systemAuthId = systemUserSeed.authId || "00000000-0000-0000-0000-000000000000";
+      const systemAuthId = systemUserSeed.authId || SYSTEM_AUTH_ID;
       const existingSystem = db
         .select()
         .from(schema.users)
@@ -290,7 +291,7 @@ export async function seedData(options: SeedOptions = {}) {
         const sysUser = db
           .select({ id: schema.users.id })
           .from(schema.users)
-          .where(eq(schema.users.authId, "00000000-0000-0000-0000-000000000000"))
+          .where(eq(schema.users.authId, SYSTEM_AUTH_ID))
           .get();
         systemUserId = sysUser?.id ?? null;
       }

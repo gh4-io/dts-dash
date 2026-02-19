@@ -56,7 +56,11 @@ This will:
 
 ### 3. First-run setup
 
-Navigate to `http://localhost:3000/setup` to create the initial admin account.
+**No manual `db:seed` is required.** The bootstrap layer (`src/lib/db/bootstrap.ts`, called from `instrumentation.ts`) automatically creates all tables, runs idempotent migrations, and seeds the system user on every startup.
+
+To create the first admin account, navigate to:
+- `http://localhost:3000/register` — self-registration is open when no real users exist; the first user is granted `superadmin` role automatically.
+- `http://localhost:3000/setup` — the legacy setup endpoint also remains available.
 
 Alternatively, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` in `.env.local` before the first start.
 
@@ -134,7 +138,11 @@ pm2 startup  # Follow instructions to enable auto-start on boot
 
 ### 5. First-run setup
 
-Navigate to `http://<host>:3000/setup` to create the initial admin account.
+**No manual `db:seed` is required.** The bootstrap layer auto-creates the schema and system user on startup.
+
+To create the first admin account, navigate to:
+- `http://<host>:3000/register` — self-registration is open when no real users exist; the first user is granted `superadmin` role automatically.
+- `http://<host>:3000/setup` — the legacy setup endpoint also remains available.
 
 ### 6. Seed reference data (recommended)
 
@@ -300,6 +308,6 @@ Use the **Admin > Cron Jobs** UI to view, edit, suspend/resume, and manually tri
 | `AUTH_SECRET is not set` error | Missing env var | Set `AUTH_SECRET` in `.env.local` |
 | `AUTH_SECRET must be at least 32 characters` | Secret too short | Run `npm run generate-secret` |
 | Health check returns 503 | Database unreachable | Check `DATABASE_PATH`, file permissions |
-| Login page shows but can't log in | No users exist | Visit `/setup` to create initial admin |
+| Login page shows but can't log in | No users exist | Visit `/register` (first user) or `/setup` to create initial admin |
 | Port 3000 already in use | Another process | Change `PORT` env var or stop the other process |
 | Login/logout redirects to localhost | Reverse proxy overwrites `Host` header | Set `app.baseUrl` in `server.config.yml` to your public URL |

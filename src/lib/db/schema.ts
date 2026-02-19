@@ -469,6 +469,32 @@ export const feedbackPostLabels = sqliteTable(
 
 // ─── End Feedback Board ──────────────────────────────────────────────────────
 
+// ─── Invite Codes ───────────────────────────────────────────────────────────
+
+export const inviteCodes = sqliteTable(
+  "invite_codes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    code: text("code").notNull().unique(),
+    createdBy: integer("created_by")
+      .notNull()
+      .references(() => users.id),
+    maxUses: integer("max_uses").notNull().default(1),
+    currentUses: integer("current_uses").notNull().default(0),
+    expiresAt: text("expires_at"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    codeIdx: index("idx_invite_codes_code").on(table.code),
+  }),
+);
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Relations — enables Drizzle db.query relational API
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -482,6 +508,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   feedbackPosts: many(feedbackPosts),
   feedbackComments: many(feedbackComments),
   mhOverrides: many(mhOverrides),
+  inviteCodesCreated: many(inviteCodes),
   customersCreated: many(customers, { relationName: "customerCreatedBy" }),
   customersUpdated: many(customers, { relationName: "customerUpdatedBy" }),
   aircraftCreated: many(aircraft, { relationName: "aircraftCreatedBy" }),
@@ -643,5 +670,12 @@ export const feedbackPostLabelsRelations = relations(feedbackPostLabels, ({ one 
   label: one(feedbackLabels, {
     fields: [feedbackPostLabels.labelId],
     references: [feedbackLabels.id],
+  }),
+}));
+
+export const inviteCodesRelations = relations(inviteCodes, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [inviteCodes.createdBy],
+    references: [users.id],
   }),
 }));

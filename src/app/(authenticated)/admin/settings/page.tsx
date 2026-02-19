@@ -43,6 +43,19 @@ interface AppConfig {
   ingestMaxSizeMB: number;
   ingestChunkTimeoutSeconds: number;
   allowedHostnames: AllowedHostname[];
+  registrationEnabled: boolean;
+}
+
+interface InviteCode {
+  id: number;
+  code: string;
+  maxUses: number;
+  currentUses: number;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  createdByName: string | null;
+  status: "active" | "expired" | "depleted" | "revoked";
 }
 
 export default function AdminSettingsPage() {
@@ -70,6 +83,11 @@ export default function AdminSettingsPage() {
   });
   const [passwordConfig, setPasswordConfig] = useState<PasswordRequirements | null>(null);
   const [passwordSource, setPasswordSource] = useState<"yaml" | "default">("default");
+  const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
+  const [creatingCode, setCreatingCode] = useState(false);
+  const [newCodeMaxUses, setNewCodeMaxUses] = useState(1);
+  const [newCodeExpiry, setNewCodeExpiry] = useState("");
+  const [codeCopied, setCodeCopied] = useState<number | null>(null);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -87,6 +105,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     fetchConfig();
     fetchPasswordConfig();
+    fetchInviteCodes();
   }, [fetchConfig]);
 
   const fetchPasswordConfig = async () => {
@@ -99,6 +118,47 @@ export default function AdminSettingsPage() {
       }
     } catch {
       // silently fail
+    }
+  };
+
+  const fetchInviteCodes = async () => {
+    try {
+      const res = await fetch("/api/admin/invite-codes");
+      if (res.ok) setInviteCodes(await res.json());
+    } catch {
+      /* silently fail */
+    }
+  };
+
+  const handleCreateCode = async () => {
+    setCreatingCode(true);
+    try {
+      const res = await fetch("/api/admin/invite-codes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          maxUses: newCodeMaxUses,
+          expiresAt: newCodeExpiry || null,
+        }),
+      });
+      if (res.ok) {
+        setNewCodeMaxUses(1);
+        setNewCodeExpiry("");
+        fetchInviteCodes();
+      }
+    } catch {
+      /* silently fail */
+    } finally {
+      setCreatingCode(false);
+    }
+  };
+
+  const handleRevokeCode = async (id: number) => {
+    try {
+      const res = await fetch(`/api/admin/invite-codes/${id}`, { method: "DELETE" });
+      if (res.ok) fetchInviteCodes();
+    } catch {
+      /* silently fail */
     }
   };
 
@@ -801,6 +861,142 @@ export default function AdminSettingsPage() {
         ) : (
           <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
             <i className="fa-solid fa-spinner fa-spin text-2xl" />
+          </div>
+        )}
+      </section>
+
+      {/* User Registration */}
+      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
+        <h2 className="text-lg font-semibold">
+          <i className="fa-solid fa-user-plus mr-2 text-muted-foreground" />
+          User Registration
+        </h2>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label>Enable Self-Registration</Label>
+            <p className="text-xs text-muted-foreground">
+              When enabled, users with a valid invite code can create their own accounts.
+            </p>
+          </div>
+          <Switch
+            checked={config.registrationEnabled}
+            onCheckedChange={() =>
+              setConfig({ ...config, registrationEnabled: !config.registrationEnabled })
+            }
+          />
+        </div>
+
+        {config.registrationEnabled && (
+          <div className="space-y-4">
+            {/* Create Code */}
+            <div className="rounded-md border border-dashed border-border p-3 space-y-3">
+              <Label className="text-sm font-medium">Create Invite Code</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">Max Uses</Label>
+                  <Input
+                    type="number"
+                    value={newCodeMaxUses}
+                    onChange={(e) =>
+                      setNewCodeMaxUses(
+                        Math.max(1, Math.min(1000, parseInt(e.target.value, 10) || 1)),
+                      )
+                    }
+                    min={1}
+                    max={1000}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Expires</Label>
+                  <Input
+                    type="datetime-local"
+                    value={newCodeExpiry}
+                    onChange={(e) => setNewCodeExpiry(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button size="sm" onClick={handleCreateCode} disabled={creatingCode}>
+                {creatingCode ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin mr-1" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-plus mr-1" />
+                    Create Code
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Codes list */}
+            <div className="space-y-2">
+              {inviteCodes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No invite codes created yet.</p>
+              ) : (
+                inviteCodes.map((ic) => (
+                  <div
+                    key={ic.id}
+                    className="flex items-center gap-3 rounded-md border border-border bg-background p-3"
+                  >
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <code className="text-xs font-mono break-all select-all">{ic.code}</code>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 w-6 p-0"
+                          onClick={() => {
+                            navigator.clipboard.writeText(ic.code);
+                            setCodeCopied(ic.id);
+                            setTimeout(() => setCodeCopied(null), 2000);
+                          }}
+                        >
+                          <i
+                            className={`fa-solid ${codeCopied === ic.id ? "fa-check" : "fa-copy"} text-xs`}
+                          />
+                        </Button>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>
+                          Uses: {ic.currentUses} / {ic.maxUses}
+                        </span>
+                        <span>
+                          Expires:{" "}
+                          {ic.expiresAt ? new Date(ic.expiresAt).toLocaleString() : "Never"}
+                        </span>
+                        {ic.createdByName && <span>By: {ic.createdByName}</span>}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        ic.status === "active"
+                          ? "bg-emerald-500/10 text-emerald-500"
+                          : ic.status === "expired"
+                            ? "bg-amber-500/10 text-amber-500"
+                            : ic.status === "depleted"
+                              ? "bg-muted text-muted-foreground"
+                              : "bg-red-500/10 text-red-500"
+                      }`}
+                    >
+                      {ic.status}
+                    </span>
+                    {ic.status === "active" && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleRevokeCode(ic.id)}
+                      >
+                        <i className="fa-solid fa-trash text-xs" />
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         )}
       </section>

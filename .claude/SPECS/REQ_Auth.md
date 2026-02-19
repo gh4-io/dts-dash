@@ -128,3 +128,45 @@ These are development defaults. A first-run setup flow or environment variable s
 | `src/lib/db/seed.ts` | Seed default users |
 | `src/app/login/page.tsx` | Login page |
 | `src/app/api/auth/[...nextauth]/route.ts` | Auth.js API routes |
+
+## Self-Registration (D-035)
+
+### Bootstrap Layer
+On every server startup, `src/lib/db/bootstrap.ts` (called from `instrumentation.ts`):
+1. Creates all tables (IF NOT EXISTS)
+2. Runs migrations (idempotent)
+3. Ensures system user exists (auth_id `00000000-0000-0000-0000-000000000000`)
+4. Seeds default `app_config` keys (INSERT OR IGNORE)
+
+### First-User Registration
+- **Route:** `GET/POST /api/auth/register`
+- **Page:** `/register`
+- When zero real users exist (passwordHash !== ""), registration is open without invite code
+- First user is created with role `superadmin`
+- The existing `/api/setup` endpoint continues to work independently
+
+### Invite Code Registration
+- **Admin toggle:** `registrationEnabled` in `app_config` (Admin Settings page)
+- **Invite codes:** Created by admins in Admin Settings with configurable max uses and optional expiry
+- **Self-registered users:** Always get `user` role, `isActive=true`, `forcePasswordChange=false`
+- **Code validation:** Must be active, not depleted, not expired. Generic error on failure (no enumeration)
+
+### Invite Code Table (`invite_codes`)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | INTEGER | PK AUTOINCREMENT |
+| code | TEXT | UNIQUE, 8-char alphanumeric (no ambiguous chars) |
+| created_by | INTEGER | FK users(id) |
+| max_uses | INTEGER | Default 1 |
+| current_uses | INTEGER | Default 0 |
+| expires_at | TEXT | Nullable ISO datetime |
+| is_active | INTEGER | Default 1 (soft-delete on revoke) |
+
+### API Endpoints
+| Endpoint | Method | Auth | Purpose |
+|----------|--------|------|---------|
+| `/api/auth/register` | GET | Public | Registration status |
+| `/api/auth/register` | POST | Public | Register user |
+| `/api/admin/invite-codes` | GET | Admin | List invite codes |
+| `/api/admin/invite-codes` | POST | Admin | Create invite code |
+| `/api/admin/invite-codes/[id]` | DELETE | Admin | Revoke invite code |

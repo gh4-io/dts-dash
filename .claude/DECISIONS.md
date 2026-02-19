@@ -414,3 +414,18 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact**: MINOR (new system setting, new API route, no API shape changes — backwards-compatible)
 **Links**: [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-045, `src/lib/config/loader.ts`, `src/lib/data/reader.ts`, `src/app/api/admin/server/flights/route.ts`, `src/components/admin/server-tab.tsx`
+
+---
+
+## D-035 | 2026-02-18 | Bootstrap Layer + Self-Registration System
+
+**Context:** The app required manual `db:seed` or CLI steps before first use. The system user (needed by `/api/ingest`) was only created during full seed. User creation was admin-only with no self-registration path.
+
+**Decision:**
+1. **Bootstrap layer** (`src/lib/db/bootstrap.ts`) auto-initializes schema, system user, and default config on every server startup (idempotent). Called from `instrumentation.ts`.
+2. **First-user registration** (`/register`) — when zero real users exist, the first registration creates a superadmin (no invite code needed).
+3. **Invite-code self-registration** — admin-gated: toggle `registrationEnabled` in Admin Settings, create invite codes with max uses and optional expiry. Self-registered users get `user` role.
+4. **SYSTEM_AUTH_ID constant** extracted to `src/lib/constants.ts` (DRY — was duplicated in 4 files).
+
+**Impact:** All additive — new files, new table (`invite_codes`), new endpoints, new config key. No existing behavior modified. MINOR increment per D-028.
+**Links**: [REQ_Auth.md](SPECS/REQ_Auth.md), [REQ_Admin.md](SPECS/REQ_Admin.md), `src/lib/db/bootstrap.ts`, `src/lib/constants.ts`

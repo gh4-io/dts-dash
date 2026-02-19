@@ -255,6 +255,19 @@ export function createTables() {
       PRIMARY KEY (post_id, label_id)
     );
 
+    -- Invite Codes
+    CREATE TABLE IF NOT EXISTS invite_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      max_uses INTEGER NOT NULL DEFAULT 1,
+      current_uses INTEGER NOT NULL DEFAULT 0,
+      expires_at TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     -- Indexes
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
@@ -280,6 +293,7 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
+    CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
   `);
 }
 
@@ -362,6 +376,26 @@ export function runMigrations(): MigrationResult[] {
         sqlite.exec(`ALTER TABLE aircraft ADD COLUMN guid TEXT;`);
         sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_aircraft_guid ON aircraft(guid);`);
       }
+    }),
+  );
+
+  // M004: Add invite_codes table
+  results.push(
+    applyMigration("M004_invite_codes", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS invite_codes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          created_by INTEGER NOT NULL REFERENCES users(id),
+          max_uses INTEGER NOT NULL DEFAULT 1,
+          current_uses INTEGER NOT NULL DEFAULT 0,
+          expires_at TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
+      `);
     }),
   );
 

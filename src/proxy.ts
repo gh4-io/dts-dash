@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 // Routes that require no authentication at all
 const PUBLIC_PREFIXES = [
   "/login",
+  "/register",
   "/setup",
   "/api/auth/",
   "/api/ingest",

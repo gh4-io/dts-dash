@@ -68,6 +68,7 @@ export async function GET() {
             },
           ]),
       ),
+      registrationEnabled: configMap.registrationEnabled === "true",
     };
 
     return NextResponse.json(config);
@@ -103,6 +104,7 @@ export async function PUT(request: NextRequest) {
       "ingestMaxSizeMB",
       "ingestChunkTimeoutSeconds",
       "allowedHostnames",
+      "registrationEnabled",
     ]);
 
     // Update config keys
