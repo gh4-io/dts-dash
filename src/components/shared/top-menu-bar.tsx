@@ -5,6 +5,7 @@ import { useFilterUrlSync } from "@/lib/hooks/use-filter-url-sync";
 import { useFilters } from "@/lib/hooks/use-filters";
 import { useActions, ACTION_COLUMNS, type ColumnFilterRule } from "@/lib/hooks/use-actions";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { getTimelineFromWindow } from "@/lib/utils/timeline-defaults";
 import { DateTimePicker } from "./datetime-picker";
 import { ActionsMenu } from "./actions-menu";
 import { ActiveChips, type ActiveChip } from "./active-chips";
@@ -39,12 +40,7 @@ function formatColumnFilterChip(cf: ColumnFilterRule): string {
   return `${col} ${cf.operator} ${cf.value}`;
 }
 
-export function TopMenuBar({
-  title,
-  icon,
-  actions,
-  formatChips = [],
-}: TopMenuBarProps) {
+export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBarProps) {
   useFilterUrlSync();
 
   const {
@@ -101,36 +97,24 @@ export function TopMenuBar({
     return map;
   }, [customers]);
 
+  // System default timezone for chip comparison
+  const defaultTz = useMemo(() => getTimelineFromWindow().defaultTimezone, []);
+
   // Build active chips from filter state + actions state + page-provided format chips
   const chips = useMemo<ActiveChip[]>(() => {
     const result: ActiveChip[] = [];
 
-    // Date range chip (non-removable, informational)
-    if (start && end) {
-      const s = new Date(start);
-      const e = new Date(end);
-      const fmt = (d: Date) =>
-        d.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          timeZone: "UTC",
-        });
-      result.push({
-        id: "date-range",
-        label: `${fmt(s)} \u2013 ${fmt(e)}`,
-        icon: "fa-solid fa-calendar",
-      });
-    }
-
-    // Timezone chip (removable — resets to UTC)
-    if (timezone && timezone !== "UTC") {
-      result.push({
-        id: "tz",
-        label: "Eastern",
-        icon: "fa-solid fa-clock",
-        onRemove: () => setTimezone("UTC"),
-      });
-    }
+    // Timezone chip — disabled due to graphical preference (value visible in TZ selector above)
+    // To re-enable: uncomment and chip will only show when user changes from system default
+    // if (timezone && timezone !== defaultTz) {
+    //   const label = timezone === "UTC" ? "UTC" : "Eastern";
+    //   result.push({
+    //     id: "tz",
+    //     label,
+    //     icon: "fa-solid fa-clock",
+    //     onRemove: () => setTimezone(defaultTz),
+    //   });
+    // }
 
     // Operator chips
     for (const op of operators) {
@@ -159,8 +143,7 @@ export function TopMenuBar({
         id: `type-${t}`,
         label: t,
         icon: "fa-solid fa-plane-circle-check",
-        onRemove: () =>
-          setTypes(types.filter((ty) => ty !== t) as AircraftType[]),
+        onRemove: () => setTypes(types.filter((ty) => ty !== t) as AircraftType[]),
       });
     }
 
@@ -224,8 +207,7 @@ export function TopMenuBar({
 
     return result;
   }, [
-    start,
-    end,
+    defaultTz,
     timezone,
     operators,
     aircraft,
@@ -253,7 +235,7 @@ export function TopMenuBar({
     setOperators([]);
     setAircraft([]);
     setTypes([]);
-    setTimezone("UTC");
+    setTimezone(defaultTz);
     resetAll();
   };
 

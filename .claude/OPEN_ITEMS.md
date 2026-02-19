@@ -973,20 +973,20 @@
 
 ---
 
-## OI-057 | System Preference Filters Not Shown as Active
+## OI-057 | ~~System Preference Filters Not Shown as Active~~ RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
-| **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Status** | **Resolved** |
+| **Priority** | ~~P2~~ |
+| **Owner** | Claude |
 | **Created** | 2026-02-18 |
-| **Context** | FilterBar displays active filter pills for user selections (customer, aircraft, type, start/end time, timezone, etc.). However, some filters have system defaults applied at startup (e.g., timezone defaults to UTC if not set, 3D zoom defaults, date auto-sets to today). These system-applied defaults are currently **displayed as active filter pills**, making the UI confusing: user sees "UTC" and "Today" pills when they didn't explicitly set filters. Additionally, the date tag/label is redundant and should not be shown as an active filter. |
-| **Proposed Solution** | (1) Distinguish between "user-selected" filters and "system defaults". (2) In Zustand store, track which filters were explicitly set by user vs. auto-populated by system. (3) Display pills ONLY for user-set filters, not system defaults. (4) System defaults are "normal setup" — show in a subtle way (e.g., info callout "Defaults applied") if needed, but not as active pills. (5) Remove date tag from FilterBar pill display — date is already shown in Start/End fields, no need for separate tag. (6) "Reset Filters" button should clear only user filters, restore system defaults. |
-| **Related** | `src/lib/hooks/use-filters.ts`, `src/components/shared/filter-bar.tsx` |
-| **Files** | `src/components/shared/filter-bar.tsx`, `src/lib/hooks/use-filters.ts`, `src/lib/utils/filter-helpers.ts` |
-| **Links** | [REQ_Filters.md](SPECS/REQ_Filters.md), [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md) |
+| **Resolved** | 2026-02-18 |
+| **Context** | FilterBar displayed active filter pills for system defaults (date range, timezone) even though the user didn't explicitly set them. "Eastern" timezone chip appeared because the check was `timezone !== "UTC"`, but the system default IS Eastern. Date range chip ("Feb 18 – Feb 21") was always shown and redundant with the Start/End pickers above. |
+| **Resolution** | **Fix 1**: Removed the date-range chip entirely — dates are already visible in Start/End pickers. **Fix 2**: Timezone chip now compares against system default (`getTimelineFromWindow().defaultTimezone`) instead of hardcoded "UTC". Only shows when user has changed timezone from the default. **Fix 3**: `handleClearAll` now resets timezone to system default instead of hardcoded "UTC". |
+| **Files** | `src/components/shared/top-menu-bar.tsx` |
+| **Links** | [REQ_Filters.md](SPECS/REQ_Filters.md), OI-059 (time indicator display) |
 
 ---
 
@@ -1008,16 +1008,32 @@
 
 ---
 
+## OI-059 | Time/Date Indicator Needs Better Display Area
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | The date range and timezone context (e.g., "Feb 18 – Feb 21", "Eastern") are useful pieces of information, but active filter pills are the wrong display area. The date range is already visible in the Start/End picker fields. A dedicated, subtle display area for time context (current range, timezone, relative label like "next 3 days") would be a better UX — perhaps a status bar, subtitle under the page title, or a small info badge near the date pickers. |
+| **Proposed Ideas** | (1) Subtitle below page title: `Dashboard · Feb 18–21 · Eastern`. (2) Small muted badge/tag inline with date pickers. (3) Breadcrumb-style context strip. (4) Footer status bar with time context + data freshness. |
+| **Files** | `src/components/shared/top-menu-bar.tsx` |
+| **Links** | OI-057 (resolved — removed default pills), [REQ_Filters.md](SPECS/REQ_Filters.md) |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 15 |
 | P1 | 3 | 1 | 0 | 12 |
-| P2 | 5 | 1 | 0 | 12 |
-| P3 | 2 | 0 | 2 | 0 |
-| **Total** | **10** | **2** | **2** | **39** |
+| P2 | 4 | 1 | 0 | 13 |
+| P3 | 3 | 0 | 2 | 0 |
+| **Total** | **10** | **2** | **2** | **40** |
 
-**Latest update (2026-02-18)**: OI-042 items 1 (pie tooltip theme), 2 (cross-filter timeline), 4 (timezone label), 5 (aircraft & turns card) resolved. Items 3, 6 deferred to v0.3.0+.
+**Latest update (2026-02-18)**: OI-057 resolved — removed default filter pills (date range chip removed, timezone chip only shows when changed from system default). OI-059 added for time indicator display improvement.
 
-**Latest additions (2026-02-18)**: Added OI-047 through OI-058 (12 items total). Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), and authentication bootstrap system (OI-058). Mapped to existing specs and decisions.
+**Latest additions (2026-02-18)**: Added OI-047 through OI-059. Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), authentication bootstrap (OI-058), and time indicator display (OI-059).

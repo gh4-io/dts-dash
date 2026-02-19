@@ -429,3 +429,20 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Impact:** All additive — new files, new table (`invite_codes`), new endpoints, new config key. No existing behavior modified. MINOR increment per D-028.
 **Links**: [REQ_Auth.md](SPECS/REQ_Auth.md), [REQ_Admin.md](SPECS/REQ_Admin.md), `src/lib/db/bootstrap.ts`, `src/lib/constants.ts`
+
+---
+
+## D-036 | 2026-02-18 | Active Filter Chips: Only Show User Overrides, Never System Defaults
+
+**Context:** Active filter chips (pills below the filter bar) were displaying system-default values as if the user had explicitly set them. Examples: date range chip always appeared, timezone chip showed "Eastern" even though Eastern was the system default, zoom chip showed "3d" even though that was the default zoom level. This made the UI noisy and confusing — users saw pills they never set.
+
+**Decision:**
+1. **Never show a chip for a value that matches the system default.** Chips indicate user overrides only.
+2. **Date range chip removed entirely** — dates are already visible in the Start/End picker fields. A chip is redundant.
+3. **Timezone chip** compares against `getTimelineFromWindow().defaultTimezone` (from `server.config.yml`), not hardcoded `"UTC"`.
+4. **Zoom chip** (flight board) compares against user's `defaultZoom` preference / system default, not hardcoded `"all"`.
+5. **Clear All** resets to system defaults, not hardcoded fallback values.
+6. **Rule for future chips:** Any new chip added to `TopMenuBar` or page-level `formatChips` must compare against the relevant system/user default before rendering. If the current value equals the default, no chip.
+
+**Rationale:** Chips signal intentional user actions. Showing defaults as chips creates noise, confuses "active filtering" state, and makes "Clear All" semantics unclear. System defaults are the baseline — invisible until changed.
+**Links**: OI-057 (resolved), OI-059, `src/components/shared/top-menu-bar.tsx`, `src/app/(authenticated)/flight-board/page.tsx`

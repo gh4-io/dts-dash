@@ -151,20 +151,21 @@ function FlightBoardPageInner() {
     chartRef.current?.dispatchZoom(0, 100);
   }, []);
 
-  // Build format chips for non-default zoom
+  // Build format chips for non-default zoom (only show when user changed from default)
+  const effectiveDefaultZoom = defaultZoom || "3d";
   const formatChips: ActiveChip[] = useMemo(
     () =>
-      zoomLevel !== "all"
+      zoomLevel !== effectiveDefaultZoom
         ? [
             {
               id: "zoom",
               label: `Zoom: ${zoomLevel}`,
               icon: "fa-solid fa-magnifying-glass",
-              onRemove: () => setZoomLevel("3d"),
+              onRemove: () => setZoomLevel(effectiveDefaultZoom),
             },
           ]
         : [],
-    [zoomLevel],
+    [zoomLevel, effectiveDefaultZoom],
   );
 
   const ZOOM_LEVELS = [
