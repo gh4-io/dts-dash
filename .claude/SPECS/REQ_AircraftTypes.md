@@ -9,9 +9,9 @@
 
 Aircraft types in inbound data are non-standard. A normalization service resolves raw type strings to canonical types using an admin-editable mapping dataset stored in SQLite.
 
-**Canonical Types**: `B777`, `B767`, `B747`, `B757`, `B737`, `Unknown`
+**Canonical Types**: `B777`, `B767`, `B747`, `B757`, `B737` (and `"Unknown"` only when no type data whatsoever is available).
 
-**Principle**: Type is sourced from inbound data. Do not rely on registration-prefix inference as primary logic. Preserve both raw and normalized type.
+**Principle**: Type is sourced from inbound data. Do not rely on registration-prefix inference as primary logic. Preserve both raw and normalized type. The `aircraft_type_mappings` table is an optional refinement — types are filterable and countable even without any mapping rules (raw strings appear as-is).
 
 ## Data Model
 
@@ -37,12 +37,20 @@ type AircraftType = "B777" | "B767" | "B747" | "B757" | "B737" | "Unknown";
 
 ```typescript
 interface NormalizedAircraftType {
-  canonical: AircraftType;            // "B747"
-  raw: string;                        // Original input: "747-4R7F"
-  confidence: "exact" | "pattern" | "fallback";
-  mappingId: string | null;           // Which mapping rule matched
+  canonical: string;                          // "B747" if mapped, raw string if not, "Unknown" if no data
+  raw: string;                                // Original input: "747-4R7F"
+  confidence: "exact" | "pattern" | "raw" | "fallback";
+  mappingId: string | null;                   // Which mapping rule matched (null if raw/fallback)
 }
 ```
+
+**Confidence levels**:
+| Level | Meaning |
+|-------|---------|
+| `"exact"` | Exact pattern match (case-insensitive) |
+| `"pattern"` | Glob-wildcard pattern match |
+| `"raw"` | No mapping match — raw string returned as-is (D-032) |
+| `"fallback"` | No type data at all — `"Unknown"` returned |
 
 ## Normalization Service
 
@@ -55,7 +63,13 @@ function normalizeAircraftType(
 ): NormalizedAircraftType;
 ```
 
-**Resolution order**: exact match → pattern match (descending priority) → `Unknown` fallback.
+**Type resolution priority chain** (in `transformer.ts`):
+1. `aircraft` master data table — `aircraft.aircraft_type` (populated from ac.json `field_5` during import)
+2. WP-level `Aircraft.field_5` (raw type from work package record)
+3. WP-level `Aircraft.AircraftType` (fallback WP field)
+4. `null` → normalizer runs with empty input → returns `"Unknown"` with `"fallback"` confidence
+
+**Within the normalizer, resolution order**: exact match → pattern match (descending priority) → raw string fallback (D-032). `"Unknown"` only when the input itself was null/empty.
 
 **Non-standard inputs handled**: `737-200`, `747-4R7F`, `747F`, `767-300ER`, `B777-200LR`, bare `777`, etc.
 

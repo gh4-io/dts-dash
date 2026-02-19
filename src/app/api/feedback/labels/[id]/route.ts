@@ -5,6 +5,7 @@ import { feedbackLabels } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { isValidHex } from "@/lib/utils/contrast";
+import { parseIntParam } from "@/lib/utils/route-helpers";
 
 const log = createChildLogger("api/feedback/labels/[id]");
 
@@ -26,7 +27,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { id } = await context.params;
+    const { id: rawId } = await context.params;
+    const id = parseIntParam(rawId);
+    if (!id) {
+      return NextResponse.json({ error: "Invalid label ID" }, { status: 400 });
+    }
 
     const label = db.select().from(feedbackLabels).where(eq(feedbackLabels.id, id)).get();
 
@@ -88,7 +93,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { id } = await context.params;
+    const { id: rawId } = await context.params;
+    const id = parseIntParam(rawId);
+    if (!id) {
+      return NextResponse.json({ error: "Invalid label ID" }, { status: 400 });
+    }
 
     const label = db.select().from(feedbackLabels).where(eq(feedbackLabels.id, id)).get();
 

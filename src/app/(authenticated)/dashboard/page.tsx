@@ -3,7 +3,6 @@
 import { Suspense, useState, useMemo, useCallback } from "react";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
-import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { AvgGroundTimeCard } from "@/components/dashboard/avg-ground-time-card";
 import { MhByOperatorCard } from "@/components/dashboard/mh-by-operator-card";
 import { TotalAircraftCard } from "@/components/dashboard/total-aircraft-card";
@@ -67,9 +66,6 @@ function DashboardPageInner() {
     <div className="flex flex-col gap-3 min-h-full">
       <TopMenuBar title="Dashboard" icon="fa-solid fa-chart-line" />
 
-      {/* Data Freshness */}
-      <DataFreshnessBadge />
-
       {isLoading || snapshotsLoading ? (
         <LoadingSkeleton variant="page" />
       ) : (
@@ -87,10 +83,7 @@ function DashboardPageInner() {
             <div className="shrink-0">
               <TotalAircraftCard workPackages={displayWps} />
             </div>
-            <AircraftByTypeCard
-              workPackages={displayWps}
-              className="flex-[3]"
-            />
+            <AircraftByTypeCard workPackages={displayWps} className="flex-[3]" />
           </div>
 
           {/* Center: chart + operator table */}
@@ -101,7 +94,11 @@ function DashboardPageInner() {
                 Arrivals / Departures / On Ground
               </h3>
               <div className="flex-1 min-h-[250px]">
-                <CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} />
+                <CombinedChart
+                  snapshots={displaySnapshots}
+                  timezone={timezone}
+                  timeFormat={timeFormat}
+                />
               </div>
             </div>
             <OperatorPerformance
@@ -119,10 +116,7 @@ function DashboardPageInner() {
               Aircraft By Customer
             </h3>
             <div className="flex-1">
-              <CustomerDonut
-                workPackages={displayWps}
-                onCustomerClick={handleOperatorFromCard}
-              />
+              <CustomerDonut workPackages={displayWps} onCustomerClick={handleOperatorFromCard} />
             </div>
           </div>
         </div>

@@ -19,19 +19,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const allCustomers = db
-      .select()
-      .from(customers)
-      .orderBy(customers.sortOrder)
-      .all();
+    const allCustomers = db.select().from(customers).orderBy(customers.sortOrder).all();
 
     return NextResponse.json(allCustomers);
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -62,10 +55,7 @@ export async function PUT(request: NextRequest) {
 
       if (item.color) {
         if (!isValidHex(item.color)) {
-          return NextResponse.json(
-            { error: `Invalid hex color: ${item.color}` },
-            { status: 400 }
-          );
+          return NextResponse.json({ error: `Invalid hex color: ${item.color}` }, { status: 400 });
         }
         updates.color = item.color;
         updates.colorText = getContrastText(item.color);
@@ -73,10 +63,7 @@ export async function PUT(request: NextRequest) {
       if (item.displayName !== undefined) updates.displayName = item.displayName;
       if (item.sortOrder !== undefined) updates.sortOrder = item.sortOrder;
 
-      db.update(customers)
-        .set(updates)
-        .where(eq(customers.id, item.id))
-        .run();
+      db.update(customers).set(updates).where(eq(customers.id, item.id)).run();
 
       updated++;
     }
@@ -84,10 +71,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true, updated });
   } catch (error) {
     log.error({ err: error }, "PUT error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -109,28 +93,21 @@ export async function POST(request: NextRequest) {
     if (!name || !displayName || !color) {
       return NextResponse.json(
         { error: "name, displayName, and color are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!isValidHex(color)) {
-      return NextResponse.json(
-        { error: `Invalid hex color: ${color}` },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: `Invalid hex color: ${color}` }, { status: 400 });
     }
 
     // Check unique name
-    const existing = db
-      .select()
-      .from(customers)
-      .where(eq(customers.name, name))
-      .get();
+    const existing = db.select().from(customers).where(eq(customers.name, name)).get();
 
     if (existing) {
       return NextResponse.json(
         { error: "A customer with this name already exists" },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -141,26 +118,24 @@ export async function POST(request: NextRequest) {
       .get();
 
     const now = new Date().toISOString();
-    const newCustomer = {
-      id: crypto.randomUUID(),
-      name,
-      displayName,
-      color,
-      colorText: getContrastText(color),
-      isActive: true,
-      sortOrder: (maxSort?.max ?? 0) + 1,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    db.insert(customers).values(newCustomer).run();
+    const newCustomer = db
+      .insert(customers)
+      .values({
+        name,
+        displayName,
+        color,
+        colorText: getContrastText(color),
+        isActive: true,
+        sortOrder: (maxSort?.max ?? 0) + 1,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
 
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

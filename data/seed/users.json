@@ -1,6 +1,6 @@
 [
   {
-    "id": null,
+    "authId": null,
     "email": "admin@local",
     "username": "admin",
     "displayName": "Admin",
@@ -9,7 +9,7 @@
     "isActive": true
   },
   {
-    "id": null,
+    "authId": null,
     "email": "user@local",
     "username": "user",
     "displayName": "Test User",
@@ -18,7 +18,7 @@
     "isActive": true
   },
   {
-    "id": "00000000-0000-0000-0000-000000000000",
+    "authId": "00000000-0000-0000-0000-000000000000",
     "email": "system@internal",
     "username": null,
     "displayName": "API Ingest",

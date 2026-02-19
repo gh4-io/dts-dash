@@ -11,6 +11,8 @@ import {
 import { eq, asc } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import type { FeedbackStatus } from "@/types/feedback";
+import { parseIntParam } from "@/lib/utils/route-helpers";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/feedback/[id]");
 
@@ -36,7 +38,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await context.params;
+    const { id: rawId } = await context.params;
+    const id = parseIntParam(rawId);
+    if (!id) {
+      return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
+    }
 
     const post = db
       .select({
@@ -73,11 +79,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .where(eq(feedbackPostLabels.postId, id))
       .all();
 
-    // Comments
-    const comments = db
+    // Comments (flat, ordered by creation time)
+    const rawComments = db
       .select({
         id: feedbackComments.id,
         postId: feedbackComments.postId,
+        parentId: feedbackComments.parentId,
         authorId: feedbackComments.authorId,
         authorName: users.displayName,
         body: feedbackComments.body,
@@ -90,11 +97,24 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       .orderBy(asc(feedbackComments.createdAt))
       .all();
 
+    // Build tree: top-level comments get replies[] arrays
+    type CommentNode = (typeof rawComments)[0] & { replies: CommentNode[] };
+    const nodeMap = new Map<number, CommentNode>();
+    for (const c of rawComments) nodeMap.set(c.id, { ...c, replies: [] });
+    const topLevel: CommentNode[] = [];
+    for (const c of rawComments) {
+      if (c.parentId && nodeMap.has(c.parentId)) {
+        nodeMap.get(c.parentId)!.replies.push(nodeMap.get(c.id)!);
+      } else {
+        topLevel.push(nodeMap.get(c.id)!);
+      }
+    }
+
     return NextResponse.json({
       ...post,
       labels,
-      comments,
-      commentCount: comments.length,
+      comments: topLevel,
+      commentCount: rawComments.length,
     });
   } catch (error) {
     log.error({ err: error }, "GET error");
@@ -113,7 +133,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await context.params;
+    const { id: rawId } = await context.params;
+    const id = parseIntParam(rawId);
+    if (!id) {
+      return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
+    }
     const role = (session.user as unknown as { role: string }).role;
     const isAdmin = role === "admin" || role === "superadmin";
 
@@ -123,7 +147,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    const isAuthor = post.authorId === session.user.id;
+    const userId = getSessionUserId(session);
+    const isAuthor = post.authorId === userId;
     if (!isAuthor && !isAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -193,7 +218,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await context.params;
+    const { id: rawId } = await context.params;
+    const id = parseIntParam(rawId);
+    if (!id) {
+      return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
+    }
     const role = (session.user as unknown as { role: string }).role;
     const isAdmin = role === "admin" || role === "superadmin";
 
@@ -203,7 +232,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    const isAuthor = post.authorId === session.user.id;
+    const userId = getSessionUserId(session);
+    const isAuthor = post.authorId === userId;
     if (!isAuthor && !isAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

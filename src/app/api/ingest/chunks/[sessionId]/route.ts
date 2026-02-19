@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyApiKey } from "@/lib/utils/api-auth";
 import { validateImportData, commitImportData } from "@/lib/data/import-utils";
 import { db } from "@/lib/db/client";
-import { appConfig } from "@/lib/db/schema";
+import { appConfig, users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import {
@@ -15,7 +15,16 @@ import {
 
 const log = createChildLogger("api/ingest/chunks");
 
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+const SYSTEM_AUTH_ID = "00000000-0000-0000-0000-000000000000";
+
+function getSystemUserId(): number {
+  const row = db.select({ id: users.id }).from(users).where(eq(users.authId, SYSTEM_AUTH_ID)).get();
+  if (!row)
+    throw new Error(
+      "System user not found — ensure the system user exists with authId " + SYSTEM_AUTH_ID,
+    );
+  return row.id;
+}
 
 /**
  * PATCH /api/ingest/chunks/[sessionId]
@@ -220,7 +229,7 @@ export async function PATCH(
     const result = await commitImportData({
       records: validation.records,
       source: "api",
-      importedBy: SYSTEM_USER_ID,
+      importedBy: getSystemUserId(),
       idempotencyKey: session.idempotencyKey || undefined,
     });
 
@@ -229,6 +238,9 @@ export async function PATCH(
         sessionId,
         logId: result.logId,
         recordCount: result.recordCount,
+        newCount: result.newCount,
+        changedCount: result.changedCount,
+        skippedCount: result.skippedCount,
         upsertedCount: result.upsertedCount,
         success: result.success,
       },
@@ -242,6 +254,13 @@ export async function PATCH(
         logId: result.logId,
         summary: validation.summary,
         warnings: validation.warnings,
+        counts: {
+          total: result.recordCount,
+          new: result.newCount,
+          changed: result.changedCount,
+          skipped: result.skippedCount,
+          upserted: result.upsertedCount,
+        },
       },
       {
         headers: {

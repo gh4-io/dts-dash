@@ -114,14 +114,27 @@ async function main() {
 
   // ─── Commit ──────────────────────────────────────────────────────────────
 
-  // Use a system-level user ID for CLI imports
-  const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+  // Look up the system user by authId for CLI imports
+  const { db } = await import("@/lib/db/client");
+  const { users } = await import("@/lib/db/schema");
+  const { eq } = await import("drizzle-orm");
+
+  const SYSTEM_AUTH_ID = "00000000-0000-0000-0000-000000000000";
+  const systemUser = db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.authId, SYSTEM_AUTH_ID))
+    .get();
+  if (!systemUser) {
+    error("System user not found. Run db:seed first.");
+    process.exit(1);
+  }
 
   const result = await commitImportData({
     records: validation.records,
     source,
     fileName: filePath ? path.basename(filePath) : "stdin",
-    importedBy: SYSTEM_USER_ID,
+    importedBy: systemUser.id,
   });
 
   if (!result.success) {

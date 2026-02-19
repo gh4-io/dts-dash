@@ -6,6 +6,7 @@ import { db } from "@/lib/db/client";
 import { importLog, workPackages } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/admin/import/reset");
 
@@ -51,16 +52,15 @@ export async function POST() {
     invalidateTransformerCache();
 
     // Log the reset action
-    const logId = crypto.randomUUID();
+    const userId = getSessionUserId(session);
     try {
       db.insert(importLog)
         .values({
-          id: logId,
           importedAt: new Date().toISOString(),
           recordCount: 0,
           source: "api",
           fileName: "RESET",
-          importedBy: session.user.id,
+          importedBy: userId,
           status: "success",
           errors: null,
           idempotencyKey: null,

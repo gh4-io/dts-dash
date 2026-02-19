@@ -28,7 +28,7 @@ export default function CustomersPage() {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  const handleSave = async (updates: Array<{ id: string; color: string; displayName: string }>) => {
+  const handleSave = async (updates: Array<{ id: number; color: string; displayName: string }>) => {
     setSaving(true);
     setMessage(null);
     try {
@@ -87,7 +87,10 @@ export default function CustomersPage() {
     await useCustomers.getState().invalidate();
   };
 
-  const handleEdit = async (id: string, data: { name?: string; displayName?: string; color?: string }) => {
+  const handleEdit = async (
+    id: number,
+    data: { name?: string; displayName?: string; color?: string },
+  ) => {
     const res = await fetch(`/api/admin/customers/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -102,7 +105,7 @@ export default function CustomersPage() {
     await useCustomers.getState().invalidate();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     const res = await fetch(`/api/admin/customers/${id}`, {
       method: "DELETE",
     });

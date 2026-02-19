@@ -6,6 +6,7 @@ import { eq, and, ne } from "drizzle-orm";
 import { compareSync, hashSync } from "bcryptjs";
 import { validatePassword, formatPasswordErrors } from "@/lib/utils/password-validation";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/account/password");
 
@@ -53,7 +54,8 @@ export async function PUT(request: NextRequest) {
     }
 
     // Fetch user
-    const user = db.select().from(users).where(eq(users.id, session.user.id)).get();
+    const userId = getSessionUserId(session);
+    const user = db.select().from(users).where(eq(users.id, userId)).get();
 
     if (!user) {
       // Unified error — don't reveal whether user exists
@@ -79,18 +81,18 @@ export async function PUT(request: NextRequest) {
       updates.forcePasswordChange = false;
     }
 
-    db.update(users).set(updates).where(eq(users.id, session.user.id)).run();
+    db.update(users).set(updates).where(eq(users.id, userId)).run();
 
     // Delete other DB sessions (keep current session alive via JWT)
     // The tokenVersion bump will invalidate other JWT tokens on their next request
-    const currentSessionId = (session as unknown as { sessionId?: string }).sessionId;
+    const currentSessionId = (session as unknown as { sessionId?: number }).sessionId;
     if (currentSessionId) {
       db.delete(sessions)
-        .where(and(eq(sessions.userId, session.user.id), ne(sessions.id, currentSessionId)))
+        .where(and(eq(sessions.userId, userId), ne(sessions.id, currentSessionId)))
         .run();
     } else {
       // Fallback: delete all sessions for user
-      db.delete(sessions).where(eq(sessions.userId, session.user.id)).run();
+      db.delete(sessions).where(eq(sessions.userId, userId)).run();
     }
 
     return NextResponse.json({ success: true });

@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { hashSync } from "bcryptjs";
-import {
-  validatePassword,
-  formatPasswordErrors,
-} from "@/lib/utils/password-validation";
+import { validatePassword, formatPasswordErrors } from "@/lib/utils/password-validation";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/setup");
@@ -26,41 +23,29 @@ export async function POST(request: NextRequest) {
       .filter((u) => u.passwordHash !== "");
 
     if (realUsers.length > 0) {
-      return NextResponse.json(
-        { error: "Setup already completed" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Setup already completed" }, { status: 403 });
     }
 
     const body = await request.json();
     const { email, password, displayName } = body;
 
     if (!email || !password) {
-      return NextResponse.json(
-        { error: "Email and password are required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { error: "Invalid email format" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
     }
 
     const validation = validatePassword(password);
     if (!validation.valid) {
-      return NextResponse.json(
-        { error: formatPasswordErrors(validation.errors) },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: formatPasswordErrors(validation.errors) }, { status: 400 });
     }
 
     const now = new Date().toISOString();
     db.insert(users)
       .values({
-        id: crypto.randomUUID(),
+        authId: crypto.randomUUID(),
         email: email.toLowerCase(),
         username: null,
         displayName: displayName || "Admin",
@@ -75,10 +60,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 

@@ -4,6 +4,7 @@ import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/account/profile");
 
@@ -18,6 +19,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = getSessionUserId(session);
     const user = db
       .select({
         id: users.id,
@@ -27,7 +29,7 @@ export async function GET() {
         role: users.role,
       })
       .from(users)
-      .where(eq(users.id, session.user.id))
+      .where(eq(users.id, userId))
       .get();
 
     if (!user) {
@@ -37,10 +39,7 @@ export async function GET() {
     return NextResponse.json(user);
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -64,26 +63,21 @@ export async function PUT(request: NextRequest) {
       displayName.trim().length < 2 ||
       displayName.trim().length > 50
     ) {
-      return NextResponse.json(
-        { error: "Display name must be 2-50 characters" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Display name must be 2-50 characters" }, { status: 400 });
     }
 
+    const userId = getSessionUserId(session);
     db.update(users)
       .set({
         displayName: displayName.trim(),
         updatedAt: new Date().toISOString(),
       })
-      .where(eq(users.id, session.user.id))
+      .where(eq(users.id, userId))
       .run();
 
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "PUT error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

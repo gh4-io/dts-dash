@@ -4,6 +4,8 @@ import { db } from "@/lib/db/client";
 import { feedbackComments, feedbackPosts } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { parseIntParam } from "@/lib/utils/route-helpers";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/feedback/[id]/comments");
 
@@ -20,7 +22,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = await context.params;
+    const { id: rawId } = await context.params;
+    const id = parseIntParam(rawId);
+    if (!id) {
+      return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
+    }
 
     // Verify post exists
     const post = db
@@ -35,6 +41,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     const body = await request.json();
     const commentBody = (body.body || "").trim();
+    const parentId = body.parentId != null ? Number(body.parentId) : null;
 
     if (!commentBody || commentBody.length > 5000) {
       return NextResponse.json(
@@ -43,21 +50,35 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const commentId = crypto.randomUUID();
-    const now = new Date().toISOString();
+    // Validate parentId belongs to the same post
+    if (parentId) {
+      const parent = db
+        .select({ id: feedbackComments.id, postId: feedbackComments.postId })
+        .from(feedbackComments)
+        .where(eq(feedbackComments.id, parentId))
+        .get();
+      if (!parent || parent.postId !== id) {
+        return NextResponse.json({ error: "Parent comment not found" }, { status: 404 });
+      }
+    }
 
-    db.insert(feedbackComments)
+    const now = new Date().toISOString();
+    const userId = getSessionUserId(session);
+
+    const newComment = db
+      .insert(feedbackComments)
       .values({
-        id: commentId,
         postId: id,
-        authorId: session.user.id,
+        parentId,
+        authorId: userId,
         body: commentBody,
         createdAt: now,
         updatedAt: now,
       })
-      .run();
+      .returning({ id: feedbackComments.id })
+      .get();
 
-    return NextResponse.json({ id: commentId }, { status: 201 });
+    return NextResponse.json({ id: newComment.id }, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

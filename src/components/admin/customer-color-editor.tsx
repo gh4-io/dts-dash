@@ -17,11 +17,14 @@ import { getContrastText, getWCAGLevel, isValidHex } from "@/lib/utils/contrast"
 
 interface CustomerColorEditorProps {
   customers: Customer[];
-  onSave: (updates: Array<{ id: string; color: string; displayName: string }>) => Promise<void>;
+  onSave: (updates: Array<{ id: number; color: string; displayName: string }>) => Promise<void>;
   onReset: () => Promise<void>;
   onAdd: (data: { name: string; displayName: string; color: string }) => Promise<void>;
-  onEdit: (id: string, data: { name?: string; displayName?: string; color?: string }) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
+  onEdit: (
+    id: number,
+    data: { name?: string; displayName?: string; color?: string },
+  ) => Promise<void>;
+  onDelete: (id: number) => Promise<void>;
   saving: boolean;
 }
 
@@ -52,7 +55,11 @@ export function CustomerColorEditor({
 
   // Edit dialog state
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
-  const [editFormData, setEditFormData] = useState<EditFormData>({ name: "", displayName: "", color: "#6b7280" });
+  const [editFormData, setEditFormData] = useState<EditFormData>({
+    name: "",
+    displayName: "",
+    color: "#6b7280",
+  });
   const [editError, setEditError] = useState<string | null>(null);
 
   // Delete dialog state
@@ -64,7 +71,12 @@ export function CustomerColorEditor({
 
   const isDirty = Object.keys(edits).length > 0;
 
-  const updateEdit = (customerId: string, customer: Customer, field: "color" | "displayName", value: string) => {
+  const updateEdit = (
+    customerId: number,
+    customer: Customer,
+    field: "color" | "displayName",
+    value: string,
+  ) => {
     const current = getEditedValue(customer);
     const updated = { ...current, [field]: value };
 
@@ -80,7 +92,7 @@ export function CustomerColorEditor({
 
   const handleSave = async () => {
     const updates = Object.entries(edits).map(([id, vals]) => ({
-      id,
+      id: Number(id),
       color: vals.color,
       displayName: vals.displayName,
     }));
@@ -147,7 +159,8 @@ export function CustomerColorEditor({
     // Build partial update with only changed fields
     const updates: { name?: string; displayName?: string; color?: string } = {};
     if (editFormData.name !== editCustomer.name) updates.name = editFormData.name;
-    if (editFormData.displayName !== editCustomer.displayName) updates.displayName = editFormData.displayName;
+    if (editFormData.displayName !== editCustomer.displayName)
+      updates.displayName = editFormData.displayName;
     if (editFormData.color !== editCustomer.color) updates.color = editFormData.color;
 
     if (Object.keys(updates).length === 0) {
@@ -189,28 +202,16 @@ export function CustomerColorEditor({
       {/* Action bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAddDialog(true)}
-          >
+          <Button variant="outline" size="sm" onClick={() => setShowAddDialog(true)}>
             <i className="fa-solid fa-plus mr-2" />
             Add Customer
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowResetDialog(true)}
-          >
+          <Button variant="outline" size="sm" onClick={() => setShowResetDialog(true)}>
             <i className="fa-solid fa-rotate-left mr-2" />
             Reset Defaults
           </Button>
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={!isDirty || saving}
-          size="sm"
-        >
+        <Button onClick={handleSave} disabled={!isDirty || saving} size="sm">
           {saving ? (
             <>
               <i className="fa-solid fa-spinner fa-spin mr-2" />
@@ -229,10 +230,12 @@ export function CustomerColorEditor({
       <div className="space-y-2">
         {activeCustomers.map((customer) => {
           const edited = getEditedValue(customer);
-          const contrastText = getContrastText(isValidHex(edited.color) ? edited.color : customer.color);
+          const contrastText = getContrastText(
+            isValidHex(edited.color) ? edited.color : customer.color,
+          );
           const wcagLevel = getWCAGLevel(
             isValidHex(edited.color) ? edited.color : customer.color,
-            contrastText
+            contrastText,
           );
           const isEdited = !!edits[customer.id];
 
@@ -502,8 +505,9 @@ export function CustomerColorEditor({
             <DialogTitle>Delete Customer?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This will deactivate <span className="font-medium text-foreground">{deleteCustomer?.name}</span>.
-            The customer will be hidden from all views but can be restored later.
+            This will deactivate{" "}
+            <span className="font-medium text-foreground">{deleteCustomer?.name}</span>. The
+            customer will be hidden from all views but can be restored later.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteCustomer(null)}>

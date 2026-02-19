@@ -3,7 +3,6 @@
 import { Suspense, useMemo } from "react";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
-import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { ConfigPanel } from "@/components/capacity/config-panel";
 import { UtilizationChart } from "@/components/capacity/utilization-chart";
 import { CapacityTable } from "@/components/capacity/capacity-table";
@@ -24,13 +23,9 @@ function CapacityPageInner() {
 
   const summary = useMemo(() => {
     if (utilization.length === 0) return null;
-    const avgUtil =
-      utilization.reduce((s, u) => s + u.utilizationPercent, 0) /
-      utilization.length;
+    const avgUtil = utilization.reduce((s, u) => s + u.utilizationPercent, 0) / utilization.length;
     const criticalDays = utilization.filter((u) => u.criticalFlag).length;
-    const overtimeDays = utilization.filter(
-      (u) => u.overtimeFlag && !u.criticalFlag
-    ).length;
+    const overtimeDays = utilization.filter((u) => u.overtimeFlag && !u.criticalFlag).length;
     const totalDemand = demand.reduce((s, d) => s + d.totalDemandMH, 0);
     const totalCapacity = capacity.reduce((s, c) => s + c.realCapacityMH, 0);
     return { avgUtil, criticalDays, overtimeDays, totalDemand, totalCapacity };
@@ -51,9 +46,6 @@ function CapacityPageInner() {
   return (
     <div className="space-y-3">
       <TopMenuBar title="Capacity Modeling" icon="fa-solid fa-gauge-high" />
-
-      {/* Data Freshness */}
-      <DataFreshnessBadge />
 
       {isLoading || isConfigLoading ? (
         <LoadingSkeleton variant="page" />
@@ -126,19 +118,11 @@ function CapacityPageInner() {
               <i className="fa-solid fa-chart-bar" />
               Daily Utilization
             </h3>
-            <UtilizationChart
-              demand={demand}
-              capacity={capacity}
-              utilization={utilization}
-            />
+            <UtilizationChart demand={demand} capacity={capacity} utilization={utilization} />
           </div>
 
           {/* Detail Table */}
-          <CapacityTable
-            demand={demand}
-            capacity={capacity}
-            utilization={utilization}
-          />
+          <CapacityTable demand={demand} capacity={capacity} utilization={utilization} />
         </>
       )}
     </div>
@@ -168,9 +152,7 @@ function SummaryPill({
     <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs">
       <i className={`fa-solid ${icon} text-[10px] text-muted-foreground`} />
       <span className="text-muted-foreground">{label}</span>
-      <span className={`font-semibold tabular-nums ${color ?? ""}`}>
-        {value}
-      </span>
+      <span className={`font-semibold tabular-nums ${color ?? ""}`}>{value}</span>
     </div>
   );
 }

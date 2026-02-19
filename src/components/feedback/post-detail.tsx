@@ -37,7 +37,7 @@ import {
 } from "@/types/feedback";
 
 interface PostDetailProps {
-  postId: string;
+  postId: number;
 }
 
 function timeAgo(dateStr: string): string {
@@ -70,9 +70,16 @@ export function PostDetail({ postId }: PostDetailProps) {
   const [allLabels, setAllLabels] = useState<FeedbackLabel[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEdit, setShowEdit] = useState(false);
+
+  // Top-level comment state
   const [commentBody, setCommentBody] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+
+  // Inline reply state (one open at a time)
+  const [replyingToId, setReplyingToId] = useState<number | null>(null);
+
+  // Inline edit state
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState("");
 
   const fetchPost = useCallback(async () => {
@@ -136,7 +143,7 @@ export function PostDetail({ postId }: PostDetailProps) {
     await fetchPost();
   };
 
-  const handleToggleLabel = async (labelId: string) => {
+  const handleToggleLabel = async (labelId: number) => {
     if (!post) return;
     const currentIds = post.labels.map((l) => l.id);
     const newIds = currentIds.includes(labelId)
@@ -162,23 +169,25 @@ export function PostDetail({ postId }: PostDetailProps) {
     }
   };
 
-  const handleDeleteLabel = async (id: string) => {
+  const handleDeleteLabel = async (id: number) => {
     await fetch(`/api/feedback/labels/${id}`, { method: "DELETE" });
     await fetchLabels();
     await fetchPost();
   };
 
-  const handleAddComment = async () => {
-    if (!commentBody.trim()) return;
+  /** Post a comment or reply. parentId = null → top-level. */
+  const handleAddComment = async (body: string, parentId?: number) => {
+    if (!body.trim()) return;
     setCommentLoading(true);
     try {
       const res = await fetch(`/api/feedback/${postId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: commentBody.trim() }),
+        body: JSON.stringify({ body: body.trim(), parentId: parentId ?? null }),
       });
       if (res.ok) {
-        setCommentBody("");
+        if (!parentId) setCommentBody("");
+        setReplyingToId(null);
         await fetchPost();
       }
     } finally {
@@ -186,7 +195,7 @@ export function PostDetail({ postId }: PostDetailProps) {
     }
   };
 
-  const handleEditComment = async (commentId: string) => {
+  const handleEditComment = async (commentId: number) => {
     if (!editingCommentBody.trim()) return;
     const res = await fetch(`/api/feedback/${postId}/comments/${commentId}`, {
       method: "PATCH",
@@ -200,7 +209,7 @@ export function PostDetail({ postId }: PostDetailProps) {
     }
   };
 
-  const handleDeleteComment = async (commentId: string) => {
+  const handleDeleteComment = async (commentId: number) => {
     await fetch(`/api/feedback/${postId}/comments/${commentId}`, { method: "DELETE" });
     await fetchPost();
   };
@@ -224,7 +233,7 @@ export function PostDetail({ postId }: PostDetailProps) {
     );
   }
 
-  const isAuthor = post.authorId === userId;
+  const isAuthor = post.authorId === Number(userId);
 
   return (
     <div className="space-y-6">
@@ -303,9 +312,9 @@ export function PostDetail({ postId }: PostDetailProps) {
             </div>
           </div>
 
-          {/* Comments */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold">Comments ({post.comments.length})</h3>
+          {/* Comments thread */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Comments ({post.commentCount})</h3>
 
             {post.comments.map((comment: FeedbackComment) => (
               <CommentItem
@@ -313,24 +322,30 @@ export function PostDetail({ postId }: PostDetailProps) {
                 comment={comment}
                 userId={userId}
                 isAdmin={isAdmin}
-                isEditing={editingCommentId === comment.id}
+                depth={0}
+                replyingToId={replyingToId}
+                editingCommentId={editingCommentId}
                 editingBody={editingCommentBody}
-                onStartEdit={() => {
-                  setEditingCommentId(comment.id);
-                  setEditingCommentBody(comment.body);
+                commentLoading={commentLoading}
+                onReply={setReplyingToId}
+                onSubmitReply={(parentId, body) => handleAddComment(body, parentId)}
+                onStartEdit={(id, body) => {
+                  setEditingCommentId(id);
+                  setEditingCommentBody(body);
+                  setReplyingToId(null);
                 }}
                 onCancelEdit={() => {
                   setEditingCommentId(null);
                   setEditingCommentBody("");
                 }}
                 onChangeBody={setEditingCommentBody}
-                onSaveEdit={() => handleEditComment(comment.id)}
-                onDelete={() => handleDeleteComment(comment.id)}
+                onSaveEdit={handleEditComment}
+                onDelete={handleDeleteComment}
               />
             ))}
 
-            {/* Add comment */}
-            <div className="space-y-2">
+            {/* Top-level add comment */}
+            <div className="space-y-2 pt-2">
               <Textarea
                 value={commentBody}
                 onChange={(e) => setCommentBody(e.target.value)}
@@ -341,7 +356,7 @@ export function PostDetail({ postId }: PostDetailProps) {
               <div className="flex justify-end">
                 <Button
                   size="sm"
-                  onClick={handleAddComment}
+                  onClick={() => handleAddComment(commentBody)}
                   disabled={commentLoading || !commentBody.trim()}
                 >
                   {commentLoading && <i className="fa-solid fa-spinner fa-spin mr-1.5" />}
@@ -437,94 +452,208 @@ export function PostDetail({ postId }: PostDetailProps) {
 
 // ─── Comment Item ────────────────────────────────────────────────────────────
 
+const MAX_INDENT_DEPTH = 4;
+
 interface CommentItemProps {
   comment: FeedbackComment;
   userId?: string;
   isAdmin: boolean;
-  isEditing: boolean;
+  depth: number;
+  replyingToId: number | null;
+  editingCommentId: number | null;
   editingBody: string;
-  onStartEdit: () => void;
+  commentLoading: boolean;
+  onReply: (id: number | null) => void;
+  onSubmitReply: (parentId: number, body: string) => void;
+  onStartEdit: (id: number, body: string) => void;
   onCancelEdit: () => void;
   onChangeBody: (body: string) => void;
-  onSaveEdit: () => void;
-  onDelete: () => void;
+  onSaveEdit: (id: number) => void;
+  onDelete: (id: number) => void;
 }
 
 function CommentItem({
   comment,
   userId,
   isAdmin,
-  isEditing,
+  depth,
+  replyingToId,
+  editingCommentId,
   editingBody,
+  commentLoading,
+  onReply,
+  onSubmitReply,
   onStartEdit,
   onCancelEdit,
   onChangeBody,
   onSaveEdit,
   onDelete,
 }: CommentItemProps) {
-  const isAuthor = comment.authorId === userId;
+  const isAuthor = comment.authorId === Number(userId);
+  const isEditing = editingCommentId === comment.id;
+  const isReplying = replyingToId === comment.id;
+  const [localReplyBody, setLocalReplyBody] = useState("");
+
+  const sharedProps: Omit<CommentItemProps, "comment" | "depth"> = {
+    userId,
+    isAdmin,
+    replyingToId,
+    editingCommentId,
+    editingBody,
+    commentLoading,
+    onReply,
+    onSubmitReply,
+    onStartEdit,
+    onCancelEdit,
+    onChangeBody,
+    onSaveEdit,
+    onDelete,
+  };
 
   return (
-    <div className="rounded-md border border-border bg-card/50 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
-            {comment.authorName.charAt(0).toUpperCase()}
-          </span>
-          <span className="font-medium text-foreground">{comment.authorName}</span>
-          <span>&middot;</span>
-          <span>{timeAgo(comment.createdAt)}</span>
-          {wasEdited(comment.createdAt, comment.updatedAt) && (
-            <span className="italic">(edited)</span>
+    <div className={depth > 0 ? "ml-5 border-l border-border pl-3" : undefined}>
+      <div className="rounded-md border border-border bg-card/50 p-3">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-[10px] font-medium text-primary">
+              {comment.authorName.charAt(0).toUpperCase()}
+            </span>
+            <span className="font-medium text-foreground">{comment.authorName}</span>
+            <span>&middot;</span>
+            <span>{timeAgo(comment.createdAt)}</span>
+            {wasEdited(comment.createdAt, comment.updatedAt) && (
+              <span className="italic">(edited)</span>
+            )}
+          </div>
+
+          {/* Actions */}
+          {!isEditing && (
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-[10px] text-muted-foreground"
+                onClick={() => onReply(isReplying ? null : comment.id)}
+              >
+                <i className="fa-solid fa-reply mr-1 text-[9px]" />
+                Reply
+              </Button>
+              {isAuthor && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => onStartEdit(comment.id, comment.body)}
+                >
+                  <i className="fa-solid fa-pen text-[10px]" />
+                </Button>
+              )}
+              {(isAuthor || isAdmin) && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                      <i className="fa-solid fa-trash text-[10px] text-destructive" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete comment?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {comment.replies.length > 0
+                          ? `This will also delete ${comment.replies.length} ${comment.replies.length === 1 ? "reply" : "replies"}.`
+                          : "This action cannot be undone."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => onDelete(comment.id)}>
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           )}
         </div>
-        {(isAuthor || isAdmin) && !isEditing && (
-          <div className="flex items-center gap-1">
-            {isAuthor && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onStartEdit}>
-                <i className="fa-solid fa-pen text-[10px]" />
+
+        {/* Body or edit form */}
+        {isEditing ? (
+          <div className="mt-2 space-y-2">
+            <Textarea
+              value={editingBody}
+              onChange={(e) => onChangeBody(e.target.value)}
+              rows={3}
+              maxLength={5000}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={onCancelEdit}>
+                Cancel
               </Button>
-            )}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                  <i className="fa-solid fa-trash text-[10px] text-destructive" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete comment?</AlertDialogTitle>
-                  <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete}>Delete</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+              <Button
+                size="sm"
+                onClick={() => onSaveEdit(comment.id)}
+                disabled={!editingBody.trim()}
+              >
+                Save
+              </Button>
+            </div>
           </div>
+        ) : (
+          <div className="mt-2 whitespace-pre-wrap text-sm text-foreground">{comment.body}</div>
         )}
       </div>
 
-      {isEditing ? (
-        <div className="mt-2 space-y-2">
+      {/* Inline reply form */}
+      {isReplying && (
+        <div className="ml-5 mt-2 space-y-2 border-l border-primary/30 pl-3">
           <Textarea
-            value={editingBody}
-            onChange={(e) => onChangeBody(e.target.value)}
-            rows={3}
+            value={localReplyBody}
+            onChange={(e) => setLocalReplyBody(e.target.value)}
+            placeholder={`Reply to ${comment.authorName}…`}
+            rows={2}
             maxLength={5000}
+            autoFocus
           />
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={onCancelEdit}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setLocalReplyBody("");
+                onReply(null);
+              }}
+            >
               Cancel
             </Button>
-            <Button size="sm" onClick={onSaveEdit} disabled={!editingBody.trim()}>
-              Save
+            <Button
+              size="sm"
+              onClick={() => {
+                onSubmitReply(comment.id, localReplyBody);
+                setLocalReplyBody("");
+              }}
+              disabled={commentLoading || !localReplyBody.trim()}
+            >
+              {commentLoading && <i className="fa-solid fa-spinner fa-spin mr-1.5" />}
+              Reply
             </Button>
           </div>
         </div>
-      ) : (
-        <div className="mt-2 whitespace-pre-wrap text-sm text-foreground">{comment.body}</div>
+      )}
+
+      {/* Nested replies */}
+      {comment.replies.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {comment.replies.map((reply) => (
+            <CommentItem
+              key={reply.id}
+              comment={reply}
+              depth={Math.min(depth + 1, MAX_INDENT_DEPTH)}
+              {...sharedProps}
+            />
+          ))}
+        </div>
       )}
     </div>
   );

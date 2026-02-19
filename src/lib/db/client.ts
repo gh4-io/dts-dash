@@ -19,6 +19,11 @@ sqlite.pragma("busy_timeout = 5000");
 // Enable WAL mode for better concurrent read performance
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = ON");
+// Performance tuning — safe in WAL mode
+sqlite.pragma("synchronous = NORMAL"); // reduce fsync overhead; still crash-safe in WAL
+sqlite.pragma("cache_size = -65536"); // 64 MB page cache (negative = KiB)
+sqlite.pragma("temp_store = MEMORY"); // temp tables and indexes in memory
+sqlite.pragma("mmap_size = 268435456"); // 256 MB memory-mapped I/O
 
 export const db = drizzle(sqlite, { schema });
 

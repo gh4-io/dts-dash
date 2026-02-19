@@ -5,6 +5,7 @@ import { customers } from "@/lib/db/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { isValidHex, getContrastText } from "@/lib/utils/contrast";
 import { createChildLogger } from "@/lib/logger";
+import { parseIntParam } from "@/lib/utils/route-helpers";
 
 const log = createChildLogger("api/admin/customers/[id]");
 
@@ -13,10 +14,7 @@ const log = createChildLogger("api/admin/customers/[id]");
  * Update a single customer (name, displayName, color)
  * Admin only
  */
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
@@ -24,6 +22,9 @@ export async function PATCH(
     }
 
     const { id } = await params;
+    const numId = parseIntParam(id);
+    if (!numId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+
     const body = await request.json();
     const { name, displayName, color } = body as {
       name?: string;
@@ -35,7 +36,7 @@ export async function PATCH(
     if (!name && !displayName && !color) {
       return NextResponse.json(
         { error: "At least one field (name, displayName, color) is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -43,15 +44,11 @@ export async function PATCH(
     if (color && !isValidHex(color)) {
       return NextResponse.json(
         { error: "Invalid hex color format (must be #rrggbb)" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const existing = db
-      .select()
-      .from(customers)
-      .where(eq(customers.id, id))
-      .get();
+    const existing = db.select().from(customers).where(eq(customers.id, numId)).get();
 
     if (!existing) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
@@ -62,12 +59,12 @@ export async function PATCH(
       const duplicate = db
         .select()
         .from(customers)
-        .where(and(eq(customers.name, name), ne(customers.id, id)))
+        .where(and(eq(customers.name, name), ne(customers.id, numId)))
         .get();
       if (duplicate) {
         return NextResponse.json(
           { error: `A customer named "${name}" already exists` },
-          { status: 409 }
+          { status: 409 },
         );
       }
     }
@@ -82,24 +79,14 @@ export async function PATCH(
       updates.colorText = getContrastText(color);
     }
 
-    db.update(customers)
-      .set(updates)
-      .where(eq(customers.id, id))
-      .run();
+    db.update(customers).set(updates).where(eq(customers.id, numId)).run();
 
-    const updated = db
-      .select()
-      .from(customers)
-      .where(eq(customers.id, id))
-      .get();
+    const updated = db.select().from(customers).where(eq(customers.id, numId)).get();
 
     return NextResponse.json(updated);
   } catch (error) {
     log.error({ err: error }, "PATCH error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -110,7 +97,7 @@ export async function PATCH(
  */
 export async function DELETE(
   _request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await auth();
@@ -119,12 +106,10 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const numId = parseIntParam(id);
+    if (!numId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
-    const existing = db
-      .select()
-      .from(customers)
-      .where(eq(customers.id, id))
-      .get();
+    const existing = db.select().from(customers).where(eq(customers.id, numId)).get();
 
     if (!existing) {
       return NextResponse.json({ error: "Customer not found" }, { status: 404 });
@@ -132,15 +117,12 @@ export async function DELETE(
 
     db.update(customers)
       .set({ isActive: false, updatedAt: new Date().toISOString() })
-      .where(eq(customers.id, id))
+      .where(eq(customers.id, numId))
       .run();
 
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "DELETE error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@
 import type { Customer } from "@/types";
 
 export interface FuzzyMatchResult {
-  customerId: string;
+  customerId: number | null;
   customerName: string;
   confidence: number; // 0-100
   matched: boolean;
@@ -36,7 +36,7 @@ function levenshteinDistance(a: string, b: string): number {
         matrix[i][j] = Math.min(
           matrix[i - 1][j - 1] + 1, // substitution
           matrix[i][j - 1] + 1, // insertion
-          matrix[i - 1][j] + 1 // deletion
+          matrix[i - 1][j] + 1, // deletion
         );
       }
     }
@@ -67,13 +67,10 @@ function normalizeCustomerName(name: string): string {
  * Returns best match with confidence score (0-100)
  * Minimum 70% confidence required for match
  */
-export function fuzzyMatchCustomer(
-  rawOperator: string,
-  customers: Customer[]
-): FuzzyMatchResult {
+export function fuzzyMatchCustomer(rawOperator: string, customers: Customer[]): FuzzyMatchResult {
   if (!rawOperator || customers.length === 0) {
     return {
-      customerId: "",
+      customerId: null,
       customerName: rawOperator,
       confidence: 0,
       matched: false,
@@ -83,9 +80,7 @@ export function fuzzyMatchCustomer(
   const normalized = normalizeCustomerName(rawOperator);
 
   // 1. Exact match (after normalization)
-  const exact = customers.find(
-    (c) => normalizeCustomerName(c.name) === normalized
-  );
+  const exact = customers.find((c) => normalizeCustomerName(c.name) === normalized);
   if (exact) {
     return {
       customerId: exact.id,
@@ -106,7 +101,7 @@ export function fuzzyMatchCustomer(
 
   if (!best) {
     return {
-      customerId: "",
+      customerId: null,
       customerName: rawOperator,
       confidence: 0,
       matched: false,
@@ -114,10 +109,7 @@ export function fuzzyMatchCustomer(
   }
 
   // 4. Calculate confidence (lower distance = higher confidence)
-  const maxLen = Math.max(
-    normalized.length,
-    normalizeCustomerName(best.customer.name).length
-  );
+  const maxLen = Math.max(normalized.length, normalizeCustomerName(best.customer.name).length);
   const confidence = Math.round((1 - best.distance / maxLen) * 100);
 
   // 5. Require minimum 70% confidence for match
@@ -132,7 +124,7 @@ export function fuzzyMatchCustomer(
 
   // 6. No good match found
   return {
-    customerId: "",
+    customerId: null,
     customerName: rawOperator,
     confidence,
     matched: false,

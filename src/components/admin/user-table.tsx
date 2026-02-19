@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 
 interface UserRow {
-  id: string;
+  id: number;
   email: string;
   username?: string | null;
   displayName: string;
@@ -62,7 +62,7 @@ export function UserTable({
         </TableHeader>
         <TableBody>
           {users.map((user) => {
-            const isSelf = user.id === currentUserId;
+            const isSelf = user.id === Number(currentUserId);
 
             return (
               <TableRow

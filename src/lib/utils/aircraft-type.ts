@@ -60,7 +60,7 @@ export function invalidateMappingsCache(): void {
  */
 export async function normalizeAircraftType(
   rawType: string | null | undefined,
-  mappings?: AircraftTypeMapping[]
+  mappings?: AircraftTypeMapping[],
 ): Promise<NormalizedAircraftType> {
   // Handle null/empty
   if (!rawType || rawType.trim() === "") {
@@ -76,9 +76,7 @@ export async function normalizeAircraftType(
   const loadedMappings = mappings ?? (await loadMappings());
 
   // 1. Exact match (case-insensitive)
-  const exactMatch = loadedMappings.find(
-    (m) => m.pattern.toLowerCase() === cleaned.toLowerCase()
-  );
+  const exactMatch = loadedMappings.find((m) => m.pattern.toLowerCase() === cleaned.toLowerCase());
 
   if (exactMatch) {
     return {
@@ -102,11 +100,12 @@ export async function normalizeAircraftType(
     }
   }
 
-  // 3. Fallback to Unknown
+  // 3. No mapping match — return the raw string so filters/grouping still work.
+  //    "Unknown" only appears when rawType itself was null/empty (handled above).
   return {
-    canonical: "Unknown",
+    canonical: cleaned,
     raw: cleaned,
-    confidence: "fallback",
+    confidence: "raw",
     mappingId: null,
   };
 }
@@ -131,7 +130,7 @@ function matchesPattern(input: string, pattern: string): boolean {
  * Batch normalize (performance optimization for large datasets)
  */
 export async function normalizeAircraftTypes(
-  rawTypes: (string | null | undefined)[]
+  rawTypes: (string | null | undefined)[],
 ): Promise<NormalizedAircraftType[]> {
   const mappings = await loadMappings(); // Load once
   return Promise.all(rawTypes.map((raw) => normalizeAircraftType(raw, mappings)));

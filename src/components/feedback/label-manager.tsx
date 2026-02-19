@@ -9,7 +9,7 @@ import type { FeedbackLabel } from "@/types/feedback";
 interface LabelManagerProps {
   labels: FeedbackLabel[];
   onCreateLabel: (name: string, color: string) => Promise<void>;
-  onDeleteLabel: (id: string) => Promise<void>;
+  onDeleteLabel: (id: number) => Promise<void>;
 }
 
 const PRESET_COLORS = [
@@ -41,7 +41,7 @@ export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelMana
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs font-semibold uppercase text-muted-foreground">Labels</h4>
+      <h4 className="text-xs font-semibold uppercase text-muted-foreground">Manage Labels</h4>
 
       {labels.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -59,15 +59,19 @@ export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelMana
         </div>
       )}
 
-      <div className="flex items-center gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Label name"
-          className="h-7 text-xs"
-          maxLength={50}
-        />
-        <div className="flex gap-1">
+      {/* Name input — full width */}
+      <Input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+        placeholder="New label name"
+        className="h-8 text-xs"
+        maxLength={50}
+      />
+
+      {/* Color swatches + Add button on same row */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1">
           {PRESET_COLORS.map((c) => (
             <button
               key={c}
@@ -76,7 +80,7 @@ export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelMana
               style={{
                 backgroundColor: c,
                 borderColor: color === c ? "white" : "transparent",
-                transform: color === c ? "scale(1.15)" : "scale(1)",
+                transform: color === c ? "scale(1.2)" : "scale(1)",
               }}
             />
           ))}
@@ -86,7 +90,7 @@ export function LabelManager({ labels, onCreateLabel, onDeleteLabel }: LabelMana
           variant="outline"
           onClick={handleCreate}
           disabled={loading || !name.trim()}
-          className="h-7 px-2 text-xs"
+          className="h-7 shrink-0 px-3 text-xs"
         >
           Add
         </Button>

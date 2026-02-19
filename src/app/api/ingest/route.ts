@@ -4,13 +4,22 @@ import { checkRateLimit } from "@/lib/utils/rate-limit";
 import { createChunkSession } from "@/lib/utils/chunk-session";
 import { validateImportData, commitImportData } from "@/lib/data/import-utils";
 import { db } from "@/lib/db/client";
-import { appConfig, importLog } from "@/lib/db/schema";
+import { appConfig, importLog, users } from "@/lib/db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/ingest");
 
-const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
+const SYSTEM_AUTH_ID = "00000000-0000-0000-0000-000000000000";
+
+function getSystemUserId(): number {
+  const row = db.select({ id: users.id }).from(users).where(eq(users.authId, SYSTEM_AUTH_ID)).get();
+  if (!row)
+    throw new Error(
+      "System user not found — ensure the system user exists with authId " + SYSTEM_AUTH_ID,
+    );
+  return row.id;
+}
 
 /**
  * POST /api/ingest
@@ -220,7 +229,7 @@ export async function POST(request: NextRequest) {
     const result = await commitImportData({
       records: validation.records,
       source: "api",
-      importedBy: SYSTEM_USER_ID,
+      importedBy: getSystemUserId(),
       idempotencyKey: idempotencyKey || undefined,
     });
 
@@ -228,6 +237,9 @@ export async function POST(request: NextRequest) {
       {
         logId: result.logId,
         recordCount: result.recordCount,
+        newCount: result.newCount,
+        changedCount: result.changedCount,
+        skippedCount: result.skippedCount,
         upsertedCount: result.upsertedCount,
         success: result.success,
       },
@@ -240,6 +252,13 @@ export async function POST(request: NextRequest) {
       logId: result.logId,
       summary: validation.summary,
       warnings: validation.warnings,
+      counts: {
+        total: result.recordCount,
+        new: result.newCount,
+        changed: result.changedCount,
+        skipped: result.skippedCount,
+        upserted: result.upsertedCount,
+      },
     });
   } catch (error) {
     log.error({ err: error }, "Unhandled error in POST /api/ingest");

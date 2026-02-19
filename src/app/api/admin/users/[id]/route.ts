@@ -6,6 +6,8 @@ import { users } from "@/lib/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { validatePassword } from "@/lib/utils/password-validation";
+import { parseIntParam } from "@/lib/utils/route-helpers";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/admin/users/[id]");
 
@@ -22,9 +24,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
+    const numId = parseIntParam(id);
+    if (!numId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+
     const body = await request.json();
 
-    const existing = db.select().from(users).where(eq(users.id, id)).get();
+    const existing = db.select().from(users).where(eq(users.id, numId)).get();
     if (!existing) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -43,7 +48,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // Prevent self-deactivation
-    if (id === session.user.id && body.isActive === false) {
+    const sessionUserId = getSessionUserId(session);
+    if (numId === sessionUserId && body.isActive === false) {
       return NextResponse.json({ error: "Cannot deactivate your own account" }, { status: 400 });
     }
 
@@ -66,7 +72,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const emailConflict = db
         .select()
         .from(users)
-        .where(and(eq(users.email, body.email.toLowerCase()), ne(users.id, id)))
+        .where(and(eq(users.email, body.email.toLowerCase()), ne(users.id, numId)))
         .get();
       if (emailConflict) {
         return NextResponse.json({ error: "Email already in use" }, { status: 409 });
@@ -92,7 +98,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         const usernameConflict = db
           .select()
           .from(users)
-          .where(and(eq(users.username, usernameVal), ne(users.id, id)))
+          .where(and(eq(users.username, usernameVal), ne(users.id, numId)))
           .get();
         if (usernameConflict) {
           return NextResponse.json({ error: "Username already in use" }, { status: 409 });
@@ -109,13 +115,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       shouldInvalidateTokens = true;
     }
 
-    db.update(users).set(updates).where(eq(users.id, id)).run();
+    db.update(users).set(updates).where(eq(users.id, numId)).run();
 
     // Invalidate tokens if role changed, user deactivated, or password changed
     const roleChanged = body.role !== undefined && body.role !== existing.role;
     const deactivated = body.isActive === false && existing.isActive;
     if (roleChanged || deactivated || shouldInvalidateTokens) {
-      invalidateUserTokens(id);
+      invalidateUserTokens(numId);
     }
 
     // Return updated user
@@ -132,7 +138,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         updatedAt: users.updatedAt,
       })
       .from(users)
-      .where(eq(users.id, id))
+      .where(eq(users.id, numId))
       .get();
 
     return NextResponse.json(updated);
@@ -158,13 +164,16 @@ export async function DELETE(
     }
 
     const { id } = await params;
+    const numId = parseIntParam(id);
+    if (!numId) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
     // Prevent self-deletion
-    if (id === session.user.id) {
+    const sessionUserId = getSessionUserId(session);
+    if (numId === sessionUserId) {
       return NextResponse.json({ error: "Cannot delete your own account" }, { status: 400 });
     }
 
-    const existing = db.select().from(users).where(eq(users.id, id)).get();
+    const existing = db.select().from(users).where(eq(users.id, numId)).get();
     if (!existing) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -184,10 +193,10 @@ export async function DELETE(
 
     db.update(users)
       .set({ isActive: false, updatedAt: new Date().toISOString() })
-      .where(eq(users.id, id))
+      .where(eq(users.id, numId))
       .run();
 
-    invalidateUserTokens(id);
+    invalidateUserTokens(numId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

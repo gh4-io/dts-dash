@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useCustomers } from "@/lib/hooks/use-customers";
@@ -73,7 +68,7 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
                   {wp.customer}
                 </span>
               </Row>
-              <Row label="Type" value={`${wp.inferredType} (inferred)`} />
+              <Row label="Type" value={wp.inferredType} />
               <button
                 className="text-xs text-primary hover:underline"
                 onClick={() => {
@@ -97,7 +92,9 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
               <Row label="Departure" value={fmtDate(departure)} />
               <Row label="Ground Time" value={`${groundH}h ${groundM}m`} />
               <Row label="Status">
-                <Badge variant="secondary" className="text-xs">{wp.status}</Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {wp.status}
+                </Badge>
               </Row>
             </div>
           </section>
@@ -106,7 +103,9 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
 
           {/* Work Package Section */}
           <section>
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Work Package</h3>
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+              Work Package
+            </h3>
             <div className="space-y-1.5 text-sm">
               <Row label="WP Number" value={wp.workpackageNo ?? "—"} />
               <Row label="Has WP">
@@ -123,7 +122,9 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
             <>
               <Separator />
               <section>
-                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Notes</h3>
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+                  Notes
+                </h3>
                 <p className="text-sm italic text-muted-foreground">
                   &ldquo;{wp.calendarComments}&rdquo;
                 </p>
@@ -135,7 +136,9 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
 
           {/* Linked Information */}
           <section>
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">Linked Information</h3>
+            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+              Linked Information
+            </h3>
             <div className="space-y-1.5">
               <LinkButton
                 label={`All ${wp.aircraftReg} visits`}
@@ -185,10 +188,7 @@ function Row({
 
 function LinkButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      className="block text-xs text-primary hover:underline"
-      onClick={onClick}
-    >
+    <button className="block text-xs text-primary hover:underline" onClick={onClick}>
       → {label}
     </button>
   );

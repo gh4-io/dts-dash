@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { analyticsEvents } from "@/lib/db/schema";
-import { nanoid } from "nanoid";
-import { desc } from "drizzle-orm";
-import { paginate, parsePaginationParams } from "@/lib/utils/pagination";
+import { desc, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
+
+const MIN_PAGE_SIZE = 1;
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 30;
 
 const log = createChildLogger("api/analytics/events");
 
@@ -30,9 +33,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert event
+    const userId = getSessionUserId(session);
     await db.insert(analyticsEvents).values({
-      id: nanoid(),
-      userId: session.user.id,
+      userId,
       eventType,
       eventData: props ? JSON.stringify(props) : null,
       page: props?.page ?? null,
@@ -59,23 +62,36 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const paginationParams = parsePaginationParams(searchParams);
+    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+    const pageSizeParam = parseInt(searchParams.get("pageSize") ?? String(DEFAULT_PAGE_SIZE), 10);
+    const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(MIN_PAGE_SIZE, pageSizeParam));
+    const offset = (page - 1) * pageSize;
 
-    // Query events (most recent first)
-    const events = await db
-      .select()
-      .from(analyticsEvents)
-      .orderBy(desc(analyticsEvents.createdAt));
+    const [events, countResult] = await Promise.all([
+      db
+        .select()
+        .from(analyticsEvents)
+        .orderBy(desc(analyticsEvents.createdAt))
+        .limit(pageSize)
+        .offset(offset),
+      db.select({ total: sql<number>`COUNT(*)` }).from(analyticsEvents),
+    ]);
 
-    // Paginate
-    const result = paginate(events, paginationParams);
+    const total = countResult[0]?.total ?? 0;
+    const totalPages = Math.ceil(total / pageSize);
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      data: events,
+      meta: {
+        total,
+        page,
+        pageSize,
+        totalPages,
+        hasMore: page < totalPages,
+      },
+    });
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

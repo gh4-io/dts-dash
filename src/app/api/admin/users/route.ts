@@ -4,10 +4,7 @@ import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { hashSync } from "bcryptjs";
-import {
-  validatePassword,
-  formatPasswordErrors,
-} from "@/lib/utils/password-validation";
+import { validatePassword, formatPasswordErrors } from "@/lib/utils/password-validation";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/admin/users");
@@ -50,10 +47,7 @@ export async function GET() {
     return NextResponse.json(allUsers);
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -76,50 +70,42 @@ export async function POST(request: NextRequest) {
     if (!email || !displayName || !role) {
       return NextResponse.json(
         { error: "email, displayName, and role are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json(
-        { error: "Invalid email format" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
     }
 
-    if (username && (username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9._-]+$/.test(username))) {
+    if (
+      username &&
+      (username.length < 3 || username.length > 30 || !/^[a-zA-Z0-9._-]+$/.test(username))
+    ) {
       return NextResponse.json(
-        { error: "Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)" },
-        { status: 400 }
+        {
+          error: "Username must be 3-30 characters (letters, numbers, dots, hyphens, underscores)",
+        },
+        { status: 400 },
       );
     }
 
     if (displayName.length < 2 || displayName.length > 50) {
-      return NextResponse.json(
-        { error: "Display name must be 2-50 characters" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Display name must be 2-50 characters" }, { status: 400 });
     }
 
     if (!["user", "admin", "superadmin"].includes(role)) {
       return NextResponse.json(
         { error: "Role must be user, admin, or superadmin" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Check unique email
-    const existingEmail = db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .get();
+    const existingEmail = db.select().from(users).where(eq(users.email, email.toLowerCase())).get();
 
     if (existingEmail) {
-      return NextResponse.json(
-        { error: "A user with this email already exists" },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "A user with this email already exists" }, { status: 409 });
     }
 
     // Check unique username
@@ -133,7 +119,7 @@ export async function POST(request: NextRequest) {
       if (existingUsername) {
         return NextResponse.json(
           { error: "A user with this username already exists" },
-          { status: 409 }
+          { status: 409 },
         );
       }
     }
@@ -143,7 +129,7 @@ export async function POST(request: NextRequest) {
       if (!validation.valid) {
         return NextResponse.json(
           { error: formatPasswordErrors(validation.errors) },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -152,20 +138,22 @@ export async function POST(request: NextRequest) {
     const forcePasswordChange = !password;
 
     const now = new Date().toISOString();
-    const newUser = {
-      id: crypto.randomUUID(),
-      email: email.toLowerCase(),
-      username: username ? username.toLowerCase() : null,
-      displayName,
-      passwordHash: hashSync(tempPassword, 10),
-      role,
-      isActive: true,
-      forcePasswordChange,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    db.insert(users).values(newUser).run();
+    const newUser = db
+      .insert(users)
+      .values({
+        authId: crypto.randomUUID(),
+        email: email.toLowerCase(),
+        username: username ? username.toLowerCase() : null,
+        displayName,
+        passwordHash: hashSync(tempPassword, 10),
+        role,
+        isActive: true,
+        forcePasswordChange,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
 
     // Return user without passwordHash, plus tempPassword if generated
     const response: Record<string, unknown> = {
@@ -186,9 +174,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

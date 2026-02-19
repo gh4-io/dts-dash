@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { MobileNav } from "./mobile-nav";
+import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 
 export function Header() {
   const { theme, resolvedTheme, setTheme } = useTheme();
@@ -65,6 +66,10 @@ export function Header() {
       <MobileNav open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
 
       <div className="flex-1" />
+
+      <div className="hidden sm:flex items-center mr-3">
+        <DataFreshnessBadge />
+      </div>
 
       <div className="flex items-center gap-2">
         {/* Theme toggle */}

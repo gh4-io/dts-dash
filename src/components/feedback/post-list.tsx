@@ -74,12 +74,12 @@ export function PostList() {
     router.push(`/feedback?${params.toString()}`);
   };
 
-  const handleLabelToggle = (labelId: string) => {
+  const handleLabelToggle = (labelId: number) => {
     const params = new URLSearchParams(searchParams.toString());
-    if (labelFilter === labelId) {
+    if (labelFilter === String(labelId)) {
       params.delete("label");
     } else {
-      params.set("label", labelId);
+      params.set("label", String(labelId));
     }
     router.push(`/feedback?${params.toString()}`);
   };
@@ -133,7 +133,7 @@ export function PostList() {
               <LabelBadge
                 key={label.id}
                 label={label}
-                active={labelFilter === label.id}
+                active={labelFilter === String(label.id)}
                 onClick={() => handleLabelToggle(label.id)}
               />
             ))}

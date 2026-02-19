@@ -44,6 +44,7 @@ export function createTables() {
       iata_code TEXT,
       icao_code TEXT,
       sp_id INTEGER UNIQUE,
+      guid TEXT UNIQUE,
       source TEXT NOT NULL DEFAULT 'inferred',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -167,8 +168,10 @@ export function createTables() {
     );
 
     CREATE TABLE IF NOT EXISTS aircraft (
-      registration TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      registration TEXT NOT NULL UNIQUE,
       sp_id INTEGER UNIQUE,
+      guid TEXT UNIQUE,
       aircraft_type TEXT,
       aircraft_model_id INTEGER REFERENCES aircraft_models(id),
       operator_id INTEGER REFERENCES customers(id),
@@ -291,5 +294,96 @@ export function runMigrations(): MigrationResult[] {
   // All prior migrations (M001–M002b) have been rolled into createTables().
   // Fresh databases get the full schema; no incremental ALTER TABLEs needed.
   // Add future migrations here if the schema evolves after this baseline.
-  return [];
+
+  const results: MigrationResult[] = [];
+
+  // M003: Add GUID columns + restructure aircraft PK
+  results.push(
+    applyMigration("M003_guid_columns_aircraft_pk", () => {
+      // 1. Add guid column to customers (if missing)
+      const custCols = sqlite.pragma("table_info(customers)") as Array<{ name: string }>;
+      if (!custCols.some((c) => c.name === "guid")) {
+        sqlite.exec(`ALTER TABLE customers ADD COLUMN guid TEXT;`);
+        sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_guid ON customers(guid);`);
+      }
+
+      // 2. Restructure aircraft table: registration PK → id autoincrement PK + guid
+      const acCols = sqlite.pragma("table_info(aircraft)") as Array<{ name: string; pk: number }>;
+      const hasId = acCols.some((c) => c.name === "id");
+      const hasGuid = acCols.some((c) => c.name === "guid");
+      const regIsPk = acCols.some((c) => c.name === "registration" && c.pk === 1);
+
+      if (!hasId || regIsPk) {
+        // Full table rebuild needed — PK change requires recreation in SQLite
+        sqlite.exec(`
+        CREATE TABLE aircraft_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          registration TEXT NOT NULL UNIQUE,
+          sp_id INTEGER UNIQUE,
+          guid TEXT UNIQUE,
+          aircraft_type TEXT,
+          aircraft_model_id INTEGER REFERENCES aircraft_models(id),
+          operator_id INTEGER REFERENCES customers(id),
+          manufacturer_id INTEGER REFERENCES manufacturers(id),
+          engine_type_id INTEGER REFERENCES engine_types(id),
+          serial_number TEXT,
+          age TEXT,
+          lessor TEXT,
+          category TEXT,
+          operator_raw TEXT,
+          operator_match_confidence INTEGER,
+          source TEXT NOT NULL DEFAULT 'inferred',
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          created_by INTEGER REFERENCES users(id),
+          updated_by INTEGER REFERENCES users(id)
+        );
+
+        INSERT INTO aircraft_new (registration, sp_id, aircraft_type, aircraft_model_id,
+          operator_id, manufacturer_id, engine_type_id, serial_number, age, lessor, category,
+          operator_raw, operator_match_confidence, source, is_active, created_at, updated_at,
+          created_by, updated_by)
+        SELECT registration, sp_id, aircraft_type, aircraft_model_id,
+          operator_id, manufacturer_id, engine_type_id, serial_number, age, lessor, category,
+          operator_raw, operator_match_confidence, source, is_active, created_at, updated_at,
+          created_by, updated_by
+        FROM aircraft;
+
+        DROP TABLE aircraft;
+        ALTER TABLE aircraft_new RENAME TO aircraft;
+
+        CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
+        CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
+        CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
+      `);
+      } else if (!hasGuid) {
+        // Table already has id PK but missing guid
+        sqlite.exec(`ALTER TABLE aircraft ADD COLUMN guid TEXT;`);
+        sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_aircraft_guid ON aircraft(guid);`);
+      }
+    }),
+  );
+
+  return results;
+}
+
+function applyMigration(name: string, fn: () => void): MigrationResult {
+  // Track applied migrations in app_config
+  const key = `migration_${name}`;
+  const existing = sqlite.prepare("SELECT value FROM app_config WHERE key = ?").get(key) as
+    | { value: string }
+    | undefined;
+
+  if (existing) {
+    return { name, applied: false };
+  }
+
+  fn();
+
+  sqlite
+    .prepare("INSERT INTO app_config (key, value, updated_at) VALUES (?, ?, ?)")
+    .run(key, "applied", new Date().toISOString());
+
+  return { name, applied: true };
 }

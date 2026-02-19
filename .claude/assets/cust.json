@@ -1,768 +1,818 @@
 {
-  "d": {
-    "results": [
-      {
-        "__metadata": {
-          "id": "4c379c63-a63f-4f48-b857-d21aae2eca7a",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)",
-          "etag": "\"4\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 1,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "Kalitta Air",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "United States",
-        "established": "2000-04-01T00:00:00Z",
-        "group": null,
-        "base": "Ypsilanti Willow Run (YIP / KYIP)",
-        "website": "kalittaair.com",
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B777", "B747", "B767"]
-        },
-        "iata": "K4",
-        "icao": "CKS",
-        "callsign": "CONNIE",
-        "commonname": "Kalitta Air",
-        "ID": 1,
-        "Modified": "2024-11-14T15:08:15Z",
-        "Created": "2024-11-14T14:09:28Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "4.0",
-        "Attachments": false,
-        "GUID": "cd545486-5eed-47ea-a158-1658b81692a9"
-      },
-      {
-        "__metadata": {
-          "id": "79574941-8dfa-48b3-9efd-9c38ac15b808",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)",
-          "etag": "\"4\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 2,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "AeroLogic",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "Germany",
-        "established": "2007-09-12T00:00:00Z",
-        "group": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["Lufthansa Group", "DHL Group"]
-        },
-        "base": "Leipzig / Halle (LEJ / EDDP)",
-        "website": "aerologic.aero",
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B777"]
-        },
-        "iata": "3S",
-        "icao": "BOX",
-        "callsign": "GERMAN CARGO",
-        "commonname": "Aerologic",
-        "ID": 2,
-        "Modified": "2024-11-14T15:07:56Z",
-        "Created": "2024-11-14T14:11:37Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "4.0",
-        "Attachments": false,
-        "GUID": "63e85ddd-17c9-42a3-8b8b-85abc4ea1238"
-      },
-      {
-        "__metadata": {
-          "id": "df4fd49c-056a-4856-8b80-1f4ed27caa88",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)",
-          "etag": "\"3\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 3,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "CargoJet Airways",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "Canada",
-        "established": "2002-02-21T00:00:00Z",
-        "group": null,
-        "base": "Hamilton John C. Munro International (YHM / CYHM)",
-        "website": "cargojet.com",
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B747", "B777", "B767", "B757"]
-        },
-        "iata": "W8",
-        "icao": "CJT",
-        "callsign": "CARGOJET",
-        "commonname": "Cargojet",
-        "ID": 3,
-        "Modified": "2024-11-14T15:07:52Z",
-        "Created": "2024-11-14T14:44:40Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "3.0",
-        "Attachments": false,
-        "GUID": "84119ea6-e861-46b4-a1d7-b626c5e2c651"
-      },
-      {
-        "__metadata": {
-          "id": "fce3c34b-92df-4688-b40c-f2299ab5e133",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)",
-          "etag": "\"2\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 4,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "21 Air",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "United States",
-        "established": null,
-        "group": null,
-        "base": null,
-        "website": null,
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B747", "B767"]
-        },
-        "iata": "2I",
-        "icao": "CSB",
-        "callsign": "CARGO SOUTH",
-        "commonname": "21 Air",
-        "ID": 4,
-        "Modified": "2024-11-14T15:08:19Z",
-        "Created": "2024-11-14T14:46:07Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "2.0",
-        "Attachments": false,
-        "GUID": "d3add7af-0784-47da-94ea-c19187e667cc"
-      },
-      {
-        "__metadata": {
-          "id": "3bfa59ed-1668-4d4a-a64f-1b9e0d92beff",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)",
-          "etag": "\"2\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 5,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "Kalitta Charters II",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "United States",
-        "established": null,
-        "group": null,
-        "base": "Ypsilanti Willow Run (YIP / KYIP)",
-        "website": "kalittacharterscargo.com",
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B737"]
-        },
-        "iata": "K5",
-        "icao": "KII",
-        "callsign": "DRAGSTER",
-        "commonname": "Kalitta Charters II",
-        "ID": 5,
-        "Modified": "2024-11-14T15:08:59Z",
-        "Created": "2024-11-14T14:49:18Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "2.0",
-        "Attachments": false,
-        "GUID": "19eb6887-7019-4952-8366-a3bc56994438"
-      },
-      {
-        "__metadata": {
-          "id": "4e53734e-42c0-4b22-8c1a-91a4ef882877",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)",
-          "etag": "\"3\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 6,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "DHL Air UK",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "United Kingdom",
-        "established": "1982-10-11T00:00:00Z",
-        "group": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["DHL Group"]
-        },
-        "base": "East Midlands (EMA / EGNX)",
-        "website": "dhl.com",
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B757", "B767", "B777"]
-        },
-        "iata": "D0",
-        "icao": "DHK",
-        "callsign": "WORLD EXPRESS",
-        "commonname": "DHL",
-        "ID": 6,
-        "Modified": "2024-11-14T15:08:47Z",
-        "Created": "2024-11-14T15:00:42Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "3.0",
-        "Attachments": false,
-        "GUID": "e3b7ec9b-f6eb-4648-a376-29204c27db8a"
-      },
-      {
-        "__metadata": {
-          "id": "700b3eb7-8860-4a69-a717-df4189bb9494",
-          "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)",
-          "etag": "\"2\"",
-          "type": "SP.Data.CustomerLookupListItem"
-        },
-        "FirstUniqueAncestorSecurableObject": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FirstUniqueAncestorSecurableObject"
-          }
-        },
-        "RoleAssignments": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/RoleAssignments"
-          }
-        },
-        "AttachmentFiles": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/AttachmentFiles"
-          }
-        },
-        "ContentType": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/ContentType"
-          }
-        },
-        "GetDlpPolicyTip": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/GetDlpPolicyTip"
-          }
-        },
-        "FieldValuesAsHtml": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FieldValuesAsHtml"
-          }
-        },
-        "FieldValuesAsText": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FieldValuesAsText"
-          }
-        },
-        "FieldValuesForEdit": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FieldValuesForEdit"
-          }
-        },
-        "File": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/File"
-          }
-        },
-        "Folder": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/Folder"
-          }
-        },
-        "LikedByInformation": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/LikedByInformation"
-          }
-        },
-        "ParentList": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/ParentList"
-          }
-        },
-        "Properties": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/Properties"
-          }
-        },
-        "Versions": {
-          "__deferred": {
-            "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/Versions"
-          }
-        },
-        "FileSystemObjectType": 0,
-        "Id": 7,
-        "ServerRedirectedEmbedUri": null,
-        "ServerRedirectedEmbedUrl": "",
-        "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
-        "Title": "Singapore Airlines",
-        "OData__ColorTag": null,
-        "ComplianceAssetId": null,
-        "country": "Singapore",
-        "established": "1947-05-01T00:00:00Z",
-        "group": null,
-        "base": "Singapore Changi (SIN / WSSS)",
-        "website": "singaporeair.com",
-        "mocphone": null,
-        "fleetmatrix": {
-          "__metadata": { "type": "Collection(Edm.String)" },
-          "results": ["B737", "B747", "B777", "B787", "A350", "A380"]
-        },
-        "iata": "SQ",
-        "icao": "SIA",
-        "callsign": "SINGAPORE",
-        "commonname": "Singapore",
-        "ID": 7,
-        "Modified": "2024-11-14T15:07:01Z",
-        "Created": "2024-11-14T15:05:28Z",
-        "AuthorId": 14,
-        "EditorId": 14,
-        "OData__UIVersionString": "2.0",
-        "Attachments": false,
-        "GUID": "25febd83-a13f-4f5c-b5e3-d37a00838e65"
-      }
-    ]
-  }
+    "d": {
+        "results": [
+            {
+                "__metadata": {
+                    "id": "f79da9ec-093c-44ef-9170-fc3c8d513d60",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)",
+                    "etag": "\"4\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(1)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 1,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "Kalitta Air",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "United States",
+                "established": "2000-04-01T00:00:00Z",
+                "group": null,
+                "base": "Ypsilanti Willow Run (YIP / KYIP)",
+                "website": "kalittaair.com",
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B777",
+                        "B747",
+                        "B767"
+                    ]
+                },
+                "iata": "K4",
+                "icao": "CKS",
+                "callsign": "CONNIE",
+                "commonname": "Kalitta Air",
+                "ID": 1,
+                "Modified": "2024-11-14T15:08:15Z",
+                "Created": "2024-11-14T14:09:28Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "4.0",
+                "Attachments": false,
+                "GUID": "cd545486-5eed-47ea-a158-1658b81692a9"
+            },
+            {
+                "__metadata": {
+                    "id": "d8e310b2-d5c7-4531-9d0a-3b0dcdd75a93",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)",
+                    "etag": "\"4\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(2)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 2,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "AeroLogic",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "Germany",
+                "established": "2007-09-12T00:00:00Z",
+                "group": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "Lufthansa Group",
+                        "DHL Group"
+                    ]
+                },
+                "base": "Leipzig / Halle (LEJ / EDDP)",
+                "website": "aerologic.aero",
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B777"
+                    ]
+                },
+                "iata": "3S",
+                "icao": "BOX",
+                "callsign": "GERMAN CARGO",
+                "commonname": "Aerologic",
+                "ID": 2,
+                "Modified": "2024-11-14T15:07:56Z",
+                "Created": "2024-11-14T14:11:37Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "4.0",
+                "Attachments": false,
+                "GUID": "63e85ddd-17c9-42a3-8b8b-85abc4ea1238"
+            },
+            {
+                "__metadata": {
+                    "id": "1d75079a-cdef-473a-8c9c-fc9dae8b916f",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)",
+                    "etag": "\"3\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(3)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 3,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "CargoJet Airways",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "Canada",
+                "established": "2002-02-21T00:00:00Z",
+                "group": null,
+                "base": "Hamilton John C. Munro International (YHM / CYHM)",
+                "website": "cargojet.com",
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B747",
+                        "B777",
+                        "B767",
+                        "B757"
+                    ]
+                },
+                "iata": "W8",
+                "icao": "CJT",
+                "callsign": "CARGOJET",
+                "commonname": "Cargojet",
+                "ID": 3,
+                "Modified": "2024-11-14T15:07:52Z",
+                "Created": "2024-11-14T14:44:40Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "3.0",
+                "Attachments": false,
+                "GUID": "84119ea6-e861-46b4-a1d7-b626c5e2c651"
+            },
+            {
+                "__metadata": {
+                    "id": "f220961b-f455-4b94-8289-90156bb42725",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)",
+                    "etag": "\"2\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(4)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 4,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "21 Air",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "United States",
+                "established": null,
+                "group": null,
+                "base": null,
+                "website": null,
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B747",
+                        "B767"
+                    ]
+                },
+                "iata": "2I",
+                "icao": "CSB",
+                "callsign": "CARGO SOUTH",
+                "commonname": "21 Air",
+                "ID": 4,
+                "Modified": "2024-11-14T15:08:19Z",
+                "Created": "2024-11-14T14:46:07Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "2.0",
+                "Attachments": false,
+                "GUID": "d3add7af-0784-47da-94ea-c19187e667cc"
+            },
+            {
+                "__metadata": {
+                    "id": "764c0f05-2c65-4833-aa74-74a0b198145e",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)",
+                    "etag": "\"2\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(5)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 5,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "Kalitta Charters II",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "United States",
+                "established": null,
+                "group": null,
+                "base": "Ypsilanti Willow Run (YIP / KYIP)",
+                "website": "kalittacharterscargo.com",
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B737"
+                    ]
+                },
+                "iata": "K5",
+                "icao": "KII",
+                "callsign": "DRAGSTER",
+                "commonname": "Kalitta Charters II",
+                "ID": 5,
+                "Modified": "2024-11-14T15:08:59Z",
+                "Created": "2024-11-14T14:49:18Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "2.0",
+                "Attachments": false,
+                "GUID": "19eb6887-7019-4952-8366-a3bc56994438"
+            },
+            {
+                "__metadata": {
+                    "id": "90564bf7-4001-4fe4-83d6-3cba39592db2",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)",
+                    "etag": "\"3\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(6)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 6,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "DHL Air UK",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "United Kingdom",
+                "established": "1982-10-11T00:00:00Z",
+                "group": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "DHL Group"
+                    ]
+                },
+                "base": "East Midlands (EMA / EGNX)",
+                "website": "dhl.com",
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B757",
+                        "B767",
+                        "B777"
+                    ]
+                },
+                "iata": "D0",
+                "icao": "DHK",
+                "callsign": "WORLD EXPRESS",
+                "commonname": "DHL",
+                "ID": 6,
+                "Modified": "2024-11-14T15:08:47Z",
+                "Created": "2024-11-14T15:00:42Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "3.0",
+                "Attachments": false,
+                "GUID": "e3b7ec9b-f6eb-4648-a376-29204c27db8a"
+            },
+            {
+                "__metadata": {
+                    "id": "bf212355-b772-4e6f-a3cd-7006410ae7d8",
+                    "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)",
+                    "etag": "\"2\"",
+                    "type": "SP.Data.CustomerLookupListItem"
+                },
+                "FirstUniqueAncestorSecurableObject": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FirstUniqueAncestorSecurableObject"
+                    }
+                },
+                "RoleAssignments": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/RoleAssignments"
+                    }
+                },
+                "AttachmentFiles": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/AttachmentFiles"
+                    }
+                },
+                "ContentType": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/ContentType"
+                    }
+                },
+                "GetDlpPolicyTip": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/GetDlpPolicyTip"
+                    }
+                },
+                "FieldValuesAsHtml": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FieldValuesAsHtml"
+                    }
+                },
+                "FieldValuesAsText": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FieldValuesAsText"
+                    }
+                },
+                "FieldValuesForEdit": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/FieldValuesForEdit"
+                    }
+                },
+                "File": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/File"
+                    }
+                },
+                "Folder": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/Folder"
+                    }
+                },
+                "LikedByInformation": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/LikedByInformation"
+                    }
+                },
+                "ParentList": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/ParentList"
+                    }
+                },
+                "Properties": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/Properties"
+                    }
+                },
+                "Versions": {
+                    "__deferred": {
+                        "uri": "https://kalittaair.sharepoint.com/sites/CVG145Scheduling/_api/Web/Lists(guid'cd348934-2e85-42ac-b478-97556ad46947')/Items(7)/Versions"
+                    }
+                },
+                "FileSystemObjectType": 0,
+                "Id": 7,
+                "ServerRedirectedEmbedUri": null,
+                "ServerRedirectedEmbedUrl": "",
+                "ContentTypeId": "0x0100C50AD1E63C50194AB27F29E68CABF6F600E554CD3F9E847C4C97ED00098E9F4A30",
+                "Title": "Singapore",
+                "OData__ColorTag": null,
+                "ComplianceAssetId": null,
+                "country": "Singapore",
+                "established": "1947-05-01T00:00:00Z",
+                "group": null,
+                "base": "Singapore Changi (SIN / WSSS)",
+                "website": "singaporeair.com",
+                "mocphone": null,
+                "fleetmatrix": {
+                    "__metadata": {
+                        "type": "Collection(Edm.String)"
+                    },
+                    "results": [
+                        "B737",
+                        "B747",
+                        "B777",
+                        "B787",
+                        "A350",
+                        "A380"
+                    ]
+                },
+                "iata": "SQ",
+                "icao": "SIA",
+                "callsign": "SINGAPORE",
+                "commonname": "Singapore",
+                "ID": 7,
+                "Modified": "2024-11-14T15:07:01Z",
+                "Created": "2024-11-14T15:05:28Z",
+                "AuthorId": 14,
+                "EditorId": 14,
+                "OData__UIVersionString": "2.0",
+                "Attachments": false,
+                "GUID": "25febd83-a13f-4f5c-b5e3-d37a00838e65"
+            }
+        ]
+    }
 }

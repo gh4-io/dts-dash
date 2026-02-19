@@ -66,19 +66,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const id = crypto.randomUUID();
-
-    db.insert(feedbackLabels)
+    const newLabel = db
+      .insert(feedbackLabels)
       .values({
-        id,
         name,
         color,
         sortOrder: body.sortOrder ?? 0,
         createdAt: new Date().toISOString(),
       })
-      .run();
+      .returning({ id: feedbackLabels.id })
+      .get();
 
-    return NextResponse.json({ id }, { status: 201 });
+    return NextResponse.json({ id: newLabel.id }, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

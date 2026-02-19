@@ -4,12 +4,13 @@ import { db } from "@/lib/db/client";
 import { customers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/admin/master-data/customers/confirm");
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
+  { params }: { params: Promise<{ name: string }> },
 ) {
   const session = await auth();
 
@@ -21,21 +22,19 @@ export async function PATCH(
     const { name } = await params;
 
     if (!name) {
-      return NextResponse.json(
-        { error: "Customer name required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Customer name required" }, { status: 400 });
     }
 
     const decodedName = decodeURIComponent(name);
 
     // Update source to "confirmed"
+    const userId = getSessionUserId(session);
     await db
       .update(customers)
       .set({
         source: "confirmed",
         updatedAt: new Date().toISOString(),
-        updatedBy: session.user.id,
+        updatedBy: userId,
       })
       .where(eq(customers.name, decodedName));
 
@@ -47,7 +46,7 @@ export async function PATCH(
         error: "Confirmation failed",
         message: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

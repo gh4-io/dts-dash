@@ -3,8 +3,10 @@ import { importLog, workPackages, users } from "@/lib/db/schema";
 import { invalidateCache } from "@/lib/data/reader";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { isCanceled } from "@/lib/utils/status";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+
+const BATCH_SIZE = 250; // 250 rows × ~29 cols ≈ 7,250 params — safe under SQLite 3.47 limit (32,766)
 
 const log = createChildLogger("import-utils");
 
@@ -30,15 +32,18 @@ export interface CommitOptions {
   records: unknown[];
   source: "file" | "paste" | "api";
   fileName?: string;
-  importedBy: string;
+  importedBy: number;
   idempotencyKey?: string;
 }
 
 export interface CommitResult {
   success: boolean;
-  logId: string;
+  logId: number;
   recordCount: number;
-  upsertedCount: number;
+  newCount: number;
+  changedCount: number;
+  skippedCount: number;
+  upsertedCount: number; // newCount + changedCount (backwards-compat)
   canceledCount: number;
 }
 
@@ -215,7 +220,6 @@ export async function commitImportData(
 ): Promise<CommitResult> {
   const { records, source, fileName, importedBy, idempotencyKey } = options;
 
-  const logId = crypto.randomUUID();
   const importedAt = new Date().toISOString();
 
   // Compute summary stats for logging
@@ -230,7 +234,6 @@ export async function commitImportData(
 
   log.info(
     {
-      logId,
       source,
       recordCount: records.length,
       customerCount: customerSet.size,
@@ -246,8 +249,8 @@ export async function commitImportData(
     log.info({ importedBy }, "Auto-creating system user for import FK");
     db.insert(users)
       .values({
-        id: importedBy,
-        email: `system-${importedBy.slice(0, 8)}@localhost`,
+        authId: crypto.randomUUID(),
+        email: `system-import-${importedBy}@localhost`,
         displayName: "System (API)",
         passwordHash: "",
         role: "user",
@@ -259,10 +262,10 @@ export async function commitImportData(
   }
 
   // Create import log entry first
+  let logId: number;
   try {
-    db.insert(importLog)
+    const inserted = db.insert(importLog)
       .values({
-        id: logId,
         importedAt,
         recordCount: records.length,
         source,
@@ -272,79 +275,158 @@ export async function commitImportData(
         errors: null,
         idempotencyKey: idempotencyKey || null,
       })
-      .run();
+      .returning({ id: importLog.id })
+      .get();
 
+    logId = inserted.id;
     log.info({ logId, source }, "Import log entry created");
   } catch (logErr) {
     log.error(
-      { err: logErr, logId, importedBy },
+      { err: logErr, importedBy },
       "Failed to create import log entry"
     );
     if ((logErr as Error).message?.includes("FOREIGN KEY")) {
       log.warn(
-        { importedBy, logId },
+        { importedBy },
         "Foreign key constraint failed — system user may not exist in users table"
       );
     }
+    return { success: false, logId: 0, recordCount: records.length, newCount: 0, changedCount: 0, skippedCount: 0, upsertedCount: 0, canceledCount: 0 };
   }
 
-  // UPSERT records in a single transaction
-  let upsertedCount = 0;
+  // Map all records to value objects
+  const valueBatch = records.map((rec) => {
+    const r = rec as Record<string, unknown>;
+    const aircraft = r.Aircraft as Record<string, unknown> | undefined;
+    const rawStatus = String(r.Workpackage_x0020_Status ?? "New");
+    const status = isCanceled(rawStatus) ? "Canceled" : rawStatus;
+    return {
+      guid: String(r.GUID),
+      spId: r.ID != null ? Number(r.ID) : null,
+      title: r.Title != null ? String(r.Title) : null,
+      aircraftReg: String(aircraft?.Title ?? "Unknown"),
+      aircraftType: aircraft?.field_5 != null
+        ? String(aircraft.field_5)
+        : aircraft?.AircraftType != null
+          ? String(aircraft.AircraftType)
+          : null,
+      customer: String(r.Customer ?? "Unknown"),
+      customerRef: r.CustomerReference != null ? String(r.CustomerReference) : null,
+      flightId: r.FlightId != null ? String(r.FlightId) : null,
+      arrival: String(r.Arrival ?? ""),
+      departure: String(r.Departure ?? ""),
+      totalMH: r.TotalMH != null ? Number(r.TotalMH) : null,
+      totalGroundHours: r.TotalGroundHours != null ? String(r.TotalGroundHours) : null,
+      status,
+      description: r.Description != null ? String(r.Description) : null,
+      parentId: r.ParentID != null ? String(r.ParentID) : null,
+      hasWorkpackage: r.HasWorkpackage != null ? Boolean(r.HasWorkpackage) : null,
+      workpackageNo: r.WorkpackageNo != null ? String(r.WorkpackageNo) : null,
+      calendarComments: r.CalendarComments != null ? String(r.CalendarComments) : null,
+      isNotClosedOrCanceled: r.IsNotClosedOrCanceled != null ? String(r.IsNotClosedOrCanceled) : null,
+      documentSetId: r.DocumentSetID != null ? Number(r.DocumentSetID) : null,
+      aircraftSpId: aircraft?.ID != null ? Number(aircraft.ID) : null,
+      spModified: r.Modified != null ? String(r.Modified) : null,
+      spCreated: r.Created != null ? String(r.Created) : null,
+      spVersion: r.OData__UIVersionString != null ? String(r.OData__UIVersionString) : null,
+      importLogId: logId,
+      importedAt,
+    };
+  });
+
+  // Fetch existing records by GUID to check for changes
+  const existingGuids = valueBatch.map((v) => v.guid);
+  const existing = db
+    .select({
+      guid: workPackages.guid,
+      spModified: workPackages.spModified,
+      spVersion: workPackages.spVersion,
+    })
+    .from(workPackages)
+    .where(inArray(workPackages.guid, existingGuids))
+    .all();
+
+  const existingMap = new Map(existing.map((e) => [e.guid, { spModified: e.spModified, spVersion: e.spVersion }]));
+
+  // Partition records into "new" and "changed" based on GUID + version comparison
+  const newRecords: typeof valueBatch = [];
+  const changedRecords: typeof valueBatch = [];
+  let skippedCount = 0;
+
+  for (const record of valueBatch) {
+    const existing = existingMap.get(record.guid);
+    if (!existing) {
+      // New record
+      newRecords.push(record);
+    } else if (
+      existing.spModified !== record.spModified ||
+      existing.spVersion !== record.spVersion
+    ) {
+      // Record has changed — update it
+      changedRecords.push(record);
+    } else {
+      // Record is identical — skip
+      skippedCount++;
+      log.debug({ guid: record.guid }, "Skipping unchanged record (GUID + version match)");
+    }
+  }
+
+  const upsertedCount = newRecords.length + changedRecords.length;
   let canceledCount = 0;
 
+  // Count canceled records
+  for (const record of [...newRecords, ...changedRecords]) {
+    if (record.status === "Canceled") canceledCount++;
+  }
+
+  log.info(
+    { logId, newCount: newRecords.length, changedCount: changedRecords.length, skippedCount },
+    "Import partitioned: new/changed/skipped"
+  );
+
+  // UPSERT new records
   try {
     db.transaction(() => {
-      for (const rec of records) {
-        const r = rec as Record<string, unknown>;
-        const aircraft = r.Aircraft as Record<string, unknown> | undefined;
+      // Insert new records
+      for (let i = 0; i < newRecords.length; i += BATCH_SIZE) {
+        const chunk = newRecords.slice(i, i + BATCH_SIZE);
+        if (chunk.length > 0) {
+          db.insert(workPackages).values(chunk).run();
+        }
+      }
 
-        // Normalize canceled status to canonical "Canceled" spelling
-        const rawStatus = String(r.Workpackage_x0020_Status ?? "New");
-        const status = isCanceled(rawStatus) ? "Canceled" : rawStatus;
-
-        const values = {
-          guid: String(r.GUID),
-          spId: r.ID != null ? Number(r.ID) : null,
-          title: r.Title != null ? String(r.Title) : null,
-          aircraftReg: String(aircraft?.Title ?? "Unknown"),
-          aircraftType: aircraft?.field_5 != null ? String(aircraft.field_5) : (aircraft?.AircraftType != null ? String(aircraft.AircraftType) : null),
-          customer: String(r.Customer ?? "Unknown"),
-          customerRef: r.CustomerReference != null ? String(r.CustomerReference) : null,
-          flightId: r.FlightId != null ? String(r.FlightId) : null,
-          arrival: String(r.Arrival ?? ""),
-          departure: String(r.Departure ?? ""),
-          totalMH: r.TotalMH != null ? Number(r.TotalMH) : null,
-          totalGroundHours: r.TotalGroundHours != null ? String(r.TotalGroundHours) : null,
-          status,
-          description: r.Description != null ? String(r.Description) : null,
-          parentId: r.ParentID != null ? String(r.ParentID) : null,
-          hasWorkpackage: r.HasWorkpackage != null ? Boolean(r.HasWorkpackage) : null,
-          workpackageNo: r.WorkpackageNo != null ? String(r.WorkpackageNo) : null,
-          calendarComments: r.CalendarComments != null ? String(r.CalendarComments) : null,
-          isNotClosedOrCanceled: r.IsNotClosedOrCanceled != null ? String(r.IsNotClosedOrCanceled) : null,
-          documentSetId: r.DocumentSetID != null ? Number(r.DocumentSetID) : null,
-          aircraftSpId: r.AircraftId != null ? Number(r.AircraftId) : null,
-          spModified: r.Modified != null ? String(r.Modified) : null,
-          spCreated: r.Created != null ? String(r.Created) : null,
-          spVersion: r.OData__UIVersionString != null ? String(r.OData__UIVersionString) : null,
-          importLogId: logId,
-          importedAt,
-        };
-
-        db.insert(workPackages)
-          .values(values)
-          .onConflictDoUpdate({
-            target: workPackages.guid,
-            set: {
-              ...values,
-              importLogId: logId,
-              importedAt,
-            },
+      // Update changed records
+      for (const record of changedRecords) {
+        db.update(workPackages)
+          .set({
+            spId: record.spId,
+            title: record.title,
+            aircraftReg: record.aircraftReg,
+            aircraftType: record.aircraftType,
+            customer: record.customer,
+            customerRef: record.customerRef,
+            flightId: record.flightId,
+            arrival: record.arrival,
+            departure: record.departure,
+            totalMH: record.totalMH,
+            totalGroundHours: record.totalGroundHours,
+            status: record.status,
+            description: record.description,
+            parentId: record.parentId,
+            hasWorkpackage: record.hasWorkpackage,
+            workpackageNo: record.workpackageNo,
+            calendarComments: record.calendarComments,
+            isNotClosedOrCanceled: record.isNotClosedOrCanceled,
+            documentSetId: record.documentSetId,
+            aircraftSpId: record.aircraftSpId,
+            spModified: record.spModified,
+            spCreated: record.spCreated,
+            spVersion: record.spVersion,
+            importLogId: record.importLogId,
+            importedAt: record.importedAt,
           })
+          .where(eq(workPackages.guid, record.guid))
           .run();
-
-        upsertedCount++;
-        if (status === "Canceled") canceledCount++;
       }
     });
   } catch (err) {
@@ -363,7 +445,7 @@ export async function commitImportData(
       log.error({ err: updateErr, logId }, "Failed to update import log status");
     }
 
-    return { success: false, logId, recordCount: records.length, upsertedCount: 0, canceledCount: 0 };
+    return { success: false, logId, recordCount: records.length, newCount: 0, changedCount: 0, skippedCount: 0, upsertedCount: 0, canceledCount: 0 };
   }
 
   // Invalidate caches
@@ -380,6 +462,9 @@ export async function commitImportData(
       logId,
       source,
       recordCount: records.length,
+      newCount: newRecords.length,
+      changedCount: changedRecords.length,
+      skippedCount,
       upsertedCount,
       canceledCount,
       customerCount: customerSet.size,
@@ -388,5 +473,14 @@ export async function commitImportData(
     "Import committed successfully"
   );
 
-  return { success: true, logId, recordCount: records.length, upsertedCount, canceledCount };
+  return {
+    success: true,
+    logId,
+    recordCount: records.length,
+    newCount: newRecords.length,
+    changedCount: changedRecords.length,
+    skippedCount,
+    upsertedCount,
+    canceledCount,
+  };
 }

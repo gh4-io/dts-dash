@@ -28,12 +28,11 @@ export async function POST() {
     db.insert(aircraftTypeMappings)
       .values(
         SEED_AIRCRAFT_TYPE_MAPPINGS.map((m) => ({
-          id: crypto.randomUUID(),
           ...m,
           isActive: true,
           createdAt: now,
           updatedAt: now,
-        }))
+        })),
       )
       .run();
 
@@ -45,9 +44,6 @@ export async function POST() {
     });
   } catch (error) {
     log.error({ err: error }, "POST error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

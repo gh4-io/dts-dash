@@ -156,11 +156,12 @@ async function main() {
 
   // Create the user
   const now = new Date().toISOString();
-  const id = crypto.randomUUID();
+
+  const authId = crypto.randomUUID();
 
   db.insert(users)
     .values({
-      id,
+      authId,
       email,
       username: username || undefined,
       displayName,

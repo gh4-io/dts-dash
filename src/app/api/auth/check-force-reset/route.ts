@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 // ─── GET — Check if current user needs forced password reset ───────────────
 
@@ -15,10 +16,11 @@ export async function GET() {
     }
 
     // Query users table for forcePasswordChange field
+    const userId = getSessionUserId(session);
     const [user] = await db
       .select({ forcePasswordChange: users.forcePasswordChange })
       .from(users)
-      .where(eq(users.id, session.user.id));
+      .where(eq(users.id, userId));
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

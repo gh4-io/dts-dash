@@ -4,7 +4,6 @@ import { Suspense, useState, useCallback, useRef, useMemo, useEffect } from "rea
 import dynamic from "next/dynamic";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
-import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 import { FlightDetailDrawer } from "@/components/flight-board/flight-detail-drawer";
 import { useWorkPackages, type SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 import { useCustomers } from "@/lib/hooks/use-customers";
@@ -320,9 +319,6 @@ function FlightBoardPageInner() {
           </div>
         }
       />
-
-      {/* Data Freshness */}
-      <DataFreshnessBadge />
 
       {/* Gantt Chart */}
       {error ? (

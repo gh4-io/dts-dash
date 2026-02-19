@@ -4,12 +4,13 @@ import { db } from "@/lib/db/client";
 import { aircraft } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/admin/master-data/aircraft/confirm");
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ registration: string }> }
+  { params }: { params: Promise<{ registration: string }> },
 ) {
   const session = await auth();
 
@@ -21,21 +22,19 @@ export async function PATCH(
     const { registration } = await params;
 
     if (!registration) {
-      return NextResponse.json(
-        { error: "Aircraft registration required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Aircraft registration required" }, { status: 400 });
     }
 
     const decodedReg = decodeURIComponent(registration);
 
     // Update source to "confirmed"
+    const userId = getSessionUserId(session);
     await db
       .update(aircraft)
       .set({
         source: "confirmed",
         updatedAt: new Date().toISOString(),
-        updatedBy: session.user.id,
+        updatedBy: userId,
       })
       .where(eq(aircraft.registration, decodedReg));
 
@@ -47,7 +46,7 @@ export async function PATCH(
         error: "Confirmation failed",
         message: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

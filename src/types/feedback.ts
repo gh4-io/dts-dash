@@ -48,7 +48,7 @@ export const FEEDBACK_STATUS_CONFIG: Record<FeedbackStatus, FeedbackStatusConfig
 };
 
 export interface FeedbackLabel {
-  id: string;
+  id: number;
   name: string;
   color: string;
   sortOrder: number;
@@ -56,8 +56,8 @@ export interface FeedbackLabel {
 }
 
 export interface FeedbackPost {
-  id: string;
-  authorId: string;
+  id: number;
+  authorId: number;
   authorName: string;
   title: string;
   body: string;
@@ -70,13 +70,15 @@ export interface FeedbackPost {
 }
 
 export interface FeedbackComment {
-  id: string;
-  postId: string;
-  authorId: string;
+  id: number;
+  postId: number;
+  parentId: number | null;
+  authorId: number;
   authorName: string;
   body: string;
   createdAt: string;
   updatedAt: string;
+  replies: FeedbackComment[];
 }
 
 export interface FeedbackPostDetail extends FeedbackPost {

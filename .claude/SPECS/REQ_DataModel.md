@@ -139,9 +139,9 @@ interface AircraftTypeMapping {
 
 ```typescript
 interface NormalizedAircraftType {
-  canonical: AircraftType;            // "B747"
+  canonical: string;                  // "B747" if mapped, raw string if unmatched, "Unknown" if no data
   raw: string;                        // Original input: "747-4R7F"
-  confidence: "exact" | "pattern" | "fallback";
+  confidence: "exact" | "pattern" | "raw" | "fallback";  // "raw" = unmatched, D-032
   mappingId: string | null;           // Which mapping rule matched
 }
 
@@ -151,7 +151,7 @@ function normalizeAircraftType(
 ): NormalizedAircraftType;
 ```
 
-**Resolution order**: exact match → pattern match (descending priority) → `Unknown` fallback.
+**Resolution order**: (1) aircraft master data → (2) WP field_5 → (3) WP AircraftType → (4) normalizer: exact match → pattern match (descending priority) → raw string (not "Unknown") → `Unknown` only when input was null/empty. See D-032.
 
 **Non-standard inputs handled**: `737-200`, `747-4R7F`, `747F`, `767-300ER`, `B777-200LR`, bare `777`, etc.
 
@@ -189,6 +189,7 @@ interface Customer {
   colorText: string;           // Auto-calculated contrast text color
   isActive: boolean;
   sortOrder: number;
+  spId: number | null;         // SharePoint record ID (from cust.json ID field) — D-033
   createdAt: Date;
   updatedAt: Date;
 }
@@ -233,7 +234,7 @@ All runtime data stored in SQLite `data/dashboard.db` — local-first, zero-conf
 | `work_packages` | Work package data (was `data/input.json`) | **D-029**: Moved from file to DB. UPSERT by GUID. Auto-increment PK, SP ID as alternate unique key. |
 | `mh_overrides` | Manual MH overrides | **D-029**: FK now references `work_packages.id` (was broken, keyed by non-existent SP ID) |
 | `app_config` | System configuration | Key-value store for settings |
-| `customers` | Customer master data | Admin-editable, color-coded |
+| `customers` | Customer master data | Admin-editable, color-coded; `sp_id` from cust.json (D-033) |
 | `users` | User accounts | Auth.js integration |
 | `sessions` | User sessions | Auth.js session store |
 | `user_preferences` | Per-user settings | Theme, timezone, pagination |
@@ -241,7 +242,7 @@ All runtime data stored in SQLite `data/dashboard.db` — local-first, zero-conf
 | `manufacturers` | Aircraft manufacturers | Master data |
 | `aircraft_models` | Aircraft models | Master data |
 | `engine_types` | Engine types | Master data |
-| `aircraft` | Aircraft registry | Master data with fuzzy operator matching |
+| `aircraft` | Aircraft registry | Master data with fuzzy operator matching; `sp_id` + `aircraft_type` from ac.json (D-033) |
 | `import_log` | Work package import history | Tracks imports (file, paste, API, CLI) |
 | `master_data_import_log` | Customer/aircraft import history | Separate from work package imports (OI-039) |
 | `analytics_events` | Usage tracking events | User behavior analytics |

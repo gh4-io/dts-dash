@@ -35,7 +35,7 @@ interface UserFormProps {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
   initialData?: {
-    id: string;
+    id: number;
     email: string;
     username?: string | null;
     displayName: string;

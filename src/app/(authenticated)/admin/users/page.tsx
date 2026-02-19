@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 
 interface UserRow {
-  id: string;
+  id: number;
   email: string;
   username?: string | null;
   displayName: string;

@@ -8,10 +8,6 @@ import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("seed-analytics");
 
-function generateId(): string {
-  return crypto.randomUUID();
-}
-
 const EVENT_TYPES = [
   "page_view",
   "page_view",
@@ -56,8 +52,7 @@ async function seedAnalytics() {
   const DAY_MS = 86400000;
 
   const events: Array<{
-    id: string;
-    userId: string;
+    userId: number;
     eventType: string;
     eventData: string | null;
     page: string | null;
@@ -80,13 +75,15 @@ async function seedAnalytics() {
     } else if (eventType === "filter_change") {
       eventData = JSON.stringify({ operators: ["Kalitta Air"], timezone: "UTC" });
     } else if (eventType === "data_import") {
-      eventData = JSON.stringify({ recordCount: Math.floor(Math.random() * 100) + 10, source: "paste" });
+      eventData = JSON.stringify({
+        recordCount: Math.floor(Math.random() * 100) + 10,
+        source: "paste",
+      });
     } else if (eventType === "error") {
       eventData = JSON.stringify({ message: "Sample error for testing", page });
     }
 
     events.push({
-      id: generateId(),
       userId,
       eventType,
       eventData,

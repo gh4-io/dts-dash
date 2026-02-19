@@ -17,25 +17,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        // Initial login — store user data + tokenVersion in JWT
-        token.id = user.id;
+        // Initial login — store authId (UUID) + integer userId in JWT
+        token.id = user.id; // authId UUID (from authorize return)
+        token.userId = (user as unknown as { userId: number }).userId;
         token.role = (user as unknown as { role: string }).role;
         token.tokenVersion = (user as unknown as { tokenVersion: number }).tokenVersion;
         token.forcePasswordChange = (
           user as unknown as { forcePasswordChange: boolean }
         ).forcePasswordChange;
-        token.sessionId = (user as unknown as { sessionId: string }).sessionId;
+        token.sessionId = (user as unknown as { sessionId: number }).sessionId;
       } else if (token.id) {
         // Subsequent requests — verify tokenVersion is still current
         const dbUser = db
           .select({
+            id: users.id,
             role: users.role,
             tokenVersion: users.tokenVersion,
             isActive: users.isActive,
             forcePasswordChange: users.forcePasswordChange,
           })
           .from(users)
-          .where(eq(users.id, token.id as string))
+          .where(eq(users.authId, token.id as string))
           .get();
 
         if (!dbUser || !dbUser.isActive) {
@@ -48,9 +50,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return { ...token, invalid: true };
         }
 
-        // Refresh role + forcePasswordChange from DB — instant changes
+        // Refresh role + forcePasswordChange + userId from DB — instant changes
         token.role = dbUser.role;
         token.forcePasswordChange = dbUser.forcePasswordChange;
+        token.userId = dbUser.id;
       }
       return token;
     },
@@ -60,7 +63,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return { ...session, user: undefined } as unknown as typeof session;
       }
       if (session.user) {
-        session.user.id = token.id as string;
+        session.user.id = String(token.userId);
         (session.user as unknown as { role: string }).role = token.role as string;
         (session.user as unknown as { forcePasswordChange: boolean }).forcePasswordChange =
           token.forcePasswordChange as boolean;
@@ -73,7 +76,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       // Clean up DB session on logout
       if ("token" in message && message.token?.sessionId) {
         db.delete(sessions)
-          .where(eq(sessions.id, message.token.sessionId as string))
+          .where(eq(sessions.id, message.token.sessionId as number))
           .run();
       }
     },
@@ -125,27 +128,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         clearAttempts(ip, loginLower);
 
         // Create DB session record
-        const sessionId = crypto.randomUUID();
         const sessionToken = crypto.randomUUID();
         const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
-        db.insert(sessions)
+        const sessionRow = db
+          .insert(sessions)
           .values({
-            id: sessionId,
             sessionToken,
             userId: user.id,
             expiresAt,
           })
-          .run();
+          .returning({ id: sessions.id })
+          .get();
 
         return {
-          id: user.id,
+          id: user.authId,
           email: user.email,
           name: user.displayName,
           role: user.role,
           tokenVersion: user.tokenVersion,
           forcePasswordChange: user.forcePasswordChange,
-          sessionId,
+          sessionId: sessionRow.id,
+          userId: user.id,
         };
       },
     }),
@@ -159,7 +163,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
  * Bump a user's tokenVersion to invalidate all existing JWT tokens.
  * Call after password change, role change, or account deactivation.
  */
-export function invalidateUserTokens(userId: string): void {
+export function invalidateUserTokens(userId: number): void {
   const user = db
     .select({ tokenVersion: users.tokenVersion })
     .from(users)
@@ -181,7 +185,7 @@ export function invalidateUserTokens(userId: string): void {
  * Invalidate all sessions EXCEPT the one with the given sessionId.
  * Used after password change to keep current session alive.
  */
-export function invalidateOtherSessions(userId: string, keepSessionId: string): void {
+export function invalidateOtherSessions(userId: number, keepSessionId: number): void {
   db.delete(sessions)
     .where(and(eq(sessions.userId, userId), ne(sessions.id, keepSessionId)))
     .run();

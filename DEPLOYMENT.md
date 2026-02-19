@@ -60,6 +60,24 @@ Navigate to `http://localhost:3000/setup` to create the initial admin account.
 
 Alternatively, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` in `.env.local` before the first start.
 
+### 4. Seed reference data (recommended)
+
+After first run, populate the aircraft type mappings, manufacturers, models, and engine types:
+
+```bash
+npm run db:seed-reference
+```
+
+This is idempotent — safe to re-run. Skips any data already present.
+
+### 5. Clean up orphaned data (optional)
+
+If migrating an existing database, remove any stale inferred rows and expired sessions:
+
+```bash
+npm run db:cleanup
+```
+
 ### 4. Verify
 
 ```bash
@@ -117,6 +135,13 @@ pm2 startup  # Follow instructions to enable auto-start on boot
 ### 5. First-run setup
 
 Navigate to `http://<host>:3000/setup` to create the initial admin account.
+
+### 6. Seed reference data (recommended)
+
+```bash
+npm run db:seed-reference
+npm run db:cleanup   # optional — removes stale inferred rows on existing DBs
+```
 
 ### Upgrade procedure (PM2)
 

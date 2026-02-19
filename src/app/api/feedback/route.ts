@@ -11,6 +11,8 @@ import {
 import { eq, desc, sql, and, inArray } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import type { FeedbackStatus } from "@/types/feedback";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
+import { parseIntParam } from "@/lib/utils/route-helpers";
 
 const log = createChildLogger("api/feedback");
 
@@ -48,13 +50,17 @@ export async function GET(request: NextRequest) {
     }
 
     // If filtering by label, get matching post IDs first
-    let labelPostIds: string[] | null = null;
+    let labelPostIds: number[] | null = null;
     if (label) {
+      const labelIdNum = parseIntParam(label);
+      if (!labelIdNum) {
+        return NextResponse.json({ posts: [], total: 0, page, limit });
+      }
       const labelRows = db
         .select({ postId: feedbackPostLabels.postId })
         .from(feedbackPostLabels)
         .innerJoin(feedbackLabels, eq(feedbackPostLabels.labelId, feedbackLabels.id))
-        .where(eq(feedbackLabels.id, label))
+        .where(eq(feedbackLabels.id, labelIdNum))
         .all();
       labelPostIds = labelRows.map((r) => r.postId);
       if (labelPostIds.length === 0) {
@@ -98,10 +104,10 @@ export async function GET(request: NextRequest) {
     const postIds = rows.map((r) => r.id);
 
     const labelsMap: Record<
-      string,
-      { id: string; name: string; color: string; sortOrder: number; createdAt: string }[]
+      number,
+      { id: number; name: string; color: string; sortOrder: number; createdAt: string }[]
     > = {};
-    const commentCounts: Record<string, number> = {};
+    const commentCounts: Record<number, number> = {};
 
     if (postIds.length > 0) {
       const labelRows = db
@@ -185,13 +191,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const id = crypto.randomUUID();
     const now = new Date().toISOString();
+    const userId = getSessionUserId(session);
 
-    db.insert(feedbackPosts)
+    const newPost = db
+      .insert(feedbackPosts)
       .values({
-        id,
-        authorId: session.user.id,
+        authorId: userId,
         title,
         body: postBody,
         status: "open",
@@ -199,9 +205,10 @@ export async function POST(request: NextRequest) {
         createdAt: now,
         updatedAt: now,
       })
-      .run();
+      .returning({ id: feedbackPosts.id })
+      .get();
 
-    return NextResponse.json({ id }, { status: 201 });
+    return NextResponse.json({ id: newPost.id }, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

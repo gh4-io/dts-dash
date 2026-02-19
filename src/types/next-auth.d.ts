@@ -4,7 +4,9 @@ declare module "next-auth" {
   interface User {
     role: "user" | "admin" | "superadmin";
     tokenVersion: number;
-    sessionId: string;
+    sessionId: number;
+    forcePasswordChange: boolean;
+    userId: number;
   }
 
   interface Session {
@@ -13,6 +15,7 @@ declare module "next-auth" {
       email: string;
       name: string;
       role: "user" | "admin" | "superadmin";
+      forcePasswordChange: boolean;
     };
   }
 }
@@ -20,9 +23,11 @@ declare module "next-auth" {
 declare module "next-auth/jwt" {
   interface JWT {
     id?: string;
+    userId?: number;
     role?: string;
     tokenVersion?: number;
-    sessionId?: string;
+    sessionId?: number;
     invalid?: boolean;
+    forcePasswordChange?: boolean;
   }
 }

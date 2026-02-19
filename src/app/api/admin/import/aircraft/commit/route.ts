@@ -6,6 +6,7 @@ import {
   commitAircraftImport,
 } from "@/lib/data/aircraft-import-utils";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/admin/import/aircraft/commit");
 
@@ -33,17 +34,11 @@ export async function POST(request: Request) {
     };
 
     if (!content || !format || !source) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     // Parse records
-    const parseResult =
-      format === "csv"
-        ? parseAircraftCSV(content)
-        : parseAircraftJSON(content);
+    const parseResult = format === "csv" ? parseAircraftCSV(content) : parseAircraftJSON(content);
 
     if (!parseResult.valid) {
       return NextResponse.json(
@@ -52,15 +47,16 @@ export async function POST(request: Request) {
           errors: parseResult.errors,
           warnings: parseResult.warnings,
         },
-        { status: 422 }
+        { status: 422 },
       );
     }
 
     // Commit import
+    const userId = getSessionUserId(session);
     const result = await commitAircraftImport(parseResult.data, {
       source,
       fileName,
-      userId: session.user.id,
+      userId,
       overrideConflicts,
     });
 
@@ -77,7 +73,7 @@ export async function POST(request: Request) {
         error: "Import failed",
         message: error instanceof Error ? error.message : String(error),
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

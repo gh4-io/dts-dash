@@ -817,14 +817,196 @@
 
 ---
 
+## OI-047 | Flight Board Chart Color Reset on Rapid Clicks
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Flight board chart colors occasionally revert to hardcoded/default values when clicked multiple times or at random intervals. Expected: custom customer colors persisted throughout session. Actual: colors reset unpredictably. |
+| **Root Cause** | Likely: ECharts state not properly managed during rapid updates, customer color context not maintaining reference across re-renders, or Zustand store not syncing customer color changes. |
+| **Proposed Solution** | (1) Debug ECharts chart update flow for color state mutation. (2) Verify Zustand customer store is properly invalidating on color edit. (3) Add key-based cache invalidation for flight board series colors. (4) Test with rapid click/drag interactions. |
+| **Files** | `src/components/flight-board/flight-board-chart.tsx`, `src/lib/hooks/use-customers.ts`, `src/app/api/admin/customers/route.ts` |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), [REQ_Admin.md](SPECS/REQ_Admin.md) (customer colors) |
+
+---
+
+## OI-048 | Rate Limiting as System Preference
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Current rate limiting for `/api/ingest` endpoint is hardcoded (`ingestRateLimitSeconds` from `app_config`). User wants rate limiting to be a configurable system preference accessible via Admin Settings, similar to other server-level settings. |
+| **Proposed Solution** | Move `ingestRateLimitSeconds` and `ingestMaxSizeMB` to `server.config.yml` with defaults. Expose in Admin Settings under API Integration section as editable fields. File-based settings are source of truth (admin changes don't persist after restart unless pushed to config file). |
+| **Related** | D-030 (system config), OI-040 (system settings file) |
+| **Files** | `server.config.yml`, `src/lib/config/loader.ts`, `src/app/api/config/route.ts`, `src/app/(authenticated)/admin/settings/page.tsx` |
+| **Links** | [REQ_DataImport.md](SPECS/REQ_DataImport.md), OI-040 |
+
+---
+
+## OI-049 | Admin Settings Tab Layout Redesign
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Current Admin Settings page mixes DB-stored preferences (demand model, capacity, shifts, display) with system-level config (allowed hostnames, API keys, rate limits). Mixed save patterns confusing: some changes save on button click, others auto-save. User wants clearer separation: **System Preferences** section (rate limiting, API config, etc.) with Save button affecting ONLY file-based system settings; **Database Preferences** section (demand/capacity models, shifts) with auto-save or separate save flow. |
+| **Proposed Solution** | (1) Split Admin Settings page into two distinct tabs/sections: "System Configuration" (server.config.yml) and "Database Preferences" (app_config/preferences tables). (2) System tab: Load all settings from `server.config.yml` via `GET /api/config`, edit form, Save button writes to file (admin-only). (3) Database tab: Current behavior (auto-save per field). (4) Visual distinction (different backgrounds/icons). (5) Info callout in System tab: "Requires server restart to apply" or "Live changes via config file". |
+| **Files** | `src/app/(authenticated)/admin/settings/page.tsx`, `src/components/admin/server-tab.tsx` |
+| **Links** | OI-040 (system config file), [REQ_Admin.md](SPECS/REQ_Admin.md) |
+
+---
+
+## OI-050 | AOG Aircraft Condition & Visual Tracking
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | AOG = Aircraft on Ground (due to maintenance emergency/unscheduled maintenance). User wants to track AOG status separately from canceled flights. AOG aircraft should: (1) Appear with a distinct visual treatment on flight board (similar to canceled flights), (2) Possibly use a secondary table or a flag in the work package data, (3) Eventually have its own view/analytics. **Not fully imagined yet** — needs discovery on data source, tracking mechanism, and UI treatment. |
+| **Proposed Solution** | **Phase 1 (Discovery)**: Clarify data source for AOG flag (exists in work package JSON? admin-entered? inferred from status?). **Phase 2 (Schema)**: Add `aogStatus` or similar field to `work_packages` table (nullable, default NULL). **Phase 3 (UI)**: Flight board visual treatment (striped/dimmed like canceled). **Phase 4 (Future)**: Dedicated AOG analytics section, admin controls. |
+| **Data Model** | Likely: `work_packages.aogStatus: string | null` (e.g., "aog", "scheduled", null). Or separate boolean: `isAog: boolean`. |
+| **Visual Reference** | Canceled treatment used as starting point (D-034). AOG could use same pattern or distinct color/pattern. |
+| **Files** | `src/lib/db/schema.ts`, `src/components/flight-board/flight-board-chart.tsx`, `src/lib/data/reader.ts` |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), D-034 (canceled visual treatment) |
+
+---
+
+## OI-051 | iPad Quick Info Panel (Long Press / Tap)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | On desktop, clicking a flight bar opens a side drawer with detailed information. On iPad, this interaction is unclear (small target, drawer may hide content). User wants: quick info popover/panel appears and stays on screen when tapping a flight on iPad, rather than relying on hover-triggered tooltips or full-screen drawer. Pattern: tap → info panel appears on same screen, tap elsewhere to close. |
+| **Proposed Solution** | (1) Detect touch device (iPad/tablet). (2) On tap, instead of opening side drawer, open a fixed floating panel (card/popover) anchored to the tapped flight or a fixed position (e.g., top-right). (3) Show same flight details as drawer (registration, customer, time, ground time, MH, type). (4) Include close button. (5) Tap outside or press close → panel dismisses. (6) Ensure panel doesn't block other important UI elements. **Alternative**: Use Radix UI Popover anchored to the ECharts element. |
+| **UX Pattern** | Similar to mobile map apps (tap pin → info card appears, swipe to close). |
+| **Files** | `src/components/flight-board/flight-detail-drawer.tsx`, `src/components/flight-board/flight-board-chart.tsx` |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md) |
+
+---
+
+## OI-052 | Flight Board Toggle: Gantt vs. List View
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Flight board currently displays as a Gantt timeline chart (ECharts). User wants ability to toggle to a **list view** (table format) to see flights in a sortable/filterable table instead of timeline. List view would enable: (1) Easier mobile navigation (vertical scrolling instead of horizontal Gantt panning), (2) Detailed tabular view for operators/admins, (3) Foundation for mobile-first design. |
+| **Proposed Solution** | (1) Add toggle button (Gantt icon / List icon) in flight board toolbar. (2) Zustand store tracks view mode (`flightBoardView: "gantt" | "list"`). (3) Conditional render: Gantt chart or TanStack Table. (4) List columns: Registration, Customer, Aircraft Type, Arrival, Departure, Ground Time, MH, Status. (5) Sortable columns, sticky header. (6) Persist view preference in `user_preferences` table. (7) Mobile: default to list view, option to switch to Gantt. |
+| **Files** | `src/app/(authenticated)/flight-board/page.tsx`, `src/components/flight-board/`, `src/lib/hooks/use-preferences.ts`, `src/lib/db/schema.ts` |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md) |
+
+---
+
+## OI-053 | iOS Home Screen Installation (PWA / Web Clip)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | User wants the app to be installable as a home screen shortcut on Apple devices (iPhone/iPad). Users can tap "Share" → "Add to Home Screen" to create a web clip. Currently app likely lacks proper PWA metadata (`manifest.json` icons, theme colors, display mode). Goal: app appears as an installable app icon, opens in full-screen mode (no browser chrome). |
+| **Proposed Solution** | (1) Ensure `public/manifest.json` exists with icons (192x192, 512x512), app name, theme colors, display mode `fullscreen` or `standalone`. (2) Add `<meta name="apple-mobile-web-app-capable">`, `<meta name="apple-mobile-web-app-status-bar-style">`, `<link rel="apple-touch-icon">` to layout root. (3) Test on iPad: Settings → Home Screen → Add to Home Screen → verify icon and full-screen launch. (4) Ensure all routes work in PWA mode (no redirect loops). |
+| **Files** | `public/manifest.json`, `src/app/layout.tsx`, iOS viewport meta tags |
+| **Links** | [MDN: Web app manifests](https://developer.mozilla.org/en-US/docs/Web/Manifest), [Apple PWA Guide](https://developer.apple.com/library/archive/referencelibrary/General/Conceptual/QueryingtheWebforScottish/) |
+
+---
+
+## OI-054 | Collapsible Sidebar with Icon-Only Mode
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Current sidebar is always expanded (full width with labels). User wants collapsible sidebar with icon-only condensed mode for space efficiency. When collapsed: width ~60-80px, icons only, logo condensed (initials "CVG"), tooltips on hover. User also wants multiple "flavors" of collapse (icons visible, icon + abbreviated labels, full width). |
+| **Proposed Solution** | (1) Add collapse toggle button in sidebar. (2) Zustand store tracks `sidebarMode: "expanded" | "condensed" | "compact"` (or similar variants). (3) CSS transitions for smooth width/opacity changes. (4) Logo component renders full text or initials based on mode. (5) Menu items render icon + label (expanded) or icon only (condensed) with Radix Tooltip on hover. (6) Persist preference to `user_preferences.sidebarMode`. (7) Mobile: always collapsed (hamburger menu), no in-page collapse. (8) Responsive: auto-collapse on small desktop screens. |
+| **Files** | `src/components/layout/sidebar.tsx`, `src/lib/hooks/use-preferences.ts`, `src/lib/db/schema.ts` |
+| **Links** | OI-041 (similar but less detail), [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md) |
+
+---
+
+## OI-055 | Sticky Time Headers on Flight Board (Horizontal Scroll)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Flight board Gantt timeline scrolls horizontally. When scrolling left/right, the time header (top axis with hour labels) scrolls out of view, making it hard to track what times you're viewing. User wants time headers to **stick** at the top of the chart during horizontal scroll, similar to sticky table headers on vertical scroll. |
+| **Proposed Solution** | (1) Identify ECharts xAxis container (top time labels). (2) Use CSS `position: sticky; top: 0; z-index: 10;` or equivalent ECharts configuration to keep top axis visible during scroll. (3) Ensure day labels (MONDAY, TUESDAY...) also stick. (4) Test horizontal scroll behavior across browsers. **Challenge**: ECharts uses canvas-based rendering, not DOM elements, so traditional CSS sticky may not work. May require custom container wrapper or ECharts gridIndex positioning. |
+| **Files** | `src/components/flight-board/flight-board-chart.tsx` (ECharts grid/axis config) |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), ECharts grid documentation |
+
+---
+
+## OI-056 | Shift Highlighting with Visual Time Separators
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | Flight board shows continuous timeline but no visual indication of shift boundaries. User wants to see **shift time blocks** on the chart: (1) Define shift times via system preference (e.g., Day 07:00-15:00, Swing 15:00-23:00, Night 23:00-07:00). (2) Render subtle background colored sections for each shift (semi-transparent, low opacity ~0.1, light gray or theme-aware). (3) Add thin separator lines at shift boundaries (e.g., 07:00, 15:00, 23:00). (4) Optional: Show shift name label (e.g., "DAY SHIFT" in corner of section). **Reference**: Similar to "now" and "day" marker lines already in the chart. |
+| **Proposed Solution** | (1) Shift times already configurable in system settings (`server.config.yml` shifts array). (2) In `flight-board-chart.tsx`, compute shift block timestamps for the visible date range. (3) Add `markArea` components to ECharts for each shift (background fill). (4) Add vertical `markLine` components for shift boundaries. (5) Shift background colors: theme-aware, low opacity. (6) Shift labels optional based on space/preference. |
+| **Files** | `src/components/flight-board/flight-board-chart.tsx`, `src/lib/config/loader.ts` (shifts), `server.config.yml` |
+| **Links** | [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md), [REQ_OtherPages.md](SPECS/REQ_OtherPages.md) (shifts), D-009 (capacity model) |
+
+---
+
+## OI-057 | System Preference Filters Not Shown as Active
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-18 |
+| **Context** | FilterBar displays active filter pills for user selections (customer, aircraft, type, start/end time, timezone, etc.). However, some filters have system defaults applied at startup (e.g., timezone defaults to UTC if not set, 3D zoom defaults, date auto-sets to today). These system-applied defaults are currently **displayed as active filter pills**, making the UI confusing: user sees "UTC" and "Today" pills when they didn't explicitly set filters. Additionally, the date tag/label is redundant and should not be shown as an active filter. |
+| **Proposed Solution** | (1) Distinguish between "user-selected" filters and "system defaults". (2) In Zustand store, track which filters were explicitly set by user vs. auto-populated by system. (3) Display pills ONLY for user-set filters, not system defaults. (4) System defaults are "normal setup" — show in a subtle way (e.g., info callout "Defaults applied") if needed, but not as active pills. (5) Remove date tag from FilterBar pill display — date is already shown in Start/End fields, no need for separate tag. (6) "Reset Filters" button should clear only user filters, restore system defaults. |
+| **Related** | `src/lib/hooks/use-filters.ts`, `src/components/shared/filter-bar.tsx` |
+| **Files** | `src/components/shared/filter-bar.tsx`, `src/lib/hooks/use-filters.ts`, `src/lib/utils/filter-helpers.ts` |
+| **Links** | [REQ_Filters.md](SPECS/REQ_Filters.md), [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md) |
+
+---
+
 ## Summary
 
 | Priority | Open | Updated | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 14 |
-| P1 | 2 | 0 | 0 | 12 |
-| P2 | 3 | 0 | 0 | 10 |
-| P3 | 3 | 0 | 2 | 0 |
-| **Total** | **8** | **0** | **2** | **36** |
+| P1 | 4 | 0 | 0 | 12 |
+| P2 | 7 | 0 | 0 | 10 |
+| P3 | 2 | 0 | 2 | 0 |
+| **Total** | **13** | **0** | **2** | **36** |
 
-**Changes this pass (DB Performance + Aircraft Type Resolution)**: Added D-031, D-032, D-033. Added OI-046 (customer_sp_id stub). Updated REQ_AircraftTypes.md, REQ_DataModel.md, REQ_DataImport.md.
+**Latest additions (2026-02-18)**: Added OI-047 through OI-057 (11 items total). Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), and UX improvements (system preference filter display, admin settings redesign, rate limiting configuration). Mapped to existing specs and decisions.

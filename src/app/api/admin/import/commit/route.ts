@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { appConfig } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 
 const log = createChildLogger("api/admin/import/commit");
 
@@ -48,11 +49,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Commit (UPSERT into work_packages by GUID)
+    const userId = getSessionUserId(session);
     const result = await commitImportData({
       records: validation.records,
       source,
       fileName,
-      importedBy: session.user.id,
+      importedBy: userId,
     });
 
     return NextResponse.json(result);
