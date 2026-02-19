@@ -831,6 +831,12 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* Recharts SVG elements should never show focus outlines */
+  .recharts-wrapper,
+  .recharts-wrapper svg,
+  .recharts-surface {
+    outline: none !important;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings:

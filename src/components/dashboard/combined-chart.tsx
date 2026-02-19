@@ -328,11 +328,7 @@ export function CombinedChart({
           <span className="invisible">placeholder</span>
         )}
       </div>
-      <ResponsiveContainer
-        width="100%"
-        height={340}
-        className="[&]:outline-none [&_svg]:outline-none [&_*]:outline-none"
-      >
+      <ResponsiveContainer width="100%" height={340}>
         <ComposedChart
           data={chartData}
           margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
@@ -340,7 +336,7 @@ export function CombinedChart({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseLeave}
-          style={{ userSelect: "none", outline: "none" }}
+          style={{ userSelect: "none" }}
         >
           <CartesianGrid
             strokeDasharray="3 3"

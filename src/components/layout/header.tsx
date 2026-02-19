@@ -43,11 +43,11 @@ export function Header() {
 
   const themeIcon = !mounted
     ? "fa-solid fa-circle-half-stroke"
-    : resolvedTheme === "dark"
-      ? "fa-solid fa-moon"
-      : resolvedTheme === "light"
-        ? "fa-solid fa-sun"
-        : "fa-solid fa-circle-half-stroke";
+    : theme === "system"
+      ? "fa-solid fa-circle-half-stroke"
+      : resolvedTheme === "dark"
+        ? "fa-solid fa-moon"
+        : "fa-solid fa-sun";
 
   const themeLabel = mounted ? (theme ?? "system") : "system";
 
