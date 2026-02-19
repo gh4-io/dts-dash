@@ -51,9 +51,9 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-[400px] overflow-y-auto sm:w-[440px]">
+      <SheetContent className="w-[400px] overflow-y-auto sm:w-[440px] px-6">
         <SheetHeader>
-          <SheetTitle>Work Package Detail</SheetTitle>
+          <SheetTitle>Workpackage Detail</SheetTitle>
         </SheetHeader>
 
         <div className="mt-4 space-y-4">
