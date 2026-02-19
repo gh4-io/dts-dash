@@ -189,7 +189,9 @@ function writeYamlConfig(requirements: PasswordRequirements): void {
  * Two-tier fallback: YAML → Hardcoded defaults.
  * Call once at startup; getters auto-load if not yet initialized.
  */
-export function loadServerConfig(): void {
+export function loadServerConfig(force = false): void {
+  if (configLoaded && !force) return;
+
   const yaml = readYamlFile();
 
   inMemoryAppTitle = yaml.app?.title ?? DEFAULT_APP_TITLE;

@@ -14,7 +14,7 @@ export async function POST() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    loadServerConfig();
+    loadServerConfig(true);
 
     const title = getAppTitle();
 

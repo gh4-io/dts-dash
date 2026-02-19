@@ -20,7 +20,7 @@ export async function POST() {
     }
 
     // Reload from server.config.yml (discards any in-memory overrides)
-    loadServerConfig();
+    loadServerConfig(true);
 
     log.info(
       { userId: session.user.id, userEmail: session.user.email },

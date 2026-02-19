@@ -26,9 +26,11 @@ export async function register() {
     // Bootstrap database (schema + system user + default config)
     const { bootstrapDatabase } = await import("@/lib/db/bootstrap");
     bootstrapDatabase();
+    console.log("[Instrumentation] Database bootstrap complete");
 
     // Start cron scheduler
     const { startCron } = await import("@/lib/cron");
     startCron();
+    console.log("[Instrumentation] Startup sequence complete");
   }
 }
