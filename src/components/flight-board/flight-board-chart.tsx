@@ -383,9 +383,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         };
       }
 
-      const { first, last, all } = findFilterMidnights(filterStart, filterEnd, timezone);
-      const axisMin = first;
-      const axisMax = last;
+      const { all } = findFilterMidnights(filterStart, filterEnd, timezone);
+      const axisMin = new Date(filterStart).getTime();
+      const axisMax = new Date(filterEnd).getTime();
       const totalMs = axisMax - axisMin || 86400000;
       const totalHours = totalMs / 3600000;
 
@@ -417,9 +417,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         minute: "numeric",
       });
 
+      // Start tick scan from the nearest hour boundary at or before axisMin
+      const scanStart = axisMin - (axisMin % 3600000) - 3600000; // floor to hour, then one extra
       const stepMs = Math.min(intervalMs, 3600000);
       const ticks: number[] = [];
-      for (let ts = axisMin; ts <= axisMax; ts += stepMs) {
+      for (let ts = scanStart; ts <= axisMax; ts += stepMs) {
+        if (ts < axisMin) continue; // skip ticks before axis start (but scan from clean boundary)
         const h = parseInt(hourFmt.format(new Date(ts)));
         const m = parseInt(minFmt.format(new Date(ts)));
         if (intervalHours >= 1) {
@@ -538,7 +541,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                       const curDay = dayNameFmt.format(new Date(value));
                       if (curDay !== prevDay) return curDay.toUpperCase();
                       // Show on the very first axis tick so viewport always has a day label
-                      if (value === timeGrid.axisMin) return curDay.toUpperCase();
+                      if (value <= timeGrid.axisMin + topIntervalMs && value >= timeGrid.axisMin)
+                        return curDay.toUpperCase();
                       return "";
                     },
                   },
@@ -1053,7 +1057,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                 const curDay = dayNameFmt.format(new Date(value));
                 if (curDay !== prevDay) return curDay.toUpperCase();
                 // Show on the very first axis tick so viewport always has a day label
-                if (value === timeGrid.axisMin) return curDay.toUpperCase();
+                if (value <= timeGrid.axisMin + topInterval && value >= timeGrid.axisMin)
+                  return curDay.toUpperCase();
                 return "";
               },
             },
@@ -1604,7 +1609,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
       // Midnight boundary markers — dark gray, visible but not dominant (skip axis edges)
       const midnightLines = midnightTimestamps
-        .filter((ts) => ts > timeGrid.axisMin && ts < timeGrid.axisMax)
+        .filter((ts) => ts >= timeGrid.axisMin && ts <= timeGrid.axisMax)
         .map((ts) => {
           return {
             xAxis: ts,
