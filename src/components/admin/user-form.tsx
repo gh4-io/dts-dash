@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,9 +70,9 @@ export function UserForm({
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Reset form when dialog opens/closes or initialData changes
-  const handleOpenChange = (isOpen: boolean) => {
-    if (isOpen) {
+  // Sync form state when dialog opens or initialData changes
+  useEffect(() => {
+    if (open) {
       setForm({
         email: initialData?.email ?? "",
         username: initialData?.username ?? "",
@@ -87,6 +87,9 @@ export function UserForm({
       setTempPassword(null);
       setCopied(false);
     }
+  }, [open, initialData]);
+
+  const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen);
   };
 

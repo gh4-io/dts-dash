@@ -8,6 +8,7 @@ import { createChildLogger } from "@/lib/logger";
 import { validatePassword } from "@/lib/utils/password-validation";
 import { parseIntParam } from "@/lib/utils/route-helpers";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
+import { SYSTEM_AUTH_ID } from "@/lib/constants";
 
 const log = createChildLogger("api/admin/users/[id]");
 
@@ -32,6 +33,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const existing = db.select().from(users).where(eq(users.id, numId)).get();
     if (!existing) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Prevent modification of the system user
+    if (existing.authId === SYSTEM_AUTH_ID) {
+      return NextResponse.json({ error: "System user cannot be modified" }, { status: 403 });
     }
 
     // Prevent demoting last superadmin
@@ -176,6 +182,11 @@ export async function DELETE(
     const existing = db.select().from(users).where(eq(users.id, numId)).get();
     if (!existing) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Prevent deletion of the system user
+    if (existing.authId === SYSTEM_AUTH_ID) {
+      return NextResponse.json({ error: "System user cannot be deleted" }, { status: 403 });
     }
 
     // Prevent deleting last superadmin

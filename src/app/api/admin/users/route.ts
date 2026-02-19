@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
+import { SYSTEM_AUTH_ID } from "@/lib/constants";
 import { hashSync } from "bcryptjs";
 import { validatePassword, formatPasswordErrors } from "@/lib/utils/password-validation";
 import { createChildLogger } from "@/lib/logger";
@@ -41,6 +42,7 @@ export async function GET() {
         updatedAt: users.updatedAt,
       })
       .from(users)
+      .where(ne(users.authId, SYSTEM_AUTH_ID))
       .orderBy(users.createdAt)
       .all();
 

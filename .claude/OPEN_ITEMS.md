@@ -1024,16 +1024,87 @@
 
 ---
 
+---
+
+## OI-060 | baseUrl / AUTH_URL Normalization in Config Loader
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-19 |
+| **Context** | `instrumentation.ts` sets `AUTH_URL` from `server.config.yml → app.baseUrl` if `AUTH_URL` env var is not already set. Auth.js then passes the value to `new URL()` internally. If the value is malformed, a cryptic `TypeError: Invalid URL` is thrown deep in Auth.js with no actionable message. Three confirmed failure cases: (1) `192.168.0.92:3000` — no protocol, `new URL()` throws. (2) `"http://192.168.0.92:3000"` — literal quote characters included in the value (common Docker env quoting mistake), `new URL()` throws. (3) `http://192.168.0.92:3000` — valid, works. |
+| **Proposed Fix** | Add a `normalizeBaseUrl(raw: string): string` helper in `instrumentation.ts` or `loader.ts` that: (1) Strips surrounding `"` or `'` quote characters. (2) Prepends `https://` if no `://` protocol is present. (3) Validates the result with `new URL()` and logs a clear `[Config] WARNING: Invalid baseUrl "{raw}" — AUTH_URL not set` rather than letting Auth.js throw. |
+| **Files** | `src/instrumentation.ts` (line 20–24), `src/lib/config/loader.ts` (`getBaseUrl`) |
+| **Links** | OI-043 (Cloudflare Tunnel host header), [REQ_Auth.md](SPECS/REQ_Auth.md) |
+
+---
+
+## OI-061 | System User (system@internal) Should Be Read-Only
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug / Security |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-19 |
+| **Resolved** | 2026-02-19 |
+| **Context** | The `system@internal` service account (SYSTEM_AUTH_ID) is used internally for automated tasks (data import, cron jobs, event tracking). It should not be modifiable by admins (cannot change username, email, or password) and should not be visible in user management UI, or if visible, should be clearly marked as system-protected. Currently admins can edit or delete this user, which would break system functionality. |
+| **Resolution** | (1) Filtered system user from `GET /api/admin/users` using `ne(users.authId, SYSTEM_AUTH_ID)`. (2) Added `authId === SYSTEM_AUTH_ID` guard returning 403 in PUT, DELETE (`[id]/route.ts`), and reset-password routes. (3) No UI changes needed — system user no longer appears in the table. |
+| **Files** | `src/app/api/admin/users/route.ts`, `src/app/api/admin/users/[id]/route.ts`, `src/app/api/admin/users/[id]/reset-password/route.ts`, `src/lib/constants.ts` |
+| **Links** | [REQ_Auth.md](SPECS/REQ_Auth.md), [REQ_Admin.md](SPECS/REQ_Admin.md), OI-058 (bootstrap system user) |
+
+---
+
+## OI-062 | Superuser Self-Service Account Modifications
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature / Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-19 |
+| **Resolved** | 2026-02-19 |
+| **Context** | Currently, superadmin users cannot modify their own username, email, or password from the Account page (`/account`). The Account page has a Profile form that shows username/email but is read-only (appears to be stub). Change Password form exists but username/email edits are missing or non-functional. Meanwhile, admins can edit superuser accounts from the Admin Users table, creating an asymmetry: admins can change superuser credentials, but superuser cannot self-modify. **Desired behavior**: Superuser should be able to change their own username, email, and password directly from their Account page, similar to any regular user. |
+| **Impact** | Superuser is locked into their original credentials — cannot rotate credentials for security or update email address. |
+| **Resolution** | (1) Extended `PUT /api/account/profile` to accept `username` and `email` with format validation, uniqueness checks, and lowercase storage. (2) Made profile-form.tsx username/email fields editable for all users (removed lock icons and "Contact an admin" text). (3) Added client-side validation. (4) Extended `auth.ts` JWT callback to refresh `displayName` and `email` from DB on every token refresh — changes reflect in session automatically. (5) Password change already worked via Security tab. |
+| **Files** | `src/app/api/account/profile/route.ts`, `src/components/account/profile-form.tsx`, `src/lib/auth.ts` |
+| **Links** | [REQ_Account.md](SPECS/REQ_Account.md), [REQ_Auth.md](SPECS/REQ_Auth.md), OI-018 (change password feature) |
+
+---
+
+## OI-063 | User Data Not Populated When Editing in Admin User Management
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-19 |
+| **Resolved** | 2026-02-19 |
+| **Context** | In the Admin Users table (`/admin/users`), when an admin clicks the edit button (pencil icon) on a user row, a dialog/form should open with that user's data (username, email, password reset option, role) pre-populated so the admin can modify it. Currently, the form opens but **no user data is populated** — all fields are blank. The form is not receiving the user's data from the selected row. |
+| **Root Cause** | `UserForm` is always mounted. `useState` initializes form from `initialData` only once at mount (when `initialData` is `undefined`). On subsequent opens, `useState` does not re-initialize from changed props, and Radix Dialog's `onOpenChange` callback only fires on user interaction (overlay/Escape), not programmatic `open` prop changes. |
+| **Resolution** | Added `useEffect` in `user-form.tsx` that syncs form state whenever `open` or `initialData` changes. Simplified `handleOpenChange` to just forward to `onOpenChange`. |
+| **Files** | `src/components/admin/user-form.tsx` |
+| **Links** | [REQ_Admin.md](SPECS/REQ_Admin.md) User Management section, M6 (Admin Core) |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 15 |
-| P1 | 3 | 1 | 0 | 12 |
-| P2 | 4 | 1 | 0 | 13 |
+| P1 | 3 | 1 | 0 | 15 |
+| P2 | 5 | 1 | 0 | 13 |
 | P3 | 3 | 0 | 2 | 0 |
-| **Total** | **10** | **2** | **2** | **40** |
+| **Total** | **11** | **2** | **2** | **43** |
 
-**Latest update (2026-02-18)**: OI-057 resolved — removed default filter pills (date range chip removed, timezone chip only shows when changed from system default). OI-059 added for time indicator display improvement.
+**Latest update (2026-02-19)**: OI-061, OI-062, OI-063 resolved — System user protected (filtered from GET, 403 on PUT/DELETE/reset-password), self-service username/email editing enabled for all users on Account page, admin user edit form now populates correctly via useEffect sync.
 
 **Latest additions (2026-02-18)**: Added OI-047 through OI-059. Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), authentication bootstrap (OI-058), and time indicator display (OI-059).

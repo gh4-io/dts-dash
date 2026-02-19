@@ -35,6 +35,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             tokenVersion: users.tokenVersion,
             isActive: users.isActive,
             forcePasswordChange: users.forcePasswordChange,
+            displayName: users.displayName,
+            email: users.email,
           })
           .from(users)
           .where(eq(users.authId, token.id as string))
@@ -50,10 +52,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return { ...token, invalid: true };
         }
 
-        // Refresh role + forcePasswordChange + userId from DB — instant changes
+        // Refresh role + forcePasswordChange + userId + name + email from DB — instant changes
         token.role = dbUser.role;
         token.forcePasswordChange = dbUser.forcePasswordChange;
         token.userId = dbUser.id;
+        token.name = dbUser.displayName;
+        token.email = dbUser.email;
       }
       return token;
     },
@@ -64,6 +68,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       if (session.user) {
         session.user.id = String(token.userId);
+        session.user.name = token.name as string;
+        session.user.email = token.email as string;
         (session.user as unknown as { role: string }).role = token.role as string;
         (session.user as unknown as { forcePasswordChange: boolean }).forcePasswordChange =
           token.forcePasswordChange as boolean;
