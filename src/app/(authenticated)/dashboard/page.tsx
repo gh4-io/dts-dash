@@ -7,7 +7,7 @@ import { AvgGroundTimeCard } from "@/components/dashboard/avg-ground-time-card";
 import { MhByOperatorCard } from "@/components/dashboard/mh-by-operator-card";
 import { TotalAircraftCard } from "@/components/dashboard/total-aircraft-card";
 import { AircraftByTypeCard } from "@/components/dashboard/aircraft-by-type-card";
-import { CombinedChart } from "@/components/dashboard/combined-chart";
+import { CombinedChart, type ChartTimeRange } from "@/components/dashboard/combined-chart";
 import { CustomerDonut } from "@/components/dashboard/customer-donut";
 import { OperatorPerformance } from "@/components/dashboard/operator-performance";
 import { useWorkPackages } from "@/lib/hooks/use-work-packages";
@@ -25,6 +25,7 @@ function DashboardPageInner() {
   const { timezone } = useFilters();
   const { timeFormat } = usePreferences();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
+  const [timeRange, setTimeRange] = useState<ChartTimeRange | null>(null);
 
   useEffect(() => {
     fetchCustomers();
@@ -33,25 +34,40 @@ function DashboardPageInner() {
   // Apply actions transforms (sort, status filter, etc.)
   const { data: transformedWps } = useTransformedData(workPackages);
 
-  const displayWps = useMemo(() => {
+  // Operator-only filter — feeds the chart (chart must NOT filter itself)
+  const operatorFilteredWps = useMemo(() => {
     if (!focusedOperator) return transformedWps;
     return transformedWps.filter((wp) => wp.customer === focusedOperator);
   }, [transformedWps, focusedOperator]);
 
+  // Operator + time-range filter — feeds all side panels
+  const displayWps = useMemo(() => {
+    if (!timeRange) return operatorFilteredWps;
+    const rangeStart = new Date(timeRange.start).getTime();
+    const rangeEnd = new Date(timeRange.end).getTime() + 3_600_000; // end is start of last hour, extend to cover it
+    return operatorFilteredWps.filter((wp) => {
+      const arr = new Date(wp.arrival).getTime();
+      const dep = new Date(wp.departure).getTime();
+      // WP overlaps the selected time window
+      return arr < rangeEnd && dep > rangeStart;
+    });
+  }, [operatorFilteredWps, timeRange]);
+
+  // Snapshots for chart — reflects operator filter only (not time range)
   const displaySnapshots = useMemo(() => {
     if (!focusedOperator || snapshots.length === 0) return snapshots;
     return snapshots.map((snapshot) => {
       const hourStart = new Date(snapshot.hour).getTime();
       const hourEnd = hourStart + 3_600_000;
-      const arrivals = displayWps.filter((wp) => {
+      const arrivals = operatorFilteredWps.filter((wp) => {
         const t = new Date(wp.arrival).getTime();
         return t >= hourStart && t < hourEnd;
       }).length;
-      const departures = displayWps.filter((wp) => {
+      const departures = operatorFilteredWps.filter((wp) => {
         const t = new Date(wp.departure).getTime();
         return t >= hourStart && t < hourEnd;
       }).length;
-      const onGround = displayWps.filter((wp) => {
+      const onGround = operatorFilteredWps.filter((wp) => {
         return (
           new Date(wp.arrival).getTime() < hourEnd && new Date(wp.departure).getTime() > hourStart
         );
@@ -63,7 +79,7 @@ function DashboardPageInner() {
         onGroundCount: onGround,
       };
     });
-  }, [snapshots, focusedOperator, displayWps]);
+  }, [snapshots, focusedOperator, operatorFilteredWps]);
 
   const handleOperatorClick = useCallback((operator: string | null) => {
     setFocusedOperator(operator);
@@ -71,6 +87,10 @@ function DashboardPageInner() {
 
   const handleOperatorFromCard = useCallback((operator: string) => {
     setFocusedOperator((prev) => (prev === operator ? null : operator));
+  }, []);
+
+  const handleTimeRangeChange = useCallback((range: ChartTimeRange | null) => {
+    setTimeRange(range);
   }, []);
 
   if (error) {
@@ -111,7 +131,7 @@ function DashboardPageInner() {
 
           {/* Center: chart + operator table */}
           <div className="flex flex-col gap-3">
-            <div className="rounded-lg border border-border bg-card p-3 flex-1 flex flex-col">
+            <div className="rounded-lg border border-border bg-card p-4 flex-1 flex flex-col">
               <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
@@ -122,11 +142,12 @@ function DashboardPageInner() {
                   snapshots={displaySnapshots}
                   timezone={timezone}
                   timeFormat={timeFormat}
+                  onSelectionChange={handleTimeRangeChange}
                 />
               </div>
             </div>
             <OperatorPerformance
-              workPackages={workPackages}
+              workPackages={displayWps}
               focusedOperator={focusedOperator}
               onOperatorClick={handleOperatorClick}
               className="flex-1"
@@ -134,7 +155,7 @@ function DashboardPageInner() {
           </div>
 
           {/* Right: Donut stretches to match full height */}
-          <div className="rounded-lg border border-border bg-card p-3 flex flex-col">
+          <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
             <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
               <i className="fa-solid fa-chart-pie" />
               Aircraft By Customer
