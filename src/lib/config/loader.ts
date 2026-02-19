@@ -131,16 +131,41 @@ const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
 };
 
 // ─── In-Memory State ────────────────────────────────────────────────────────
+// Use globalThis so state survives across code-split chunks in Next.js builds.
+// Without this, each dynamic-import chunk gets its own module instance with
+// null state, causing redundant config reloads.
 
-let inMemoryConfig: PasswordRequirements | null = null;
-let inMemoryAppTitle: string | null = null;
-let inMemoryBaseUrl: string | null = null;
-let inMemoryLogLevel: string | null = null;
-let inMemoryFeatures: AppFeatures | null = null;
-let inMemoryTimeline: TimelineDefaults | null = null;
-let inMemoryFlights: FlightSettings | null = null;
-let inMemoryAppearance: AppearanceSettings | null = null;
-let configLoaded = false;
+interface ServerConfigState {
+  inMemoryConfig: PasswordRequirements | null;
+  inMemoryAppTitle: string | null;
+  inMemoryBaseUrl: string | null;
+  inMemoryLogLevel: string | null;
+  inMemoryFeatures: AppFeatures | null;
+  inMemoryTimeline: TimelineDefaults | null;
+  inMemoryFlights: FlightSettings | null;
+  inMemoryAppearance: AppearanceSettings | null;
+  configLoaded: boolean;
+}
+
+const STATE_KEY = "__serverConfig" as const;
+
+function getState(): ServerConfigState {
+  const g = globalThis as Record<string, unknown>;
+  if (!g[STATE_KEY]) {
+    g[STATE_KEY] = {
+      inMemoryConfig: null,
+      inMemoryAppTitle: null,
+      inMemoryBaseUrl: null,
+      inMemoryLogLevel: null,
+      inMemoryFeatures: null,
+      inMemoryTimeline: null,
+      inMemoryFlights: null,
+      inMemoryAppearance: null,
+      configLoaded: false,
+    };
+  }
+  return g[STATE_KEY] as ServerConfigState;
+}
 
 // ─── YAML Reader ─────────────────────────────────────────────────────────────
 
@@ -190,14 +215,15 @@ function writeYamlConfig(requirements: PasswordRequirements): void {
  * Call once at startup; getters auto-load if not yet initialized.
  */
 export function loadServerConfig(force = false): void {
-  if (configLoaded && !force) return;
+  const s = getState();
+  if (s.configLoaded && !force) return;
 
   const yaml = readYamlFile();
 
-  inMemoryAppTitle = yaml.app?.title ?? DEFAULT_APP_TITLE;
-  inMemoryBaseUrl = yaml.app?.baseUrl ?? null;
-  inMemoryLogLevel = yaml.logging?.level ?? DEFAULT_LOG_LEVEL;
-  inMemoryFeatures = {
+  s.inMemoryAppTitle = yaml.app?.title ?? DEFAULT_APP_TITLE;
+  s.inMemoryBaseUrl = yaml.app?.baseUrl ?? null;
+  s.inMemoryLogLevel = yaml.logging?.level ?? DEFAULT_LOG_LEVEL;
+  s.inMemoryFeatures = {
     enableSeedEndpoint: yaml.features?.enableSeedEndpoint ?? DEFAULT_FEATURES.enableSeedEndpoint,
     cronEnabled: yaml.features?.cronEnabled ?? DEFAULT_FEATURES.cronEnabled,
   };
@@ -208,7 +234,7 @@ export function loadServerConfig(force = false): void {
   // Otherwise derive endOffset = startOffset + defaultDays.
   const bothExplicit = yamlTl.startOffset !== undefined && yamlTl.endOffset !== undefined;
   const endOffset = bothExplicit ? yamlTl.endOffset! : startOffset + defaultDays;
-  inMemoryTimeline = {
+  s.inMemoryTimeline = {
     startOffset,
     endOffset,
     defaultZoom: yamlTl.defaultZoom ?? DEFAULT_TIMELINE.defaultZoom,
@@ -217,11 +243,11 @@ export function loadServerConfig(force = false): void {
     defaultDays,
   };
   const yamlFlights = yaml.flights ?? {};
-  inMemoryFlights = {
+  s.inMemoryFlights = {
     hideCanceled: yamlFlights.hideCanceled ?? DEFAULT_FLIGHT_SETTINGS.hideCanceled,
     cleanupGraceHours: yamlFlights.cleanupGraceHours ?? DEFAULT_FLIGHT_SETTINGS.cleanupGraceHours,
   };
-  inMemoryConfig = {
+  s.inMemoryConfig = {
     ...DEFAULT_PASSWORD_REQUIREMENTS,
     ...yaml.passwordSecurity,
   };
@@ -230,7 +256,7 @@ export function loadServerConfig(force = false): void {
   const yamlAppearance = yaml.appearance ?? {};
   const rawColorMode = yamlAppearance.defaultColorMode;
   const rawPreset = yamlAppearance.defaultThemePreset;
-  inMemoryAppearance = {
+  s.inMemoryAppearance = {
     defaultColorMode:
       rawColorMode && (VALID_COLOR_MODES as readonly string[]).includes(rawColorMode)
         ? (rawColorMode as AppearanceSettings["defaultColorMode"])
@@ -241,50 +267,57 @@ export function loadServerConfig(force = false): void {
         : DEFAULT_APPEARANCE_SETTINGS.defaultThemePreset,
   };
 
-  configLoaded = true;
+  s.configLoaded = true;
   console.log("[Config Loader] Configuration loaded from server.config.yml");
 }
 
 /** Site title for browser tab, sidebar, login page */
 export function getAppTitle(): string {
-  if (inMemoryAppTitle === null) loadServerConfig();
-  return inMemoryAppTitle!;
+  const s = getState();
+  if (s.inMemoryAppTitle === null) loadServerConfig();
+  return s.inMemoryAppTitle!;
 }
 
 /** Base URL for auth redirects (optional — overrides Host header detection) */
 export function getBaseUrl(): string | null {
-  if (!configLoaded) loadServerConfig();
-  return inMemoryBaseUrl;
+  const s = getState();
+  if (!s.configLoaded) loadServerConfig();
+  return s.inMemoryBaseUrl;
 }
 
 /** Pino log level */
 export function getLogLevel(): string {
-  if (inMemoryLogLevel === null) loadServerConfig();
-  return inMemoryLogLevel!;
+  const s = getState();
+  if (s.inMemoryLogLevel === null) loadServerConfig();
+  return s.inMemoryLogLevel!;
 }
 
 /** Feature flags */
 export function getFeatures(): AppFeatures {
-  if (inMemoryFeatures === null) loadServerConfig();
-  return inMemoryFeatures!;
+  const s = getState();
+  if (s.inMemoryFeatures === null) loadServerConfig();
+  return s.inMemoryFeatures!;
 }
 
 /** Timeline/filter defaults (start/end offsets, zoom, compact, timezone) */
 export function getTimelineDefaults(): TimelineDefaults {
-  if (inMemoryTimeline === null) loadServerConfig();
-  return inMemoryTimeline!;
+  const s = getState();
+  if (s.inMemoryTimeline === null) loadServerConfig();
+  return s.inMemoryTimeline!;
 }
 
 /** Flight display + cleanup settings */
 export function getFlightSettings(): FlightSettings {
-  if (inMemoryFlights === null) loadServerConfig();
-  return inMemoryFlights!;
+  const s = getState();
+  if (s.inMemoryFlights === null) loadServerConfig();
+  return s.inMemoryFlights!;
 }
 
 /** System appearance defaults (color mode + theme preset) */
 export function getAppearanceDefaults(): AppearanceSettings {
-  if (inMemoryAppearance === null) loadServerConfig();
-  return inMemoryAppearance!;
+  const s = getState();
+  if (s.inMemoryAppearance === null) loadServerConfig();
+  return s.inMemoryAppearance!;
 }
 
 /**
@@ -304,7 +337,7 @@ export function updateFlightSettings(settings: FlightSettings): void {
     throw new Error("cleanupGraceHours must be an integer between 1 and 720");
   }
 
-  inMemoryFlights = { ...settings };
+  getState().inMemoryFlights = { ...settings };
   writeYamlSection((config) => {
     config.flights = { ...settings };
   });
@@ -314,8 +347,9 @@ export function updateFlightSettings(settings: FlightSettings): void {
 
 /** Password requirements */
 export function getPasswordRequirements(): PasswordRequirements {
-  if (inMemoryConfig === null) loadServerConfig();
-  return inMemoryConfig!;
+  const s = getState();
+  if (s.inMemoryConfig === null) loadServerConfig();
+  return s.inMemoryConfig!;
 }
 
 /**
@@ -336,7 +370,7 @@ export function updatePasswordRequirements(requirements: PasswordRequirements): 
     throw new Error("Invalid minEntropy (must be 0-100)");
   }
 
-  inMemoryConfig = { ...requirements };
+  getState().inMemoryConfig = { ...requirements };
   writeYamlConfig(requirements);
 
   console.log("[Config Loader] Password requirements updated");
