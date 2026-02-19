@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:reset — Delete dashboard.db and recreate empty schema.
  * DESTRUCTIVE: All users, customers, settings, analytics will be lost.
@@ -55,7 +55,7 @@ async function main() {
   // Recreate schema (tables + migrations) via db:migrate
   log("Creating schema...", "blue");
   try {
-    execSync("npx tsx scripts/db/migrate.ts", {
+    execSync("tsx scripts/db/migrate.ts", {
       cwd: PROJECT_ROOT,
       stdio: "inherit",
     });
@@ -69,7 +69,7 @@ async function main() {
     log("");
     log("Seeding demo data...", "blue");
     try {
-      execSync("npx tsx scripts/db/seed.ts", {
+      execSync("tsx scripts/db/seed.ts", {
         cwd: PROJECT_ROOT,
         stdio: "inherit",
       });

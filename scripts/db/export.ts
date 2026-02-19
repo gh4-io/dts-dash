@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:export — Export all database tables to JSON files.
  * Creates a timestamped directory in data/exports/.

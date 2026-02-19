@@ -157,6 +157,14 @@ scripts/db/                  — Database CLI tools (seed, reset, backup, etc.)
 public/vendor/fontawesome/   — Self-hosted FA assets
 plan/                        — Implementation plans
 .claude/                     — Knowledge base (specs, UI, dev docs)
+Dockerfile                   — Unified multi-target (prod default + dev target)
+docker/                      — Docker resources directory
+docker/docker-compose.dev.yml   — Dev compose example
+docker/docker-compose.prod.yml  — Prod compose example
+docker/.env.example             — Universal env reference (all 7 vars documented)
+docker/.env.dev.example         — Pre-filled dev template (cp to .env.local)
+docker/.env.prod.example        — Production template with placeholders
+docker/README.md                — Authoritative Docker + env + deployment guide
 ```
 
 ## Knowledge Base (.claude/)
@@ -257,6 +265,23 @@ plan/                        — Implementation plans
 - `npm run lint` must be clean
 - `npm run dev` must render all pages without console errors
 - See [TEST_PLAN.md](.claude/DEV/TEST_PLAN.md) for full checklist
+
+## Docker & Deployment Verification
+
+**Before any deployment, tag, or release**, run a Docker gap analysis:
+
+1. `docker build -t dtsd .` — prod image builds successfully
+2. `docker build --target dev -t dtsd:dev .` — dev image builds successfully
+3. `docker compose -f docker/docker-compose.prod.yml up` — container starts and stays healthy
+4. Health check passes: `wget -qO- http://localhost:3000/api/health`
+5. DB scripts work in container: `docker exec <container> tsx scripts/db/status.ts`
+6. Volume mount paths are relative (`./data`, `./server.config.yml`) — not absolute
+7. `env_file` paths resolve correctly relative to compose file location
+8. No dev dependencies leak into prod image (`docker exec <container> ls node_modules/vitest` should fail)
+
+**Key files:** Root `Dockerfile` (single file, `prod` default + `dev` target), `docker/` (compose examples, env templates, resource files).
+
+See [docker/README.md](docker/README.md) for full Docker usage guide.
 
 ## Plan Files
 

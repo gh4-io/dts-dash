@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:seed — Run full database seed from JSON data files.
  * Idempotent: safe to run multiple times.

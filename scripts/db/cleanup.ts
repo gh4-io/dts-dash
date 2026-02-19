@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:cleanup — Remove orphaned/inferred rows that provide no data value.
  * Safe to run on a live database. Idempotent — can be re-run freely.

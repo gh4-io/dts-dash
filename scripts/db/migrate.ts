@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:migrate — Run pending schema migrations.
  * Idempotent: safe to run multiple times.

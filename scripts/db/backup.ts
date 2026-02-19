@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:backup — Snapshot dashboard.db to timestamped backup.
  *

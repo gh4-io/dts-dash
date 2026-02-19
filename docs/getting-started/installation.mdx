@@ -30,31 +30,43 @@ npm install
 
 ### 3. Set up environment
 
-Create `.env.local` in the project root:
+Copy the pre-filled dev template:
+
+```bash
+cp docker/.env.dev.example .env.local
+cp server.config.dev.yml server.config.yml
+```
+
+Or create `.env.local` manually with just the required secret:
+
+```bash
+npm run generate-secret
+# Paste the output below
+```
 
 ```env
-AUTH_SECRET=your-random-secret-here
+AUTH_SECRET=<paste-generated-secret-here>
 ```
 
-Generate a secret:
-```bash
-openssl rand -base64 32
-```
+> See [Configuration](/docs/getting-started/configuration) for all available variables.
 
-### 4. Seed the database
+### 4. Start the development server
 
 ```bash
-npm run db:seed
+npm run dev
 ```
 
-This creates `data/dashboard.db` with:
-- Default admin user (`admin@local`, username: `admin`)
-- Default test user (`user@local`, username: `user`)
-- 6 customer color presets
-- Aircraft type mappings
-- Default app configuration
+Open [http://localhost:3000](http://localhost:3000).
 
-### 5. Seed reference data (recommended)
+The database **auto-bootstraps on first start** — tables, migrations, system user, and default config are created automatically. No manual seed step is required.
+
+### 5. Create your first user
+
+Navigate to [http://localhost:3000/register](http://localhost:3000/register). The first user is automatically granted the `superadmin` role.
+
+If you used `docker/.env.dev.example`, you can also run `npm run db:seed` to create the pre-configured admin (`admin@local` / `admin123`).
+
+### 6. Seed reference data (recommended)
 
 ```bash
 npm run db:seed-reference
@@ -62,19 +74,11 @@ npm run db:seed-reference
 
 Populates aircraft type mapping rules, manufacturers, aircraft models, and engine types. Idempotent — safe to re-run after any reset.
 
-### 6. Add work package data
+### 7. Add work package data
 
 Place your SharePoint OData JSON export at `data/input.json`. The file should be either:
 - A bare JSON array: `[{...}, {...}]`
 - OData format: `{"value": [{...}, {...}]}`
-
-### 7. Start the development server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
 
 ## Troubleshooting
 

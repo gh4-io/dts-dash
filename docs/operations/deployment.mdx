@@ -21,36 +21,58 @@ The server runs on `http://localhost:3000` by default.
 ### First-Time Setup
 
 1. Install dependencies: `npm install`
-2. Create `.env.local` with `AUTH_SECRET`
-3. Seed database: `npx tsx src/lib/db/seed.ts`
-4. Place work package data at `data/input.json`
+2. Create environment file: `cp docker/.env.prod.example .env.prod`
+3. Generate secret: `npm run generate-secret` — paste into `.env.prod`
+4. Create config: `cp server.config.dev.yml server.config.yml`
 5. Build: `npm run build`
 6. Start: `npm run start`
+
+The database **auto-bootstraps on first start**. Navigate to `/register` to create the first superadmin.
 
 ### Data Directory
 
 ```
 data/
-├── input.json       # Work package data (SharePoint OData export)
-├── dashboard.db     # SQLite database (auto-created on seed)
+├── dashboard.db     # SQLite database (auto-created on first start)
 ├── dashboard.db-shm # SQLite shared memory (runtime)
-└── dashboard.db-wal # SQLite write-ahead log (runtime)
+├── dashboard.db-wal # SQLite write-ahead log (runtime)
+├── seed/            # Reference data for seeding
+├── backups/         # Timestamped backups
+└── exports/         # Timestamped exports
 ```
 
-Back up `dashboard.db` and `input.json` to preserve configuration and data.
+Back up `dashboard.db` regularly. See [Backup](/docs/operations/backup) for procedures.
 
-## Production Considerations
+## Docker Deployment
+
+See `docker/README.md` for the full Docker guide, including compose examples, volume setup, and health checks.
+
+```bash
+cp docker/.env.prod.example .env.prod
+# Edit .env.prod — set AUTH_SECRET
+cp server.config.dev.yml server.config.yml
+
+docker compose -f docker/docker-compose.prod.yml build
+docker compose -f docker/docker-compose.prod.yml up -d
+```
+
+## Production Configuration
 
 ### Environment Variables
 
+Only secrets and deployment-specific values are env vars. Application settings live in `server.config.yml`.
+
 ```env
-AUTH_SECRET=<generate-with-openssl>
+AUTH_SECRET=<generate-with-npm-run-generate-secret>
+DATABASE_PATH=/app/data/dashboard.db
 NODE_ENV=production
 ```
 
+See [Configuration](/docs/getting-started/configuration) for the full variable reference.
+
 ### Process Manager
 
-For production, use a process manager:
+For bare-metal production, use a process manager:
 
 ```bash
 # Using PM2
@@ -62,7 +84,7 @@ pm2 startup
 
 ### Reverse Proxy
 
-If exposing to a network, place behind a reverse proxy (nginx, Caddy):
+If exposing to a network, place behind a reverse proxy (Nginx, Caddy, Cloudflare Tunnel):
 
 ```nginx
 server {
@@ -77,13 +99,16 @@ server {
 }
 ```
 
+If the proxy rewrites the `Host` header, set `AUTH_URL` in `.env.prod` or `app.baseUrl` in `server.config.yml`.
+
 ### Background Tasks
 
-The application includes an in-process cron scheduler. No external crontab is needed — built-in tasks (like cleanup) run automatically. Custom tasks can be added via `server.config.yml` or the Admin UI. See [Scheduled Tasks](/docs/operations/scheduled-tasks) for details.
+The application includes an in-process cron scheduler. No external crontab is needed — built-in tasks (like cleanup) run automatically. Custom tasks can be added via `server.config.yml`. See [Scheduled Tasks](/docs/operations/scheduled-tasks) for details.
 
 ### Security Notes
 
-- Change default seed passwords immediately
-- Set `NODE_ENV=production` to restrict seed endpoint
+- Generate a unique `AUTH_SECRET` for production (never reuse dev secrets)
+- Set `logging.level: info` and `features.enableSeedEndpoint: false` in `server.config.yml`
+- Never set `INITIAL_ADMIN_*` env vars in production
 - Consider adding rate limiting if exposed to network
 - Back up `data/dashboard.db` regularly

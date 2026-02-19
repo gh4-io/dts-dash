@@ -11,10 +11,12 @@ description: How to develop and contribute
 git clone <repo-url> dashboard
 cd dashboard
 npm install
-cp .env.local.example .env.local  # Add AUTH_SECRET
-npx tsx src/lib/db/seed.ts
+cp docker/.env.dev.example .env.local
+cp server.config.dev.yml server.config.yml
 npm run dev
 ```
+
+The database auto-bootstraps on first start. Navigate to `/register` to create the first superadmin, or run `npm run db:seed` to create the pre-configured admin (`admin@local` / `admin123`).
 
 ## Development Cycle
 
@@ -80,4 +82,4 @@ test(utils): add date-helpers edge case tests
 | `.claude/OPEN_ITEMS.md` | Tracked issues and questions |
 | `.claude/DECISIONS.md` | Architectural decisions log |
 | `.claude/PLAN.md` | Implementation plan |
-| `docs/review/` | Code review artifacts |
+| `docker/README.md` | Docker & environment configuration guide |

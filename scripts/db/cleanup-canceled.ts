@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:cleanup-canceled — Remove canceled work packages from the database.
  * Safe to run multiple times (idempotent).

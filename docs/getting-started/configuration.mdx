@@ -5,15 +5,55 @@ description: Environment variables and app settings
 
 # Configuration
 
+The app uses a **two-layer configuration system**:
+
+| Layer | File | What goes here |
+|-------|------|---------------|
+| **Environment variables** | `.env.local` / `.env.prod` | Secrets and deployment-specific values |
+| **Application config** | `server.config.yml` | All non-secret settings |
+
 ## Environment Variables
 
-Create `.env.local` in the project root:
+Create `.env.local` in the project root. For a pre-filled dev setup:
+
+```bash
+cp docker/.env.dev.example .env.local
+```
+
+The app reads 7 environment variables:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AUTH_SECRET` | Yes | — | Secret key for JWT signing. Generate with `openssl rand -base64 32` |
-| `NEXTAUTH_URL` | No | `http://localhost:3000` | Base URL for auth callbacks |
-| `NODE_ENV` | No | `development` | `development` or `production` |
+| `AUTH_SECRET` | Yes | — | JWT signing secret (32+ chars). Generate: `npm run generate-secret` |
+| `DATABASE_PATH` | No | `./data/dashboard.db` | SQLite file path |
+| `NODE_ENV` | No | Set by Next.js | `development` or `production` |
+| `AUTH_URL` | No | From `app.baseUrl` in config | Override for reverse proxy scenarios |
+| `SENTRY_DSN` | No | *(disabled)* | Error tracking DSN |
+| `INITIAL_ADMIN_EMAIL` | No | — | Dev only: auto-create first admin during seed |
+| `INITIAL_ADMIN_PASSWORD` | No | — | Dev only: password for auto-created admin |
+
+> See `docker/.env.example` for the full reference with documentation.
+
+## Server Configuration (`server.config.yml`)
+
+System settings are stored in `server.config.yml` (loaded at startup). Copy the dev template to get started:
+
+```bash
+cp server.config.dev.yml server.config.yml
+```
+
+| Section | Key Settings |
+|---------|-------------|
+| `app` | `title`, `baseUrl` (for auth redirects behind reverse proxy) |
+| `logging` | `level` (trace/debug/info/warn/error) |
+| `features` | `enableSeedEndpoint`, `cronEnabled` |
+| `timeline` | `startOffset`, `defaultDays`, `defaultZoom`, `defaultTimezone` |
+| `appearance` | `defaultColorMode`, `defaultThemePreset` |
+| `flights` | `hideCanceled`, `cleanupGraceHours` |
+| `passwordSecurity` | `minLength`, `maxLength`, character requirements, `minEntropy` |
+| `cron.jobs` | Override built-in job schedules/options, or define custom jobs |
+
+See [Scheduled Tasks](/docs/operations/scheduled-tasks) for the `cron.jobs` schema.
 
 ## App Configuration (SQLite)
 
@@ -25,8 +65,6 @@ These settings are stored in the `app_config` table and editable via the Admin p
 | `wpMHMode` | `include` | Whether to include WP man-hours (`include` or `exclude`) |
 | `theoreticalCapacityPerPerson` | `8.0` | Theoretical MH per person per shift |
 | `realCapacityPerPerson` | `6.5` | Real (effective) MH per person per shift |
-| `timelineDefaultDays` | `3` | Default number of days shown on flight board |
-| `defaultTimezone` | `UTC` | Default timezone for new users |
 | `shifts` | See below | JSON array of shift definitions |
 
 ### Shifts Configuration
@@ -38,21 +76,6 @@ These settings are stored in the `app_config` table and editable via the Admin p
   { "name": "Night", "startHour": 23, "endHour": 7,  "headcount": 4 }
 ]
 ```
-
-## Server Configuration (`server.config.yml`)
-
-System settings are stored in `server.config.yml` (loaded at startup). The dev template is `server.config.dev.yml`.
-
-| Section | Key Settings |
-|---------|-------------|
-| `app` | `title`, `baseUrl` |
-| `logging` | `level` (trace/debug/info/warn/error) |
-| `features` | `enableSeedEndpoint`, `cronEnabled` |
-| `timeline` | `startOffset`, `defaultDays`, `defaultZoom`, `defaultTimezone` |
-| `passwordSecurity` | `minLength`, `maxLength`, character requirements, `minEntropy` |
-| `cron.jobs` | Override built-in job schedules/options, or define custom jobs |
-
-See [Scheduled Tasks](/docs/operations/scheduled-tasks) for the `cron.jobs` schema.
 
 ## User Preferences (Per-User)
 

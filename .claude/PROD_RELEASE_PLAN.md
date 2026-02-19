@@ -67,6 +67,8 @@ git cherry-pick <commit-hash>        # specific commits
 
 # 3. Strip any dev artifacts that came along (if cherry-picking brought any)
 # 4. Verify: npm run build && npm run lint
+# 5. Docker gap analysis (see CLAUDE.md "Docker & Deployment Verification")
+#    docker build -t dtsd . && docker run --rm -p 3000:3000 dtsd
 
 # 5. Push and create PR
 git push origin release/vX.Y.Z
@@ -158,8 +160,8 @@ These are deleted on the release branch only. They remain on `dev`.
 | `next-env.d.ts` | Next.js TypeScript declarations |
 | `.gitignore` | Git ignore rules |
 | `.env.example` | Environment variable documentation |
-| `Dockerfile` | Container build |
-| `docker-compose.yml` | Container orchestration |
+| `Dockerfile` | Unified container build (prod default + dev target) |
+| `docker/` | Compose examples, env templates, Docker resources |
 | `.dockerignore` | Docker build exclusions |
 | `ecosystem.config.js` | PM2 process manager config |
 | `.github/workflows/` | CI/CD pipelines |

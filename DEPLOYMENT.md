@@ -11,19 +11,31 @@
 
 ---
 
-## Environment Variables
+## Configuration
 
-Copy `.env.example` to `.env.local` and configure:
+The app uses a **two-layer configuration system**:
+
+| Layer | File | What goes here |
+|-------|------|---------------|
+| **Environment variables** | `.env.local` / `.env.prod` | Secrets and deployment-specific values |
+| **Application config** | `server.config.yml` | All non-secret settings (logging, themes, timeline, cron, passwords) |
+
+### Environment Variables
+
+The app reads **7 environment variables** total. For a pre-filled dev setup: `cp docker/.env.dev.example .env.local`
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `AUTH_SECRET` | **Yes** | — | Session signing secret. 32+ chars. Generate: `npm run generate-secret` |
+| `AUTH_SECRET` | **Yes** | — | JWT signing secret. 32+ chars. Generate: `npm run generate-secret` |
 | `DATABASE_PATH` | No | `./data/dashboard.db` | Path to SQLite database file |
-| `NODE_ENV` | No | `development` | Set to `production` for deployment |
-| `INITIAL_ADMIN_EMAIL` | No | — | First admin email (seed-time only) |
-| `INITIAL_ADMIN_PASSWORD` | No | — | First admin password (seed-time only) |
-| `ENABLE_SEED_ENDPOINT` | No | `false` | Enable `/api/seed` endpoint |
-| `SENTRY_DSN` | No | — | Optional Sentry error tracking DSN |
+| `NODE_ENV` | No | Set by Next.js | `development` or `production` |
+| `AUTH_URL` | No | From `app.baseUrl` in config | Override for reverse proxy scenarios |
+| `SENTRY_DSN` | No | *(disabled)* | Error tracking DSN |
+| `INITIAL_ADMIN_EMAIL` | No | — | Dev only: auto-create first admin during seed |
+| `INITIAL_ADMIN_PASSWORD` | No | — | Dev only: password for auto-created admin |
+
+> See `docker/.env.example` for the full reference with documentation.
+> Application settings (logging level, seed endpoint, themes, etc.) are in `server.config.yml`, not env vars.
 
 ---
 
@@ -34,72 +46,61 @@ Copy `.env.example` to `.env.local` and configure:
 ```bash
 git clone <repo-url> cvg-dashboard
 cd cvg-dashboard
-cp .env.example .env.local
-```
-
-Edit `.env.local`:
-```
-AUTH_SECRET=<your-generated-secret>
-NODE_ENV=production
+cp docker/.env.prod.example .env.prod
+npm run generate-secret
+# Paste the output as AUTH_SECRET in .env.prod
+cp server.config.dev.yml server.config.yml
+# Edit server.config.yml: set logging.level: info, features.enableSeedEndpoint: false
 ```
 
 ### 2. Build and start
 
 ```bash
-docker compose up -d --build
+docker compose -f docker/docker-compose.prod.yml build
+docker compose -f docker/docker-compose.prod.yml up -d
 ```
 
 This will:
-- Build a multi-stage Docker image (Node 20 Alpine)
+- Build a multi-stage Docker image (Node 20 Alpine) from the root `Dockerfile`
 - Mount `./data` as a persistent volume for SQLite
+- Mount `./server.config.yml` as read-only config
 - Start on port 3000 with auto-restart and health checks
 
 ### 3. First-run setup
 
 **No manual `db:seed` is required.** The bootstrap layer (`src/lib/db/bootstrap.ts`, called from `instrumentation.ts`) automatically creates all tables, runs idempotent migrations, and seeds the system user on every startup.
 
-To create the first admin account, navigate to:
-- `http://localhost:3000/register` — self-registration is open when no real users exist; the first user is granted `superadmin` role automatically.
-- `http://localhost:3000/setup` — the legacy setup endpoint also remains available.
-
-Alternatively, set `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` in `.env.local` before the first start.
+Navigate to `http://localhost:3000/register` to create the first superadmin.
 
 ### 4. Seed reference data (recommended)
 
 After first run, populate the aircraft type mappings, manufacturers, models, and engine types:
 
 ```bash
-npm run db:seed-reference
+docker exec -it dtsd-prod tsx scripts/db/seed-reference.ts
 ```
 
-This is idempotent — safe to re-run. Skips any data already present.
+Or locally: `npm run db:seed-reference`. This is idempotent — safe to re-run.
 
-### 5. Clean up orphaned data (optional)
-
-If migrating an existing database, remove any stale inferred rows and expired sessions:
+### 5. Verify
 
 ```bash
-npm run db:cleanup
-```
-
-### 4. Verify
-
-```bash
+docker inspect --format='{{.State.Health.Status}}' dtsd-prod
 curl http://localhost:3000/api/health
 # Expected: {"status":"healthy","version":"0.1.0","uptime":"...","checks":{...}}
-
-docker compose logs -f dashboard
 ```
 
 ### Upgrade procedure (Docker)
 
 ```bash
 git pull origin master
-docker compose down
-docker compose up -d --build
+docker compose -f docker/docker-compose.prod.yml down
+docker compose -f docker/docker-compose.prod.yml up -d --build
 ```
 
 The SQLite database persists in the `./data` volume mount.
+
+See [docker/README.md](docker/README.md) for the full Docker guide, including compose examples, volumes, DB scripts in container, and troubleshooting.
 
 ---
 
@@ -116,9 +117,11 @@ npm ci
 ### 2. Configure environment
 
 ```bash
-cp .env.example .env.local
+cp docker/.env.prod.example .env.prod
 npm run generate-secret
-# Paste the output as AUTH_SECRET in .env.local
+# Paste the output as AUTH_SECRET in .env.prod
+cp server.config.dev.yml server.config.yml
+# Edit server.config.yml: set logging.level: info, features.enableSeedEndpoint: false
 ```
 
 ### 3. Build
@@ -140,15 +143,12 @@ pm2 startup  # Follow instructions to enable auto-start on boot
 
 **No manual `db:seed` is required.** The bootstrap layer auto-creates the schema and system user on startup.
 
-To create the first admin account, navigate to:
-- `http://<host>:3000/register` — self-registration is open when no real users exist; the first user is granted `superadmin` role automatically.
-- `http://<host>:3000/setup` — the legacy setup endpoint also remains available.
+Navigate to `http://<host>:3000/register` to create the first superadmin.
 
 ### 6. Seed reference data (recommended)
 
 ```bash
 npm run db:seed-reference
-npm run db:cleanup   # optional — removes stale inferred rows on existing DBs
 ```
 
 ### Upgrade procedure (PM2)
@@ -185,7 +185,7 @@ RestartSec=5
 
 Environment=NODE_ENV=production
 Environment=PORT=3000
-EnvironmentFile=/opt/cvg-dashboard/.env.local
+EnvironmentFile=/opt/cvg-dashboard/.env.prod
 
 [Install]
 WantedBy=multi-user.target
@@ -305,9 +305,11 @@ Use the **Admin > Cron Jobs** UI to view, edit, suspend/resume, and manually tri
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `AUTH_SECRET is not set` error | Missing env var | Set `AUTH_SECRET` in `.env.local` |
+| `AUTH_SECRET is not set` error | Missing env var | Run `npm run generate-secret`, set in `.env.local` or `.env.prod` |
 | `AUTH_SECRET must be at least 32 characters` | Secret too short | Run `npm run generate-secret` |
-| Health check returns 503 | Database unreachable | Check `DATABASE_PATH`, file permissions |
-| Login page shows but can't log in | No users exist | Visit `/register` (first user) or `/setup` to create initial admin |
-| Port 3000 already in use | Another process | Change `PORT` env var or stop the other process |
+| `SQLITE_CANTOPEN` | Data dir not writable | Check volume mount permissions: `chown 1001:1001 ./data` |
+| Health check returns 503 | Database unreachable | Check `DATABASE_PATH`, file permissions, volume mount |
+| Login page shows but can't log in | No users exist | Navigate to `/register` (first user becomes superadmin) |
+| Port 3000 already in use | Another process | `lsof -i :3000` then `kill <PID>`, or use `PORT=3001` |
 | Login/logout redirects to localhost | Reverse proxy overwrites `Host` header | Set `app.baseUrl` in `server.config.yml` to your public URL |
+| Config changes not applied | Config cached | Restart the container to reload `server.config.yml` |

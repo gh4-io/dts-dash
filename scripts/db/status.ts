@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:status — Show database health: table row counts, file sizes, last import.
  * Read-only, no modifications.

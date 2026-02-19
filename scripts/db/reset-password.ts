@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:reset-password — Reset superadmin password.
  * Dev mode (default): resets to "admin123"
@@ -32,11 +32,7 @@ async function main() {
   log("");
 
   // Find superadmin
-  const admin = db
-    .select()
-    .from(users)
-    .where(eq(users.role, "superadmin"))
-    .get();
+  const admin = db.select().from(users).where(eq(users.role, "superadmin")).get();
 
   if (!admin) {
     error("No superadmin user found in database.");

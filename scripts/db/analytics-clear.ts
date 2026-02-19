@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:analytics-clear — Purge all analytics events from the database.
  * Keeps all other data intact (users, customers, config, etc.).

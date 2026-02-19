@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:superuser — Create the first superadmin user on a fresh database.
  * Intended for production first-run setup where db:seed is not used.

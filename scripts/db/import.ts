@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:import — Import SharePoint work package JSON into SQLite.
  * Reuses the same validation and UPSERT logic as the Admin UI.

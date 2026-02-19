@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env tsx
 /**
  * db:seed-reference — Seed reference/lookup tables only.
  * Never touches users, customers, work_packages, or aircraft.
