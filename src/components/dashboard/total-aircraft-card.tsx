@@ -10,8 +10,9 @@ interface TotalAircraftCardProps {
 }
 
 export function TotalAircraftCard({ workPackages, className }: TotalAircraftCardProps) {
-  const { totalAircraft, dateRange } = useMemo(() => {
+  const { totalAircraft, totalVisits, dateRange } = useMemo(() => {
     const uniqueRegs = new Set(workPackages.map((wp) => wp.aircraftReg));
+    const totalVisits = workPackages.length;
 
     let range = "";
     if (workPackages.length > 0) {
@@ -24,16 +25,24 @@ export function TotalAircraftCard({ workPackages, className }: TotalAircraftCard
       range = `${fmt(minDate)} – ${fmt(maxDate)}`;
     }
 
-    return { totalAircraft: uniqueRegs.size, dateRange: range };
+    return { totalAircraft: uniqueRegs.size, totalVisits, dateRange: range };
   }, [workPackages]);
 
   return (
-    <KpiCard title="Total Aircraft" icon="fa-solid fa-plane" className={className}>
-      <div>
-        <p className="text-4xl font-bold tabular-nums">{totalAircraft}</p>
-        {dateRange && (
-          <p className="text-xs text-muted-foreground mt-1">{dateRange}</p>
-        )}
+    <KpiCard title="Aircraft & Turns" icon="fa-solid fa-plane" className={className}>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <div className="text-center flex-1">
+            <p className="text-3xl font-bold tabular-nums">{totalAircraft}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Aircraft</p>
+          </div>
+          <div className="h-10 w-px bg-border" />
+          <div className="text-center flex-1">
+            <p className="text-3xl font-bold tabular-nums">{totalVisits}</p>
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Turns</p>
+          </div>
+        </div>
+        {dateRange && <p className="text-xs text-muted-foreground text-center">{dateRange}</p>}
       </div>
     </KpiCard>
   );

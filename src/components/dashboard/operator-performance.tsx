@@ -120,7 +120,9 @@ export function OperatorPerformance({
   }
 
   return (
-    <div className={`rounded-lg border border-border bg-card overflow-hidden flex flex-col ${className ?? ""}`}>
+    <div
+      className={`rounded-lg border border-border bg-card overflow-hidden flex flex-col ${className ?? ""}`}
+    >
       <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
           <i className="fa-solid fa-users" />
@@ -142,12 +144,48 @@ export function OperatorPerformance({
               <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground uppercase">
                 Operator
               </th>
-              <SortHeader label="Visits" field="visits" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-              <SortHeader label="Aircraft" field="aircraftCount" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-              <SortHeader label="Total MH" field="totalMH" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-              <SortHeader label="Avg MH" field="avgMHPerVisit" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-              <SortHeader label="Avg Ground" field="avgGroundHours" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
-              <SortHeader label="Share" field="sharePct" sortKey={sortKey} sortAsc={sortAsc} onSort={handleSort} />
+              <SortHeader
+                label="Turns"
+                field="visits"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Aircraft"
+                field="aircraftCount"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Total MH"
+                field="totalMH"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Avg MH"
+                field="avgMHPerVisit"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Avg Ground"
+                field="avgGroundHours"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
+              <SortHeader
+                label="Share"
+                field="sharePct"
+                sortKey={sortKey}
+                sortAsc={sortAsc}
+                onSort={handleSort}
+              />
             </tr>
           </thead>
           <tbody>
@@ -158,25 +196,19 @@ export function OperatorPerformance({
               return (
                 <tr
                   key={row.name}
-                  className={`border-b border-border last:border-0 transition-opacity ${
+                  className={`border-b border-border last:border-0 transition-opacity cursor-pointer ${
                     isDimmed ? "opacity-30" : ""
                   } ${isFocused ? "bg-primary/5" : "hover:bg-muted/50"}`}
+                  onClick={() => onOperatorClick(isFocused ? null : row.name)}
                 >
                   <td className="px-3 py-2">
-                    <button
-                      className="flex items-center gap-2 hover:underline text-left"
-                      onClick={() =>
-                        onOperatorClick(isFocused ? null : row.name)
-                      }
-                    >
+                    <span className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 rounded-full shrink-0"
                         style={{ backgroundColor: getColor(row.name) }}
                       />
-                      <span className="font-medium truncate max-w-[160px]">
-                        {row.name}
-                      </span>
-                    </button>
+                      <span className="font-medium truncate max-w-[160px]">{row.name}</span>
+                    </span>
                   </td>
                   <td className="px-3 py-2 tabular-nums">{row.visits}</td>
                   <td className="px-3 py-2 tabular-nums">{row.aircraftCount}</td>

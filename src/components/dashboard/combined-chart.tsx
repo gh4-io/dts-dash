@@ -27,7 +27,11 @@ interface CombinedChartProps {
   timeFormat?: "12h" | "24h";
 }
 
-export function CombinedChart({ snapshots, timezone = "UTC", timeFormat = "24h" }: CombinedChartProps) {
+export function CombinedChart({
+  snapshots,
+  timezone = "UTC",
+  timeFormat = "24h",
+}: CombinedChartProps) {
   const chartData = useMemo(() => {
     return snapshots.map((s) => ({
       hour: s.hour,
@@ -71,11 +75,15 @@ export function CombinedChart({ snapshots, timezone = "UTC", timeFormat = "24h" 
     // Pick step: aim for ~8-16 visible ticks
     const hours = chartData.length;
     let step: number;
-    if (hours <= 12) step = 1;       // ≤12h: every hour
-    else if (hours <= 24) step = 2;  // ≤1 day: every 2h
-    else if (hours <= 48) step = 3;  // ≤2 days: every 3h
-    else if (hours <= 96) step = 6;  // ≤4 days: every 6h
-    else step = 12;                  // >4 days: every 12h
+    if (hours <= 12)
+      step = 1; // ≤12h: every hour
+    else if (hours <= 24)
+      step = 2; // ≤1 day: every 2h
+    else if (hours <= 48)
+      step = 3; // ≤2 days: every 3h
+    else if (hours <= 96)
+      step = 6; // ≤4 days: every 6h
+    else step = 12; // >4 days: every 12h
 
     const hourFmt = new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
@@ -211,15 +219,15 @@ export function CombinedChart({ snapshots, timezone = "UTC", timeFormat = "24h" 
           }}
         />
         <Legend
-          wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+          wrapperStyle={{
+            fontSize: 11,
+            paddingTop: 8,
+            color: "hsl(var(--foreground))",
+            pointerEvents: "none",
+          }}
+          formatter={(value) => <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>}
         />
-        <Bar
-          dataKey="arrivals"
-          name="Arrivals"
-          fill="#3b82f6"
-          radius={[2, 2, 0, 0]}
-          barSize={8}
-        />
+        <Bar dataKey="arrivals" name="Arrivals" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={8} />
         <Bar
           dataKey="departures"
           name="Departures"

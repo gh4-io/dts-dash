@@ -693,61 +693,52 @@
 
 ---
 
-## OI-042 | Dashboard Chart Issues & Enhancements
+## OI-042 | ~~Dashboard Chart Issues & Enhancements~~ PARTIALLY RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug + Enhancement |
-| **Status** | **Open** |
+| **Status** | **Partially Resolved** |
 | **Priority** | P1 (bugs), P2 (enhancements) |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-16 |
+| **Resolved** | 2026-02-18 (items 1, 2, 4, 5) |
 | **Context** | Multiple issues identified with dashboard charts (main timeline + pie charts). Some are bugs (broken filtering, theme non-compliance), others are UX enhancements (timezone display, cross-filtering). |
 
-### Bugs (P1)
+### Bugs (P1) — RESOLVED
 
-1. **Aircraft by Customer pie chart labels not theme-compliant**
-   - **Issue**: Pie chart labels don't respect light/dark mode or current theme colors
-   - **Expected**: Labels should use theme-aware text colors (like Flight Board)
-   - **Current**: Hardcoded colors or default chart colors
-   - **File**: Likely `src/components/dashboard/*.tsx` (pie chart component)
+1. **~~Aircraft by Customer pie chart tooltip not theme-compliant~~** ✅
+   - **Root cause**: Recharts Tooltip `itemStyle` defaults to the pie slice color, making hover text unreadable in dark mode when slice colors are dark
+   - **Fix**: Added `itemStyle={{ color: "hsl(var(--popover-foreground))" }}` to Tooltip. Also added inline `style={{ color: "hsl(var(--foreground))" }}` to Legend `wrapperStyle` and `formatter` span (Tailwind classes don't reliably override Recharts internals)
+   - **Files**: `src/components/dashboard/customer-donut.tsx`, `src/components/dashboard/combined-chart.tsx`
 
-2. **Customer filter doesn't filter main timeline graph**
-   - **Issue**: Selecting a customer in FilterBar doesn't filter the main dashboard timeline chart
-   - **Expected**: Main chart should show only work packages for selected customer(s)
-   - **Current**: Chart shows all data regardless of customer filter
-   - **File**: Dashboard page API route or chart data transformation
+2. **~~Click-to-focus operator doesn't filter timeline chart~~** ✅
+   - **Root cause**: `displaySnapshots` was a passthrough of API-fetched snapshots, ignoring `focusedOperator`. FilterBar operator selection already worked (via `useHourlySnapshots` API call), but clicking an operator in the performance table/donut did not update the chart.
+   - **Fix**: `displaySnapshots` memo now recomputes hourly arrival/departure/onGround counts in-memory from `displayWps` (already filtered by `focusedOperator`) when cross-filtering is active
+   - **File**: `src/app/(authenticated)/dashboard/page.tsx`
 
-### Enhancements (P2)
+### Enhancements (P2) — RESOLVED
 
-3. **Pie chart interaction: popout instead of single pick**
-   - **Issue**: Current pie chart interaction unclear (what does "single pick" mean?)
-   - **Proposed**: Clicking a pie slice opens a popout/modal with detailed breakdown (list of aircraft, visit counts, etc.) instead of just highlighting
-   - **Alternative**: Tooltip on hover with full details, click to filter/drill-down
+3. **Pie chart interaction: popout instead of single pick** — **Open (deferred)**
+   - Deferred to v0.3.0+
 
-4. **Show selected timezone in top-right of main chart (like Flight Board)**
-   - **Issue**: Dashboard main chart doesn't show which timezone is active
-   - **Expected**: Top-right corner shows "UTC" or "America/New_York" (same pattern as Flight Board)
-   - **Current**: No timezone indicator
-   - **File**: Dashboard chart component
+4. **~~Show selected timezone in chart header~~** ✅
+   - **Fix**: Added `ml-auto` span to combined chart `<h3>` header, inherits same styling (text-xs font-semibold uppercase text-muted-foreground). Shows "UTC" or "Eastern (ET)"
+   - **File**: `src/app/(authenticated)/dashboard/page.tsx`
 
-5. **Total Aircraft section should show total visits**
-   - **Issue**: "Total Aircraft" KPI card only shows unique aircraft count
-   - **Expected**: Also show total visit count (sum of all work packages)
-   - **Proposed**: Two metrics in same card: "57 Aircraft / 86 Visits" or separate cards
-   - **File**: Dashboard KPI cards component
+5. **~~Total Aircraft card: show total turns~~** ✅
+   - **Fix**: Reimagined as "Aircraft & Turns" card with two-column layout — both numbers shown at `text-3xl font-bold` with vertical divider, equally prominent. Uses "Turns" terminology (not "Visits")
+   - **File**: `src/components/dashboard/total-aircraft-card.tsx`
 
-### Future (v0.3.0+)
+### Future (v0.3.0+) — Open
 
 6. **Interactive chart filtering (brush selection + customer cross-filter)**
    - **Proposal**: Click/drag to select a time range on main chart → filters all stats
    - **Cross-filtering**: Select customer in sidebar → highlights that customer's data on chart
-   - **Brush + filter combination**: Highlight time range, then select customer → shows only that customer in selected range
-   - **Reference**: Grafana/Tableau-style interactive dashboards
    - **Implementation**: ECharts brush component + Zustand filter state + cross-component sync
 
-| **Resolution** | |
-| **Files** | `src/app/(authenticated)/dashboard/page.tsx`, `src/components/dashboard/*.tsx`, `src/app/api/work-packages/route.ts`, `src/lib/hooks/use-filters.ts` |
+| **Resolution** | Items 1, 2, 4, 5 resolved. Items 3, 6 deferred to v0.3.0+. |
+| **Files** | `src/app/(authenticated)/dashboard/page.tsx`, `src/components/dashboard/customer-donut.tsx`, `src/components/dashboard/combined-chart.tsx`, `src/components/dashboard/total-aircraft-card.tsx` |
 | **Links** | [REQ_Dashboard_UI.md](SPECS/REQ_Dashboard_UI.md), [REQ_Filters.md](SPECS/REQ_Filters.md), Flight Board timezone display (working reference) |
 
 ---
@@ -1019,12 +1010,14 @@
 
 ## Summary
 
-| Priority | Open | Updated | Acknowledged | Resolved |
+| Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 15 |
-| P1 | 4 | 0 | 0 | 12 |
-| P2 | 7 | 0 | 0 | 10 |
+| P1 | 3 | 1 | 0 | 12 |
+| P2 | 5 | 1 | 0 | 12 |
 | P3 | 2 | 0 | 2 | 0 |
-| **Total** | **13** | **0** | **2** | **37** |
+| **Total** | **10** | **2** | **2** | **39** |
+
+**Latest update (2026-02-18)**: OI-042 items 1 (pie tooltip theme), 2 (cross-filter timeline), 4 (timezone label), 5 (aircraft & turns card) resolved. Items 3, 6 deferred to v0.3.0+.
 
 **Latest additions (2026-02-18)**: Added OI-047 through OI-058 (12 items total). Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), and authentication bootstrap system (OI-058). Mapped to existing specs and decisions.

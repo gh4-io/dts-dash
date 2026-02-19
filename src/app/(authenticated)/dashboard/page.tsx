@@ -39,8 +39,31 @@ function DashboardPageInner() {
   }, [transformedWps, focusedOperator]);
 
   const displaySnapshots = useMemo(() => {
-    return snapshots;
-  }, [snapshots]);
+    if (!focusedOperator || snapshots.length === 0) return snapshots;
+    return snapshots.map((snapshot) => {
+      const hourStart = new Date(snapshot.hour).getTime();
+      const hourEnd = hourStart + 3_600_000;
+      const arrivals = displayWps.filter((wp) => {
+        const t = new Date(wp.arrival).getTime();
+        return t >= hourStart && t < hourEnd;
+      }).length;
+      const departures = displayWps.filter((wp) => {
+        const t = new Date(wp.departure).getTime();
+        return t >= hourStart && t < hourEnd;
+      }).length;
+      const onGround = displayWps.filter((wp) => {
+        return (
+          new Date(wp.arrival).getTime() < hourEnd && new Date(wp.departure).getTime() > hourStart
+        );
+      }).length;
+      return {
+        ...snapshot,
+        arrivalsCount: arrivals,
+        departuresCount: departures,
+        onGroundCount: onGround,
+      };
+    });
+  }, [snapshots, focusedOperator, displayWps]);
 
   const handleOperatorClick = useCallback((operator: string | null) => {
     setFocusedOperator(operator);
@@ -92,6 +115,7 @@ function DashboardPageInner() {
               <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                 <i className="fa-solid fa-chart-column" />
                 Arrivals / Departures / On Ground
+                <span className="ml-auto">{timezone === "UTC" ? "UTC" : "Eastern (ET)"}</span>
               </h3>
               <div className="flex-1 min-h-[250px]">
                 <CombinedChart

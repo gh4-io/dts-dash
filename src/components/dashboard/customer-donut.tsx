@@ -1,14 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 
@@ -81,16 +74,16 @@ export function CustomerDonut({ workPackages, onCustomerClick }: CustomerDonutPr
             color: "hsl(var(--popover-foreground))",
             fontSize: 12,
           }}
+          itemStyle={{
+            color: "hsl(var(--popover-foreground))",
+          }}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          formatter={(value: any, name: any) => [
-            `${value} aircraft`,
-            name,
-          ]}
+          formatter={(value: any, name: any) => [`${value} aircraft`, name]}
         />
         <Legend
-          wrapperStyle={{ fontSize: 11 }}
+          wrapperStyle={{ fontSize: 11, color: "hsl(var(--foreground))" }}
           formatter={(value) => (
-            <span className="text-foreground text-xs">{value}</span>
+            <span style={{ color: "hsl(var(--foreground))", fontSize: 11 }}>{value}</span>
           )}
         />
       </PieChart>
