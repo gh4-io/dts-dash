@@ -138,7 +138,14 @@ export function ImportToolbar({
       </div>
 
       {/* Export dialog */}
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} schema={exportSchema} />
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={(open) => {
+          setExportOpen(open);
+          if (!open) setExportSchema(null);
+        }}
+        schema={exportSchema}
+      />
     </>
   );
 }

@@ -176,7 +176,14 @@ const aircraftTypeMappingsSchema: ImportSchema = {
       const existingMap = new Map(existing.map((m) => [m.pattern, m]));
 
       for (const record of records) {
-        const pattern = String(record.pattern).trim();
+        const pattern = String(record.pattern ?? "").trim();
+
+        if (!pattern) {
+          warnings.push("Skipping record with empty pattern");
+          skipped++;
+          continue;
+        }
+
         const canonicalType = String(record.canonicalType).trim() as
           | "B777"
           | "B767"

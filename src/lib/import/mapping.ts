@@ -170,10 +170,12 @@ export function extractSourceFields(
     }
   }
 
-  // Sample first few records to discover all fields
-  const sample = records.slice(0, 10);
-  for (const record of sample) {
-    walk(record, "", 0);
+  // Sample from throughout the dataset to catch fields that only appear in some records
+  const len = records.length;
+  const sampleSize = Math.min(len, 100);
+  const step = Math.max(1, Math.floor(len / sampleSize));
+  for (let i = 0; i < len && fields.size < 500; i += step) {
+    walk(records[i], "", 0);
   }
 
   return Array.from(fields).sort();

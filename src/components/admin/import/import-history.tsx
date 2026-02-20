@@ -171,7 +171,7 @@ export function ImportHistory({ refreshTrigger }: ImportHistoryProps) {
     setPage(1);
   }, [typeFilter]);
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.pagination.total / PAGE_SIZE)) : 1;
+  const totalPages = data?.pagination.totalPages ?? 1;
 
   // ---------------------------------------------------------------------------
   // Render

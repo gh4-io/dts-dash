@@ -501,7 +501,7 @@ const customersSchema: ImportSchema = {
 
           if (isConfirmed) {
             warnings.push(
-              `Customer "${name}" has "confirmed" source — updating with import data (source downgraded to "imported")`,
+              `Customer "${name}" has "confirmed" source — updating fields but preserving confirmed status`,
             );
           }
 
@@ -539,7 +539,7 @@ const customersSchema: ImportSchema = {
               spId: record.spId != null ? Number(record.spId) : existing.spId,
               guid: guid || existing.guid,
               source: isConfirmed
-                ? "imported"
+                ? "confirmed"
                 : (strOpt(record.source) as "inferred" | "imported" | "confirmed") ||
                   existing.source,
               updatedAt: now,

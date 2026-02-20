@@ -46,11 +46,12 @@ export async function POST(request: NextRequest) {
 
     const result = await exportData(schema, filters, format as "json" | "csv");
 
+    const safeName = result.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
     return new NextResponse(result.content, {
       status: 200,
       headers: {
         "Content-Type": result.mimeType,
-        "Content-Disposition": `attachment; filename="${result.filename}"`,
+        "Content-Disposition": `attachment; filename="${safeName}"`,
       },
     });
   } catch (error) {

@@ -1131,15 +1131,29 @@
 
 8. **Aircraft type editor removed from nav.** Same issue — admins lost inline add/edit/delete, pattern testing, bulk operations, and priority management. **Fix:** Restored Aircraft Types tab in admin nav and original editor page. (`src/components/admin/admin-nav.tsx`, `src/app/(authenticated)/admin/aircraft-types/page.tsx`)
 
-### Code Review — Remaining Items (not fixed, documented for future)
+### Code Review Items — Fixed
 
-- `aircraft-models.ts`: `skipped` count hardcoded to 0, never incremented
-- `customers.ts`: "confirmed" source always downgraded to "imported" on re-import
-- `validator.ts`: field coverage calculation ignores fields with `defaultValue`
-- `mapping.ts`: only samples first 10 records for field extraction
-- `export/route.ts`: filename not sanitized in Content-Disposition header
+9. **`aircraft-models.ts`: `skipped` count hardcoded to 0.** `const skipped = 0` could never be incremented. Also missing empty-key validation for `modelCode`. **Fix:** Changed to `let`, added empty modelCode check + skip.
 
-| **Files** | `src/lib/db/schema-init.ts`, `src/lib/import/schemas/work-packages.ts`, `src/app/api/data-freshness/route.ts`, `src/app/api/admin/server/status/route.ts`, `src/components/admin/import/import-hub.tsx`, `src/components/admin/admin-nav.tsx`, `src/app/(authenticated)/admin/customers/page.tsx`, `src/app/(authenticated)/admin/aircraft-types/page.tsx` |
+10. **`customers.ts`: "confirmed" source always downgraded to "imported" on re-import.** Admin-confirmed customers lost their status on any subsequent import. **Fix:** Preserve `"confirmed"` source during re-import.
+
+11. **`validator.ts`: field coverage ignores fields with `defaultValue`.** Fields with defaults are effectively covered even without mapping, but weren't counted — artificially low coverage percentage. **Fix:** Count defaultValue fields as covered in both `mapped` and `requiredMapped` tallies.
+
+12. **`mapping.ts`: only samples first 10 records for field extraction.** Fields present only in later records would be missed entirely. **Fix:** Sample up to 100 records distributed across the dataset.
+
+13. **`parser.ts`: CSV starting with `{` or `[` misdetected as JSON.** `detectFormat()` only checked first character. **Fix:** Verify with `JSON.parse()` before committing to JSON; fall back to CSV on parse failure.
+
+14. **`export/route.ts` + `template/route.ts`: filename not sanitized.** Content-Disposition header used filename directly. **Fix:** Sanitize to `[a-zA-Z0-9._-]` in both routes.
+
+15. **`import-toolbar.tsx`: export dialog state not cleared on close.** `exportSchema` remained set after dialog closed. **Fix:** Clear on dialog close.
+
+16. **`import-history.tsx`: recalculated `totalPages` instead of using API value.** Redundant Math.ceil calculation when API already provides `totalPages`. **Fix:** Use `data.pagination.totalPages` directly.
+
+### Missing Empty-Key Validation — Fixed (found during code review follow-up)
+
+17. **5 schemas missing empty dedup-key validation in `commit()`.** Records with null/empty keys would be silently inserted or matched incorrectly. **Fix:** Added null-coalescing + empty check + skip + warning in: `aircraft-type-mappings.ts` (pattern), `engine-types.ts` (name), `manufacturers.ts` (name), `app-config.ts` (key), `users.ts` (email).
+
+| **Files** | `src/lib/db/schema-init.ts`, `src/lib/import/schemas/work-packages.ts`, `src/lib/import/schemas/aircraft-models.ts`, `src/lib/import/schemas/aircraft-type-mappings.ts`, `src/lib/import/schemas/customers.ts`, `src/lib/import/schemas/engine-types.ts`, `src/lib/import/schemas/manufacturers.ts`, `src/lib/import/schemas/app-config.ts`, `src/lib/import/schemas/users.ts`, `src/lib/import/parser.ts`, `src/lib/import/mapping.ts`, `src/lib/import/validator.ts`, `src/app/api/data-freshness/route.ts`, `src/app/api/admin/server/status/route.ts`, `src/app/api/admin/import/export/route.ts`, `src/app/api/admin/import/template/route.ts`, `src/components/admin/import/import-hub.tsx`, `src/components/admin/import/import-history.tsx`, `src/components/admin/import/import-toolbar.tsx`, `src/components/admin/admin-nav.tsx`, `src/app/(authenticated)/admin/customers/page.tsx`, `src/app/(authenticated)/admin/aircraft-types/page.tsx` |
 | **Links** | [CHANGELOG.md](../CHANGELOG.md) v0.2.0, [REQ_DataImport.md](SPECS/REQ_DataImport.md), [REQ_Admin.md](SPECS/REQ_Admin.md) |
 
 ---
@@ -1154,6 +1168,6 @@
 | P3 | 3 | 0 | 2 | 0 |
 | **Total** | **10** | **2** | **2** | **45** |
 
-**Latest update (2026-02-20)**: OI-064 resolved — Universal Import Hub post-implementation bugs: 6 bugs fixed (missing DB table, FK violation, data freshness scope, missing update field, silent error handling, schema fetch failure) + 2 UI regressions restored (customer color editor, aircraft type editor).
+**Latest update (2026-02-20)**: OI-064 fully resolved — 17 total fixes: 6 showstopper bugs, 2 UI regressions, 8 code review items (parser, validator, mapping, exporter, history, toolbar, source downgrade), and 5 missing empty-key validations across schemas.
 
 **Previous update (2026-02-19)**: OI-060 resolved — D-037 unified base URL config under `baseUrl`/`BASE_URL`, removed `AUTH_URL` from user-facing config. OI-061, OI-062, OI-063 resolved — System user protected, self-service edits enabled, admin user edit form populates correctly.

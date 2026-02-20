@@ -17,7 +17,14 @@ import type { ParseResult } from "./types";
 export function detectFormat(content: string): "json" | "csv" {
   const trimmed = content.trimStart();
   if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    return "json";
+    // Verify it actually parses as JSON before committing
+    try {
+      JSON.parse(trimmed);
+      return "json";
+    } catch {
+      // Starts with { or [ but isn't valid JSON — treat as CSV
+      return "csv";
+    }
   }
   return "csv";
 }

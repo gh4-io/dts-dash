@@ -103,7 +103,14 @@ const appConfigSchema: ImportSchema = {
       const keyMap = new Map(existing.map((c) => [c.key, c]));
 
       for (const record of records) {
-        const key = String(record.key).trim();
+        const key = String(record.key ?? "").trim();
+
+        if (!key) {
+          warnings.push("Skipping record with empty key");
+          skipped++;
+          continue;
+        }
+
         const value = String(record.value);
 
         const ex = keyMap.get(key);

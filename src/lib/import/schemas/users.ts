@@ -180,7 +180,16 @@ const usersSchema: ImportSchema = {
       const emailMap = new Map(existing.map((u) => [u.email.toLowerCase(), u]));
 
       for (const record of records) {
-        const email = String(record.email).toLowerCase().trim();
+        const email = String(record.email ?? "")
+          .toLowerCase()
+          .trim();
+
+        if (!email) {
+          warnings.push("Skipping record with empty email");
+          skipped++;
+          continue;
+        }
+
         const displayName = String(record.displayName).trim();
         const role = String(record.role || "user");
         const username = record.username ? String(record.username).trim() : null;

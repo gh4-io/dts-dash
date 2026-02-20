@@ -160,11 +160,19 @@ function computeFieldCoverage(
   mapping: FieldMapping[],
   fields: FieldDef[],
 ): ValidationPreview["fieldCoverage"] {
-  const mapped = mapping.filter((m) => m.sourceField !== null).length;
+  const explicitlyMapped = mapping.filter((m) => m.sourceField !== null);
+  const mappedTargets = new Set(explicitlyMapped.map((m) => m.targetField));
+
+  // Fields with defaultValue are effectively covered even without an explicit mapping
+  const coveredByDefault = fields.filter(
+    (f) => f.defaultValue !== undefined && !mappedTargets.has(f.name),
+  ).length;
+  const mapped = explicitlyMapped.length + coveredByDefault;
+
   const total = fields.length;
   const requiredFields = fields.filter((f) => f.required);
-  const requiredMapped = requiredFields.filter((f) =>
-    mapping.some((m) => m.targetField === f.name && m.sourceField !== null),
+  const requiredMapped = requiredFields.filter(
+    (f) => mappedTargets.has(f.name) || f.defaultValue !== undefined,
   ).length;
 
   return {

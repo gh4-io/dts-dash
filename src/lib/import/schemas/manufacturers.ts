@@ -102,7 +102,14 @@ const manufacturersSchema: ImportSchema = {
       const nameMap = new Map(existing.map((m) => [m.name, m]));
 
       for (const record of records) {
-        const name = String(record.name).trim();
+        const name = String(record.name ?? "").trim();
+
+        if (!name) {
+          warnings.push("Skipping record with empty name");
+          skipped++;
+          continue;
+        }
+
         const ex = nameMap.get(name);
 
         if (!ex) {

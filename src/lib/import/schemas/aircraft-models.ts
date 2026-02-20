@@ -137,7 +137,7 @@ const aircraftModelsSchema: ImportSchema = {
     const warnings: string[] = [];
     let inserted = 0;
     let updated = 0;
-    const skipped = 0;
+    let skipped = 0;
 
     const logEntry = db
       .insert(unifiedImportLog)
@@ -164,7 +164,14 @@ const aircraftModelsSchema: ImportSchema = {
       const mfrNameMap = new Map(mfrs.map((m) => [m.name, m.id]));
 
       for (const record of records) {
-        const modelCode = String(record.modelCode).trim();
+        const modelCode = String(record.modelCode ?? "").trim();
+
+        if (!modelCode) {
+          warnings.push("Skipping record with empty modelCode");
+          skipped++;
+          continue;
+        }
+
         const manufacturerId = record.manufacturer
           ? (mfrNameMap.get(String(record.manufacturer).trim()) ?? null)
           : null;
