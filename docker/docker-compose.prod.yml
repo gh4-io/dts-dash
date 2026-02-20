@@ -23,6 +23,11 @@ services:
       context: ..
       dockerfile: Dockerfile
       # Default target is prod — no target: needed
+      args:
+        # UID/GID baked into the image (default 1001:1001)
+        # Override to match host file ownership on bind-mounted volumes
+        PUID: 1001
+        PGID: 1001
     image: dtsd:latest
     container_name: dtsd-prod
     restart: unless-stopped
@@ -34,6 +39,10 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_PATH=/app/data/dashboard.db
+      # Runtime UID/GID override — no rebuild needed. Entrypoint adjusts the
+      # nextjs user to match these values, then drops privileges via su-exec.
+      # - PUID=1000
+      # - PGID=1000
       # Public base URL — set if behind a proxy that rewrites the Host header.
       # Overrides app.baseUrl in server.config.yml. Leave commented for auto-detection.
       # - BASE_URL=https://dashboard.example.com

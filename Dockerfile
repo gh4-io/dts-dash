@@ -111,9 +111,16 @@ FROM node:20-alpine AS prod
 
 WORKDIR /app
 
+# Configurable UID/GID — override at build time or runtime (via PUID/PGID env)
+ARG PUID=1001
+ARG PGID=1001
+
 # Non-root user — no build tools needed in this stage
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+RUN addgroup --system --gid ${PGID} nodejs && \
+    adduser --system --uid ${PUID} nextjs
+
+# su-exec for entrypoint privilege drop (~20KB)
+RUN apk add --no-cache su-exec
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -170,6 +177,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/data/seed ./data/seed
 RUN mkdir -p /app/data /app/logs && \
     chown -R nextjs:nodejs /app/data /app/logs
 
+# ── Entrypoint: runtime UID/GID adjustment via PUID/PGID env ──
+COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # ── OCI labels ────────────────────────────────────────────────
 ARG GIT_SHA=unknown
 ARG BUILD_DATE=unknown
@@ -180,8 +191,6 @@ LABEL org.opencontainers.image.title="DTS Dashboard" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/gh4-io/dts-dash"
 
-USER nextjs
-
 EXPOSE 3000
 
 ENV PORT=3000
@@ -190,4 +199,6 @@ ENV HOSTNAME="0.0.0.0"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD wget -qO- http://localhost:3000/api/health || exit 1
 
+# Entrypoint adjusts UID/GID if PUID/PGID env vars are set, then drops to nextjs
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
