@@ -60,17 +60,15 @@ export interface SeedEngineType {
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
-function loadSeedFile<T>(filename: string): T {
+function loadSeedFile<T extends unknown[]>(filename: string): T {
   const filePath = path.join(process.cwd(), "data", "seed", filename);
   try {
     const raw = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(raw) as T;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Failed to load seed file data/seed/${filename}: ${msg}\n` +
-        `Ensure the file exists and contains valid JSON.`,
-    );
+  } catch {
+    // Seed files are optional — return empty array if missing.
+    // This allows clean builds without seed data present.
+    return [] as unknown as T;
   }
 }
 

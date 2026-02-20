@@ -1,16 +1,16 @@
-# Line Maintenance Operations Dashboard
+# DTS Dashboard
 
 A **local-first** web application for airline line maintenance operations planning and capacity management. Built with Next.js, TypeScript, and modern web technologies.
 
 ## Overview
 
-This dashboard provides three core operational views for line maintenance planning:
+DTS Dashboard (DTSD) provides three core operational views for line maintenance planning:
 
 1. **Flight Board** — Visual timeline (Gantt chart) showing aircraft ground windows and maintenance schedules
 2. **Statistics Dashboard** — KPI cards, charts, and operational analytics
 3. **Capacity Modeling** — Demand forecasting vs. available capacity for staffing decisions
 
-The application ingests work package data, computes derived metrics (utilization, capacity, demand), and renders interactive visualizations—all running locally with no cloud dependencies.
+The application ingests work package data, computes derived metrics (utilization, capacity, demand), and renders interactive visualizations — all running locally with no cloud dependencies.
 
 ## Key Features
 
@@ -25,77 +25,62 @@ The application ingests work package data, computes derived metrics (utilization
 
 ## Tech Stack
 
-| Layer | Technology | Notes |
-|-------|-----------|-------|
-| Framework | Next.js 15+ (App Router) | TypeScript, SSR, API routes |
-| UI Components | shadcn/ui + Radix UI | Accessible, composable components |
-| Styling | Tailwind CSS v4 | Utility-first CSS framework |
-| Theme | next-themes | Dark default, light available |
-| Charts | Recharts + Apache ECharts | Bar, line, donut, Gantt timeline |
-| Icons | Font Awesome 6 + Lucide | Self-hosted Font Awesome |
-| Tables | TanStack Table | Sortable, filterable data tables |
-| State | Zustand | Client-side state management |
-| Auth | Auth.js (NextAuth v5) | Credentials provider, DB sessions |
-| Database | SQLite (better-sqlite3) | Local database at `data/dashboard.db` |
-| ORM | Drizzle ORM | Type-safe schema and migrations |
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router, TypeScript) |
+| UI Components | shadcn/ui + Radix UI |
+| Styling | Tailwind CSS v4 |
+| Theme | next-themes (dark default) |
+| Charts | Recharts + Apache ECharts |
+| Icons | Font Awesome 6 + Lucide |
+| Tables | TanStack Table |
+| State | Zustand |
+| Auth | Auth.js (NextAuth v5) |
+| Database | SQLite (better-sqlite3) |
+| ORM | Drizzle ORM |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 20+ and npm
 - Git
 
-### Installation
+### Quick Start
 
 ```bash
-# Clone the repository
 git clone <repository-url>
 cd dts-dash
-
-# Install dependencies
 npm install
-
-# Initialize the database
-npm run db:reset
-```
-
-### Development
-
-```bash
-# Start the development server
-npm run dev
-
-# Open http://localhost:3000 in your browser
-```
-
-### Build for Production
-
-```bash
-# Build the application
+npm run config:init
 npm run build
-
-# Start the production server
 npm start
 ```
 
-### Database Management
+On first launch, the application automatically initializes the database. The first registered user becomes the superadmin.
 
-The project includes CLI tools for database lifecycle management:
+### Docker Deployment
 
 ```bash
-npm run db:reset          # Reset and seed database
-npm run db:seed           # Seed database with sample data
-npm run db:backup         # Create timestamped backup
-npm run db:restore        # Restore from backup
-npm run db:export         # Export to JSON
-npm run db:list-backups   # List available backups
-npm run db:superuser      # Create superuser
-npm run db:nuke           # Delete database (destructive)
-npm run db:verify         # Verify database integrity
+docker build -t dtsd .
+docker run -p 3000:3000 -v ./data:/app/data --env-file .env dtsd
 ```
 
-See `scripts/db/` for individual scripts.
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full deployment instructions including Docker Compose, PM2, reverse proxy, and environment configuration.
+
+### Database Management
+
+```bash
+npm run db:status          # Show database status
+npm run db:seed            # Seed database with sample data
+npm run db:backup          # Create timestamped backup
+npm run db:export          # Export to JSON
+npm run db:import          # Import from JSON
+npm run db:superuser       # Create superuser
+npm run db:reset           # Reset database
+npm run db:reset-password  # Reset a user's password
+npm run db:migrate         # Run schema migrations
+```
 
 ## Project Structure
 
@@ -103,6 +88,7 @@ See `scripts/db/` for individual scripts.
 src/
 ├── app/                      # Next.js App Router pages
 │   ├── login/                # Authentication
+│   ├── register/             # Self-registration
 │   ├── account/              # User account settings
 │   ├── admin/                # Admin console
 │   ├── api/                  # API route handlers
@@ -125,68 +111,39 @@ src/
 ├── types/                    # TypeScript type definitions
 └── middleware.ts             # Route protection
 
-data/
-├── dashboard.db              # SQLite database
-├── seed/                     # Seed data (tracked in git)
-├── backups/                  # Database backups (gitignored)
-└── exports/                  # Data exports (gitignored)
-
-.claude/                      # Project documentation
-├── SPECS/                    # Feature specifications
-├── UI/                       # UI design patterns
-├── DEV/                      # Development standards
-└── SKILLS/                   # Workflow documentation
+data/                         # SQLite database (auto-created)
+docs/                         # Operational documentation
+scripts/db/                   # Database CLI tools
+docker/                       # Docker Compose examples and env templates
 ```
-
-## Key Domain Concepts
-
-- **Effective MH** — Manual override > work package MH > default (3.0)
-- **Shift Capacity** — Day (8 heads), Swing (6 heads), Night (4 heads)
-- **Real Capacity** — Headcount × 6.5 MH per person
-- **Utilization** — Total demand MH / real capacity × 100%
-- **Work Package** — Maintenance task with ground time, labor hours, and customer assignment
-
-## Authentication
-
-Default credentials for development:
-
-- **Superadmin:** `admin` / `admin123`
-- **Admin:** `manager` / `manager123`
-- **User:** `viewer` / `viewer123`
-
-Change these in production via the Admin console or `npm run db:superuser`.
 
 ## Configuration
 
-Key settings are stored in the database and configurable via the Admin UI:
+### Environment Variables
 
+See [docker/.env.example](docker/.env.example) for the complete environment variable reference.
+
+Key variables:
+- `AUTH_SECRET` — Session signing secret (required, 32+ chars)
+- `BASE_URL` — Application base URL (default: `http://localhost:3000`)
+- `DATABASE_PATH` — SQLite database path (default: `data/dashboard.db`)
+
+### System Configuration
+
+Server-side settings are managed via `server.config.yml`. Run `npm run config:init` to generate the default configuration file.
+
+Admin-configurable settings (via the web UI):
 - **Customer Colors** — Visual coding for maintenance customers
 - **Aircraft Type Mapping** — Normalization rules for aircraft model names
 - **User Preferences** — Timezone, theme, pagination per user
-- **System Settings** — Allowed hostnames, session duration
+- **Invite Codes** — Self-registration access control
 
 ## Documentation
 
-Full project documentation is available in `.claude/`:
-
-- [CLAUDE.md](.claude/../CLAUDE.md) — Project overview and session workflow
-- [SPECS/](.claude/SPECS/) — Feature specifications
-- [ROADMAP.md](.claude/ROADMAP.md) — Development milestones
-- [DEV_STANDARDS.md](.claude/DEV/DEV_STANDARDS.md) — Coding conventions
-- [TEST_PLAN.md](.claude/DEV/TEST_PLAN.md) — Testing checklist
-
-## Development Workflow
-
-1. Read `CLAUDE.md` and check `.claude/OPEN_ITEMS.md` for current issues
-2. Review relevant specs in `.claude/SPECS/` before implementing features
-3. Follow conventions in `.claude/DEV/DEV_STANDARDS.md`
-4. Verify changes: `npm run lint && npm run build && npm run dev`
-5. Update documentation in `.claude/OPEN_ITEMS.md` after changes
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) — Deployment guide (Docker, PM2, systemd, reverse proxy)
+- [BACKUP.md](docs/BACKUP.md) — Backup procedures and restore steps
+- [MONITORING.md](docs/MONITORING.md) — Health checks, log analysis, incident response
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For questions or issues, contact your project administrator.
+This project is licensed under the Apache License 2.0 — see the [LICENSE](LICENSE) file for details.
