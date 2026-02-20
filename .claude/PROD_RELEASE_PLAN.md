@@ -1,8 +1,8 @@
 # Production Release Plan — CVG Line Maintenance Dashboard
 
 > **Created:** 2026-02-15
-> **Updated:** 2026-02-16
-> **Status:** v0.1.0 RELEASED — published to `master` as orphan commit `3f8220e`
+> **Updated:** 2026-02-19
+> **Status:** v0.1.0 RELEASED — published to `master` as orphan commit `18c5986`
 > **Versioning:** See [REQ_Versioning.md](SPECS/REQ_Versioning.md) for semver rules, backwards compatibility contract, and release procedures (D-028)
 
 ## Context
@@ -129,17 +129,18 @@ These are deleted on the release branch only. They remain on `dev`.
 |------|--------|
 | `.claude/` | Knowledge base — specs, plans, decisions, dev docs |
 | `plan/` | Implementation plans |
-| `docs/` | Documentation site content |
+| `docs-wiki/` | Fumadocs wiki content (separate docs site) |
+| `.serena/` | Dev tool (Serena MCP) config |
+| `.husky/` | Pre-commit hooks (dev only) |
 | `CLAUDE.md` | AI operating instructions |
-| `scripts/phase_commit.sh` | Dev workflow tool |
-| `scripts/feature_intake.sh` | Dev workflow tool |
-| `scripts/reset-event-data.mjs` | Dev utility |
-| `scripts/reset_event_data.sh` | Dev utility |
-| `screenshot.mjs` | Dev screenshot utility |
 | `vitest.config.ts` | Test config (no tests shipped) |
 | `.prettierrc.json` | Dev formatting config |
 | `.prettierignore` | Dev formatting config |
-| `data/input.json` | Development test data |
+| `scripts/phase_commit.sh` | Dev workflow tool |
+| `scripts/feature_intake.sh` | Dev workflow tool |
+| `scripts/db/dev-seed.ts` | Dev-only seed script |
+
+> **Note:** `docs/` (BACKUP.md, DEPLOYMENT.md, MONITORING.md) is KEPT — operational docs ship with the release.
 
 ### KEEP — shipped in release
 
@@ -147,7 +148,7 @@ These are deleted on the release branch only. They remain on `dev`.
 |------|--------|
 | `src/` | All application source code |
 | `public/` | Static assets (Font Awesome, favicon) |
-| `data/seed/` | Seed data for first-run |
+| `docs/` | Operational docs (DEPLOYMENT.md, BACKUP.md, MONITORING.md) |
 | `scripts/db/` | Operational database tools (seed, reset, backup, migrate, etc.) |
 | `package.json` | Dependencies and scripts (cleaned — see below) |
 | `package-lock.json` | Locked dependency tree |
@@ -159,16 +160,16 @@ These are deleted on the release branch only. They remain on `dev`.
 | `components.json` | shadcn/ui configuration |
 | `next-env.d.ts` | Next.js TypeScript declarations |
 | `.gitignore` | Git ignore rules |
-| `.env.example` | Environment variable documentation |
+| `server.config.dev.yml` | Default config template (live `server.config.yml` is gitignored) |
+| `scripts/init-config.js` | Config initialization |
+| `scripts/backup-db.sh` | DB backup shell script |
 | `Dockerfile` | Unified container build (prod default + dev target) |
 | `docker/` | Compose examples, env templates, Docker resources |
 | `.dockerignore` | Docker build exclusions |
 | `ecosystem.config.js` | PM2 process manager config |
 | `.github/workflows/` | CI/CD pipelines |
 | `README.md` | Project overview |
-| `DEPLOYMENT.md` | Deployment guide (Docker, PM2, systemd, reverse proxy) |
-| `BACKUP.md` | Backup procedures and restore steps |
-| `MONITORING.md` | Health checks, log analysis, incident response |
+| `LICENSE` | Apache 2.0 license |
 
 ### package.json Cleanup
 
@@ -181,7 +182,8 @@ On the release branch, remove scripts and devDependencies that reference strippe
 - `test:watch` (references vitest)
 - `test:coverage` (references vitest)
 - `validate` (references test)
-- `db:event-reset` (references stripped `scripts/reset-event-data.mjs`)
+- `prepare` (references husky)
+- `db:dev-seed` (references stripped script)
 
 **Remove devDependencies:**
 - `vitest`
@@ -192,6 +194,11 @@ On the release branch, remove scripts and devDependencies that reference strippe
 - `prettier`
 - `eslint-config-prettier`
 - `puppeteer-core`
+- `husky`
+- `lint-staged`
+
+**Remove top-level config blocks:**
+- `lint-staged` (references prettier + eslint)
 
 **Keep devDependencies** (required for build):
 - `typescript`, `@types/*`
@@ -199,6 +206,7 @@ On the release branch, remove scripts and devDependencies that reference strippe
 - `eslint`, `eslint-config-next`
 - `drizzle-kit`
 - `shadcn`
+- `pino-pretty`
 
 ### Stripping Procedure
 
@@ -206,30 +214,38 @@ Run on the release branch after all release-specific work is complete:
 
 ```bash
 # 1. Remove directories
-git rm -r .claude/ plan/ docs/
+git rm -r .claude/ plan/ docs-wiki/ .serena/ .husky/
 
 # 2. Remove individual files
-git rm CLAUDE.md screenshot.mjs vitest.config.ts .prettierrc.json .prettierignore
+git rm CLAUDE.md vitest.config.ts .prettierrc.json .prettierignore
 git rm scripts/phase_commit.sh scripts/feature_intake.sh
-git rm scripts/reset-event-data.mjs scripts/reset_event_data.sh
-git rm data/input.json
+git rm scripts/db/dev-seed.ts
 
-# 3. Clean package.json (manual edit — remove scripts + devDeps listed above)
-# 4. Clean eslint.config.mjs (remove prettier + vitest references)
+# 3. Clean package.json (remove scripts + devDeps + lint-staged block listed above)
+# 4. Clean eslint.config.mjs (remove prettier import/config, vitest from ignores)
 
-# 5. Regenerate lock file
-npm install
+# 5. Regenerate lock file (clean install recommended)
+rm -rf node_modules && npm install
 
 # 6. Verify build
 npm run build
 npm run lint
 
-# 7. Commit
+# 7. Stage and commit
 git add -A
 git commit -m "chore(release): strip dev artifacts for vX.Y.Z"
 
 # 8. Publish as orphan commit (see publish procedure above)
 ```
+
+### Lessons Learned (v0.1.0 release)
+
+1. **`seed-data.ts` must handle missing files gracefully** — seed files in `data/seed/` are not tracked in git. The loader returns empty arrays when files are absent so `next build` succeeds on a fresh clone.
+2. **Never use `git checkout dev -- .` on a release branch** — it restores the full index and working tree, undoing all staged deletions. If you need a file from dev, cherry-pick or checkout specific paths only.
+3. **node_modules must be rebuilt when switching branches** — release branch strips devDeps (prettier, vitest, etc.). Always `rm -rf node_modules && npm install` after switching between dev and release branches.
+4. **Pre-commit hooks (husky) fail on release branch** — prettier is removed from devDeps. The release branch strips `.husky/` so this only matters if you switch back to dev with release node_modules.
+5. **`gh release create` uses `--notes` not `--body`** — different from `gh pr create`.
+6. **Backport production README to dev** — the production README.md (DTS Dashboard naming, no dev credentials) should be committed to dev as well.
 
 ---
 
