@@ -1,0 +1,79 @@
+# ============================================================
+# DTSD Dashboard — Production Docker Compose
+# ============================================================
+# Runs the pre-built Next.js standalone output.
+# Build the image before starting:
+#
+#   docker compose -f docker/docker-compose.prod.yml build
+#   docker compose -f docker/docker-compose.prod.yml up -d
+#
+# Prerequisites:
+#   1. Copy .env.example → .env.prod (fill AUTH_SECRET, NODE_ENV=production)
+#   2. Copy server.config.dev.yml → server.config.yml (set logging.level: info,
+#      features.enableSeedEndpoint: false)
+#   3. Create ./data/ directory with your database / input files
+#
+# The app will be available at http://localhost:3000
+# Place a reverse proxy (Nginx, Caddy, Cloudflare Tunnel) in front for HTTPS.
+# ============================================================
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      # Default target is prod — no target: needed
+      args:
+        # UID/GID baked into the image (default 1001:1001)
+        # Override to match host file ownership on bind-mounted volumes
+        PUID: 1001
+        PGID: 1001
+    image: dtsd:latest
+    container_name: dtsd-prod
+    restart: unless-stopped
+
+    ports:
+      # Bind to localhost only; let the reverse proxy handle public exposure
+      - "127.0.0.1:3000:3000"
+
+    environment:
+      - NODE_ENV=production
+      - DATABASE_PATH=/app/data/dashboard.db
+      # Runtime UID/GID override — no rebuild needed. Entrypoint adjusts the
+      # nextjs user to match these values, then drops privileges via su-exec.
+      # - PUID=1000
+      # - PGID=1000
+      # Public base URL — set if behind a proxy that rewrites the Host header.
+      # Overrides app.baseUrl in server.config.yml. Leave commented for auto-detection.
+      # - BASE_URL=https://dashboard.example.com
+
+    # Secrets from .env.prod — do not commit this file
+    env_file:
+      - ../.env.prod
+
+    volumes:
+      # Persistent database + input files
+      - ./data:/app/data
+
+      # Runtime config (log level, theme defaults, password policy, etc.)
+      # Edit server.config.yml on the host; restart the container to apply.
+      # The image includes server.config.dev.yml as a fallback if this is omitted.
+      - ./server.config.yml:/app/server.config.yml:ro
+
+    # Health check — verifies DB connectivity via /api/health endpoint
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    # Resource limits — tune for your host
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M

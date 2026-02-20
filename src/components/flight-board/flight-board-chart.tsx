@@ -1,0 +1,1712 @@
+"use client";
+
+import {
+  useMemo,
+  useCallback,
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+  useEffect,
+  useState,
+} from "react";
+import ReactEChartsCore from "echarts-for-react/lib/core";
+import * as echarts from "echarts/core";
+import { CustomChart } from "echarts/charts";
+import {
+  TooltipComponent,
+  GridComponent,
+  DataZoomComponent,
+  LegendComponent,
+  MarkLineComponent,
+  GraphicComponent,
+} from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+import { useTheme } from "next-themes";
+import { useCustomers } from "@/lib/hooks/use-customers";
+import { usePreferences } from "@/lib/hooks/use-preferences";
+import { formatFlightTooltip } from "./flight-tooltip";
+import { cn } from "@/lib/utils";
+import { isCanceled } from "@/lib/utils/status";
+import { BREAK_PREFIX } from "@/lib/hooks/use-transformed-data";
+import { computeTickInterval } from "@/lib/utils/tick-interval";
+import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
+import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams } from "echarts";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type RenderGroup = any;
+
+// Register ECharts components (tree-shaking)
+echarts.use([
+  CustomChart,
+  TooltipComponent,
+  GridComponent,
+  DataZoomComponent,
+  LegendComponent,
+  MarkLineComponent,
+  GraphicComponent,
+  CanvasRenderer,
+]);
+
+// ─── Layout constants for pixel-based tick computation ───
+const GRID_PADDING = 120; // grid.left (100) + grid.right (20)
+const SSR_FALLBACK_WIDTH = 1200; // reasonable desktop assumption before DOM is available
+/** Prefix for empty padding rows — no label, no data, just grid lines */
+const EMPTY_ROW_PREFIX = "___empty___";
+
+/** Diagonal stripe overlay for canceled work package bars */
+function createStripeOverlay(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  stripeColor: string,
+): RenderGroup {
+  const spacing = 8;
+  const lines: RenderGroup[] = [];
+  for (let offset = -h; offset <= w; offset += spacing) {
+    lines.push({
+      type: "line",
+      shape: { x1: x + offset, y1: y + h, x2: x + offset + h, y2: y },
+      style: { stroke: stripeColor, lineWidth: 2 },
+    });
+  }
+  return {
+    type: "group",
+    children: lines,
+    clipPath: {
+      type: "rect",
+      shape: { x, y, width: w, height: h, r },
+    },
+  };
+}
+
+/**
+ * Find midnight boundaries for the filter range in the given timezone
+ * Returns [firstMidnight, lastMidnight] where:
+ * - firstMidnight is the midnight AT OR BEFORE filterStart
+ * - lastMidnight is the midnight AT OR AFTER filterEnd
+ */
+function findFilterMidnights(
+  filterStart: string,
+  filterEnd: string,
+  tz: string,
+): { first: number; last: number; all: number[] } {
+  const startTs = new Date(filterStart).getTime();
+  const endTs = new Date(filterEnd).getTime();
+
+  const hourFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    hourCycle: "h23",
+  });
+
+  // Scan backwards from start to find first midnight AT OR BEFORE
+  let firstMidnight = startTs;
+  for (let ts = startTs; ts >= startTs - 86400000; ts -= 3600000) {
+    if (parseInt(hourFmt.format(new Date(ts))) === 0) {
+      firstMidnight = ts;
+      break;
+    }
+  }
+
+  // Scan forwards from end to find last midnight AT OR AFTER
+  let lastMidnight = endTs;
+  for (let ts = endTs; ts <= endTs + 86400000; ts += 3600000) {
+    if (parseInt(hourFmt.format(new Date(ts))) === 0) {
+      lastMidnight = ts;
+      break;
+    }
+  }
+
+  // Collect all midnights in the range
+  const all: number[] = [];
+  for (let ts = firstMidnight; ts <= lastMidnight; ts += 86400000) {
+    if (parseInt(hourFmt.format(new Date(ts))) === 0) {
+      all.push(ts);
+    }
+  }
+
+  return { first: firstMidnight, last: lastMidnight, all };
+}
+
+export interface FlightBoardChartHandle {
+  getZoomRange: () => { start: number; end: number } | null;
+  dispatchZoom: (start: number, end: number) => void;
+}
+
+interface FlightBoardChartProps {
+  workPackages: SerializedWorkPackage[];
+  zoomLevel: string;
+  timezone: string;
+  filterStart: string;
+  filterEnd: string;
+  isExpanded: boolean;
+  onBarClick?: (wp: SerializedWorkPackage) => void;
+  /** If provided, used instead of computing registrations internally */
+  transformedRegistrations?: string[];
+  /** Map of WP index → highlight hex color (overrides customer color) */
+  highlightMap?: Map<number, string>;
+  /** Group-by result for collapsing rows */
+  groups?: { groupedRegistrations: string[]; wpToGroupIndex: Map<number, number> } | null;
+  /** When true, click+drag on body chart pans instead of selecting bars */
+  panMode?: boolean;
+  /** Condensed view — triples row density, hides bar labels */
+  condensed?: boolean;
+  /** Called when user drags slider or scrolls to zoom (resets preset selection) */
+  onZoomChange?: () => void;
+}
+
+// Data array format: [regIndex, arrivalTs, departureTs, customer, registration, flightId, wpIndex]
+type GanttDataItem = [
+  number, // 0: regIndex (Y category)
+  number, // 1: arrival timestamp
+  number, // 2: departure timestamp
+  string, // 3: customer name
+  string, // 4: registration
+  string | null, // 5: flightId
+  number, // 6: original index in workPackages
+];
+
+export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardChartProps>(
+  function FlightBoardChart(
+    {
+      workPackages,
+      zoomLevel,
+      timezone,
+      filterStart,
+      filterEnd,
+      isExpanded,
+      onBarClick,
+      transformedRegistrations,
+      highlightMap,
+      groups,
+      panMode,
+      condensed,
+      onZoomChange,
+    },
+    ref,
+  ) {
+    const headerChartRef = useRef<ReactEChartsCore>(null);
+    const bodyChartRef = useRef<ReactEChartsCore>(null);
+    const syncLock = useRef(false);
+    // Track real dataZoom state (for adaptive tick interval)
+    const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
+    // Track body chart container width for pixel-based tick computation
+    const chartWidthRef = useRef<number>(0);
+    const [chartWidth, setChartWidth] = useState(0);
+    const [tickRecalcTrigger, setTickRecalcTrigger] = useState(0);
+    // Track body wrapper container height for row padding computation
+    const bodyWrapperRef = useRef<HTMLDivElement>(null);
+    const containerHeightRef = useRef<number>(0);
+    const [containerHeight, setContainerHeight] = useState(0);
+    // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
+    const [nowTimestamp, setNowTimestamp] = useState(0);
+    // ─── Row hover highlight refs (graphic-based, no React re-render) ───
+    const hoveredRowIdxRef = useRef<number>(-1);
+    const rafIdRef = useRef<number>(0);
+    const { getColor } = useCustomers();
+    const { timeFormat } = usePreferences();
+    const { resolvedTheme } = useTheme();
+    const echartsTheme = resolvedTheme === "dark" ? "dark" : undefined;
+
+    // Resolve CSS variables to concrete colors for ECharts canvas (canvas can't parse var())
+    const cc = useMemo(() => {
+      if (typeof document === "undefined") {
+        // SSR fallback — dark defaults
+        return {
+          fg: "#e5e5e5",
+          mutedFg: "#a1a1aa",
+          border: "#27272a",
+          popover: "#18181b",
+          popoverFg: "#fafafa",
+          primary15: "rgba(59,130,246,0.15)",
+          rowHover: "rgba(255,255,255,0.1)",
+        };
+      }
+      const s = getComputedStyle(document.documentElement);
+      const v = (name: string) => {
+        const raw = s.getPropertyValue(name).trim();
+        return raw ? `hsl(${raw})` : "#888";
+      };
+      return {
+        fg: v("--foreground"),
+        mutedFg: v("--muted-foreground"),
+        border: v("--border"),
+        popover: v("--popover"),
+        popoverFg: v("--popover-foreground"),
+        primary15: (() => {
+          const raw = s.getPropertyValue("--primary").trim();
+          return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
+        })(),
+        rowHover: resolvedTheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+      };
+    }, [resolvedTheme]);
+
+    // Expose zoom read/write for parent toolbar handlers
+    useImperativeHandle(ref, () => ({
+      getZoomRange: () => {
+        const instance = headerChartRef.current?.getEchartsInstance();
+        if (!instance) return null;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const opt = instance.getOption() as any;
+        const dz = opt?.dataZoom?.[0];
+        return dz ? { start: dz.start ?? 0, end: dz.end ?? 100 } : null;
+      },
+      dispatchZoom: (start: number, end: number) => {
+        [headerChartRef, bodyChartRef].forEach((r) => {
+          r.current?.getEchartsInstance()?.dispatchAction({ type: "dataZoom", start, end });
+        });
+      },
+    }));
+
+    // ─── Compute chart data + time bounds ───
+    // ✅ Note: minTime/maxTime still computed for chart data but not used for zoom (now using filter bounds)
+    const { registrations, chartData, colorMap, allWps } = useMemo(() => {
+      if (workPackages.length === 0) {
+        return {
+          registrations: [] as string[],
+          chartData: [] as GanttDataItem[],
+          colorMap: {} as Record<string, string>,
+          allWps: workPackages,
+          minTime: 0,
+          maxTime: 0,
+        };
+      }
+
+      // Use transformed registrations if provided, otherwise compute
+      let regs: string[];
+      if (transformedRegistrations && transformedRegistrations.length > 0) {
+        regs = transformedRegistrations;
+      } else {
+        const sorted = [...workPackages].sort(
+          (a, b) => new Date(a.arrival).getTime() - new Date(b.arrival).getTime(),
+        );
+        const regSet = new Set<string>();
+        sorted.forEach((wp) => regSet.add(wp.aircraftReg));
+        regs = Array.from(regSet);
+      }
+
+      const colors: Record<string, string> = {};
+      workPackages.forEach((wp) => {
+        if (!colors[wp.customer]) colors[wp.customer] = getColor(wp.customer);
+      });
+
+      // If group-by is active, map WPs to group indices
+      const wpToGroup = groups?.wpToGroupIndex;
+      const groupRegs = groups?.groupedRegistrations;
+
+      const data: GanttDataItem[] = workPackages.map((wp, idx) => {
+        let regIndex: number;
+        if (wpToGroup && groupRegs) {
+          regIndex = wpToGroup.get(idx) ?? 0;
+        } else {
+          regIndex = regs.indexOf(wp.aircraftReg);
+        }
+        return [
+          regIndex,
+          new Date(wp.arrival).getTime(),
+          new Date(wp.departure).getTime(),
+          wp.customer,
+          wp.aircraftReg,
+          wp.flightId,
+          idx,
+        ];
+      });
+
+      const allTimes = workPackages.flatMap((wp) => [
+        new Date(wp.arrival).getTime(),
+        new Date(wp.departure).getTime(),
+      ]);
+
+      // Use grouped registrations for Y-axis if grouping is active
+      const yRegs = groupRegs ?? regs;
+
+      return {
+        registrations: yRegs,
+        chartData: data,
+        colorMap: colors,
+        allWps: workPackages,
+        minTime: Math.min(...allTimes),
+        maxTime: Math.max(...allTimes),
+      };
+    }, [workPackages, getColor, transformedRegistrations, groups]);
+
+    // ─── Zoom range for the dataZoom (only recalculates on preset/filter change) ───
+    const zoomRange = useMemo(() => {
+      if (workPackages.length === 0) return { start: 0, end: 100 };
+
+      const filterStartMs = new Date(filterStart).getTime();
+      const filterEndMs = new Date(filterEnd).getTime();
+      const totalMs = filterEndMs - filterStartMs || 86400000;
+
+      const zoomHours: Record<string, number> = {
+        "6h": 6,
+        "12h": 12,
+        "1d": 24,
+        "3d": 72,
+        "1w": 168,
+      };
+      const hours = zoomHours[zoomLevel];
+      if (!hours) return { start: 0, end: 100 };
+
+      const rangeMs = hours * 3600000;
+      const span = Math.min(100, (rangeMs / totalMs) * 100);
+
+      // Clamp: if preset exceeds filter span, show full range
+      if (span >= 99) {
+        return { start: 0, end: 100 };
+      }
+
+      // Smart anchor: center on "now" if within filter range, else center of filter
+      const now = nowTimestamp || filterStartMs;
+      const centerMs =
+        now >= filterStartMs && now <= filterEndMs ? now : filterStartMs + totalMs / 2;
+
+      const centerPct = ((centerMs - filterStartMs) / totalMs) * 100;
+      const start = Math.max(0, Math.min(100 - span, centerPct - span / 2));
+      const end = start + span;
+      return { start, end };
+    }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp]);
+
+    // ─── Sync realZoomState ref when zoom preset/filter changes ───
+    useEffect(() => {
+      realZoomState.current = { start: zoomRange.start, end: zoomRange.end };
+    }, [zoomRange]);
+
+    // ─── Filter-based midnight boundaries (TZ-aware) ───
+    const { midnightTimestamps, timeGrid } = useMemo(() => {
+      if (workPackages.length === 0 || !filterStart || !filterEnd) {
+        return {
+          midnightTimestamps: [] as number[],
+          timeGrid: { intervalMs: 21600000, axisMin: 0, axisMax: 0, ticks: [] as number[] },
+        };
+      }
+
+      const { all } = findFilterMidnights(filterStart, filterEnd, timezone);
+      const axisMin = new Date(filterStart).getTime();
+      const axisMax = new Date(filterEnd).getTime();
+      const totalMs = axisMax - axisMin || 86400000;
+      const totalHours = totalMs / 3600000;
+
+      // Compute visible ms from zoom preset for tick density
+      const zoomHoursMap: Record<string, number> = {
+        "6h": 6,
+        "12h": 12,
+        "1d": 24,
+        "3d": 72,
+        "1w": 168,
+      };
+      const visibleHours = Math.min(zoomHoursMap[zoomLevel] ?? totalHours, totalHours);
+      const visibleMs = visibleHours * 3600000;
+
+      // Pixel-based interval selection (SSR fallback before DOM is available)
+      const containerWidth = chartWidth || SSR_FALLBACK_WIDTH;
+      const availablePixels = Math.max(containerWidth - GRID_PADDING, 100);
+      const intervalMs = computeTickInterval({ availablePixels, visibleMs });
+      const intervalHours = intervalMs / 3600000;
+
+      // Generate tick positions — step by interval or 1h, whichever is smaller
+      const hourFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "numeric",
+        hourCycle: "h23",
+      });
+      const minFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        minute: "numeric",
+      });
+
+      // Start tick scan from the nearest hour boundary at or before axisMin
+      const scanStart = axisMin - (axisMin % 3600000) - 3600000; // floor to hour, then one extra
+      const stepMs = Math.min(intervalMs, 3600000);
+      const ticks: number[] = [];
+      for (let ts = scanStart; ts <= axisMax; ts += stepMs) {
+        if (ts < axisMin) continue; // skip ticks before axis start (but scan from clean boundary)
+        const h = parseInt(hourFmt.format(new Date(ts)));
+        const m = parseInt(minFmt.format(new Date(ts)));
+        if (intervalHours >= 1) {
+          if (h % intervalHours === 0 && m === 0) ticks.push(ts);
+        } else {
+          const intervalMins = intervalHours * 60;
+          if (m % intervalMins === 0) ticks.push(ts);
+        }
+      }
+
+      return {
+        midnightTimestamps: all,
+        timeGrid: { intervalMs, axisMin, axisMax, ticks },
+      };
+    }, [workPackages.length, filterStart, filterEnd, timezone, zoomLevel, chartWidth]);
+
+    // ─── Update NOW timestamp every 60s ───
+    useEffect(() => {
+      const tid = setTimeout(() => setNowTimestamp(Date.now()), 0);
+      const id = setInterval(() => setNowTimestamp(Date.now()), 60000);
+      return () => {
+        clearTimeout(tid);
+        clearInterval(id);
+      };
+    }, []);
+
+    // ─── TZ-aware time formatter (reused in renderItem) ───
+    const timeFmt = useMemo(
+      () =>
+        new Intl.DateTimeFormat("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: timeFormat === "12h" ? "h12" : "h23",
+          timeZone: timezone,
+        }),
+      [timezone, timeFormat],
+    );
+
+    // ─── Shared time formatters (used by header, body, and adaptive tick effect) ───
+    const { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel } = useMemo(() => {
+      const hourFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: timeFormat === "12h" ? "h12" : "h23",
+      });
+      const dayNameFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        weekday: "long",
+      });
+      const dateFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        month: "numeric",
+        day: "numeric",
+      });
+      const tzLabel = timezone === "UTC" ? "UTC" : "Eastern (ET)";
+      const midnightSet = new Set(midnightTimestamps);
+      return { hourFormatter, dayNameFmt, dateFmt, midnightSet, tzLabel };
+    }, [timezone, timeFormat, midnightTimestamps]);
+
+    // ✅ STEP 3: Adaptive tick interval based on real visible window
+    useEffect(() => {
+      const { start, end } = realZoomState.current;
+      const filterStartMs = new Date(filterStart).getTime();
+      const filterEndMs = new Date(filterEnd).getTime();
+      const totalMs = filterEndMs - filterStartMs || 86400000;
+      const visibleMs = ((end - start) / 100) * totalMs;
+
+      // Pixel-based interval selection using real DOM width
+      const containerWidth =
+        chartWidthRef.current ||
+        bodyChartRef.current?.getEchartsInstance()?.getDom()?.clientWidth ||
+        SSR_FALLBACK_WIDTH;
+      const availablePixels = Math.max(containerWidth - GRID_PADDING, 100);
+      const intervalMs = computeTickInterval({ availablePixels, visibleMs });
+
+      // Top axis interval: coarser than time ticks (minimum 3h) for day labels
+      const topIntervalMs = Math.max(intervalMs, 3 * 3600000);
+
+      // Update header chart — 2 axes (bottom hidden for sync + top day names)
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      if (headerInstance) {
+        try {
+          headerInstance.setOption(
+            {
+              xAxis: [
+                {
+                  // Bottom axis (hidden, for dataZoom sync) — update interval
+                  type: "value",
+                  position: "bottom",
+                  min: timeGrid.axisMin,
+                  max: timeGrid.axisMax,
+                  interval: intervalMs,
+                  axisLabel: { show: false },
+                  splitLine: { show: false },
+                  axisLine: { show: false },
+                  axisTick: { show: false },
+                },
+                {
+                  // Top axis (day labels) — coarser interval, formatter filters to day boundaries
+                  type: "value",
+                  position: "top",
+                  min: timeGrid.axisMin,
+                  max: timeGrid.axisMax,
+                  interval: topIntervalMs,
+                  axisLabel: {
+                    interval: 0,
+                    color: cc.fg,
+                    fontSize: 12,
+                    fontWeight: "bold" as const,
+                    formatter: (value: number) => {
+                      // Show day name only at midnight OR at the first tick of a new day
+                      if (midnightSet.has(value))
+                        return dayNameFmt.format(new Date(value)).toUpperCase();
+                      const prevDay = dayNameFmt.format(new Date(value - topIntervalMs));
+                      const curDay = dayNameFmt.format(new Date(value));
+                      if (curDay !== prevDay) return curDay.toUpperCase();
+                      // Show on the very first axis tick so viewport always has a day label
+                      if (value <= timeGrid.axisMin + topIntervalMs && value >= timeGrid.axisMin)
+                        return curDay.toUpperCase();
+                      return "";
+                    },
+                  },
+                  axisLine: { show: false },
+                  axisTick: { show: false },
+                  splitLine: { show: false },
+                },
+              ],
+            },
+            { replaceMerge: ["xAxis"] },
+          );
+        } catch (err) {
+          console.warn("[Adaptive Ticks] header setOption error:", err);
+        }
+      }
+
+      // Update body chart — single axis (top, time labels)
+      const wideView = intervalMs >= 12 * 3600000;
+      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+      if (bodyInstance) {
+        try {
+          bodyInstance.setOption(
+            {
+              xAxis: {
+                type: "value",
+                position: "top",
+                min: timeGrid.axisMin,
+                max: timeGrid.axisMax,
+                interval: intervalMs,
+                axisLabel: {
+                  interval: 0,
+                  color: cc.fg,
+                  fontSize: 12,
+                  formatter: (value: number) => {
+                    if (midnightSet.has(value)) {
+                      if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
+                      const dateStr = dateFmt.format(new Date(value));
+                      const timeStr = hourFormatter.format(new Date(value));
+                      return `{date|${dateStr}}\n{time|${timeStr}}`;
+                    }
+                    if (wideView) return "";
+                    return `{time|${hourFormatter.format(new Date(value))}}`;
+                  },
+                  rich: {
+                    date: {
+                      fontWeight: "bold" as const,
+                      fontSize: 12,
+                      lineHeight: 16,
+                      color: cc.fg,
+                    },
+                    time: { fontSize: 12, lineHeight: 16 },
+                  },
+                },
+                axisLine: { show: true, lineStyle: { color: cc.border } },
+                axisTick: {
+                  show: true,
+                  alignWithLabel: true,
+                  length: 6,
+                  lineStyle: { color: cc.mutedFg },
+                },
+                splitLine: {
+                  show: true,
+                  lineStyle: {
+                    color: "rgba(128,128,128,0.25)",
+                    width: 1,
+                    type: "dashed" as const,
+                  },
+                },
+              },
+            },
+            { replaceMerge: ["xAxis"] },
+          );
+        } catch (err) {
+          console.warn("[Adaptive Ticks] body setOption error:", err);
+        }
+      }
+    }, [
+      filterStart,
+      filterEnd,
+      zoomLevel,
+      tickRecalcTrigger,
+      workPackages.length,
+      midnightSet,
+      dateFmt,
+      hourFormatter,
+      timeGrid,
+      cc,
+      dayNameFmt,
+    ]);
+
+    // ─── Track body chart container width via ResizeObserver ───
+    useEffect(() => {
+      const dom = bodyChartRef.current?.getEchartsInstance()?.getDom();
+      if (!dom) return;
+
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const newWidth = entry.contentRect.width;
+          if (Math.abs(newWidth - chartWidthRef.current) > 5) {
+            chartWidthRef.current = newWidth;
+            setChartWidth(newWidth);
+            setTickRecalcTrigger((t) => t + 1);
+          }
+        }
+      });
+
+      observer.observe(dom);
+      return () => observer.disconnect();
+    }, [workPackages.length]);
+
+    // ─── Track body wrapper container height for row padding ───
+    useEffect(() => {
+      const wrapper = bodyWrapperRef.current;
+      if (!wrapper) return;
+
+      containerHeightRef.current = wrapper.clientHeight;
+      setContainerHeight(wrapper.clientHeight);
+
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const newHeight = entry.contentRect.height;
+          if (Math.abs(newHeight - containerHeightRef.current) > 5) {
+            containerHeightRef.current = newHeight;
+            setContainerHeight(newHeight);
+          }
+        }
+      });
+
+      observer.observe(wrapper);
+      return () => observer.disconnect();
+    }, [workPackages.length, isExpanded]);
+
+    // ✅ STEP 3b: Update visible window start date label
+    useEffect(() => {
+      const { start } = realZoomState.current;
+      const filterStartMs = new Date(filterStart).getTime();
+      const filterEndMs = new Date(filterEnd).getTime();
+      const totalMs = filterEndMs - filterStartMs || 86400000;
+
+      // Compute visible window start timestamp
+      const visibleStartMs = filterStartMs + (start / 100) * totalMs;
+      const dateFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const dateStr = dateFmt.format(new Date(visibleStartMs));
+
+      // Update header chart graphic
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      if (headerInstance) {
+        try {
+          headerInstance.setOption({
+            graphic: [
+              {
+                id: "visibleStartDate",
+                style: { text: dateStr },
+              },
+            ],
+          });
+        } catch (err) {
+          console.warn("[Date Anchor] setOption error:", err);
+        }
+      }
+    }, [filterStart, filterEnd, timezone, tickRecalcTrigger]);
+
+    // ─── Pad registrations with empty rows to fill available container height ───
+    const paddedRegistrations = useMemo(() => {
+      if (isExpanded) return registrations;
+      if (containerHeight <= 0) return registrations;
+
+      const rowH = condensed ? 20 : 36;
+      const gridVerticalPadding = 34 + 2; // grid.top + grid.bottom
+      const availableForRows = containerHeight - gridVerticalPadding;
+      const totalRowsNeeded = Math.max(registrations.length, Math.floor(availableForRows / rowH));
+
+      if (registrations.length >= totalRowsNeeded) return registrations;
+
+      const padded = [...registrations];
+      for (let i = 0; i < totalRowsNeeded - registrations.length; i++) {
+        padded.push(`${EMPTY_ROW_PREFIX}${i}`);
+      }
+      return padded;
+    }, [registrations, containerHeight, condensed, isExpanded]);
+
+    // ─── Compute body chart height (used by rendering + hover effect) ───
+    const computedBodyHeight = useMemo(() => {
+      const rowH = condensed ? 20 : 36;
+      const contentMin = registrations.length * rowH + 38;
+      if (isExpanded) return Math.max(300, contentMin);
+      if (containerHeight > 0) return Math.max(300, contentMin, containerHeight);
+      return Math.max(300, contentMin);
+    }, [registrations.length, condensed, isExpanded, containerHeight]);
+
+    // ─── renderItem for custom flight bars ───
+    const renderFlightBar = useCallback(
+      (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
+        const regIndex = api.value(0) as number;
+        const arrivalTs = api.value(1) as number;
+        const departureTs = api.value(2) as number;
+        const customer = api.value(3) as string;
+        const registration = api.value(4) as string;
+        const flightId = api.value(5) as string | null;
+        const wpIndex = api.value(6) as number;
+
+        // Check if this row is an empty padding row — render nothing
+        if (paddedRegistrations[regIndex]?.startsWith(EMPTY_ROW_PREFIX)) {
+          return;
+        }
+
+        // Check if this row is a break separator — render as thick band
+        if (paddedRegistrations[regIndex]?.startsWith(BREAK_PREFIX)) {
+          const coordSys = (
+            params as unknown as {
+              coordSys?: { x: number; y: number; width: number; height: number };
+            }
+          ).coordSys;
+          if (!coordSys) return;
+          const breakLabel = paddedRegistrations[regIndex].slice(BREAK_PREFIX.length);
+          const yPos = api.coord([0, regIndex]);
+          if (!yPos) return;
+          const centerY = yPos[1];
+          const bandHeight = condensed ? 16 : 24;
+          const bandTop = centerY - bandHeight / 2;
+          return {
+            type: "group",
+            children: [
+              // Background band
+              {
+                type: "rect",
+                shape: { x: coordSys.x, y: bandTop, width: coordSys.width, height: bandHeight },
+                style: { fill: "rgba(128,128,128,0.15)" },
+              },
+              // Top border line
+              {
+                type: "line",
+                shape: {
+                  x1: coordSys.x,
+                  y1: bandTop,
+                  x2: coordSys.x + coordSys.width,
+                  y2: bandTop,
+                },
+                style: { stroke: cc.border, lineWidth: 1 },
+              },
+              // Bottom border line
+              {
+                type: "line",
+                shape: {
+                  x1: coordSys.x,
+                  y1: bandTop + bandHeight,
+                  x2: coordSys.x + coordSys.width,
+                  y2: bandTop + bandHeight,
+                },
+                style: { stroke: cc.border, lineWidth: 1 },
+              },
+              // Centered bold label
+              {
+                type: "text",
+                style: {
+                  text: breakLabel,
+                  x: coordSys.x + coordSys.width / 2,
+                  y: centerY,
+                  fill: cc.fg,
+                  fontSize: condensed ? 9 : 12,
+                  fontWeight: "bold",
+                  align: "center",
+                  verticalAlign: "middle",
+                },
+              },
+            ],
+          } as RenderGroup;
+        }
+
+        const arrival = api.coord([arrivalTs, regIndex]);
+        const departure = api.coord([departureTs, regIndex]);
+        if (!arrival || !departure) return;
+
+        const sizeArr = api.size?.([0, 1]) as number[] | undefined;
+        const barHeight = sizeArr ? sizeArr[1] * (condensed ? 0.75 : 0.6) : condensed ? 14 : 20;
+
+        // Use highlight color if available, otherwise customer color
+        const hlColor = highlightMap?.get(wpIndex);
+        const color = hlColor ?? colorMap[customer] ?? "#6b7280";
+
+        const coordSys = (
+          params as unknown as {
+            coordSys?: { x: number; y: number; width: number; height: number };
+          }
+        ).coordSys;
+        if (!coordSys) return;
+
+        const x = Math.max(arrival[0], coordSys.x);
+        const w = Math.min(departure[0], coordSys.x + coordSys.width) - x;
+        if (w <= 0) return;
+
+        const y = arrival[1] - barHeight / 2;
+        const centerY = y + barHeight / 2;
+
+        const r = Math.min(6, barHeight / 3);
+        const wp = allWps[wpIndex];
+        const canceled = wp != null && isCanceled(wp.status);
+
+        const children: RenderGroup[] = [
+          {
+            type: "rect",
+            shape: { x, y, width: w, height: barHeight, r },
+            style: { fill: color, opacity: canceled ? 0.55 : 1 },
+          } as RenderGroup,
+        ];
+
+        if (canceled) {
+          const stripeColor =
+            resolvedTheme === "dark" ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.18)";
+          children.push(createStripeOverlay(x, y, w, barHeight, r, stripeColor));
+        }
+
+        const fmtTime = (ts: number) => timeFmt.format(new Date(ts));
+
+        // Truncate text to fit within pixel budget (approximate char width)
+        const truncate = (text: string, maxPx: number, charWidth: number): string => {
+          const maxChars = Math.floor(maxPx / charWidth);
+          if (text.length <= maxChars) return text;
+          return maxChars > 3 ? text.slice(0, maxChars - 1) + "\u2026" : text.slice(0, maxChars);
+        };
+
+        const centerLabel = flightId ? `${registration} · ${flightId}` : registration;
+        const fLg = condensed ? 9 : 10;
+        const fSm = condensed ? 9 : 9;
+
+        if (w >= 240) {
+          // Full layout: arrival LEFT + center label + departure RIGHT
+          children.push(
+            {
+              type: "text",
+              style: {
+                text: fmtTime(arrivalTs),
+                x: x + 6,
+                y: centerY,
+                fill: "rgba(255,255,255,0.85)",
+                fontSize: fSm,
+                verticalAlign: "middle",
+              },
+            } as RenderGroup,
+            {
+              type: "text",
+              style: {
+                text: truncate(centerLabel, w - 100, 6.5),
+                x: x + w / 2,
+                y: centerY,
+                fill: "#fff",
+                fontSize: fLg,
+                fontWeight: "bold",
+                align: "center",
+                verticalAlign: "middle",
+              },
+            } as RenderGroup,
+            {
+              type: "text",
+              style: {
+                text: fmtTime(departureTs),
+                x: x + w - 6,
+                y: centerY,
+                fill: "rgba(255,255,255,0.85)",
+                fontSize: fSm,
+                align: "right",
+                verticalAlign: "middle",
+              },
+            } as RenderGroup,
+          );
+        } else if (w >= 170) {
+          // Center label + departure RIGHT only
+          children.push(
+            {
+              type: "text",
+              style: {
+                text: truncate(centerLabel, w - 56, 6.5),
+                x: x + (w - 56) / 2 + 4,
+                y: centerY,
+                fill: "#fff",
+                fontSize: fLg,
+                fontWeight: "bold",
+                align: "center",
+                verticalAlign: "middle",
+              },
+            } as RenderGroup,
+            {
+              type: "text",
+              style: {
+                text: fmtTime(departureTs),
+                x: x + w - 6,
+                y: centerY,
+                fill: "rgba(255,255,255,0.85)",
+                fontSize: fSm,
+                align: "right",
+                verticalAlign: "middle",
+              },
+            } as RenderGroup,
+          );
+        } else if (w >= 130) {
+          // Full center label only
+          children.push({
+            type: "text",
+            style: {
+              text: centerLabel,
+              x: x + w / 2,
+              y: centerY,
+              fill: "#fff",
+              fontSize: fLg,
+              fontWeight: "bold",
+              align: "center",
+              verticalAlign: "middle",
+            },
+          } as RenderGroup);
+        } else if (w >= 70) {
+          // Short center, truncated with ellipsis
+          children.push({
+            type: "text",
+            style: {
+              text: truncate(centerLabel, w - 8, 5.5),
+              x: x + w / 2,
+              y: centerY,
+              fill: "#fff",
+              fontSize: fSm,
+              align: "center",
+              verticalAlign: "middle",
+            },
+          } as RenderGroup);
+        }
+        // < 70px: no text, tooltip serves as full detail
+
+        return { type: "group", children } as RenderGroup;
+      },
+      [colorMap, timeFmt, paddedRegistrations, highlightMap, cc, condensed, allWps, resolvedTheme],
+    );
+
+    // ─── HEADER OPTION (time axis + slider — always visible) ───
+    const headerOption = useMemo(() => {
+      // Compute initial visible window start date
+      const { start } = zoomRange;
+      const filterStartMs = new Date(filterStart).getTime();
+      const filterEndMs = new Date(filterEnd).getTime();
+      const totalMs = filterEndMs - filterStartMs || 86400000;
+      const visibleStartMs = filterStartMs + (start / 100) * totalMs;
+      const visibleDateFmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: timezone,
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+      const initialDateStr = visibleDateFmt.format(new Date(visibleStartMs));
+
+      return {
+        backgroundColor: "transparent",
+        graphic: [
+          {
+            type: "text",
+            right: 25,
+            top: 6,
+            style: { text: tzLabel, fill: cc.mutedFg, fontSize: 20 },
+            z: 100,
+          },
+          {
+            type: "text",
+            left: 100,
+            top: 6,
+            style: {
+              text: initialDateStr, // ✅ Computed on initial render
+              fill: cc.mutedFg,
+              fontSize: 20,
+            },
+            id: "visibleStartDate", // ✅ ID for targeting in setOption
+            z: 100,
+          },
+        ],
+        grid: {
+          left: 100,
+          right: 20,
+          top: 62,
+          bottom: 8,
+        },
+        xAxis: [
+          // Bottom axis — hidden labels, kept for dataZoom sync
+          {
+            type: "value" as const,
+            position: "bottom" as const,
+            min: timeGrid.axisMin,
+            max: timeGrid.axisMax,
+            interval: timeGrid.intervalMs,
+            axisLabel: { show: false },
+            splitLine: { show: false },
+            axisLine: { show: false },
+            axisTick: { show: false },
+          },
+          // Top axis — day name labels (shown at first tick of each day in viewport)
+          {
+            type: "value" as const,
+            position: "top" as const,
+            min: timeGrid.axisMin,
+            max: timeGrid.axisMax,
+            interval: Math.max(timeGrid.intervalMs, 3 * 3600000), // minimum 3h for day labels
+            axisLabel: {
+              interval: 0,
+              color: cc.fg,
+              fontSize: 12,
+              fontWeight: "bold" as const,
+              formatter: (value: number) => {
+                const topInterval = Math.max(timeGrid.intervalMs, 3 * 3600000);
+                // Show day name only at midnight OR at the first tick of a new day
+                if (midnightSet.has(value)) return dayNameFmt.format(new Date(value)).toUpperCase();
+                const prevDay = dayNameFmt.format(new Date(value - topInterval));
+                const curDay = dayNameFmt.format(new Date(value));
+                if (curDay !== prevDay) return curDay.toUpperCase();
+                // Show on the very first axis tick so viewport always has a day label
+                if (value <= timeGrid.axisMin + topInterval && value >= timeGrid.axisMin)
+                  return curDay.toUpperCase();
+                return "";
+              },
+            },
+            axisLine: { show: false },
+            axisTick: { show: false },
+            splitLine: { show: false },
+          },
+        ],
+        yAxis: { show: false, type: "category" as const, data: [] },
+        dataZoom: [
+          {
+            type: "slider" as const,
+            xAxisIndex: [0, 1],
+            filterMode: "weakFilter" as const,
+            height: 18,
+            bottom: 14,
+            start: zoomRange.start,
+            end: zoomRange.end,
+            handleSize: "80%",
+            borderColor: cc.border,
+            fillerColor: cc.primary15,
+            textStyle: { color: cc.mutedFg },
+          },
+          {
+            type: "inside" as const,
+            xAxisIndex: [0, 1],
+            filterMode: "weakFilter" as const,
+            zoomOnMouseWheel: "ctrl" as const,
+            moveOnMouseWheel: "shift" as const,
+          },
+        ],
+        series: [],
+      };
+    }, [
+      dayNameFmt,
+      midnightSet,
+      tzLabel,
+      timeGrid,
+      zoomRange,
+      cc,
+      filterStart,
+      filterEnd,
+      timezone,
+    ]);
+
+    // ─── BODY OPTION (bars + y-axis, time labels at top) ───
+    const bodyOption = useMemo(() => {
+      return {
+        backgroundColor: "transparent",
+        tooltip: {
+          trigger: "item" as const,
+          appendToBody: false,
+          confine: true,
+          backgroundColor: cc.popover,
+          borderColor: cc.border,
+          textStyle: { color: cc.popoverFg },
+          formatter: (params: { data: GanttDataItem }) => {
+            const d = params.data;
+            if (!d || !Array.isArray(d)) return "";
+            const wpIdx = d[6];
+            const wp = allWps[wpIdx];
+            if (!wp) return "";
+            return formatFlightTooltip({
+              registration: wp.aircraftReg,
+              aircraftType: wp.inferredType,
+              customer: wp.customer,
+              customerColor: colorMap[wp.customer] ?? "#6b7280",
+              flightId: wp.flightId,
+              arrival: wp.arrival,
+              departure: wp.departure,
+              groundHours: wp.groundHours,
+              status: wp.status,
+              workpackageNo: wp.workpackageNo,
+              effectiveMH: wp.effectiveMH,
+              mhSource: wp.mhSource,
+              comments: wp.calendarComments,
+              timezone,
+              timeFormat,
+            });
+          },
+        },
+        grid: {
+          left: 100,
+          right: 20,
+          top: 34,
+          bottom: 2,
+        },
+        xAxis: {
+          type: "value" as const,
+          position: "top" as const,
+          min: timeGrid.axisMin,
+          max: timeGrid.axisMax,
+          interval: timeGrid.intervalMs,
+          axisLabel: {
+            interval: 0,
+            color: cc.fg,
+            fontSize: 12,
+            formatter: (value: number) => {
+              const wideView = timeGrid.intervalMs >= 12 * 3600000;
+              if (midnightSet.has(value)) {
+                if (wideView) {
+                  return `{date|${dateFmt.format(new Date(value))}}`;
+                }
+                const dateStr = dateFmt.format(new Date(value));
+                const timeStr = hourFormatter.format(new Date(value));
+                return `{date|${dateStr}}\n{time|${timeStr}}`;
+              }
+              if (wideView) return "";
+              return `{time|${hourFormatter.format(new Date(value))}}`;
+            },
+            rich: {
+              date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
+              time: { fontSize: 12, lineHeight: 16 },
+            },
+          },
+          axisLine: { show: true, lineStyle: { color: cc.border } },
+          axisTick: {
+            show: true,
+            alignWithLabel: true,
+            length: 6,
+            lineStyle: { color: cc.mutedFg },
+          },
+          splitLine: {
+            show: true,
+            lineStyle: {
+              color: "rgba(128,128,128,0.25)",
+              width: 1,
+              type: "dashed" as const,
+            },
+          },
+        },
+        yAxis: {
+          type: "category" as const,
+          data: paddedRegistrations,
+          inverse: true,
+          axisLabel: {
+            color: cc.fg,
+            fontSize: condensed ? 10 : 11,
+            fontWeight: "bold" as const,
+            formatter: (value: string) => {
+              if (value.startsWith(BREAK_PREFIX)) return "";
+              if (value.startsWith(EMPTY_ROW_PREFIX)) return "";
+              return value;
+            },
+          },
+          splitLine: {
+            show: true,
+            lineStyle: { color: cc.border, opacity: condensed ? 0.3 : 0.4 },
+          },
+        },
+        dataZoom: [
+          {
+            type: "slider" as const,
+            show: false,
+            xAxisIndex: 0,
+            filterMode: "weakFilter" as const,
+            start: zoomRange.start,
+            end: zoomRange.end,
+          },
+        ],
+        // Row hover highlight — initialized hidden, updated by mousemove handler
+        graphic: [
+          {
+            id: "rowHighlight",
+            type: "rect" as const,
+            shape: { x: 0, y: 0, width: 0, height: 0 },
+            style: { fill: "transparent" },
+            silent: true,
+            z: 1,
+          },
+        ],
+        series: [
+          // Marker series — rendered BEHIND bars (lower z)
+          {
+            type: "custom" as const,
+            renderItem: () => ({ type: "group" as const, children: [] }),
+            data: [],
+            z: 0,
+            markLine: {
+              silent: true,
+              symbol: ["none", "none"],
+              animation: false,
+              z: 0,
+              data: [],
+            },
+          },
+          // Bar series — rendered ON TOP (higher z)
+          {
+            type: "custom" as const,
+            renderItem: renderFlightBar,
+            encode: { x: [1, 2], y: 0 },
+            data: chartData,
+            z: 2,
+          },
+        ],
+      };
+    }, [
+      paddedRegistrations,
+      chartData,
+      colorMap,
+      allWps,
+      renderFlightBar,
+      timeGrid,
+      timezone,
+      timeFormat,
+      zoomRange,
+      cc,
+      hourFormatter,
+      dateFmt,
+      midnightSet,
+      condensed,
+    ]);
+
+    // ─── Sync header zoom → body ───
+    const handleHeaderDataZoom = useCallback(() => {
+      if (syncLock.current) return;
+      syncLock.current = true;
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+      if (headerInstance && bodyInstance) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const opt = headerInstance.getOption() as any;
+        const dz = opt?.dataZoom?.[0];
+        if (dz) {
+          const start = dz.start ?? 0;
+          const end = dz.end ?? 100;
+          realZoomState.current = { start, end };
+          setTickRecalcTrigger((t) => t + 1);
+
+          bodyInstance.dispatchAction({
+            type: "dataZoom",
+            start: dz.start,
+            end: dz.end,
+          });
+          onZoomChange?.();
+        }
+      }
+      syncLock.current = false;
+    }, [onZoomChange]);
+
+    // ─── Sync body zoom → header ───
+    const handleBodyDataZoom = useCallback(() => {
+      if (syncLock.current) return;
+      syncLock.current = true;
+      const headerInstance = headerChartRef.current?.getEchartsInstance();
+      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+      if (headerInstance && bodyInstance) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const opt = bodyInstance.getOption() as any;
+        const dz = opt?.dataZoom?.[0];
+        if (dz) {
+          const start = dz.start ?? 0;
+          const end = dz.end ?? 100;
+          realZoomState.current = { start, end };
+          setTickRecalcTrigger((t) => t + 1);
+
+          headerInstance.dispatchAction({ type: "dataZoom", start: dz.start, end: dz.end });
+          onZoomChange?.();
+        }
+      }
+      syncLock.current = false;
+    }, [onZoomChange]);
+
+    // ─── Body chart: Ctrl+Scroll zoom, Shift+Scroll pan ───
+    useEffect(() => {
+      const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
+      if (!bodyEl) return;
+
+      const handleWheel = (e: WheelEvent) => {
+        if (!e.ctrlKey && !e.shiftKey) return; // plain scroll → let CSS handle
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const headerInstance = headerChartRef.current?.getEchartsInstance();
+        const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+        if (!headerInstance || !bodyInstance) return;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const opt = headerInstance.getOption() as any;
+        const dz = opt?.dataZoom?.[0];
+        if (!dz) return;
+
+        let { start, end } = dz;
+        const span = end - start;
+
+        if (e.ctrlKey) {
+          // Zoom: scale by deltaY magnitude (clamped) to handle trackpads + mice
+          const absDelta = Math.min(Math.abs(e.deltaY), 100);
+          const rate = absDelta * 0.0015; // gentle: ~0.15 for a full mouse tick (deltaY≈100)
+          const factor = e.deltaY > 0 ? 1 + rate : 1 / (1 + rate);
+          const newSpan = Math.min(100, Math.max(1, span * factor));
+          const center = (start + end) / 2;
+          start = Math.max(0, center - newSpan / 2);
+          end = Math.min(100, center + newSpan / 2);
+        } else if (e.shiftKey) {
+          // Pan: scale by deltaY magnitude
+          const absDelta = Math.min(Math.abs(e.deltaY), 100);
+          const shift = Math.sign(e.deltaY) * span * absDelta * 0.001;
+          start = Math.max(0, Math.min(100 - span, start + shift));
+          end = start + span;
+        }
+
+        // Dispatch to both charts
+        [headerInstance, bodyInstance].forEach((inst) => {
+          inst.dispatchAction({ type: "dataZoom", start, end });
+        });
+      };
+
+      bodyEl.addEventListener("wheel", handleWheel, { passive: false });
+      return () => bodyEl.removeEventListener("wheel", handleWheel);
+    }, [workPackages.length]); // re-attach if chart rebuilds
+
+    // ─── Body chart: click+drag pan (hand tool) ───
+    const dragState = useRef<{ startX: number; startPct: number; span: number; dragging: boolean }>(
+      {
+        startX: 0,
+        startPct: 0,
+        span: 0,
+        dragging: false,
+      },
+    );
+
+    useEffect(() => {
+      const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
+      if (!bodyEl) return;
+
+      if (panMode) {
+        bodyEl.style.cursor = "grab";
+      } else {
+        bodyEl.style.cursor = "";
+      }
+
+      if (!panMode) return;
+
+      const handleMouseDown = (e: MouseEvent) => {
+        // Only left button
+        if (e.button !== 0) return;
+        const headerInstance = headerChartRef.current?.getEchartsInstance();
+        if (!headerInstance) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const opt = headerInstance.getOption() as any;
+        const dz = opt?.dataZoom?.[0];
+        if (!dz) return;
+
+        dragState.current = {
+          startX: e.clientX,
+          startPct: dz.start,
+          span: dz.end - dz.start,
+          dragging: true,
+        };
+        bodyEl.style.cursor = "grabbing";
+        e.preventDefault();
+      };
+
+      const handleMouseMove = (e: MouseEvent) => {
+        if (!dragState.current.dragging) return;
+        const dx = e.clientX - dragState.current.startX;
+        // Convert px delta to % of dataZoom range
+        const chartWidth = bodyEl.clientWidth;
+        const pctDelta = -(dx / chartWidth) * dragState.current.span * 1.5;
+        let start = dragState.current.startPct + pctDelta;
+        start = Math.max(0, Math.min(100 - dragState.current.span, start));
+        const end = start + dragState.current.span;
+
+        const headerInstance = headerChartRef.current?.getEchartsInstance();
+        const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+        [headerInstance, bodyInstance].forEach((inst) => {
+          inst?.dispatchAction({ type: "dataZoom", start, end });
+        });
+      };
+
+      const handleMouseUp = () => {
+        if (dragState.current.dragging) {
+          dragState.current.dragging = false;
+          bodyEl.style.cursor = "grab";
+        }
+      };
+
+      bodyEl.addEventListener("mousedown", handleMouseDown);
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      return () => {
+        bodyEl.removeEventListener("mousedown", handleMouseDown);
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+        bodyEl.style.cursor = "";
+      };
+    }, [panMode, workPackages.length]);
+
+    // ─── Row hover highlight — track mouse position, update graphic rect ───
+    useEffect(() => {
+      const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
+      if (!bodyEl || paddedRegistrations.length === 0) return;
+
+      // Derive actual grid bounds and band height from ECharts coordinate system
+      const getInstance = () => bodyChartRef.current?.getEchartsInstance();
+
+      const getBandMetrics = () => {
+        const instance = getInstance();
+        if (!instance) return null;
+        try {
+          // Get pixel Y for first two rows to derive band height and actual grid top
+          const [, y0] = instance.convertToPixel("grid", [0, 0]);
+          const bandH =
+            paddedRegistrations.length > 1
+              ? Math.abs((instance.convertToPixel("grid", [0, 1]) as [number, number])[1] - y0)
+              : y0 * 2; // single-row fallback: assume symmetric padding
+          const gridTopPx = y0 - bandH / 2;
+          const gridBottomPx = gridTopPx + bandH * paddedRegistrations.length;
+          return { bandH, gridTopPx, gridBottomPx };
+        } catch {
+          return null;
+        }
+      };
+
+      const updateHighlight = (rowIndex: number) => {
+        const instance = getInstance();
+        if (!instance) return;
+
+        if (rowIndex < 0) {
+          try {
+            instance.setOption({
+              graphic: [
+                {
+                  id: "rowHighlight",
+                  type: "rect",
+                  shape: { x: 0, y: 0, width: 0, height: 0 },
+                  style: { fill: "transparent" },
+                  silent: true,
+                  z: 1,
+                },
+              ],
+            });
+          } catch {
+            /* chart transitioning */
+          }
+          return;
+        }
+
+        try {
+          const [, centerY] = instance.convertToPixel("grid", [0, rowIndex]);
+          const metrics = getBandMetrics();
+          if (!metrics) return;
+          const chartWidth = bodyEl.clientWidth;
+          const y = centerY - metrics.bandH / 2;
+          instance.setOption({
+            graphic: [
+              {
+                id: "rowHighlight",
+                type: "rect",
+                shape: { x: 0, y, width: chartWidth, height: metrics.bandH },
+                style: { fill: cc.rowHover },
+                silent: true,
+                z: 1,
+              },
+            ],
+          });
+        } catch {
+          /* chart transitioning */
+        }
+      };
+
+      const handleMouseMove = (e: MouseEvent) => {
+        const mouseY = e.offsetY;
+        const metrics = getBandMetrics();
+        if (!metrics || metrics.bandH <= 0) return;
+
+        const { bandH, gridTopPx, gridBottomPx } = metrics;
+
+        if (mouseY < gridTopPx || mouseY > gridBottomPx) {
+          if (hoveredRowIdxRef.current !== -1) {
+            hoveredRowIdxRef.current = -1;
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = requestAnimationFrame(() => updateHighlight(-1));
+          }
+          return;
+        }
+
+        const rowIndex = Math.min(
+          Math.floor((mouseY - gridTopPx) / bandH),
+          paddedRegistrations.length - 1,
+        );
+
+        // Skip empty padding rows and break separator rows
+        const regName = paddedRegistrations[rowIndex];
+        if (regName?.startsWith(EMPTY_ROW_PREFIX) || regName?.startsWith(BREAK_PREFIX)) {
+          if (hoveredRowIdxRef.current !== -1) {
+            hoveredRowIdxRef.current = -1;
+            cancelAnimationFrame(rafIdRef.current);
+            rafIdRef.current = requestAnimationFrame(() => updateHighlight(-1));
+          }
+          return;
+        }
+
+        if (rowIndex !== hoveredRowIdxRef.current) {
+          hoveredRowIdxRef.current = rowIndex;
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = requestAnimationFrame(() => updateHighlight(rowIndex));
+        }
+      };
+
+      const handleMouseLeave = () => {
+        hoveredRowIdxRef.current = -1;
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = requestAnimationFrame(() => updateHighlight(-1));
+      };
+
+      bodyEl.addEventListener("mousemove", handleMouseMove);
+      bodyEl.addEventListener("mouseleave", handleMouseLeave);
+      return () => {
+        bodyEl.removeEventListener("mousemove", handleMouseMove);
+        bodyEl.removeEventListener("mouseleave", handleMouseLeave);
+        cancelAnimationFrame(rafIdRef.current);
+      };
+    }, [computedBodyHeight, paddedRegistrations, cc.rowHover, workPackages.length]);
+
+    // ─── Handle click on bar ───
+    const handleClick = useCallback(
+      (params: { data?: GanttDataItem }) => {
+        if (panMode) return; // suppress clicks in pan mode
+        if (!params.data || !onBarClick) return;
+        const wpIdx = params.data[6];
+        const wp = allWps[wpIdx];
+        if (wp) onBarClick(wp);
+      },
+      [allWps, onBarClick, panMode],
+    );
+
+    // ─── Live NOW line + time grid lines — merge-update on body chart ───
+    useEffect(() => {
+      if (nowTimestamp === 0 || workPackages.length === 0) return;
+      const instance = bodyChartRef.current?.getEchartsInstance();
+      if (!instance) return;
+
+      // Safety check: ensure chart is fully initialized with xAxis before updating
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const opt = instance.getOption() as any;
+        if (!opt?.xAxis || opt.xAxis.length === 0) {
+          // Chart not fully initialized yet, skip this update
+          return;
+        }
+      } catch {
+        // getOption failed, chart not ready
+        return;
+      }
+
+      // Midnight boundary markers — dark gray, visible but not dominant (skip axis edges)
+      const midnightLines = midnightTimestamps
+        .filter((ts) => ts >= timeGrid.axisMin && ts <= timeGrid.axisMax)
+        .map((ts) => {
+          return {
+            xAxis: ts,
+            lineStyle: { type: "solid" as const, color: "rgba(128,128,128,0.5)", width: 1.5 },
+            label: { show: false },
+          };
+        });
+
+      // NOW line
+      const nowInRange = nowTimestamp >= timeGrid.axisMin && nowTimestamp <= timeGrid.axisMax;
+      const nowLine = nowInRange
+        ? [
+            {
+              xAxis: nowTimestamp,
+              lineStyle: { type: "solid" as const, color: "#ef4444", width: 2 },
+              label: {
+                show: true,
+                formatter: "NOW",
+                position: "start" as const,
+                color: "#ef4444",
+                fontWeight: "bold" as const,
+                fontSize: 10,
+              },
+            },
+          ]
+        : [];
+
+      try {
+        instance.setOption({
+          series: [
+            {
+              // Update marker series (index 0) with midnight + now lines
+              type: "custom",
+              markLine: {
+                silent: true,
+                symbol: ["none", "none"],
+                animation: false,
+                z: 0,
+                data: [...midnightLines, ...nowLine],
+              },
+            },
+            {
+              // Bar series (index 1) — keep alignment, no changes
+              type: "custom",
+            },
+          ],
+        });
+      } catch (err) {
+        // Suppress setOption errors during chart transitions
+        console.warn("[FlightBoardChart] setOption error (likely chart transition):", err);
+      }
+    }, [nowTimestamp, timeGrid, midnightTimestamps, timezone, workPackages.length]);
+
+    // ─── Empty state ───
+    if (workPackages.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <i className="fa-solid fa-plane-slash text-4xl mb-4" />
+          <p className="text-lg font-medium">No aircraft match</p>
+          <p className="text-sm">Adjust your filters to see flight data.</p>
+        </div>
+      );
+    }
+
+    const bodyHeight = computedBodyHeight;
+
+    return (
+      <div className={cn("flex flex-col", !isExpanded && "h-full min-h-0")}>
+        {/* Time axis header — always visible (yellow zone) */}
+        <div className="flex-shrink-0">
+          <ReactEChartsCore
+            ref={headerChartRef}
+            echarts={echarts}
+            option={headerOption}
+            style={{ height: 95, width: "100%" }}
+            theme={echartsTheme}
+            notMerge
+            onEvents={{ datazoom: handleHeaderDataZoom }}
+          />
+        </div>
+
+        {/* Chart body — scrollable in contained mode (purple zone) */}
+        <div
+          ref={bodyWrapperRef}
+          className={cn("flex-1 min-h-0", !isExpanded && "overflow-y-auto")}
+        >
+          <ReactEChartsCore
+            ref={bodyChartRef}
+            echarts={echarts}
+            option={bodyOption}
+            style={{ height: bodyHeight, width: "100%" }}
+            theme={echartsTheme}
+            notMerge
+            onEvents={{ click: handleClick, datazoom: handleBodyDataZoom }}
+          />
+        </div>
+      </div>
+    );
+  },
+);
