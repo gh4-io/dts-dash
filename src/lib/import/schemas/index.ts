@@ -14,3 +14,8 @@ import "./engine-types";
 import "./manufacturers";
 import "./users";
 import "./work-packages";
+
+// Capacity schemas
+import "./capacity-shifts";
+import "./headcount-plans";
+import "./headcount-exceptions";

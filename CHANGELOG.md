@@ -75,9 +75,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Extensibility** — New schemas can be added by creating a file in `src/lib/import/schemas/`, auto-registers at module load
 - **Logging** — Structured pino logging, child loggers per endpoint, full audit trail in unified_import_log
 
+### Added - Capacity Modeling MVP (v0.3.0)
+
+#### Major Features
+- **3-Tier Capacity Model** — Replaces flat 6.5 MH/person with configurable chain: Paid Hours x paidToAvailable x availableToProductive x nightFactor = Productive MH/person
+- **Demand Distribution Engine** — Distributes WP man-hours across ground-time shift slots (replaces old per-day duplication model). Configurable demand curves (EVEN/WEIGHTED) with arrival/departure weights.
+- **Capacity Heatmap** — Date x Shift grid with color-coded utilization cells, click-to-drilldown
+- **Shift Drilldown Drawer** — Explainable capacity chain breakdown and WP attribution per cell
+- **Effective-Dated Headcount Plans** — Per-shift headcount with date ranges and weekday overrides
+- **Headcount Exceptions** — Date-specific delta overrides for holidays, overtime, etc.
+- **Admin Capacity Settings** — Headcount plan editor + model assumptions editor with live preview sliders
+
+#### New Database Tables
+- `capacity_shifts` — Shift window definitions (code, hours, paid time, min headcount)
+- `capacity_assumptions` — Productivity factors, demand curve config (single active row)
+- `headcount_plans` — Effective-dated headcount targets per shift
+- `headcount_exceptions` — Date-specific headcount delta overrides
+
+#### New API Routes
+- `GET /api/capacity/overview` — Full capacity+demand+utilization with drilldown data
+- `GET /api/admin/capacity/shifts` — List active shifts
+- `GET/PUT /api/admin/capacity/assumptions` — Read/update productivity factors
+- `GET/POST /api/admin/capacity/headcount-plans` — List/create headcount plans
+- `PUT/DELETE /api/admin/capacity/headcount-plans/[id]` — Update/delete plans
+- `GET/POST /api/admin/capacity/headcount-exceptions` — List/create exceptions
+- `PUT/DELETE /api/admin/capacity/headcount-exceptions/[id]` — Update/delete exceptions
+
+#### New UI Components
+- `CapacityHeatmap` — Date x Shift utilization grid with color coding and tooltips
+- `CapacityKpiStrip` — KPI cards (avg/peak utilization, demand, capacity, critical days)
+- `CapacitySummaryChart` — Recharts bar/line chart with stacked/total view toggle
+- `ShiftDrilldownDrawer` — Sheet drawer with capacity chain and demand breakdown
+- `HeadcountGrid` — Admin editor for headcount plans and exceptions
+- `AssumptionsForm` — Admin editor with sliders and live preview
+
+#### Import Hub Integration
+- 3 new import schemas: `capacity-shifts`, `headcount-plans`, `headcount-exceptions`
+- All schemas support JSON/CSV, export, templates
+
+#### Behavioral Changes
+- **Demand model**: MH is now DISTRIBUTED across ground-time slots (not duplicated per day). A 3-day WP with 3 MH shows 1 MH/slot = 3 MH total (was 3 MH/day = 9 MH total).
+- **Capacity model**: Day shift = 5.20 MH/person (was 6.5), Night = 4.42 MH/person. All factors admin-configurable.
+
 ### Changed
 - Admin navigation restructured for Data Hub UX
 - Import history moved to unified table (all data types in one view)
+- Admin nav: added "Capacity" link after "Cron Jobs"
+- Config panel: added info banner linking to admin capacity settings
 
 ### Fixed
 - N/A (new feature)

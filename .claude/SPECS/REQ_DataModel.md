@@ -101,6 +101,105 @@ interface HourlySnapshot {
 }
 ```
 
+### Capacity V2 Types (v0.3.0)
+
+```typescript
+// Shift reference data
+interface CapacityShift {
+  id: number;
+  code: string;              // "DAY" | "SWING" | "NIGHT"
+  name: string;
+  startHour: number;         // 0-23
+  endHour: number;           // 0-23 (may be < startHour for overnight)
+  paidHours: number;         // e.g. 8.0
+  minHeadcount: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+// Productivity assumptions (single active row)
+interface CapacityAssumptions {
+  id: number;
+  station: string;
+  paidToAvailable: number;         // Default 0.89
+  availableToProductive: number;   // Default 0.73
+  defaultMhNoWp: number;          // Default 3.0
+  nightProductivityFactor: number; // Default 0.85
+  demandCurve: "EVEN" | "WEIGHTED";
+  arrivalWeight: number;
+  departureWeight: number;
+  allocationMode: "DISTRIBUTE";
+  isActive: boolean;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+}
+
+// Effective-dated headcount plan
+interface HeadcountPlan {
+  id: number;
+  station: string;
+  shiftId: number;           // FK → capacity_shifts
+  headcount: number;
+  effectiveFrom: string;     // YYYY-MM-DD
+  effectiveTo: string | null;
+  dayOfWeek: number | null;  // 0-6, null=all days
+  label: string | null;
+  notes: string | null;
+}
+
+// Date-specific headcount override
+interface HeadcountException {
+  id: number;
+  station: string;
+  shiftId: number;           // FK → capacity_shifts
+  exceptionDate: string;     // YYYY-MM-DD
+  headcountDelta: number;    // Can be negative
+  reason: string | null;
+}
+
+// Demand output (per-day, per-shift)
+interface DailyDemandV2 {
+  date: string;
+  totalDemandMH: number;
+  aircraftCount: number;
+  byCustomer: Record<string, number>;
+  byShift: ShiftDemandV2[];
+}
+
+// Capacity output (per-day, per-shift with 3-tier chain)
+interface DailyCapacityV2 {
+  date: string;
+  totalProductiveMH: number;
+  totalPaidMH: number;
+  byShift: ShiftCapacityV2[];
+  hasExceptions: boolean;
+}
+
+// Utilization output
+interface DailyUtilizationV2 {
+  date: string;
+  totalDemandMH: number;
+  totalProductiveMH: number;
+  utilizationPercent: number | null; // null when productiveMH = 0
+  gapMH: number;
+  overtimeFlag: boolean;
+  criticalFlag: boolean;
+  byShift: ShiftUtilizationV2[];
+}
+
+// Summary statistics
+interface CapacitySummary {
+  avgUtilization: number | null;
+  peakUtilization: number | null;
+  totalDemandMH: number;
+  totalCapacityMH: number;
+  criticalDays: number;      // >120% utilization
+  overtimeDays: number;      // >100% utilization
+  noCoverageDays: number;    // Shifts with 0 productive MH
+  worstDeficit: { date: string; shift: string; gapMH: number } | null;
+}
+```
+
 ### AppConfig
 ```typescript
 interface AppConfig {
@@ -245,6 +344,11 @@ All runtime data stored in SQLite `data/dashboard.db` — local-first, zero-conf
 | `aircraft` | Aircraft registry | Master data with fuzzy operator matching; `sp_id` + `aircraft_type` from ac.json (D-033) |
 | `import_log` | Work package import history | Tracks imports (file, paste, API, CLI) |
 | `master_data_import_log` | Customer/aircraft import history | Separate from work package imports (OI-039) |
+| `capacity_shifts` | Shift window definitions | Day/Swing/Night with hours, paid time |
+| `capacity_assumptions` | Productivity factors | 3-tier chain config, demand curve |
+| `headcount_plans` | Effective-dated headcount targets | Per-shift, weekday overrides |
+| `headcount_exceptions` | Date-specific headcount deltas | Holidays, overtime adjustments |
+| `unified_import_log` | Universal import audit log | All data type imports in one table |
 | `analytics_events` | Usage tracking events | User behavior analytics |
 
 ## Data Warnings
