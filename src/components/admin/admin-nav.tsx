@@ -5,6 +5,12 @@ import { usePathname } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 
 const NAV_ITEMS = [
+  { label: "Customers", href: "/admin/customers", icon: "fa-solid fa-palette" },
+  {
+    label: "Aircraft Types",
+    href: "/admin/aircraft-types",
+    icon: "fa-solid fa-plane-circle-check",
+  },
   { label: "Data Hub", href: "/admin/import", icon: "fa-solid fa-database" },
   { label: "Users", href: "/admin/users", icon: "fa-solid fa-users-gear" },
   { label: "Settings", href: "/admin/settings", icon: "fa-solid fa-cogs" },

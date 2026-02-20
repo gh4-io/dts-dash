@@ -1097,16 +1097,63 @@
 
 ---
 
+## OI-064 | Universal Import Hub (v0.2.0) — Post-Implementation Bugs — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug (multi-item) |
+| **Status** | **Resolved** |
+| **Priority** | P0 |
+| **Owner** | Claude |
+| **Created** | 2026-02-20 |
+| **Resolved** | 2026-02-20 |
+| **Context** | Universal Import Hub implemented per plan (`/home/guru/.claude/plans/zazzy-honking-whale.md`). Post-implementation testing revealed 6 bugs and 2 missing UI regressions. Full code review conducted across all 7 core library files, 9 schemas, 8 API routes, and 13 UI components. |
+| **Bugs Found & Fixed** | See below |
+| **Plan Reference** | `.claude/plans/zazzy-honking-whale.md` (implementation), `.claude/plans/inherited-weaving-toucan.md` (review + fixes) |
+
+### Bugs Fixed
+
+1. **SHOWSTOPPER — `unified_import_log` table never created.** The Drizzle schema defined the table and a migration SQL was generated, but `schema-init.ts` `createTables()` was never updated. All import commits and history queries returned 500. **Fix:** Added CREATE TABLE to `createTables()` + migration M005 to `runMigrations()`. (`src/lib/db/schema-init.ts`)
+
+2. **SHOWSTOPPER — Work packages import FK constraint violation.** `mapRecordToDb()` set `importLogId` to the `unified_import_log.id`, but `work_packages.import_log_id` references the old `import_log` table. **Fix:** Set `importLogId: null` since the new system tracks imports via `unified_import_log` separately; removed unused `logId` param. (`src/lib/import/schemas/work-packages.ts`)
+
+3. **Data freshness badge showed all import types.** `/api/data-freshness` and `/api/admin/server/status` queried the old `import_log` table. **Fix:** Both now query `unified_import_log WHERE data_type = 'work-packages'`. Added `unified_import_log` to server status TABLE_NAMES. (`src/app/api/data-freshness/route.ts`, `src/app/api/admin/server/status/route.ts`)
+
+4. **Missing `customerSpId` in WP update set.** Field was in insert values but omitted from the `.set()` in the update path — silent data loss on re-import. **Fix:** Added `customerSpId: record.customerSpId` to update set. (`src/lib/import/schemas/work-packages.ts`)
+
+5. **Silent error handling — users stuck in loading state.** All async callbacks (`handleParse`, `handleValidate`, `handleCommit`) had empty `catch {}` blocks. If any API call failed, the wizard showed a spinner forever with no way to recover. **Fix:** Added `error` state, dismissible error banner, proper error capture in all async operations, `setError(null)` on step transitions. (`src/components/admin/import/import-hub.tsx`)
+
+6. **Schema fetch failure silently ignored.** `.catch(() => {})` on initial schema load meant a 401/500 showed an empty schema grid with no indication of failure. **Fix:** Now captures and displays error via the same error banner. (`src/components/admin/import/import-hub.tsx`)
+
+### UI Regressions Fixed
+
+7. **Customer color editor removed from nav.** Plan said "replaced by customers schema" but the schema only handles bulk import, not inline CRUD. Admins lost the ability to pick colors visually, preview WCAG contrast, or edit individual customers. **Fix:** Restored Customers tab in admin nav and original editor page. (`src/components/admin/admin-nav.tsx`, `src/app/(authenticated)/admin/customers/page.tsx`)
+
+8. **Aircraft type editor removed from nav.** Same issue — admins lost inline add/edit/delete, pattern testing, bulk operations, and priority management. **Fix:** Restored Aircraft Types tab in admin nav and original editor page. (`src/components/admin/admin-nav.tsx`, `src/app/(authenticated)/admin/aircraft-types/page.tsx`)
+
+### Code Review — Remaining Items (not fixed, documented for future)
+
+- `aircraft-models.ts`: `skipped` count hardcoded to 0, never incremented
+- `customers.ts`: "confirmed" source always downgraded to "imported" on re-import
+- `validator.ts`: field coverage calculation ignores fields with `defaultValue`
+- `mapping.ts`: only samples first 10 records for field extraction
+- `export/route.ts`: filename not sanitized in Content-Disposition header
+
+| **Files** | `src/lib/db/schema-init.ts`, `src/lib/import/schemas/work-packages.ts`, `src/app/api/data-freshness/route.ts`, `src/app/api/admin/server/status/route.ts`, `src/components/admin/import/import-hub.tsx`, `src/components/admin/admin-nav.tsx`, `src/app/(authenticated)/admin/customers/page.tsx`, `src/app/(authenticated)/admin/aircraft-types/page.tsx` |
+| **Links** | [CHANGELOG.md](../CHANGELOG.md) v0.2.0, [REQ_DataImport.md](SPECS/REQ_DataImport.md), [REQ_Admin.md](SPECS/REQ_Admin.md) |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
-| P0 | 0 | 0 | 0 | 15 |
+| P0 | 0 | 0 | 0 | 16 |
 | P1 | 3 | 1 | 0 | 15 |
 | P2 | 4 | 1 | 0 | 14 |
 | P3 | 3 | 0 | 2 | 0 |
-| **Total** | **10** | **2** | **2** | **44** |
+| **Total** | **10** | **2** | **2** | **45** |
 
-**Latest update (2026-02-19)**: OI-060 resolved — D-037 unified base URL config under `baseUrl`/`BASE_URL`, removed `AUTH_URL` from user-facing config. OI-061, OI-062, OI-063 resolved — System user protected, self-service edits enabled, admin user edit form populates correctly.
+**Latest update (2026-02-20)**: OI-064 resolved — Universal Import Hub post-implementation bugs: 6 bugs fixed (missing DB table, FK violation, data freshness scope, missing update field, silent error handling, schema fetch failure) + 2 UI regressions restored (customer color editor, aircraft type editor).
 
-**Latest additions (2026-02-18)**: Added OI-047 through OI-059. Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), authentication bootstrap (OI-058), and time indicator display (OI-059).
+**Previous update (2026-02-19)**: OI-060 resolved — D-037 unified base URL config under `baseUrl`/`BASE_URL`, removed `AUTH_URL` from user-facing config. OI-061, OI-062, OI-063 resolved — System user protected, self-service edits enabled, admin user edit form populates correctly.

@@ -80,6 +80,7 @@ export function ImportHub() {
   const [schemas, setSchemas] = useState<SerializableSchema[]>([]);
   const [state, setState] = useState<WizardState>(INITIAL_STATE);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [historyTrigger, setHistoryTrigger] = useState(0);
   const initialTypeHandled = useRef(false);
@@ -87,9 +88,12 @@ export function ImportHub() {
   // Fetch schemas on mount
   useEffect(() => {
     fetch("/api/admin/import/schemas")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`Failed to load schemas (${r.status})`);
+        return r.json();
+      })
       .then((data) => setSchemas(data.schemas || []))
-      .catch(() => {});
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load schemas"));
   }, []);
 
   // Handle ?type= query param to pre-select a schema
@@ -128,7 +132,11 @@ export function ImportHub() {
   // Reset wizard to step 1
   const resetWizard = useCallback(() => {
     setState(INITIAL_STATE);
+    setError(null);
   }, []);
+
+  // Clear error on step navigation
+  const clearError = useCallback(() => setError(null), []);
 
   // -----------------------------------------------------------------------
   // Step 1: Select Type
@@ -142,6 +150,7 @@ export function ImportHub() {
         schemaId,
         schema,
       }));
+      setError(null);
     },
     [schemas],
   );
@@ -162,6 +171,7 @@ export function ImportHub() {
     if (!state.schemaId || !state.content.trim()) return;
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/import/parse", {
         method: "POST",
@@ -173,8 +183,8 @@ export function ImportHub() {
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Parse failed");
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `Parse failed (${res.status})`);
       }
 
       const data = await res.json();
@@ -187,8 +197,8 @@ export function ImportHub() {
         mapping: data.suggestedMapping,
         previewRows: [],
       }));
-    } catch {
-      // Error shown in UI
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to parse data");
     } finally {
       setLoading(false);
     }
@@ -218,7 +228,7 @@ export function ImportHub() {
         }));
       }
     } catch {
-      // Silent
+      // Auto-map is a convenience action; silent failure is acceptable
     }
   }, [state.schemaId, state.content]);
 
@@ -226,6 +236,7 @@ export function ImportHub() {
     if (!state.schemaId || !state.content.trim()) return;
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/import/validate", {
         method: "POST",
@@ -238,6 +249,11 @@ export function ImportHub() {
         }),
       });
 
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `Validation failed (${res.status})`);
+      }
+
       const data: ValidationPreview = await res.json();
 
       setState((prev) => ({
@@ -245,8 +261,8 @@ export function ImportHub() {
         step: 4,
         validation: data,
       }));
-    } catch {
-      // Error shown in UI
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Validation request failed");
     } finally {
       setLoading(false);
     }
@@ -266,6 +282,7 @@ export function ImportHub() {
     if (!state.schemaId || !state.content.trim()) return;
 
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/admin/import/commit", {
         method: "POST",
@@ -280,6 +297,11 @@ export function ImportHub() {
         }),
       });
 
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `Import failed (${res.status})`);
+      }
+
       const data: CommitResult = await res.json();
 
       setState((prev) => ({
@@ -290,8 +312,8 @@ export function ImportHub() {
 
       // Refresh history
       setHistoryTrigger((prev) => prev + 1);
-    } catch {
-      // Error shown in UI
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import commit failed");
     } finally {
       setLoading(false);
     }
@@ -312,6 +334,20 @@ export function ImportHub() {
         onToggleHelp={toggleHelp}
         helpOpen={helpOpen}
       />
+
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center gap-3 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <i className="fa-solid fa-circle-exclamation shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={clearError}
+            className="shrink-0 text-destructive/70 hover:text-destructive"
+          >
+            <i className="fa-solid fa-xmark" />
+          </button>
+        </div>
+      )}
 
       {/* Main content area */}
       <div className="flex gap-6">

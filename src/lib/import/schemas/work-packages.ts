@@ -83,7 +83,7 @@ interface WorkPackageDbValues {
   spModified: string | null;
   spCreated: string | null;
   spVersion: string | null;
-  importLogId: number;
+  importLogId: number | null;
   importedAt: string;
 }
 
@@ -118,11 +118,7 @@ function unwrapOData(rawData: unknown): Record<string, unknown>[] {
 
 // ─── Map Source Record to DB Values ─────────────────────────────────────────
 
-function mapRecordToDb(
-  rec: Record<string, unknown>,
-  logId: number,
-  importedAt: string,
-): WorkPackageDbValues {
+function mapRecordToDb(rec: Record<string, unknown>, importedAt: string): WorkPackageDbValues {
   const aircraft = rec.Aircraft as SPWorkPackageRecord["Aircraft"] | undefined;
   const rawStatus = String(rec.Workpackage_x0020_Status ?? rec.status ?? "New");
   const status = isCanceled(rawStatus) ? "Canceled" : rawStatus;
@@ -231,7 +227,7 @@ function mapRecordToDb(
         : rec.spVersion != null
           ? String(rec.spVersion)
           : null,
-    importLogId: logId,
+    importLogId: null,
     importedAt,
   };
 }
@@ -693,7 +689,7 @@ const workPackagesSchema: ImportSchema = {
     }
 
     // 2. Map all records to DB value objects
-    const valueBatch = records.map((rec) => mapRecordToDb(rec, logId, importedAt));
+    const valueBatch = records.map((rec) => mapRecordToDb(rec, importedAt));
 
     // 3. Fetch existing records by GUID for change detection
     const allGuids = valueBatch.map((v) => v.guid);
@@ -772,6 +768,7 @@ const workPackagesSchema: ImportSchema = {
               isNotClosedOrCanceled: record.isNotClosedOrCanceled,
               documentSetId: record.documentSetId,
               aircraftSpId: record.aircraftSpId,
+              customerSpId: record.customerSpId,
               spModified: record.spModified,
               spCreated: record.spCreated,
               spVersion: record.spVersion,

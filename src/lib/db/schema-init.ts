@@ -268,7 +268,29 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
+    -- Unified Import Log (v0.2.0)
+    CREATE TABLE IF NOT EXISTS unified_import_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      imported_at TEXT NOT NULL,
+      data_type TEXT NOT NULL,
+      source TEXT NOT NULL,
+      format TEXT NOT NULL,
+      file_name TEXT,
+      imported_by INTEGER NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL,
+      records_total INTEGER NOT NULL,
+      records_inserted INTEGER NOT NULL DEFAULT 0,
+      records_updated INTEGER NOT NULL DEFAULT 0,
+      records_skipped INTEGER NOT NULL DEFAULT 0,
+      field_mapping TEXT,
+      warnings TEXT,
+      errors TEXT,
+      idempotency_key TEXT
+    );
+
     -- Indexes
+    CREATE INDEX IF NOT EXISTS idx_unified_import_log_type ON unified_import_log(data_type);
+    CREATE INDEX IF NOT EXISTS idx_unified_import_log_imported_at ON unified_import_log(imported_at);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);
@@ -395,6 +417,34 @@ export function runMigrations(): MigrationResult[] {
           updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
+      `);
+    }),
+  );
+
+  // M005: Add unified_import_log table (v0.2.0 Universal Import Hub)
+  results.push(
+    applyMigration("M005_unified_import_log", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS unified_import_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          imported_at TEXT NOT NULL,
+          data_type TEXT NOT NULL,
+          source TEXT NOT NULL,
+          format TEXT NOT NULL,
+          file_name TEXT,
+          imported_by INTEGER NOT NULL REFERENCES users(id),
+          status TEXT NOT NULL,
+          records_total INTEGER NOT NULL,
+          records_inserted INTEGER NOT NULL DEFAULT 0,
+          records_updated INTEGER NOT NULL DEFAULT 0,
+          records_skipped INTEGER NOT NULL DEFAULT 0,
+          field_mapping TEXT,
+          warnings TEXT,
+          errors TEXT,
+          idempotency_key TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_unified_import_log_type ON unified_import_log(data_type);
+        CREATE INDEX IF NOT EXISTS idx_unified_import_log_imported_at ON unified_import_log(imported_at);
       `);
     }),
   );
