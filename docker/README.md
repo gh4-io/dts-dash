@@ -37,7 +37,7 @@ The app reads **7 environment variables** total:
 |----------|---------|-------------|
 | `DATABASE_PATH` | `./data/dashboard.db` | SQLite file path. Docker: `/app/data/dashboard.db` |
 | `NODE_ENV` | Set by Next.js | `development` / `production` / `test` |
-| `AUTH_URL` | Derived from `app.baseUrl` in config | Override for reverse proxy (e.g. Cloudflare Tunnel) |
+| `BASE_URL` | *(unset — derived from Host header)* | Override public base URL (reverse proxy scenarios). Overrides `app.baseUrl` in config |
 | `SENTRY_DSN` | *(disabled)* | Sentry error tracking DSN |
 
 ### Development Only
@@ -231,11 +231,14 @@ docker exec -it dtsd-prod tsx scripts/db/seed-reference.ts
 
 The prod compose binds to `127.0.0.1:3000` only. Place Nginx, Caddy, or Cloudflare Tunnel in front for HTTPS.
 
-If the proxy rewrites the `Host` header, set one of:
-- `AUTH_URL=https://your-domain.com` in `.env.prod`
-- `app.baseUrl: "https://your-domain.com"` in `server.config.yml`
+If the proxy rewrites the `Host` header, set `app.baseUrl` in `server.config.yml`:
 
-The config value is automatically set as `AUTH_URL` at startup if the env var is not already present.
+```yaml
+app:
+  baseUrl: "https://your-domain.com"
+```
+
+Or override via env var: `BASE_URL=https://your-domain.com` in `.env.prod` (takes precedence over the config file).
 
 ---
 

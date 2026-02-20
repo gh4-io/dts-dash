@@ -34,10 +34,9 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_PATH=/app/data/dashboard.db
-      # Hostname for Auth.js callbacks — set to your public URL if behind a proxy
-      # that rewrites the Host header (e.g. Cloudflare Tunnel).
-      # Leave commented if the proxy forwards the original Host correctly.
-      # - AUTH_URL=https://dashboard.example.com
+      # Public base URL — set if behind a proxy that rewrites the Host header.
+      # Overrides app.baseUrl in server.config.yml. Leave commented for auto-detection.
+      # - BASE_URL=https://dashboard.example.com
 
     # Secrets from .env.prod — do not commit this file
     env_file:

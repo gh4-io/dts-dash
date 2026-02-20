@@ -627,15 +627,16 @@
 
 ---
 
-## OI-039 | Master Data Imports Not Shown in Import History
+## OI-039 | ~~Master Data Imports Not Shown in Import History~~ RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug / UX Gap |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P3 |
 | **Owner** | Unassigned |
 | **Created** | 2026-02-16 |
+| **Resolved** | 2026-02-19 |
 | **Context** | Customer and aircraft imports write to `master_data_import_log` table (separate from work package `import_log`). Admin import history page (`/admin/import`) only queries `import_log`, so master data imports don't appear in the UI. Users have no visibility into customer/aircraft import history via the UI. |
 | **Impact** | Moderate — users can still perform master data imports, but cannot see history/audit trail in the UI. Must query DB directly to see `master_data_import_log` records. |
 | **Workarounds** | (1) Query `master_data_import_log` table directly via `db:status` or SQL. (2) Check `data/exports/` timestamped directories for exported CSVs. |
@@ -1026,19 +1027,20 @@
 
 ---
 
-## OI-060 | baseUrl / AUTH_URL Normalization in Config Loader
+## OI-060 | ~~baseUrl / AUTH_URL Normalization~~ RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
-| **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Status** | **Resolved** |
+| **Priority** | ~~P2~~ |
+| **Owner** | Claude |
 | **Created** | 2026-02-19 |
-| **Context** | `instrumentation.ts` sets `AUTH_URL` from `server.config.yml → app.baseUrl` if `AUTH_URL` env var is not already set. Auth.js then passes the value to `new URL()` internally. If the value is malformed, a cryptic `TypeError: Invalid URL` is thrown deep in Auth.js with no actionable message. Three confirmed failure cases: (1) `192.168.0.92:3000` — no protocol, `new URL()` throws. (2) `"http://192.168.0.92:3000"` — literal quote characters included in the value (common Docker env quoting mistake), `new URL()` throws. (3) `http://192.168.0.92:3000` — valid, works. |
-| **Proposed Fix** | Add a `normalizeBaseUrl(raw: string): string` helper in `instrumentation.ts` or `loader.ts` that: (1) Strips surrounding `"` or `'` quote characters. (2) Prepends `https://` if no `://` protocol is present. (3) Validates the result with `new URL()` and logs a clear `[Config] WARNING: Invalid baseUrl "{raw}" — AUTH_URL not set` rather than letting Auth.js throw. |
-| **Files** | `src/instrumentation.ts` (line 20–24), `src/lib/config/loader.ts` (`getBaseUrl`) |
-| **Links** | OI-043 (Cloudflare Tunnel host header), [REQ_Auth.md](SPECS/REQ_Auth.md) |
+| **Resolved** | 2026-02-19 |
+| **Context** | Three confirmed failure cases with malformed base URL values: (1) no protocol, (2) literal quote characters from Docker env quoting, (3) valid URL — only this one worked. Also, `AUTH_URL` env var name was confusing (sounds security-related, is actually the public URL). |
+| **Resolution** | **D-037**: Unified under single concept `baseUrl`. `app.baseUrl` in `server.config.yml` is primary. `BASE_URL` env var is override (env beats YAML). `AUTH_URL` removed from all user-facing config/docs (still set internally for Auth.js). Normalization added: strips quotes, adds protocol, validates, logs clearly, falls back to trustHost on failure. |
+| **Files** | `src/instrumentation.ts`, `server.config.dev.yml`, `docker/.env.example`, `docker/.env.prod.example`, `docker/docker-compose.prod.yml`, `docker/README.md`, `DEPLOYMENT.md`, `docs/getting-started/configuration.mdx`, `docs/operations/deployment.mdx` |
+| **Links** | [DECISIONS.md](DECISIONS.md) D-037, OI-043 |
 
 ---
 
@@ -1101,10 +1103,10 @@
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 15 |
 | P1 | 3 | 1 | 0 | 15 |
-| P2 | 5 | 1 | 0 | 13 |
+| P2 | 4 | 1 | 0 | 14 |
 | P3 | 3 | 0 | 2 | 0 |
-| **Total** | **11** | **2** | **2** | **43** |
+| **Total** | **10** | **2** | **2** | **44** |
 
-**Latest update (2026-02-19)**: OI-061, OI-062, OI-063 resolved — System user protected (filtered from GET, 403 on PUT/DELETE/reset-password), self-service username/email editing enabled for all users on Account page, admin user edit form now populates correctly via useEffect sync.
+**Latest update (2026-02-19)**: OI-060 resolved — D-037 unified base URL config under `baseUrl`/`BASE_URL`, removed `AUTH_URL` from user-facing config. OI-061, OI-062, OI-063 resolved — System user protected, self-service edits enabled, admin user edit form populates correctly.
 
 **Latest additions (2026-02-18)**: Added OI-047 through OI-059. Flight board bugs (color reset, sticky headers, shift markers), feature requests (list view toggle, sidebar collapse, iOS PWA), UX improvements (system preference filter display, admin settings redesign, rate limiting configuration), authentication bootstrap (OI-058), and time indicator display (OI-059).

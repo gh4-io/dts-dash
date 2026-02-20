@@ -8,10 +8,10 @@ app:
   # Default: "Dashboard"
   title: "CVG Dashboard"
 
-  # Base URL for auth redirects (login/logout callbacks)
-  # Required when behind a reverse proxy that overwrites the Host header (e.g. Cloudflare Tunnel)
-  # Leave unset if your proxy forwards the original Host header correctly
-  # baseUrl: "https://example.com"
+  # Public base URL — only needed behind a reverse proxy that rewrites the Host header
+  # (e.g. Cloudflare Tunnel). Leave commented for auto-detection via trustHost.
+  # Can also be set via BASE_URL env var (env overrides this file).
+  # baseUrl: "https://dashboard.example.com"
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging:

@@ -446,3 +446,20 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Rationale:** Chips signal intentional user actions. Showing defaults as chips creates noise, confuses "active filtering" state, and makes "Clear All" semantics unclear. System defaults are the baseline — invisible until changed.
 **Links**: OI-057 (resolved), OI-059, `src/components/shared/top-menu-bar.tsx`, `src/app/(authenticated)/flight-board/page.tsx`
+
+---
+
+## D-037 | 2026-02-19 | Unified Base URL: `baseUrl` / `BASE_URL` (replaces AUTH_URL)
+
+**Context:** The app had two overlapping, confusingly-named ways to set the public base URL: `AUTH_URL` (Auth.js native env var — name suggests security/auth) and `app.baseUrl` in `server.config.yml` (bridged to `AUTH_URL` at startup). No input validation — malformed values (missing protocol, literal quotes) caused cryptic `TypeError: Invalid URL` crashes in Auth.js.
+
+**Decision:**
+1. **Single concept: `baseUrl`** — `app.baseUrl` in `server.config.yml` is the primary source; `BASE_URL` env var is the override (env beats YAML).
+2. **`AUTH_URL` removed** from all user-facing configuration, documentation, env templates, and compose files. Internally, the resolved base URL is still injected into `process.env.AUTH_URL` at runtime for Auth.js (hidden implementation detail).
+3. **Normalization** added in `instrumentation.ts`: strips surrounding quotes, prepends `https://` if no protocol, validates with `new URL()`, logs clear messages on failure (falls back to trustHost auto-detection).
+4. **Resolution order**: `BASE_URL` env → `app.baseUrl` YAML → `trustHost` auto-detection from request Host header.
+
+**Rationale:** `AUTH_URL` was misleading — it's not an auth setting, it's the app's public URL. `server.config.yml` is the canonical system config file; base URL belongs there alongside other infrastructure settings. The env var override (`BASE_URL`) provides Docker/deployment flexibility without touching the config file. Normalization prevents the most common deployment mistakes (Docker quote handling, omitted protocol).
+
+**Version impact:** MINOR (renamed env var, added normalization — backwards-compatible in behavior; old `AUTH_URL` env var no longer read)
+**Links**: OI-060 (resolved), `src/instrumentation.ts`, `server.config.dev.yml`, `docker/.env.example`, `DEPLOYMENT.md`
