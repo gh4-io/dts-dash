@@ -17,6 +17,7 @@ export default function RegisterPage() {
   const [status, setStatus] = useState<RegistrationStatus | null>(null);
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -52,7 +53,7 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const body: Record<string, string> = { email, displayName, password };
+      const body: Record<string, string> = { email, username, displayName, password };
       if (status?.requiresInviteCode && !status.isFirstUser) {
         body.inviteCode = inviteCode;
       }
@@ -139,6 +140,27 @@ export default function RegisterPage() {
                 className="w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="username" className="text-sm font-medium text-foreground">
+              Username
+            </label>
+            <div className="relative">
+              <i className="fa-solid fa-at absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="yourusername"
+                required
+                className="w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              3-20 characters, letters, numbers, and underscores only
+            </p>
           </div>
 
           <div className="space-y-2">

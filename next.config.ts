@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { readAllowedDevOrigins } from "./src/lib/db/read-hostnames";
 
 const securityHeaders = [
   {
@@ -45,7 +44,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3", "pino", "pino-pretty", "node-cron"],
   transpilePackages: ["echarts", "zrender"],
   turbopack: {},
-  allowedDevOrigins: readAllowedDevOrigins(),
+  allowedDevOrigins: ["http://localhost:3000"],
   async headers() {
     return [
       {

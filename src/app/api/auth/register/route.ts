@@ -61,15 +61,29 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, displayName, password, inviteCode } = body;
+    const { email, username, displayName, password, inviteCode } = body;
 
     // ─── Validate common fields ────────────────────────────────────────────
-    if (!email || !password) {
-      return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+    if (!email || !username || !password) {
+      return NextResponse.json(
+        { error: "Email, username, and password are required" },
+        { status: 400 },
+      );
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
+    }
+
+    // Validate username format: 3-20 characters, alphanumeric and underscores only
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+      return NextResponse.json(
+        {
+          error:
+            "Username must be 3-20 characters and contain only letters, numbers, and underscores",
+        },
+        { status: 400 },
+      );
     }
 
     const validation = validatePassword(password);
@@ -78,14 +92,21 @@ export async function POST(request: NextRequest) {
     }
 
     const emailLower = email.toLowerCase();
+    const usernameLower = username.toLowerCase();
 
     // Check email uniqueness
-    const existing = db.select().from(users).where(eq(users.email, emailLower)).get();
-    if (existing) {
+    const existingEmail = db.select().from(users).where(eq(users.email, emailLower)).get();
+    if (existingEmail) {
       return NextResponse.json(
         { error: "An account with this email already exists" },
         { status: 409 },
       );
+    }
+
+    // Check username uniqueness
+    const existingUsername = db.select().from(users).where(eq(users.username, usernameLower)).get();
+    if (existingUsername) {
+      return NextResponse.json({ error: "This username is already taken" }, { status: 409 });
     }
 
     const realCount = countRealUsers();
@@ -98,7 +119,7 @@ export async function POST(request: NextRequest) {
         .values({
           authId: crypto.randomUUID(),
           email: emailLower,
-          username: null,
+          username: usernameLower,
           displayName: displayName || "Admin",
           passwordHash,
           role: "superadmin",
@@ -108,7 +129,10 @@ export async function POST(request: NextRequest) {
         })
         .run();
 
-      log.info({ email: emailLower }, "First user registered as superadmin");
+      log.info(
+        { email: emailLower, username: usernameLower },
+        "First user registered as superadmin",
+      );
       return NextResponse.json({ success: true, role: "superadmin" });
     }
 
@@ -158,7 +182,7 @@ export async function POST(request: NextRequest) {
       .values({
         authId: crypto.randomUUID(),
         email: emailLower,
-        username: null,
+        username: usernameLower,
         displayName: displayName || emailLower.split("@")[0],
         passwordHash,
         role: "user",
@@ -178,7 +202,10 @@ export async function POST(request: NextRequest) {
       .where(eq(inviteCodes.id, codeRow.id))
       .run();
 
-    log.info({ email: emailLower, inviteCodeId: codeRow.id }, "User registered via invite code");
+    log.info(
+      { email: emailLower, username: usernameLower, inviteCodeId: codeRow.id },
+      "User registered via invite code",
+    );
     return NextResponse.json({ success: true, role: "user" });
   } catch (error) {
     log.error({ err: error }, "POST error");

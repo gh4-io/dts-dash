@@ -27,7 +27,7 @@ The app reads 7 environment variables:
 | `AUTH_SECRET` | Yes | — | JWT signing secret (32+ chars). Generate: `npm run generate-secret` |
 | `DATABASE_PATH` | No | `./data/dashboard.db` | SQLite file path |
 | `NODE_ENV` | No | Set by Next.js | `development` or `production` |
-| `AUTH_URL` | No | From `app.baseUrl` in config | Override for reverse proxy scenarios |
+| `BASE_URL` | No | *(from `app.baseUrl` in config)* | Override public base URL (reverse proxy scenarios) |
 | `SENTRY_DSN` | No | *(disabled)* | Error tracking DSN |
 | `INITIAL_ADMIN_EMAIL` | No | — | Dev only: auto-create first admin during seed |
 | `INITIAL_ADMIN_PASSWORD` | No | — | Dev only: password for auto-created admin |
@@ -44,7 +44,7 @@ cp server.config.dev.yml server.config.yml
 
 | Section | Key Settings |
 |---------|-------------|
-| `app` | `title`, `baseUrl` (for auth redirects behind reverse proxy) |
+| `app` | `title`, `baseUrl` (public URL for reverse proxy scenarios) |
 | `logging` | `level` (trace/debug/info/warn/error) |
 | `features` | `enableSeedEndpoint`, `cronEnabled` |
 | `timeline` | `startOffset`, `defaultDays`, `defaultZoom`, `defaultTimezone` |
