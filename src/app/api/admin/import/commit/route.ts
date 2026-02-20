@@ -1,18 +1,24 @@
+/**
+ * POST /api/admin/import/commit
+ *
+ * Schema-driven commit. Accepts schemaId + content + fieldMapping,
+ * calls schema.commit(), logs to unified_import_log.
+ *
+ * Backwards-compatible: if no schemaId is provided and jsonContent is present,
+ * falls back to work-packages commit (legacy behavior).
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { validateImportData, commitImportData } from "@/lib/data/import-utils";
-import { db } from "@/lib/db/client";
-import { appConfig } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
+import { ensureSchemasLoaded, getSchema } from "@/lib/import/registry";
+import { parseContent, detectFormat, checkContentSize } from "@/lib/import/parser";
+import { autoMap, applyMapping, extractSourceFields } from "@/lib/import/mapping";
+import type { FieldMapping, ImportContext } from "@/lib/import/types";
 
 const log = createChildLogger("api/admin/import/commit");
 
-/**
- * POST /api/admin/import/commit
- * UPSERT validated JSON data into work_packages table and log the import
- */
 export async function POST(request: NextRequest) {
   try {
     const session = await auth();
@@ -21,41 +27,81 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { jsonContent, source, fileName } = body as {
-      jsonContent: string;
-      source: "file" | "paste";
-      fileName?: string;
-    };
 
-    if (!jsonContent || typeof jsonContent !== "string") {
-      return NextResponse.json({ error: "jsonContent is required" }, { status: 400 });
+    // Legacy fallback
+    const schemaId = body.schemaId || (body.jsonContent ? "work-packages" : null);
+    const content = body.content || body.jsonContent;
+    const format = body.format;
+    const source = body.source || "file";
+    const fileName = body.fileName;
+    const fieldMapping: FieldMapping[] | undefined = body.fieldMapping;
+
+    if (!schemaId) {
+      return NextResponse.json({ error: "schemaId is required" }, { status: 400 });
     }
 
-    if (!source || !["file", "paste"].includes(source)) {
-      return NextResponse.json({ error: "source must be 'file' or 'paste'" }, { status: 400 });
+    if (!content || typeof content !== "string") {
+      return NextResponse.json({ error: "content is required" }, { status: 400 });
     }
 
-    // Load configurable size limit
-    const sizeRow = db.select().from(appConfig).where(eq(appConfig.key, "ingestMaxSizeMB")).get();
-    const maxSizeMB = parseInt(sizeRow?.value ?? "50", 10);
-
-    // Re-validate the JSON
-    const validation = validateImportData(jsonContent, maxSizeMB);
-    if (!validation.valid || !validation.records) {
+    if (!["file", "paste", "api"].includes(source)) {
       return NextResponse.json(
-        { error: validation.errors[0] || "No valid records found" },
+        { error: "source must be 'file', 'paste', or 'api'" },
         { status: 400 },
       );
     }
 
-    // Commit (UPSERT into work_packages by GUID)
+    await ensureSchemasLoaded();
+    const schema = getSchema(schemaId);
+    if (!schema) {
+      return NextResponse.json({ error: `Unknown schema: ${schemaId}` }, { status: 400 });
+    }
+
+    // Size check
+    const sizeError = checkContentSize(content, schema.maxSizeMB || 50);
+    if (sizeError) {
+      return NextResponse.json({ error: sizeError }, { status: 400 });
+    }
+
+    // Parse
+    const detectedFormat = format || detectFormat(content);
+    if (!detectedFormat) {
+      return NextResponse.json({ error: "Could not detect format" }, { status: 400 });
+    }
+
+    const parseResult = parseContent(content, detectedFormat);
+    let records = parseResult.records;
+
+    // PreProcess
+    if (schema.preProcess) {
+      records = schema.preProcess(records);
+    }
+
+    // Map fields
+    const mapping = fieldMapping || autoMap(extractSourceFields(records), schema.fields);
+    const mappedRecords = applyMapping(records, mapping, schema.fields);
+
+    // Build context
     const userId = getSessionUserId(session);
-    const result = await commitImportData({
-      records: validation.records,
-      source,
+    const ctx: ImportContext = {
+      userId,
+      source: source as "file" | "paste" | "api",
       fileName,
-      importedBy: userId,
-    });
+      format: detectedFormat as "json" | "csv",
+      schemaId,
+    };
+
+    // Commit
+    const result = await schema.commit(mappedRecords, ctx);
+
+    // PostCommit hook
+    if (result.success && schema.postCommit) {
+      try {
+        await schema.postCommit(result, ctx);
+      } catch (hookErr) {
+        log.error({ err: hookErr }, "postCommit hook error");
+      }
+    }
 
     return NextResponse.json(result);
   } catch (error) {
