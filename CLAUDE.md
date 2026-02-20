@@ -3,22 +3,27 @@
 > Canonical operating manual for Claude Code. Read this first, every session.
 > Detailed specs live in `.claude/` — this file links to them, never duplicates.
 >
-> **Last updated:** 2026-02-14 (Project Steward Skill)
+> **Last updated:** 2026-02-20 (Universal Import Hub — v0.2.0)
 >
-> **What changed (UI Reconciliation Pass):**
-> - Created `REQ_Dashboard_UI.md` — dashboard layout from CVG Line Maintenance reference screenshots
-> - Created `REQ_Themes.md` — expanded to all 11 Fumadocs presets (D-022, supersedes D-018)
-> - Created `UI_REFERENCE_MAP.md` — maps 12 reference images to layout/style decisions
-> - Created `UI_MENUS.md` — dropdown, sidebar, admin navigation patterns
-> - Updated `REQ_FlightBoard.md` — registration labels on bars, day separators, refresh button
-> - Updated `REQ_Filters.md` — instant filtering confirmed, active filter pills, refresh action
-> - Updated `UI_FILTER_PATTERNS.md` — active pill pattern, Column/Operator/Expression reference
+> **What changed (v0.2.0 — Universal Import Hub):**
+> - **Major Feature:** Single schema-driven Data Hub replaces 3 siloed import pipelines
+>   - 6-step wizard (Select → Load → Map → Validate → Confirm → Results)
+>   - 9 pluggable schemas (work-packages, customers, aircraft, aircraft-type-mappings, aircraft-models, manufacturers, engine-types, users, app-config)
+>   - Visual field mapping with 3-pass auto-mapping (exact alias → case-insensitive → fuzzy)
+>   - Unified import history with type filtering + pagination
+>   - Export + template downloads (JSON/CSV)
+>   - Contextual help panel (responsive: desktop sidebar ↔ mobile bottom sheet)
+> - 4 new API routes (schemas, parse, export, template) + 4 refactored (validate, commit, history, reset)
+> - 13 new UI components + import-stepper, help-panel, data-preview-table
+> - Admin nav consolidation: 9 → 7 items ("Data Hub" replaces Customers + Aircraft Types + Data Import)
+> - Old customer/aircraft-types pages redirect to Data Hub (for backwards compatibility)
+> - MINOR version bump: v0.1.0 → v0.2.0 (all changes backwards-compatible)
+> - See CHANGELOG.md and `.claude/SPECS/REQ_DataImport.md` for full details
+>
+> **Previous updates (UI Reconciliation Pass):**
+> - Created `REQ_Dashboard_UI.md`, `REQ_Themes.md`, `UI_REFERENCE_MAP.md`, `UI_MENUS.md`
+> - Updated `REQ_FlightBoard.md`, `REQ_Filters.md`, `UI_FILTER_PATTERNS.md`
 > - Decisions: D-022 (11 themes), D-023 (dashboard layout), D-024 (instant vs apply filtering)
->
-> **What changed (PASS 2 re-plan):**
-> - Consolidated milestones from M0–M9 → M0–M8 with acceptance criteria
-> - Created `.claude/PLAN.md` as authoritative implementation plan
-> - Extracted standalone specs: `REQ_AircraftTypes.md`, `REQ_DataImport.md`
 
 ## Project Intent
 
