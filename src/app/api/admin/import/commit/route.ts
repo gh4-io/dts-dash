@@ -1,0 +1,65 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { validateImportData, commitImportData } from "@/lib/data/import-utils";
+import { db } from "@/lib/db/client";
+import { appConfig } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
+
+const log = createChildLogger("api/admin/import/commit");
+
+/**
+ * POST /api/admin/import/commit
+ * UPSERT validated JSON data into work_packages table and log the import
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session || !["admin", "superadmin"].includes(session.user.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { jsonContent, source, fileName } = body as {
+      jsonContent: string;
+      source: "file" | "paste";
+      fileName?: string;
+    };
+
+    if (!jsonContent || typeof jsonContent !== "string") {
+      return NextResponse.json({ error: "jsonContent is required" }, { status: 400 });
+    }
+
+    if (!source || !["file", "paste"].includes(source)) {
+      return NextResponse.json({ error: "source must be 'file' or 'paste'" }, { status: 400 });
+    }
+
+    // Load configurable size limit
+    const sizeRow = db.select().from(appConfig).where(eq(appConfig.key, "ingestMaxSizeMB")).get();
+    const maxSizeMB = parseInt(sizeRow?.value ?? "50", 10);
+
+    // Re-validate the JSON
+    const validation = validateImportData(jsonContent, maxSizeMB);
+    if (!validation.valid || !validation.records) {
+      return NextResponse.json(
+        { error: validation.errors[0] || "No valid records found" },
+        { status: 400 },
+      );
+    }
+
+    // Commit (UPSERT into work_packages by GUID)
+    const userId = getSessionUserId(session);
+    const result = await commitImportData({
+      records: validation.records,
+      source,
+      fileName,
+      importedBy: userId,
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    log.error({ err: error }, "POST error");
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}

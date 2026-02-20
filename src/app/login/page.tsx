@@ -1,0 +1,152 @@
+"use client";
+
+import { signIn } from "next-auth/react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useAppTitle } from "@/components/layout/app-config-provider";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const appTitle = useAppTitle();
+  const [login, setLogin] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/register")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.registrationOpen || data.isFirstUser) {
+          setRegistrationOpen(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    const result = await signIn("credentials", {
+      login,
+      password,
+      redirect: false,
+    });
+
+    setLoading(false);
+
+    if (result?.error) {
+      if (result.error.includes("Too many login attempts")) {
+        setError("Too many login attempts. Try again in 15 minutes.");
+      } else {
+        setError("Invalid username/email or password");
+      }
+    } else {
+      // Check if user needs forced password reset
+      try {
+        const forceResetRes = await fetch("/api/auth/check-force-reset");
+        if (forceResetRes.ok) {
+          const data = await forceResetRes.json();
+          if (data.forcePasswordChange) {
+            router.push("/account/change-password?forced=true");
+            router.refresh();
+            return;
+          }
+        }
+      } catch {
+        // Silently fail - middleware will catch it anyway
+      }
+
+      // Normal redirect to dashboard
+      router.push("/dashboard");
+      router.refresh();
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center">
+          <i className="fa-solid fa-plane-circle-check text-4xl text-primary mb-4" />
+          <h1 className="text-2xl font-bold text-foreground">{appTitle}</h1>
+          <p className="text-sm text-muted-foreground">Line Maintenance Operations</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="login" className="text-sm font-medium text-foreground">
+              Username or Email
+            </label>
+            <div className="relative">
+              <i className="fa-solid fa-user absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
+              <input
+                id="login"
+                type="text"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
+                placeholder="johnd or johnd@dash.com"
+                required
+                className="w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="password" className="text-sm font-medium text-foreground">
+              Password
+            </label>
+            <div className="relative">
+              <i className="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
+                className="w-full rounded-md border border-input bg-background px-3 py-2 pl-9 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <i className="fa-solid fa-circle-exclamation mr-2" />
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {loading ? (
+              <span>
+                <i className="fa-solid fa-spinner fa-spin mr-2" />
+                Signing in...
+              </span>
+            ) : (
+              "Sign in"
+            )}
+          </button>
+        </form>
+
+        {registrationOpen && (
+          <p className="text-center text-sm text-muted-foreground">
+            Don&apos;t have an account?{" "}
+            <Link href="/register" className="text-primary hover:underline font-medium">
+              Register
+            </Link>
+          </p>
+        )}
+
+        <p className="text-center text-xs text-muted-foreground">Line Maintenance Operations</p>
+      </div>
+    </div>
+  );
+}

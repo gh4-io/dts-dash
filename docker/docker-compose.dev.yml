@@ -1,0 +1,52 @@
+# ============================================================
+# DTSD Dashboard — Development Docker Compose
+# ============================================================
+# Hot-reloading dev server with source mounted into the container.
+#
+# Usage:
+#   docker compose -f docker/docker-compose.dev.yml up
+#
+# Prerequisites:
+#   1. Copy .env.example → .env.local and fill in AUTH_SECRET
+#   2. Copy server.config.dev.yml → server.config.yml
+#
+# The app will be available at http://localhost:3000
+# ============================================================
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: dev
+    container_name: dtsd-dev
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    environment:
+      - NODE_ENV=development
+      - DATABASE_PATH=/app/data/dashboard.db
+
+    # Secrets from .env.local — do not commit real values
+    env_file:
+      - ../.env.local
+
+    volumes:
+      # Source code — enables hot reload (Next.js Turbopack)
+      - ../src:/app/src:delegated
+      - ../public:/app/public:delegated
+
+      # Config files — edit and restart to pick up changes
+      - ../server.config.yml:/app/server.config.yml:ro
+
+      # Persistent data — database + input files survive restarts
+      - ../data:/app/data
+
+      # node_modules stay inside the container (do not bind-mount)
+      - /app/node_modules
+
+    # Keep stdin open for interactive debugging
+    stdin_open: true
+    tty: true
