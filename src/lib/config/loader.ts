@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import yaml from "js-yaml";
@@ -54,6 +55,12 @@ interface ServerConfig {
   app?: {
     title?: string;
     baseUrl?: string;
+  };
+  auth?: {
+    secret?: string;
+  };
+  database?: {
+    path?: string;
   };
   logging?: {
     level?: string;
@@ -148,6 +155,8 @@ interface ServerConfigState {
 }
 
 const STATE_KEY = "__serverConfig" as const;
+const CONFIG_PATH_KEY = "__serverConfigPath" as const;
+const CONFIG_PATH_RESOLVED = "__serverConfigPathResolved" as const;
 
 function getState(): ServerConfigState {
   const g = globalThis as Record<string, unknown>;
@@ -167,25 +176,80 @@ function getState(): ServerConfigState {
   return g[STATE_KEY] as ServerConfigState;
 }
 
+// ─── Config Path Resolution ─────────────────────────────────────────────────
+// Priority: --config CLI arg > SERVER_CONFIG_PATH env > auto-detect (.yml then .yaml)
+
+function resolveConfigPath(): string | null {
+  const g = globalThis as Record<string, unknown>;
+
+  // Already resolved and cached
+  if (g[CONFIG_PATH_RESOLVED]) {
+    return (g[CONFIG_PATH_KEY] as string) ?? null;
+  }
+
+  let resolved: string | null = null;
+
+  // 1. --config CLI arg
+  const idx = process.argv.indexOf("--config");
+  if (idx !== -1 && idx + 1 < process.argv.length) {
+    resolved = path.resolve(process.argv[idx + 1]);
+  }
+
+  // 2. SERVER_CONFIG_PATH env var
+  if (!resolved && process.env.SERVER_CONFIG_PATH) {
+    resolved = path.resolve(process.env.SERVER_CONFIG_PATH);
+  }
+
+  // 3. Auto-detect .yml then .yaml in cwd
+  if (!resolved) {
+    const ymlPath = path.join(process.cwd(), "server.config.yml");
+    const yamlPath = path.join(process.cwd(), "server.config.yaml");
+    const ymlExists = fs.existsSync(ymlPath);
+    const yamlExists = fs.existsSync(yamlPath);
+
+    if (ymlExists && yamlExists) {
+      console.warn(
+        "[Config Loader] Both server.config.yml and server.config.yaml exist — using .yml",
+      );
+    }
+
+    if (ymlExists) {
+      resolved = ymlPath;
+    } else if (yamlExists) {
+      resolved = yamlPath;
+    }
+  }
+
+  g[CONFIG_PATH_KEY] = resolved;
+  g[CONFIG_PATH_RESOLVED] = true;
+  return resolved;
+}
+
+/** Get the writable config path (resolved path, or default server.config.yml in cwd) */
+function getWritablePath(): string {
+  return resolveConfigPath() ?? path.join(process.cwd(), "server.config.yml");
+}
+
 // ─── YAML Reader ─────────────────────────────────────────────────────────────
 
 function readYamlFile(): ServerConfig {
-  const configPath = path.join(process.cwd(), "server.config.yml");
+  const configPath = resolveConfigPath();
+  if (!configPath) return {};
   try {
     if (!fs.existsSync(configPath)) return {};
     const fileContents = fs.readFileSync(configPath, "utf8");
     return (yaml.load(fileContents) as ServerConfig) || {};
   } catch (error) {
-    console.warn("[Config Loader] Failed to load server.config.yml:", error);
+    console.warn(`[Config Loader] Failed to load ${path.basename(configPath)}:`, error);
     return {};
   }
 }
 
 // ─── YAML Writer ─────────────────────────────────────────────────────────────
 
-/** Read-merge-write a section of server.config.yml */
+/** Read-merge-write a section of the config file */
 function writeYamlSection(mutator: (config: ServerConfig) => void): void {
-  const configPath = path.join(process.cwd(), "server.config.yml");
+  const configPath = getWritablePath();
   try {
     let config: ServerConfig = {};
     if (fs.existsSync(configPath)) {
@@ -196,7 +260,7 @@ function writeYamlSection(mutator: (config: ServerConfig) => void): void {
     const yamlStr = yaml.dump(config, { indent: 2, lineWidth: 80, noRefs: true });
     fs.writeFileSync(configPath, yamlStr, "utf8");
   } catch (error) {
-    console.error("[Config Loader] Failed to write server.config.yml:", error);
+    console.error(`[Config Loader] Failed to write ${path.basename(configPath)}:`, error);
     throw error;
   }
 }
@@ -268,7 +332,10 @@ export function loadServerConfig(force = false): void {
   };
 
   s.configLoaded = true;
-  console.log("[Config Loader] Configuration loaded from server.config.yml");
+  const loadedFrom = resolveConfigPath();
+  console.log(
+    `[Config Loader] Configuration loaded from ${loadedFrom ? path.basename(loadedFrom) : "defaults (no config file found)"}`,
+  );
 }
 
 /** Site title for browser tab, sidebar, login page */
@@ -403,6 +470,64 @@ export function getPasswordRequirementsSource(): {
 
   const hasYaml = Object.values(details).some((s) => s === "yaml");
   return { source: hasYaml ? "yaml" : "default", details };
+}
+
+// ─── Config Path + Secret Resolution ────────────────────────────────────────
+// These are called once at startup in instrumentation.ts before other modules load.
+// They read YAML directly (not from in-memory state) because they run before loadServerConfig()
+// populates the cached state.
+
+/** Get the resolved config file path (or null if no file found) */
+export function getConfigPath(): string | null {
+  return resolveConfigPath();
+}
+
+/** Resolve AUTH_SECRET: YAML auth.secret > AUTH_SECRET env > null */
+export function getAuthSecret(): string | null {
+  const config = readYamlFile();
+  return config.auth?.secret ?? process.env.AUTH_SECRET ?? null;
+}
+
+/**
+ * Ensure AUTH_SECRET is available. Resolution order:
+ * 1. YAML auth.secret (primary)
+ * 2. AUTH_SECRET env var (fallback)
+ * 3. Auto-generate, persist to YAML, and return
+ *
+ * Returns the resolved secret and sets process.env.AUTH_SECRET.
+ */
+export function ensureAuthSecret(): string {
+  const config = readYamlFile();
+  let secret = config.auth?.secret ?? process.env.AUTH_SECRET ?? null;
+  let source: string;
+
+  if (secret && config.auth?.secret) {
+    source = "server config (YAML)";
+  } else if (secret) {
+    source = "AUTH_SECRET env";
+  } else {
+    // Auto-generate and persist
+    secret = crypto.randomBytes(48).toString("base64url");
+    writeYamlSection((cfg) => {
+      if (!cfg.auth) cfg.auth = {};
+      cfg.auth.secret = secret!;
+    });
+    source = "auto-generated (saved to config)";
+  }
+
+  process.env.AUTH_SECRET = secret;
+  console.log(`[Config Loader] AUTH_SECRET resolved from ${source}`);
+  return secret;
+}
+
+/** Resolve DATABASE_PATH: YAML database.path > DATABASE_PATH env > default */
+export function getDatabasePath(): string {
+  const config = readYamlFile();
+  return (
+    config.database?.path ??
+    process.env.DATABASE_PATH ??
+    path.join(process.cwd(), "data", "dashboard.db")
+  );
 }
 
 // ─── Cron Job Overrides ────────────────────────────────────────────────────

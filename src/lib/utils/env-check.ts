@@ -21,27 +21,34 @@ export function validateAuthSecret(): void {
 
   if (!secret) {
     if (isProd) {
-      throw new Error(
-        "AUTH_SECRET is not set. Generate one with: npm run generate-secret"
+      log.fatal(
+        "AUTH_SECRET is not set. Set auth.secret in server.config.yml or AUTH_SECRET env var. " +
+          "Generate with: npm run generate-secret",
       );
+      process.exit(1);
     }
     log.warn(
-      "AUTH_SECRET is not set. This is OK for development but must be set in production."
+      "AUTH_SECRET is not set. Set auth.secret in server.config.yml or AUTH_SECRET env var. " +
+        "This is OK for development but must be set in production.",
     );
     return;
   }
 
   if (isProd) {
     if (secret.length < MIN_SECRET_LENGTH) {
-      throw new Error(
-        `AUTH_SECRET must be at least ${MIN_SECRET_LENGTH} characters. Current length: ${secret.length}. Generate a new one with: npm run generate-secret`
+      log.fatal(
+        `AUTH_SECRET must be at least ${MIN_SECRET_LENGTH} characters (current: ${secret.length}). ` +
+          "Generate with: npm run generate-secret",
       );
+      process.exit(1);
     }
 
     if (DEV_DEFAULTS.some((d) => secret.toLowerCase().includes(d))) {
-      throw new Error(
-        "AUTH_SECRET contains a development placeholder. Generate a production secret with: npm run generate-secret"
+      log.fatal(
+        "AUTH_SECRET contains a development placeholder. " +
+          "Generate a production secret with: npm run generate-secret",
       );
+      process.exit(1);
     }
   }
 }

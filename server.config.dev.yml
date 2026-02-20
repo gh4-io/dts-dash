@@ -10,8 +10,23 @@ app:
 
   # Public base URL — only needed behind a reverse proxy that rewrites the Host header
   # (e.g. Cloudflare Tunnel). Leave commented for auto-detection via trustHost.
-  # Can also be set via BASE_URL env var (env overrides this file).
+  # YAML takes priority over BASE_URL env var.
   # baseUrl: "https://dashboard.example.com"
+
+# ─── Authentication ──────────────────────────────────────────────────────────
+# auth:
+#   # Auth.js JWT signing secret. Must be 32+ characters in production.
+#   # If not set here or via AUTH_SECRET env var, one is auto-generated on first run.
+#   # YAML takes priority over AUTH_SECRET env var.
+#   # Generate with: npm run generate-secret
+#   secret: "your-secret-here"
+
+# ─── Database ────────────────────────────────────────────────────────────────
+# database:
+#   # SQLite database file path (absolute or relative to project root).
+#   # YAML takes priority over DATABASE_PATH env var.
+#   # Default: ./data/dashboard.db
+#   path: "./data/dashboard.db"
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging:

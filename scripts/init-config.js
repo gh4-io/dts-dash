@@ -11,10 +11,15 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const devConfigPath = path.join(root, "server.config.dev.yml");
 const prodConfigPath = path.join(root, "server.config.yml");
+const prodConfigYamlPath = path.join(root, "server.config.yaml");
 
-// Check if server.config.yml already exists
+// Check if server.config.yml or .yaml already exists
 if (fs.existsSync(prodConfigPath)) {
   console.log("✓ server.config.yml already exists");
+  process.exit(0);
+}
+if (fs.existsSync(prodConfigYamlPath)) {
+  console.log("✓ server.config.yaml already exists");
   process.exit(0);
 }
 
