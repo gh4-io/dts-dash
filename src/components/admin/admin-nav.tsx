@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { label: "Settings", href: "/admin/settings", icon: "fa-solid fa-cogs" },
   { label: "Server", href: "/admin/server", icon: "fa-solid fa-server" },
   { label: "Cron Jobs", href: "/admin/cron", icon: "fa-solid fa-clock-rotate-left" },
+  { label: "Capacity", href: "/admin/capacity", icon: "fa-solid fa-gauge-high" },
   { label: "Analytics", href: "/admin/analytics", icon: "fa-solid fa-chart-bar", badge: "M8" },
   { label: "Audit Log", href: "/admin/audit", icon: "fa-solid fa-clipboard-list", badge: "vNext" },
 ];

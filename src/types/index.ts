@@ -178,6 +178,153 @@ export interface HourlySnapshot {
   onGroundCount: number;
 }
 
+// ─── Capacity Modeling V2 (v0.3.0) ─────────────────────────────────────────
+
+export interface CapacityShift {
+  id: number;
+  code: string; // DAY, SWING, NIGHT
+  name: string;
+  startHour: number;
+  endHour: number;
+  paidHours: number;
+  minHeadcount: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface CapacityAssumptions {
+  id: number;
+  station: string;
+  paidToAvailable: number;
+  availableToProductive: number;
+  defaultMhNoWp: number;
+  nightProductivityFactor: number;
+  demandCurve: "EVEN" | "WEIGHTED";
+  arrivalWeight: number;
+  departureWeight: number;
+  allocationMode: "DISTRIBUTE";
+  isActive: boolean;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+}
+
+export interface HeadcountPlan {
+  id: number;
+  station: string;
+  shiftId: number;
+  headcount: number;
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo: string | null;
+  dayOfWeek: number | null; // 0=Sun..6=Sat
+  label: string | null;
+  notes: string | null;
+}
+
+export interface HeadcountException {
+  id: number;
+  station: string;
+  shiftId: number;
+  exceptionDate: string; // YYYY-MM-DD
+  headcountDelta: number;
+  reason: string | null;
+}
+
+/** Slot: a (date, shift) pair for demand/capacity computation */
+export interface ShiftSlot {
+  date: string; // YYYY-MM-DD
+  shiftCode: string;
+  shiftId: number;
+}
+
+/** Per-shift capacity breakdown for a single date+shift */
+export interface ShiftCapacityV2 {
+  shiftCode: string;
+  shiftName: string;
+  effectiveHeadcount: number;
+  paidMH: number;
+  availableMH: number;
+  productiveMH: number;
+  hasExceptions: boolean;
+  belowMinHeadcount: boolean;
+}
+
+/** Daily capacity with per-shift breakdown */
+export interface DailyCapacityV2 {
+  date: string;
+  totalProductiveMH: number;
+  totalPaidMH: number;
+  byShift: ShiftCapacityV2[];
+  hasExceptions: boolean;
+}
+
+/** Per-shift demand breakdown with WP attribution */
+export interface ShiftDemandV2 {
+  shiftCode: string;
+  demandMH: number;
+  wpContributions: Array<{
+    wpId: number;
+    aircraftReg: string;
+    customer: string;
+    allocatedMH: number;
+    mhSource: string;
+  }>;
+}
+
+/** Daily demand V2 with per-shift and per-customer breakdown */
+export interface DailyDemandV2 {
+  date: string;
+  totalDemandMH: number;
+  aircraftCount: number;
+  byCustomer: Record<string, number>;
+  byShift: ShiftDemandV2[];
+}
+
+/** Per-shift utilization for a single date+shift */
+export interface ShiftUtilizationV2 {
+  shiftCode: string;
+  utilization: number | null; // null when productiveMH = 0
+  gapMH: number;
+  demandMH: number;
+  productiveMH: number;
+  noCoverage: boolean;
+}
+
+/** Daily utilization V2 with per-shift breakdown */
+export interface DailyUtilizationV2 {
+  date: string;
+  utilizationPercent: number | null;
+  totalDemandMH: number;
+  totalProductiveMH: number;
+  gapMH: number;
+  overtimeFlag: boolean;
+  criticalFlag: boolean;
+  noCoverageDays: number; // count of shifts with 0 productive MH
+  byShift: ShiftUtilizationV2[];
+}
+
+/** Summary statistics for the capacity overview response */
+export interface CapacitySummary {
+  avgUtilization: number | null;
+  peakUtilization: number | null;
+  totalDemandMH: number;
+  totalCapacityMH: number;
+  criticalDays: number;
+  overtimeDays: number;
+  worstDeficit: { date: string; shift: string; gapMH: number } | null;
+  noCoverageDays: number;
+}
+
+/** Full response for GET /api/capacity/overview */
+export interface CapacityOverviewResponse {
+  demand: DailyDemandV2[];
+  capacity: DailyCapacityV2[];
+  utilization: DailyUtilizationV2[];
+  summary: CapacitySummary;
+  warnings: string[];
+  shifts: CapacityShift[];
+  assumptions: CapacityAssumptions;
+}
+
 // ─── Pagination (D-017) ────────────────────────────────────────────────────
 
 export interface PaginationParams {

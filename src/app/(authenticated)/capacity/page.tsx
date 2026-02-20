@@ -1,35 +1,72 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useState, useCallback } from "react";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
-import { ConfigPanel } from "@/components/capacity/config-panel";
-import { UtilizationChart } from "@/components/capacity/utilization-chart";
+import { CapacityKpiStrip } from "@/components/capacity/capacity-kpi-strip";
+import { CapacityHeatmap } from "@/components/capacity/capacity-heatmap";
+import { CapacitySummaryChart } from "@/components/capacity/capacity-summary-chart";
+import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
-import { useCapacity } from "@/lib/hooks/use-capacity";
+import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
+import { Button } from "@/components/ui/button";
 
 function CapacityPageInner() {
   const {
     demand,
     capacity,
     utilization,
-    config,
+    summary,
+    warnings,
+    shifts,
+    assumptions,
     isLoading,
-    isConfigLoading,
     error,
-    updateConfig,
     refetch,
-  } = useCapacity();
+  } = useCapacityV2();
 
-  const summary = useMemo(() => {
-    if (utilization.length === 0) return null;
-    const avgUtil = utilization.reduce((s, u) => s + u.utilizationPercent, 0) / utilization.length;
-    const criticalDays = utilization.filter((u) => u.criticalFlag).length;
-    const overtimeDays = utilization.filter((u) => u.overtimeFlag && !u.criticalFlag).length;
-    const totalDemand = demand.reduce((s, d) => s + d.totalDemandMH, 0);
-    const totalCapacity = capacity.reduce((s, c) => s + c.realCapacityMH, 0);
-    return { avgUtil, criticalDays, overtimeDays, totalDemand, totalCapacity };
-  }, [demand, capacity, utilization]);
+  // Drilldown drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerDate, setDrawerDate] = useState<string | null>(null);
+  const [drawerShift, setDrawerShift] = useState<string | null>(null);
+
+  const handleCellClick = useCallback((date: string, shiftCode: string | null) => {
+    setDrawerDate(date);
+    setDrawerShift(shiftCode);
+    setDrawerOpen(true);
+  }, []);
+
+  const handleDrawerClose = useCallback(() => {
+    setDrawerOpen(false);
+  }, []);
+
+  // Build legacy-compatible data for the CapacityTable (backwards compat)
+  const legacyDemand = demand.map((d) => ({
+    date: d.date,
+    totalDemandMH: d.totalDemandMH,
+    aircraftCount: d.aircraftCount,
+    byCustomer: d.byCustomer,
+  }));
+
+  const legacyCapacity = capacity.map((c) => ({
+    date: c.date,
+    theoreticalCapacityMH: c.totalPaidMH,
+    realCapacityMH: c.totalProductiveMH,
+    byShift: c.byShift.map((s) => ({
+      shift: s.shiftName,
+      headcount: s.effectiveHeadcount,
+      theoreticalMH: s.paidMH,
+      realMH: s.productiveMH,
+    })),
+  }));
+
+  const legacyUtilization = utilization.map((u) => ({
+    date: u.date,
+    utilizationPercent: u.utilizationPercent ?? 0,
+    surplusDeficitMH: u.gapMH,
+    overtimeFlag: u.overtimeFlag,
+    criticalFlag: u.criticalFlag,
+  }));
 
   if (error) {
     return (
@@ -38,6 +75,10 @@ function CapacityPageInner() {
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
           <p className="text-sm text-destructive">{error}</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={refetch}>
+            <i className="fa-solid fa-rotate mr-1.5" />
+            Retry
+          </Button>
         </div>
       </div>
     );
@@ -45,84 +86,82 @@ function CapacityPageInner() {
 
   return (
     <div className="space-y-3">
-      <TopMenuBar title="Capacity Modeling" icon="fa-solid fa-gauge-high" />
+      <TopMenuBar
+        title="Capacity Modeling"
+        icon="fa-solid fa-gauge-high"
+        actions={
+          <Button variant="outline" size="sm" onClick={refetch} disabled={isLoading}>
+            <i className={`fa-solid fa-rotate mr-1.5 ${isLoading ? "fa-spin" : ""}`} />
+            Refresh
+          </Button>
+        }
+      />
 
-      {isLoading || isConfigLoading ? (
+      {isLoading ? (
         <LoadingSkeleton variant="page" />
       ) : (
         <>
-          {/* Summary KPI pills */}
-          {summary && (
-            <div className="flex flex-wrap gap-2">
-              <SummaryPill
-                icon="fa-chart-line"
-                label="Avg Utilization"
-                value={`${summary.avgUtil.toFixed(1)}%`}
-                color={
-                  summary.avgUtil > 120
-                    ? "text-red-500"
-                    : summary.avgUtil > 100
-                      ? "text-amber-500"
-                      : summary.avgUtil > 80
-                        ? "text-blue-500"
-                        : "text-green-500"
-                }
-              />
-              <SummaryPill
-                icon="fa-calendar-days"
-                label="Days"
-                value={String(utilization.length)}
-              />
-              <SummaryPill
-                icon="fa-hammer"
-                label="Total Demand"
-                value={`${summary.totalDemand.toFixed(0)} MH`}
-              />
-              <SummaryPill
-                icon="fa-people-group"
-                label="Total Capacity"
-                value={`${summary.totalCapacity.toFixed(0)} MH`}
-              />
-              {summary.criticalDays > 0 && (
-                <SummaryPill
-                  icon="fa-triangle-exclamation"
-                  label="Critical Days"
-                  value={String(summary.criticalDays)}
-                  color="text-red-500"
-                />
-              )}
-              {summary.overtimeDays > 0 && (
-                <SummaryPill
-                  icon="fa-clock"
-                  label="Overtime Days"
-                  value={String(summary.overtimeDays)}
-                  color="text-yellow-500"
-                />
-              )}
+          {/* Warnings banner */}
+          {warnings.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex items-start gap-2">
+                <i className="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-amber-400">
+                    Staffing Warnings ({warnings.length})
+                  </p>
+                  <ul className="text-xs text-muted-foreground space-y-0.5">
+                    {warnings.slice(0, 5).map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                    {warnings.length > 5 && (
+                      <li className="text-amber-400">...and {warnings.length - 5} more</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Config Panel */}
-          {config && (
-            <ConfigPanel
-              key={`${config.defaultMH}:${config.wpMHMode}:${JSON.stringify(config.shifts)}`}
-              config={config}
-              onConfigChange={updateConfig}
-              onRefetch={refetch}
-            />
-          )}
+          {/* KPI Strip */}
+          {summary && <CapacityKpiStrip summary={summary} dayCount={utilization.length} />}
 
-          {/* Utilization Chart */}
-          <div className="rounded-lg border border-border bg-card p-3">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-              <i className="fa-solid fa-chart-bar" />
-              Daily Utilization
-            </h3>
-            <UtilizationChart demand={demand} capacity={capacity} utilization={utilization} />
-          </div>
+          {/* Heatmap */}
+          <CapacityHeatmap
+            capacity={capacity}
+            demand={demand}
+            utilization={utilization}
+            shifts={shifts}
+            onCellClick={handleCellClick}
+          />
 
-          {/* Detail Table */}
-          <CapacityTable demand={demand} capacity={capacity} utilization={utilization} />
+          {/* Chart */}
+          <CapacitySummaryChart
+            capacity={capacity}
+            demand={demand}
+            utilization={utilization}
+            shifts={shifts}
+          />
+
+          {/* Detail Table (using legacy-compatible wrapper) */}
+          <CapacityTable
+            demand={legacyDemand}
+            capacity={legacyCapacity}
+            utilization={legacyUtilization}
+          />
+
+          {/* Drilldown drawer */}
+          <ShiftDrilldownDrawer
+            open={drawerOpen}
+            onClose={handleDrawerClose}
+            date={drawerDate}
+            shiftCode={drawerShift}
+            capacity={capacity}
+            demand={demand}
+            utilization={utilization}
+            shifts={shifts}
+            assumptions={assumptions}
+          />
         </>
       )}
     </div>
@@ -134,25 +173,5 @@ export default function CapacityPage() {
     <Suspense fallback={null}>
       <CapacityPageInner />
     </Suspense>
-  );
-}
-
-function SummaryPill({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-xs">
-      <i className={`fa-solid ${icon} text-[10px] text-muted-foreground`} />
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-semibold tabular-nums ${color ?? ""}`}>{value}</span>
-    </div>
   );
 }

@@ -288,7 +288,71 @@ export function createTables() {
       idempotency_key TEXT
     );
 
+    -- Capacity Modeling (v0.3.0)
+    CREATE TABLE IF NOT EXISTS capacity_shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      start_hour INTEGER NOT NULL,
+      end_hour INTEGER NOT NULL,
+      paid_hours REAL NOT NULL,
+      min_headcount INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS capacity_assumptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      station TEXT NOT NULL DEFAULT 'CVG',
+      paid_to_available REAL NOT NULL DEFAULT 0.89,
+      available_to_productive REAL NOT NULL DEFAULT 0.73,
+      default_mh_no_wp REAL NOT NULL DEFAULT 3.0,
+      night_productivity_factor REAL NOT NULL DEFAULT 0.85,
+      demand_curve TEXT NOT NULL DEFAULT 'EVEN',
+      arrival_weight REAL NOT NULL DEFAULT 0.0,
+      departure_weight REAL NOT NULL DEFAULT 0.0,
+      allocation_mode TEXT NOT NULL DEFAULT 'DISTRIBUTE',
+      is_active INTEGER NOT NULL DEFAULT 1,
+      effective_from TEXT,
+      effective_to TEXT,
+      updated_at TEXT NOT NULL,
+      updated_by INTEGER REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS headcount_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      station TEXT NOT NULL DEFAULT 'CVG',
+      shift_id INTEGER NOT NULL REFERENCES capacity_shifts(id),
+      headcount INTEGER NOT NULL,
+      effective_from TEXT NOT NULL,
+      effective_to TEXT,
+      day_of_week INTEGER,
+      label TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS headcount_exceptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      station TEXT NOT NULL DEFAULT 'CVG',
+      shift_id INTEGER NOT NULL REFERENCES capacity_shifts(id),
+      exception_date TEXT NOT NULL,
+      headcount_delta INTEGER NOT NULL,
+      reason TEXT,
+      created_at TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id),
+      UNIQUE(shift_id, exception_date)
+    );
+
     -- Indexes
+    CREATE INDEX IF NOT EXISTS idx_hcp_shift ON headcount_plans(shift_id);
+    CREATE INDEX IF NOT EXISTS idx_hcp_effective ON headcount_plans(effective_from, effective_to);
+    CREATE INDEX IF NOT EXISTS idx_hce_shift_date ON headcount_exceptions(shift_id, exception_date);
     CREATE INDEX IF NOT EXISTS idx_unified_import_log_type ON unified_import_log(data_type);
     CREATE INDEX IF NOT EXISTS idx_unified_import_log_imported_at ON unified_import_log(imported_at);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
@@ -446,6 +510,134 @@ export function runMigrations(): MigrationResult[] {
         CREATE INDEX IF NOT EXISTS idx_unified_import_log_type ON unified_import_log(data_type);
         CREATE INDEX IF NOT EXISTS idx_unified_import_log_imported_at ON unified_import_log(imported_at);
       `);
+    }),
+  );
+
+  // M006: Add capacity modeling tables (v0.3.0)
+  results.push(
+    applyMigration("M006_capacity_modeling", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS capacity_shifts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          start_hour INTEGER NOT NULL,
+          end_hour INTEGER NOT NULL,
+          paid_hours REAL NOT NULL,
+          min_headcount INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS capacity_assumptions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          station TEXT NOT NULL DEFAULT 'CVG',
+          paid_to_available REAL NOT NULL DEFAULT 0.89,
+          available_to_productive REAL NOT NULL DEFAULT 0.73,
+          default_mh_no_wp REAL NOT NULL DEFAULT 3.0,
+          night_productivity_factor REAL NOT NULL DEFAULT 0.85,
+          demand_curve TEXT NOT NULL DEFAULT 'EVEN',
+          arrival_weight REAL NOT NULL DEFAULT 0.0,
+          departure_weight REAL NOT NULL DEFAULT 0.0,
+          allocation_mode TEXT NOT NULL DEFAULT 'DISTRIBUTE',
+          is_active INTEGER NOT NULL DEFAULT 1,
+          effective_from TEXT,
+          effective_to TEXT,
+          updated_at TEXT NOT NULL,
+          updated_by INTEGER REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS headcount_plans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          station TEXT NOT NULL DEFAULT 'CVG',
+          shift_id INTEGER NOT NULL REFERENCES capacity_shifts(id),
+          headcount INTEGER NOT NULL,
+          effective_from TEXT NOT NULL,
+          effective_to TEXT,
+          day_of_week INTEGER,
+          label TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          created_by INTEGER REFERENCES users(id),
+          updated_by INTEGER REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS headcount_exceptions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          station TEXT NOT NULL DEFAULT 'CVG',
+          shift_id INTEGER NOT NULL REFERENCES capacity_shifts(id),
+          exception_date TEXT NOT NULL,
+          headcount_delta INTEGER NOT NULL,
+          reason TEXT,
+          created_at TEXT NOT NULL,
+          created_by INTEGER REFERENCES users(id),
+          UNIQUE(shift_id, exception_date)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_hcp_shift ON headcount_plans(shift_id);
+        CREATE INDEX IF NOT EXISTS idx_hcp_effective ON headcount_plans(effective_from, effective_to);
+        CREATE INDEX IF NOT EXISTS idx_hce_shift_date ON headcount_exceptions(shift_id, exception_date);
+      `);
+
+      // Seed from existing appConfig.shifts if present
+      const shiftsRow = sqlite
+        .prepare("SELECT value FROM app_config WHERE key = 'shifts'")
+        .get() as { value: string } | undefined;
+
+      if (shiftsRow) {
+        try {
+          const shifts = JSON.parse(shiftsRow.value) as Array<{
+            name: string;
+            startHour: number;
+            endHour: number;
+            headcount: number;
+          }>;
+          const now = new Date().toISOString();
+          const codeMap: Record<string, string> = { Day: "DAY", Swing: "SWING", Night: "NIGHT" };
+          const insertShift = sqlite.prepare(
+            `INSERT OR IGNORE INTO capacity_shifts (code, name, start_hour, end_hour, paid_hours, min_headcount, sort_order, is_active, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+          );
+          const insertPlan = sqlite.prepare(
+            `INSERT INTO headcount_plans (station, shift_id, headcount, effective_from, label, created_at, updated_at)
+             VALUES ('CVG', ?, ?, '2020-01-01', ?, ?, ?)`,
+          );
+
+          shifts.forEach((s, i) => {
+            const code = codeMap[s.name] || s.name.toUpperCase();
+            const hours =
+              s.endHour > s.startHour ? s.endHour - s.startHour : 24 - s.startHour + s.endHour;
+            insertShift.run(code, s.name, s.startHour, s.endHour, hours, 1, i, now, now);
+
+            // Get the shift ID we just inserted
+            const shiftRow = sqlite
+              .prepare("SELECT id FROM capacity_shifts WHERE code = ?")
+              .get(code) as { id: number } | undefined;
+            if (shiftRow) {
+              insertPlan.run(
+                shiftRow.id,
+                s.headcount,
+                `Migrated from appConfig (${s.name})`,
+                now,
+                now,
+              );
+            }
+          });
+
+          // Seed default assumptions
+          sqlite
+            .prepare(
+              `INSERT OR IGNORE INTO capacity_assumptions (station, paid_to_available, available_to_productive, default_mh_no_wp, night_productivity_factor, demand_curve, arrival_weight, departure_weight, allocation_mode, is_active, updated_at)
+             VALUES ('CVG', 0.89, 0.73, 3.0, 0.85, 'EVEN', 0.0, 0.0, 'DISTRIBUTE', 1, ?)`,
+            )
+            .run(now);
+        } catch {
+          // If parsing fails, tables are created empty — bootstrap will seed defaults
+        }
+      }
     }),
   );
 

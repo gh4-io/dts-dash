@@ -1,0 +1,23 @@
+[
+  {
+    "station": "CVG",
+    "shiftCode": "DAY",
+    "headcount": 8,
+    "effectiveFrom": "2020-01-01",
+    "label": "Default Day shift"
+  },
+  {
+    "station": "CVG",
+    "shiftCode": "SWING",
+    "headcount": 6,
+    "effectiveFrom": "2020-01-01",
+    "label": "Default Swing shift"
+  },
+  {
+    "station": "CVG",
+    "shiftCode": "NIGHT",
+    "headcount": 4,
+    "effectiveFrom": "2020-01-01",
+    "label": "Default Night shift"
+  }
+]

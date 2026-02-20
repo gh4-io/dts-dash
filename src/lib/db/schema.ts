@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  primaryKey,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -270,6 +278,100 @@ export const cronJobRuns = sqliteTable("cron_job_runs", {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+// ─── Capacity Modeling (v0.3.0) ─────────────────────────────────────────────
+
+export const capacityShifts = sqliteTable("capacity_shifts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code").notNull().unique(), // DAY, SWING, NIGHT
+  name: text("name").notNull(),
+  startHour: integer("start_hour").notNull(), // 0-23
+  endHour: integer("end_hour").notNull(), // 0-23
+  paidHours: real("paid_hours").notNull(), // e.g. 8.0
+  minHeadcount: integer("min_headcount").notNull().default(1),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+export const capacityAssumptions = sqliteTable("capacity_assumptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  station: text("station").notNull().default("CVG"),
+  paidToAvailable: real("paid_to_available").notNull().default(0.89),
+  availableToProductive: real("available_to_productive").notNull().default(0.73),
+  defaultMhNoWp: real("default_mh_no_wp").notNull().default(3.0),
+  nightProductivityFactor: real("night_productivity_factor").notNull().default(0.85),
+  demandCurve: text("demand_curve", { enum: ["EVEN", "WEIGHTED"] })
+    .notNull()
+    .default("EVEN"),
+  arrivalWeight: real("arrival_weight").notNull().default(0.0),
+  departureWeight: real("departure_weight").notNull().default(0.0),
+  allocationMode: text("allocation_mode", { enum: ["DISTRIBUTE"] })
+    .notNull()
+    .default("DISTRIBUTE"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  effectiveFrom: text("effective_from"),
+  effectiveTo: text("effective_to"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const headcountPlans = sqliteTable(
+  "headcount_plans",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    station: text("station").notNull().default("CVG"),
+    shiftId: integer("shift_id")
+      .notNull()
+      .references(() => capacityShifts.id),
+    headcount: integer("headcount").notNull(), // >= 0
+    effectiveFrom: text("effective_from").notNull(), // DATE (YYYY-MM-DD)
+    effectiveTo: text("effective_to"), // DATE nullable — null means open-ended
+    dayOfWeek: integer("day_of_week"), // 0=Sun..6=Sat, null=all days
+    label: text("label"),
+    notes: text("notes"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    createdBy: integer("created_by").references(() => users.id),
+    updatedBy: integer("updated_by").references(() => users.id),
+  },
+  (table) => ({
+    shiftIdx: index("idx_hcp_shift").on(table.shiftId),
+    effectiveIdx: index("idx_hcp_effective").on(table.effectiveFrom, table.effectiveTo),
+  }),
+);
+
+export const headcountExceptions = sqliteTable(
+  "headcount_exceptions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    station: text("station").notNull().default("CVG"),
+    shiftId: integer("shift_id")
+      .notNull()
+      .references(() => capacityShifts.id),
+    exceptionDate: text("exception_date").notNull(), // DATE (YYYY-MM-DD)
+    headcountDelta: integer("headcount_delta").notNull(), // can be negative
+    reason: text("reason"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    createdBy: integer("created_by").references(() => users.id),
+  },
+  (table) => ({
+    shiftDateUniq: uniqueIndex("idx_hce_shift_date").on(table.shiftId, table.exceptionDate),
+  }),
+);
 
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────
 
@@ -709,6 +811,46 @@ export const feedbackPostLabelsRelations = relations(feedbackPostLabels, ({ one 
 export const inviteCodesRelations = relations(inviteCodes, ({ one }) => ({
   createdByUser: one(users, {
     fields: [inviteCodes.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// ─── Capacity Modeling Relations ────────────────────────────────────────────
+
+export const capacityShiftsRelations = relations(capacityShifts, ({ many }) => ({
+  headcountPlans: many(headcountPlans),
+  headcountExceptions: many(headcountExceptions),
+}));
+
+export const capacityAssumptionsRelations = relations(capacityAssumptions, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [capacityAssumptions.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const headcountPlansRelations = relations(headcountPlans, ({ one }) => ({
+  shift: one(capacityShifts, {
+    fields: [headcountPlans.shiftId],
+    references: [capacityShifts.id],
+  }),
+  createdByUser: one(users, {
+    fields: [headcountPlans.createdBy],
+    references: [users.id],
+  }),
+  updatedByUser: one(users, {
+    fields: [headcountPlans.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const headcountExceptionsRelations = relations(headcountExceptions, ({ one }) => ({
+  shift: one(capacityShifts, {
+    fields: [headcountExceptions.shiftId],
+    references: [capacityShifts.id],
+  }),
+  createdByUser: one(users, {
+    fields: [headcountExceptions.createdBy],
     references: [users.id],
   }),
 }));
