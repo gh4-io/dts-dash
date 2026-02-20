@@ -47,6 +47,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Ensure data/seed exists (may be empty if seed files aren't tracked in git)
+RUN mkdir -p data/seed
+
 # Skip database bootstrap during build (instrumentation.ts checks this)
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PHASE=phase-production-build
