@@ -1,0 +1,32 @@
+[
+  { "pattern": "B777", "canonicalType": "B777", "description": "Exact B777", "priority": 100 },
+  { "pattern": "B767", "canonicalType": "B767", "description": "Exact B767", "priority": 100 },
+  { "pattern": "B747", "canonicalType": "B747", "description": "Exact B747", "priority": 100 },
+  { "pattern": "B757", "canonicalType": "B757", "description": "Exact B757", "priority": 100 },
+  { "pattern": "B737", "canonicalType": "B737", "description": "Exact B737", "priority": 100 },
+
+  { "pattern": "C-F*", "canonicalType": "B767", "description": "CargoJet C-F* registration -> B767", "priority": 80 },
+  { "pattern": "C-G*", "canonicalType": "B767", "description": "CargoJet C-G* registration -> B767", "priority": 80 },
+
+  { "pattern": "D-AA*", "canonicalType": "B777", "description": "Aerologic D-AA* registration -> B777F", "priority": 80 },
+  { "pattern": "D-AER*", "canonicalType": "B777", "description": "Aerologic D-AER* registration -> B777F", "priority": 80 },
+
+  { "pattern": "G-DHL*", "canonicalType": "B767", "description": "DHL Air UK G-DHL* registration -> B767 (default)", "priority": 80 },
+  { "pattern": "G-DHM*", "canonicalType": "B767", "description": "DHL Air UK G-DHM* registration -> B767 (default)", "priority": 80 },
+
+  { "pattern": "N77?CK", "canonicalType": "B777", "description": "Kalitta N77xCK -> B777", "priority": 85 },
+  { "pattern": "N76?CK", "canonicalType": "B767", "description": "Kalitta N76xCK -> B767", "priority": 85 },
+  { "pattern": "N74?CK", "canonicalType": "B747", "description": "Kalitta N74xCK -> B747", "priority": 85 },
+  { "pattern": "N79?CK", "canonicalType": "B747", "description": "Kalitta N79xCK -> B747", "priority": 85 },
+  { "pattern": "N78?CK", "canonicalType": "B747", "description": "Kalitta N78xCK -> B747", "priority": 85 },
+
+  { "pattern": "N2*", "canonicalType": "B767", "description": "Kalitta N2* -> B767 (default)", "priority": 70 },
+  { "pattern": "N3*", "canonicalType": "B767", "description": "Kalitta N3* -> B767 (default)", "priority": 70 },
+  { "pattern": "N4*", "canonicalType": "B767", "description": "Kalitta N4* -> B767 (default)", "priority": 70 },
+
+  { "pattern": "*777*", "canonicalType": "B777", "description": "Contains 777", "priority": 50 },
+  { "pattern": "*767*", "canonicalType": "B767", "description": "Contains 767", "priority": 50 },
+  { "pattern": "*747*", "canonicalType": "B747", "description": "Contains 747 (incl 747-4R7F, 747F)", "priority": 50 },
+  { "pattern": "*757*", "canonicalType": "B757", "description": "Contains 757", "priority": 50 },
+  { "pattern": "*737*", "canonicalType": "B737", "description": "Contains 737 (incl 737-200)", "priority": 50 }
+]

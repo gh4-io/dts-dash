@@ -73,7 +73,13 @@ function wallClockToUtc(
   return new Date(tentative.getTime() + offset).toISOString();
 }
 
-export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" }: DateTimePickerProps) {
+export function DateTimePicker({
+  value,
+  onChange,
+  label,
+  icon,
+  timezone = "UTC",
+}: DateTimePickerProps) {
   const [open, setOpen] = React.useState(false);
   const { timeFormat } = usePreferences();
 
@@ -130,9 +136,7 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
   const handleNow = () => {
     const now = new Date();
     const nowWc = getWallClock(now, timezone);
-    onChange(
-      wallClockToUtc(wc.year, wc.month, wc.day, nowWc.hour, nowWc.minute, timezone),
-    );
+    onChange(wallClockToUtc(wc.year, wc.month, wc.day, nowWc.hour, nowWc.minute, timezone));
   };
 
   const handleDateSelect = (selected: Date | undefined) => {
@@ -216,25 +220,16 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
         >
           {icon && <i className={cn(icon, "mr-1.5 text-muted-foreground")} />}
           <span className="hidden sm:inline mr-1 text-muted-foreground">{label}:</span>
-          <span>{formatDisplay()}</span>
+          <span suppressHydrationWarning>{formatDisplay()}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={calendarDate}
-          onSelect={handleDateSelect}
-          initialFocus
-        />
+        <Calendar mode="single" selected={calendarDate} onSelect={handleDateSelect} initialFocus />
         <div className="border-t">
           <div className="flex items-center justify-between px-3 pt-2">
-            <label className="text-xs text-muted-foreground">
-              Time ({tzLabel})
-            </label>
+            <label className="text-xs text-muted-foreground">Time ({tzLabel})</label>
             {utcAnnotation && (
-              <span className="text-[11px] text-muted-foreground">
-                {utcAnnotation}
-              </span>
+              <span className="text-[11px] text-muted-foreground">{utcAnnotation}</span>
             )}
           </div>
           {/* Scroll-column time picker */}
@@ -264,13 +259,7 @@ export function DateTimePicker({ value, onChange, label, icon, timezone = "UTC" 
           </div>
           {/* Footer with Now shortcut */}
           <div className="flex items-center justify-end border-t px-2 py-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={handleNow}
-              className="text-xs"
-            >
+            <Button type="button" variant="ghost" size="xs" onClick={handleNow} className="text-xs">
               Now
             </Button>
           </div>

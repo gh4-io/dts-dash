@@ -5,6 +5,7 @@ import { db } from "@/lib/db/client";
 import { cronJobRuns } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { cleanupCanceledWPs } from "./tasks/cleanup-canceled";
+import { backupDatabase } from "./tasks/backup-database";
 import { createChildLogger } from "@/lib/logger";
 import { getFeatures, getCronJobOverrides, getFlightSettings } from "@/lib/config/loader";
 
@@ -86,6 +87,26 @@ const BUILTIN_JOBS: BuiltinJobDef[] = [
         min: 1,
         max: 720,
         description: "Hours after cancellation before permanent deletion",
+      },
+    },
+  },
+  {
+    key: "backup-database",
+    name: "Database Backup",
+    description: "Creates a timestamped backup of the database and prunes old backups",
+    script: "src/lib/cron/tasks/backup-database.ts",
+    handler: backupDatabase,
+    defaultSchedule: "0 0 * * *",
+    defaultEnabled: true,
+    defaultOptions: { maxBackups: 7 },
+    optionsSchema: {
+      maxBackups: {
+        type: "number",
+        default: 7,
+        label: "Max Backups to Keep",
+        min: 1,
+        max: 365,
+        description: "Number of recent backups to retain (oldest are pruned automatically)",
       },
     },
   },
