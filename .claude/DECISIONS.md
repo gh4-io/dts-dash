@@ -555,3 +555,14 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** None (new feature, backwards-compatible — all new fields are optional)
 **Links**: P2-4, `src/lib/capacity/concurrency-engine.ts`, `src/types/index.ts`
+
+## D-046 | 2026-02-21 | Billed Hours as Informational Overlay (P2-3)
+
+**Context:** Should billing entries affect the utilization calculation, or serve as a reconciliation overlay?
+
+**Decision:** Billed hours are informational overlay only — `billedMH` and `totalBilledMH` fields are added to `ShiftDemandV2` and `DailyDemandV2` but do NOT modify utilization. Simple active/inactive model (no status workflow). Hours-only tracking (no billing rate field — rate calculation happens externally). `computeBillingVariance` computes worked-vs-billed variance for UI display.
+
+**Rationale:** Consistent with D-041 (forecast), D-044 (worked hours), and D-045 (concurrency) overlay pattern. Billing is for revenue reconciliation, not capacity planning. Keeping the model simple (no draft/invoiced/paid status) matches current operational needs.
+
+**Version impact:** None (new feature, backwards-compatible — all new fields are optional)
+**Links**: P2-3, `src/lib/capacity/billing-engine.ts`, `src/lib/capacity/billing-data.ts`

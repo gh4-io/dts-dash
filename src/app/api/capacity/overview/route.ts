@@ -34,6 +34,9 @@ import {
   loadTimeBookings,
   aggregateWorkedHours,
   applyWorkedHours,
+  loadBillingEntries,
+  aggregateBilledHours,
+  applyBilledHours,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import { createChildLogger } from "@/lib/logger";
@@ -166,6 +169,13 @@ export async function GET(request: NextRequest) {
       adjustedDemand = applyWorkedHours(adjustedDemand, workedAgg);
     }
 
+    // Load billing entries and overlay billed hours on demand
+    const billingEntries = loadBillingEntries(startDate, endDate, true);
+    if (billingEntries.length > 0) {
+      const billedAgg = aggregateBilledHours(billingEntries, startDate, endDate);
+      adjustedDemand = applyBilledHours(adjustedDemand, billedAgg);
+    }
+
     // Compute utilization
     const utilization = computeUtilizationV2(adjustedDemand, capacity);
 
@@ -189,6 +199,7 @@ export async function GET(request: NextRequest) {
       forecastRates: forecastRates && forecastRates.length > 0 ? forecastRates : undefined,
       forecastModel: activeForecastModel ?? undefined,
       timeBookings: timeBookings.length > 0 ? timeBookings : undefined,
+      billingEntries: billingEntries.length > 0 ? billingEntries : undefined,
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

@@ -138,6 +138,23 @@ export {
   deleteTimeBooking,
 } from "./time-bookings-data";
 
+// Billing engine (pure functions)
+export {
+  aggregateBilledHours,
+  applyBilledHours,
+  computeBillingVariance,
+  validateBillingEntry,
+} from "./billing-engine";
+
+// Billing data access (CRUD)
+export {
+  loadBillingEntries,
+  loadBillingEntry,
+  createBillingEntry,
+  updateBillingEntry,
+  deleteBillingEntry,
+} from "./billing-data";
+
 // Forecast data access (CRUD)
 export {
   loadForecastModels,

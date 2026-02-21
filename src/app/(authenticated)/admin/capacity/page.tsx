@@ -52,6 +52,14 @@ const CAPACITY_SECTIONS = [
     color: "text-green-400",
   },
   {
+    title: "Billed Hours",
+    description:
+      "Track invoiced/billable man-hours per customer and aircraft for revenue reconciliation against worked hours and planned demand.",
+    href: "/admin/capacity/billing-entries",
+    icon: "fa-solid fa-file-invoice-dollar",
+    color: "text-indigo-400",
+  },
+  {
     title: "Model Assumptions",
     description:
       "Configure productivity factors (paid-to-available, available-to-productive, night factor), demand curve weights, and default MH.",

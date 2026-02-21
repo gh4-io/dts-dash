@@ -413,6 +413,7 @@ export interface ShiftDemandV2 {
   allocatedDemandMH?: number;
   forecastedDemandMH?: number;
   workedMH?: number;
+  billedMH?: number;
   peakConcurrency?: number;
   avgConcurrency?: number;
   wpContributions: Array<{
@@ -431,6 +432,7 @@ export interface DailyDemandV2 {
   totalAllocatedDemandMH?: number;
   totalForecastedDemandMH?: number;
   totalWorkedMH?: number;
+  totalBilledMH?: number;
   peakConcurrency?: number;
   avgConcurrency?: number;
   aircraftCount: number;
@@ -487,6 +489,29 @@ export interface CapacityOverviewResponse {
   coverageWindows?: EventCoverageWindow[];
   concurrencyBuckets?: ConcurrencyBucket[];
   timeBookings?: TimeBooking[];
+  billingEntries?: BillingEntry[];
+}
+
+// ─── Billing Entries / Billed Hours (P2-3) ───────────────────────────────────
+
+export type BillingEntrySource = "manual" | "import";
+
+export interface BillingEntry {
+  id: number;
+  workPackageId: number | null; // logical ref only — no FK
+  aircraftReg: string;
+  customer: string;
+  billingDate: string; // YYYY-MM-DD
+  shiftCode: string; // DAY/SWING/NIGHT
+  description: string | null; // what was billed
+  billedMh: number; // billable man-hours
+  invoiceRef: string | null; // optional invoice number/reference
+  notes: string | null;
+  source: BillingEntrySource;
+  isActive: boolean;
+  createdBy?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ─── Staffing: Rotation-Based Scheduling ────────────────────────────────────

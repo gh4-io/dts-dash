@@ -1150,6 +1150,45 @@ export const timeBookingsRelations = relations(timeBookings, ({ one }) => ({
   }),
 }));
 
+// ─── Billing Entries (P2-3: Billed Hours) ─────────────────────────────────────
+
+export const billingEntries = sqliteTable(
+  "billing_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id"), // logical ref, no FK
+    aircraftReg: text("aircraft_reg").notNull(),
+    customer: text("customer").notNull(),
+    billingDate: text("billing_date").notNull(), // YYYY-MM-DD
+    shiftCode: text("shift_code").notNull(), // DAY/SWING/NIGHT
+    description: text("description"),
+    billedMh: real("billed_mh").notNull(),
+    invoiceRef: text("invoice_ref"),
+    notes: text("notes"),
+    source: text("source").notNull().default("manual"), // manual|import
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    dateIdx: index("idx_be_date").on(table.billingDate),
+    customerIdx: index("idx_be_customer").on(table.customer),
+    wpIdx: index("idx_be_wp").on(table.workPackageId),
+  }),
+);
+
+export const billingEntriesRelations = relations(billingEntries, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [billingEntries.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // ─── Staffing Relations ─────────────────────────────────────────────────────
 
 export const rotationPatternsRelations = relations(rotationPatterns, ({ many }) => ({

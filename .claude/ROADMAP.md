@@ -37,8 +37,8 @@
 - [x] P2-5: Rate Forecast — 2026-02-21
 - [x] P2-2: Worked Hours — 2026-02-21
 - [x] P2-4: Concurrency — 2026-02-21
-- [ ] P2-3: Billed Hours — **NEXT**
-- [ ] P2-7: Multi-Lens UI (blocked by P2-1 through P2-6)
+- [x] P2-3: Billed Hours — 2026-02-21
+- [ ] P2-7: Multi-Lens UI — **NEXT** (blocked by P2-1 through P2-6)
 
 ## Milestones
 
@@ -391,9 +391,9 @@ See [PLAN.md](PLAN.md) M8 section.
 | **P1** | **P2-1** | Flight Events | **Done** ✅ | `flight_events` | See P2-1 section below |
 | **P2** | **P2-5** | Rate Forecast | **Done** ✅ | `forecast_models`, `forecast_rates` | See P2-5 section below |
 | **P2** | **P2-2** | Worked Hours | **Done** ✅ | `time_bookings` | See P2-2 section below |
-| P2 | **P2-3** | Billed Hours | **Next** 🔜 | `billing_entries` | — |
+| **P2** | **P2-3** | Billed Hours | **Done** ✅ | `billing_entries` | See P2-3 section below |
 | **P3** | **P2-4** | Concurrency | **Done** ✅ | 0 new (computed) | See P2-4 section below |
-| P3 | **P2-7** | Multi-Lens UI | Planned (needs all) | 0 new | — |
+| P3 | **P2-7** | Multi-Lens UI | **Next** 🔜 (needs all) | 0 new | — |
 
 ### Priority Legend
 - **P1** = Start here — no dependencies on other Phase 2 work
@@ -632,15 +632,40 @@ Indexes: idx_da_customer, idx_da_effective, idx_da_shift
 
 ---
 
-## P2-3: Billed Hours — Planned
+## P2-3: Billed Hours — Done ✅
 
-> **Priority:** P2 (independent) | **Effort:** 1-2 sessions
+> **Priority:** P2 (independent) | **Completed:** 2026-02-21
 
 ### What It Adds
-`billing_entries` table tracking invoiced/billable hours. "Billed" lens shows revenue recognition.
+`billing_entries` table tracking invoiced/billable man-hours per customer/aircraft/date. "Billed" lens enables revenue reconciliation — comparing billed hours against worked hours (P2-2) and planned demand.
 
-### User Value
-"Revenue recognition + billing reconciliation" — compares worked vs billed hours.
+### Design Decisions
+- **D-046:** Billed hours as informational overlay only — `billedMH`/`totalBilledMH` do NOT change utilization calculation. Simple active/inactive model, hours-only (no rate tracking).
+- Mirrors P2-2 (Worked Hours / time_bookings) pattern exactly.
+
+### Files Created
+1. `src/lib/capacity/billing-engine.ts` — `aggregateBilledHours`, `applyBilledHours`, `computeBillingVariance`, `validateBillingEntry`
+2. `src/lib/capacity/billing-data.ts` — CRUD: `loadBillingEntries`, `loadBillingEntry`, `createBillingEntry`, `updateBillingEntry`, `deleteBillingEntry`
+3. `src/app/api/admin/capacity/billing-entries/route.ts` — GET list + POST create
+4. `src/app/api/admin/capacity/billing-entries/[id]/route.ts` — GET + PUT + DELETE
+5. `src/app/(authenticated)/admin/capacity/billing-entries/page.tsx` — Admin CRUD page
+6. `src/components/admin/capacity/billing-grid.tsx` — Table with actions
+7. `src/components/admin/capacity/billing-editor.tsx` — Dialog form (create/edit)
+8. `src/__tests__/capacity/billing-engine.test.ts` — 39 tests
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `src/types/index.ts` | Added `BillingEntry`, `BillingEntrySource`; added optional `billedMH` on `ShiftDemandV2`, `totalBilledMH` on `DailyDemandV2`, `billingEntries?` on `CapacityOverviewResponse` |
+| `src/lib/db/schema.ts` | `billingEntries` table + relations |
+| `src/lib/db/schema-init.ts` | M014 migration |
+| `src/lib/capacity/index.ts` | Barrel exports for billing engine + data |
+| `src/app/api/capacity/overview/route.ts` | Billing integration (load, aggregate, overlay) |
+| `src/app/(authenticated)/admin/capacity/page.tsx` | Hub card (indigo, fa-file-invoice-dollar) |
+
+### Tests
+- 39 new tests (aggregateBilledHours: 8, applyBilledHours: 8, computeBillingVariance: 6, validateBillingEntry: 17)
+- All 397 tests passing (358 existing + 39 new)
 
 ---
 

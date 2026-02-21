@@ -862,6 +862,35 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M014: Billing Entries (P2-3 Billed Hours)
+  results.push(
+    applyMigration("M014_billing_entries", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS billing_entries (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_package_id   INTEGER,
+          aircraft_reg      TEXT NOT NULL,
+          customer          TEXT NOT NULL,
+          billing_date      TEXT NOT NULL,
+          shift_code        TEXT NOT NULL,
+          description       TEXT,
+          billed_mh         REAL NOT NULL,
+          invoice_ref       TEXT,
+          notes             TEXT,
+          source            TEXT NOT NULL DEFAULT 'manual',
+          is_active         INTEGER NOT NULL DEFAULT 1,
+          created_by        INTEGER REFERENCES users(id),
+          created_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_be_date ON billing_entries(billing_date);
+        CREATE INDEX IF NOT EXISTS idx_be_customer ON billing_entries(customer);
+        CREATE INDEX IF NOT EXISTS idx_be_wp ON billing_entries(work_package_id);
+      `);
+    }),
+  );
+
   return results;
 }
 
