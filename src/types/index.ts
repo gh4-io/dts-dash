@@ -291,6 +291,22 @@ export interface ConcurrencyBucket {
   eventIds: number[];
 }
 
+/** Aggregated concurrency summary for a single day (P2-4) */
+export interface ConcurrencyDaySummary {
+  peakAircraft: number;
+  avgAircraft: number; // average across non-zero hours
+  concurrencyHours: number; // count of hours with 2+ aircraft
+  peakHour: string | null; // ISO hour with highest count
+}
+
+/** Aggregated concurrency summary for a single shift within a day (P2-4) */
+export interface ConcurrencyShiftSummary {
+  shiftCode: string;
+  peakAircraft: number;
+  avgAircraft: number;
+  concurrencyHours: number;
+}
+
 // ─── Rate Forecast (P2-5) ────────────────────────────────────────────────
 
 export type ForecastMethod = "moving_average" | "weighted_average" | "linear_trend";
@@ -397,6 +413,8 @@ export interface ShiftDemandV2 {
   allocatedDemandMH?: number;
   forecastedDemandMH?: number;
   workedMH?: number;
+  peakConcurrency?: number;
+  avgConcurrency?: number;
   wpContributions: Array<{
     wpId: number;
     aircraftReg: string;
@@ -413,6 +431,8 @@ export interface DailyDemandV2 {
   totalAllocatedDemandMH?: number;
   totalForecastedDemandMH?: number;
   totalWorkedMH?: number;
+  peakConcurrency?: number;
+  avgConcurrency?: number;
   aircraftCount: number;
   byCustomer: Record<string, number>;
   byShift: ShiftDemandV2[];
@@ -465,6 +485,7 @@ export interface CapacityOverviewResponse {
   allocations?: DemandAllocation[];
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];
+  concurrencyBuckets?: ConcurrencyBucket[];
   timeBookings?: TimeBooking[];
 }
 

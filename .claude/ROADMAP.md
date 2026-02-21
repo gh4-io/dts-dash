@@ -36,8 +36,8 @@
 - [x] P2-1: Flight Events — 2026-02-21
 - [x] P2-5: Rate Forecast — 2026-02-21
 - [x] P2-2: Worked Hours — 2026-02-21
+- [x] P2-4: Concurrency — 2026-02-21
 - [ ] P2-3: Billed Hours — **NEXT**
-- [ ] P2-4: Concurrency (blocked by P2-1)
 - [ ] P2-7: Multi-Lens UI (blocked by P2-1 through P2-6)
 
 ## Milestones
@@ -392,7 +392,7 @@ See [PLAN.md](PLAN.md) M8 section.
 | **P2** | **P2-5** | Rate Forecast | **Done** ✅ | `forecast_models`, `forecast_rates` | See P2-5 section below |
 | **P2** | **P2-2** | Worked Hours | **Done** ✅ | `time_bookings` | See P2-2 section below |
 | P2 | **P2-3** | Billed Hours | **Next** 🔜 | `billing_entries` | — |
-| P3 | **P2-4** | Concurrency | Planned (needs P2-1) | 0 new | — |
+| **P3** | **P2-4** | Concurrency | **Done** ✅ | 0 new (computed) | See P2-4 section below |
 | P3 | **P2-7** | Multi-Lens UI | Planned (needs all) | 0 new | — |
 
 ### Priority Legend
@@ -644,12 +644,37 @@ Indexes: idx_da_customer, idx_da_effective, idx_da_shift
 
 ---
 
-## P2-4: Concurrency — Planned
+## P2-4: Concurrency — Done ✅
 
-> **Priority:** P3 (requires P2-1) | **Effort:** 1 session
+> **Priority:** P3 (requires P2-1) | **Completed:** 2026-02-21
 
 ### What It Adds
-Concurrency pressure index computed from P2-1 flight events. No new tables — derived metric from overlapping aircraft windows.
+Concurrency pressure index computed from P2-1 flight events. No new tables — purely derived from overlapping aircraft on-ground windows. Four pure engine functions aggregate hourly `ConcurrencyBucket[]` (from P2-1's `computeConcurrencyPressure`) into day/shift summaries and overlay onto demand.
+
+### Files Created
+1. `src/lib/capacity/concurrency-engine.ts` — `aggregateConcurrencyByDay`, `aggregateConcurrencyByShift`, `applyConcurrencyPressure`, `computeConcurrencyPressureIndex`
+2. `src/__tests__/capacity/concurrency-engine.test.ts` — 31 tests
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `src/types/index.ts` | Added `ConcurrencyDaySummary`, `ConcurrencyShiftSummary`; added optional `peakConcurrency`, `avgConcurrency` on `ShiftDemandV2` and `DailyDemandV2`; added `concurrencyBuckets?` on `CapacityOverviewResponse` |
+| `src/lib/capacity/index.ts` | Barrel exports for concurrency-engine |
+| `src/app/api/capacity/overview/route.ts` | Computes concurrency buckets from already-loaded flight events, aggregates by day/shift, overlays onto demand, includes `concurrencyBuckets` in response |
+
+### Design Decisions
+- **D-045**: Concurrency is informational overlay only — does NOT change utilization calculation (consistent with D-041 forecast, D-044 worked hours)
+- No admin CRUD page — concurrency is fully derived from flight events
+- No DB table or migration — pure computed metric
+- Pressure index (`peak / headcount * 100`) for UI color-coding thresholds (consumed by P2-7)
+
+### Automated Tests (31 passing)
+| Suite | Tests | Covers |
+|-------|-------|--------|
+| `aggregateConcurrencyByDay` | 7 | empty, single/multi day, peak identification, avg rounding, concurrency-hours count, tie-breaking |
+| `aggregateConcurrencyByShift` | 7 | empty, empty shifts, DAY/SWING/NIGHT mapping, multi-shift distribution, multi-day, avg rounding |
+| `applyConcurrencyPressure` | 6 | empty short-circuit, day-level overlay, shift-level overlay, unmatched days unchanged, immutability, mixed data |
+| `computeConcurrencyPressureIndex` | 11 | zero/negative edge cases, below/at/above capacity, rounding |
 
 ### User Value
 "How many aircraft overlap?" — workload intensity beyond just MH totals.

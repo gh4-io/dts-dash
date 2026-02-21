@@ -92,6 +92,14 @@ export {
   validateFlightEvent,
 } from "./flight-events-engine";
 
+// Concurrency pressure analysis (P2-4, pure functions)
+export {
+  aggregateConcurrencyByDay,
+  aggregateConcurrencyByShift,
+  applyConcurrencyPressure,
+  computeConcurrencyPressureIndex,
+} from "./concurrency-engine";
+
 // Flight events data access (CRUD)
 export {
   loadFlightEvents,

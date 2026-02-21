@@ -24,6 +24,10 @@ import {
   resolveStaffingForCapacity,
   loadFlightEvents,
   computeAllEventWindows,
+  computeConcurrencyPressure,
+  aggregateConcurrencyByDay,
+  aggregateConcurrencyByShift,
+  applyConcurrencyPressure,
   loadActiveForecastModel,
   loadForecastRates,
   applyForecastRates,
@@ -128,6 +132,18 @@ export async function GET(request: NextRequest) {
         ? computeAllEventWindows(flightEvents, startDate, endDate)
         : undefined;
 
+    // Compute concurrency pressure from flight events (P2-4)
+    const concurrencyBuckets =
+      flightEvents.length > 0
+        ? computeConcurrencyPressure(flightEvents, startDate, endDate)
+        : undefined;
+
+    if (concurrencyBuckets && concurrencyBuckets.length > 0) {
+      const dailyConcurrency = aggregateConcurrencyByDay(concurrencyBuckets);
+      const shiftConcurrency = aggregateConcurrencyByShift(concurrencyBuckets, shifts);
+      adjustedDemand = applyConcurrencyPressure(adjustedDemand, dailyConcurrency, shiftConcurrency);
+    }
+
     // Load active forecast model and overlay rates on demand
     const activeForecastModel = loadActiveForecastModel();
     let forecastRates;
@@ -168,6 +184,8 @@ export async function GET(request: NextRequest) {
       allocations: allocations.length > 0 ? allocations : undefined,
       flightEvents: flightEvents.length > 0 ? flightEvents : undefined,
       coverageWindows: coverageWindows && coverageWindows.length > 0 ? coverageWindows : undefined,
+      concurrencyBuckets:
+        concurrencyBuckets && concurrencyBuckets.length > 0 ? concurrencyBuckets : undefined,
       forecastRates: forecastRates && forecastRates.length > 0 ? forecastRates : undefined,
       forecastModel: activeForecastModel ?? undefined,
       timeBookings: timeBookings.length > 0 ? timeBookings : undefined,

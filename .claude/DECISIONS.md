@@ -542,3 +542,16 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** None (new feature, backwards-compatible)
 **Links**: P2-2, `src/lib/capacity/time-bookings-engine.ts`, `src/types/index.ts`
+
+---
+
+## D-045 | 2026-02-21 | Concurrency as Informational Overlay (P2-4)
+
+**Context:** Should concurrency pressure affect the utilization calculation, or be displayed as an informational overlay alongside demand/capacity?
+
+**Decision:** Concurrency is informational overlay only — `peakConcurrency` and `avgConcurrency` fields are added to `DailyDemandV2` and `ShiftDemandV2` but do NOT modify `totalDemandMH` or utilization percentages. No new DB table — concurrency is purely computed from existing `flight_events` data via `computeConcurrencyPressure` (P2-1). A normalized `computeConcurrencyPressureIndex(peak, headcount)` ratio enables UI color-coding in P2-7.
+
+**Rationale:** Consistent with D-041 (forecast overlay) and D-044 (worked hours overlay). Concurrency is a workload intensity metric that complements MH-based demand, not a replacement. Keeping it informational avoids double-counting aircraft presence in utilization calculations.
+
+**Version impact:** None (new feature, backwards-compatible — all new fields are optional)
+**Links**: P2-4, `src/lib/capacity/concurrency-engine.ts`, `src/types/index.ts`
