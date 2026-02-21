@@ -22,7 +22,7 @@
 # ─── Build args for OCI labels ──────────────────────────────
 ARG GIT_SHA=unknown
 ARG BUILD_DATE=unknown
-ARG VERSION=0.1.0
+ARG VERSION
 
 # ─── Shared base: Alpine + native build tools ───────────────
 # Used by build stages only — never used as the final image
@@ -187,7 +187,7 @@ RUN chmod +x /docker-entrypoint.sh
 # ── OCI labels ────────────────────────────────────────────────
 ARG GIT_SHA=unknown
 ARG BUILD_DATE=unknown
-ARG VERSION=0.1.0
+ARG VERSION
 LABEL org.opencontainers.image.title="DTS Dashboard" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_SHA}" \

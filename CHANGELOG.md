@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] - 2026-02-21
+
 ### Added - Rotation-Based Staffing Matrix (v0.3.0)
 
 #### Major Features
@@ -191,5 +195,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
 
-[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0

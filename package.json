@@ -1,6 +1,6 @@
 {
   "name": "dtsd",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
@@ -35,7 +35,15 @@
     "db:seed-reference": "tsx scripts/db/seed-reference.ts",
     "audit": "npm audit --audit-level=high",
     "generate-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
-    "prepare": "husky"
+    "prepare": "husky",
+    "ver:patch": "npm version patch --no-git-tag-version",
+    "ver:minor": "npm version minor --no-git-tag-version",
+    "ver:major": "npm version major --no-git-tag-version",
+    "ver:rc": "npm version prerelease --preid=rc --no-git-tag-version",
+    "version": "node scripts/db/sync-version.mjs && git add -A",
+    "docker:build": "docker build --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd .",
+    "docker:build:tag": "docker build --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:$(node -p \"require('./package.json').version\") .",
+    "docker:build:dev": "docker build --target dev --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:dev ."
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",

@@ -1,6 +1,6 @@
 # Backup Procedures
 
-> CVG Line Maintenance Dashboard v0.1.0
+> CVG Line Maintenance Dashboard v0.2.0
 
 ## What to Back Up
 
