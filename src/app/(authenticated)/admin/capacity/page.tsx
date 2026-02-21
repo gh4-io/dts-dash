@@ -4,6 +4,14 @@ import Link from "next/link";
 
 const CAPACITY_SECTIONS = [
   {
+    title: "Staffing Matrix",
+    description:
+      "Advanced rotation-based staffing with 3-week cycles, custom shift definitions, and weekly headcount visualization.",
+    href: "/admin/capacity/staffing",
+    icon: "fa-solid fa-calendar-days",
+    color: "text-violet-400",
+  },
+  {
     title: "Headcount Plans",
     description:
       "Manage base headcount per shift with effective dating, weekday overrides, and date-specific exceptions.",

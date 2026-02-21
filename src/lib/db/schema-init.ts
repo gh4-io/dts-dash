@@ -641,6 +641,75 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M007: Add staffing rotation matrix tables (v0.3.0)
+  results.push(
+    applyMigration("M007_staffing_rotation_matrix", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS rotation_patterns (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          pattern TEXT NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS staffing_configs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          is_active INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          created_by INTEGER REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS staffing_shifts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          config_id INTEGER NOT NULL REFERENCES staffing_configs(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          rotation_id INTEGER NOT NULL REFERENCES rotation_patterns(id),
+          rotation_start_date TEXT NOT NULL,
+          start_hour INTEGER NOT NULL,
+          start_minute INTEGER NOT NULL DEFAULT 0,
+          end_hour INTEGER NOT NULL,
+          end_minute INTEGER NOT NULL DEFAULT 0,
+          break_minutes INTEGER NOT NULL DEFAULT 0,
+          lunch_minutes INTEGER NOT NULL DEFAULT 0,
+          mh_override REAL,
+          headcount INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_ss_config ON staffing_shifts(config_id);
+        CREATE INDEX IF NOT EXISTS idx_ss_config_category ON staffing_shifts(config_id, category);
+        CREATE INDEX IF NOT EXISTS idx_ss_rotation ON staffing_shifts(rotation_id);
+      `);
+    }),
+  );
+
+  // M008: Add description columns to rotation_patterns and staffing_shifts
+  results.push(
+    applyMigration("M008_staffing_descriptions", () => {
+      // SQLite ALTER TABLE ADD COLUMN — safe if column already exists (IF NOT EXISTS not supported, so catch)
+      try {
+        sqlite.exec(`ALTER TABLE rotation_patterns ADD COLUMN description TEXT`);
+      } catch {
+        // Column already exists
+      }
+      try {
+        sqlite.exec(`ALTER TABLE staffing_shifts ADD COLUMN description TEXT`);
+      } catch {
+        // Column already exists
+      }
+    }),
+  );
+
   return results;
 }
 

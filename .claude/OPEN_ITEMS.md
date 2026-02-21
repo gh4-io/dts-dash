@@ -974,6 +974,23 @@
 
 ---
 
+## OI-057 | Integrate react-to-print for Print/Export Functionality
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-20 |
+| **Context** | DTS-Dash needs print/export capability for Flight Board, Capacity reports, and Analytics dashboards. Research completed: `react-to-print` is the optimal choice (uses browser native print dialog, local-first, simple hook API, reuses existing CSS). Alternative: `@react-pdf/renderer` requires PDF StyleSheet recreation. |
+| **Proposed Solution** | (1) Install: `npm install react-to-print`. (2) Create export wrapper components for each page: `FlightBoardPrint`, `CapacityReportPrint`, `AnalyticsDashboardPrint`. (3) Add "Print" buttons to toolbar on each page using `useReactToPrint` hook. (4) Use CSS media queries (`@media print`) to hide UI chrome (buttons, sidebar, filters) and optimize layout for print. (5) Test print preview and PDF save in Chrome, Firefox, Safari. (6) Document print CSS patterns for future exports. |
+| **Implementation Steps** | - [ ] Install `react-to-print` package<br>- [ ] Add print button to Flight Board toolbar<br>- [ ] Create `FlightBoardPrint` wrapper component<br>- [ ] Add print-friendly CSS media queries<br>- [ ] Test print preview and PDF export<br>- [ ] Add print to Capacity page<br>- [ ] Add print to Analytics dashboard<br>- [ ] Document print patterns in DEV_STANDARDS.md |
+| **Files** | `src/components/flight-board/`, `src/components/capacity/`, `src/components/dashboard/`, print CSS utilities |
+| **Links** | Memory: `react_print_integration.md`, [REQ_Dashboard_UI.md](SPECS/REQ_Dashboard_UI.md), [REQ_OtherPages.md](SPECS/REQ_OtherPages.md) |
+
+---
+
 ## OI-057 | ~~System Preference Filters Not Shown as Active~~ RESOLVED
 
 | Field | Value |

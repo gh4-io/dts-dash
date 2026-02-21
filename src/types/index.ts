@@ -325,6 +325,91 @@ export interface CapacityOverviewResponse {
   assumptions: CapacityAssumptions;
 }
 
+// ─── Staffing: Rotation-Based Scheduling ────────────────────────────────────
+
+export type StaffingShiftCategory = "DAY" | "SWING" | "NIGHT" | "OTHER";
+
+export interface RotationPattern {
+  id: number;
+  name: string;
+  description: string | null;
+  pattern: string; // 21-char: x=work, o=off
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface StaffingConfig {
+  id: number;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StaffingShift {
+  id: number;
+  configId: number;
+  name: string;
+  description: string | null;
+  category: StaffingShiftCategory;
+  rotationId: number;
+  rotationStartDate: string; // YYYY-MM-DD
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  breakMinutes: number;
+  lunchMinutes: number;
+  mhOverride: number | null;
+  headcount: number;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/** Staffing config with shift count and total headcount for list display */
+export interface StaffingConfigSummary extends StaffingConfig {
+  shiftCount: number;
+  totalHeadcount: number;
+}
+
+/** Per-category headcount result for a single day from rotation engine */
+export interface StaffingDayResult {
+  date: string;
+  byCategory: Record<StaffingShiftCategory, number>; // headcount per category
+  byShift: Array<{
+    shiftId: number;
+    shiftName: string;
+    category: StaffingShiftCategory;
+    isWorking: boolean;
+    headcount: number;
+    effectivePaidHours: number;
+  }>;
+  totalHeadcount: number;
+}
+
+/** Weekly matrix cell: headcount + MH breakdown for one day+category */
+export interface WeeklyMatrixCell {
+  headcount: number;
+  paidMH: number;
+  availableMH: number;
+  productiveMH: number;
+}
+
+/** Full weekly matrix result for the right panel visualization */
+export interface WeeklyMatrixResult {
+  weekStart: string; // YYYY-MM-DD (Sunday)
+  days: Array<{
+    date: string;
+    dayOfWeek: number; // 0=Sun..6=Sat
+    byCategory: Record<StaffingShiftCategory, WeeklyMatrixCell>;
+    total: WeeklyMatrixCell;
+  }>;
+  categoryTotals: Record<StaffingShiftCategory, WeeklyMatrixCell>;
+  grandTotal: WeeklyMatrixCell;
+  totalConfigHeadcount: number; // sum of all shift headcounts in config
+}
+
 // ─── Pagination (D-017) ────────────────────────────────────────────────────
 
 export interface PaginationParams {

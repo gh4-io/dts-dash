@@ -151,6 +151,55 @@ function ensureDefaultCapacityData(): void {
 }
 
 /**
+ * Seed default rotation patterns and a default staffing config if none exist.
+ */
+function ensureDefaultStaffingData(): void {
+  const now = new Date().toISOString();
+
+  // Check if rotation_patterns has any rows
+  const patternCount = sqlite.prepare("SELECT COUNT(*) as cnt FROM rotation_patterns").get() as {
+    cnt: number;
+  };
+
+  if (patternCount.cnt === 0) {
+    const patterns = [
+      { name: "Standard 5-2", pattern: "oxxxxoxoxxxxoxoxxxxox", sort: 0 },
+      { name: "Compressed 4-3", pattern: "oxxxxoooxxxxoooxxxxoo", sort: 1 },
+      { name: "Weekend Bridge", pattern: "xoooooxxoooooxxooooox", sort: 2 },
+      { name: "Panama 2-2-3", pattern: "xxooxxxooxxoooxxooxxx", sort: 3 },
+      { name: "3-Week Rotation A", pattern: "oxxxooxooxxxoxoxxooox", sort: 4 },
+    ];
+
+    const insertPattern = sqlite.prepare(
+      `INSERT INTO rotation_patterns (name, pattern, is_active, sort_order, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?)`,
+    );
+
+    for (const p of patterns) {
+      insertPattern.run(p.name, p.pattern, p.sort, now, now);
+    }
+
+    log.info("Seeded 5 default rotation patterns");
+  }
+
+  // Check if staffing_configs has any rows
+  const configCount = sqlite.prepare("SELECT COUNT(*) as cnt FROM staffing_configs").get() as {
+    cnt: number;
+  };
+
+  if (configCount.cnt === 0) {
+    sqlite
+      .prepare(
+        `INSERT INTO staffing_configs (name, description, is_active, created_at, updated_at)
+         VALUES (?, ?, 0, ?, ?)`,
+      )
+      .run("Default Configuration", "Auto-created default staffing configuration", now, now);
+
+    log.info("Seeded default staffing configuration");
+  }
+}
+
+/**
  * Main bootstrap entry point. Called from instrumentation.ts on server startup.
  *
  * 1. Create tables (IF NOT EXISTS)
@@ -158,6 +207,7 @@ function ensureDefaultCapacityData(): void {
  * 3. Ensure system user exists
  * 4. Ensure default config keys exist
  * 5. Ensure default capacity data exists
+ * 6. Ensure default staffing data exists
  */
 export function bootstrapDatabase(): void {
   try {
@@ -171,6 +221,7 @@ export function bootstrapDatabase(): void {
     ensureSystemUser();
     ensureDefaultConfig();
     ensureDefaultCapacityData();
+    ensureDefaultStaffingData();
 
     log.info("Database bootstrap complete");
   } catch (err) {

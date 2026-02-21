@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Rotation-Based Staffing Matrix (v0.3.0)
+
+#### Major Features
+- **Rotation-Based Staffing System** — Advanced scheduling with 3-week (21-day) rotation cycles
+  - **Rotation Pattern Library** — Create/edit reusable on/off cycle patterns with visual grid editor
+  - **Staffing Configurations** — Named configuration sets for experimentation (duplicate, activate, compare)
+  - **Custom Shift Definitions** — Combine rotation patterns with shift times, category (Day/Swing/Night/Other), breaks, headcount
+  - **Weekly Staffing Matrix** — Auto-computed headcount/MH heatmap with productivity chain calculations
+  - **Three-Panel Admin UI** — Rotation patterns (left), shift card-bars by category (center), weekly visualization + stats (right)
+
+#### New API Routes
+- `GET/POST /api/admin/capacity/rotation-patterns` — List/create rotation patterns
+- `PUT/DELETE /api/admin/capacity/rotation-patterns/[id]` — Update/delete pattern (delete blocked if in use)
+- `POST /api/admin/capacity/rotation-patterns/bulk` — Bulk activate/deactivate/delete
+- `GET/POST /api/admin/capacity/staffing-configs` — List/create staffing configs (with shift count + headcount)
+- `GET/PUT/DELETE /api/admin/capacity/staffing-configs/[id]` — Config CRUD (delete blocked if active)
+- `POST /api/admin/capacity/staffing-configs/[id]/activate` — Set active config (deactivates others)
+- `POST /api/admin/capacity/staffing-configs/[id]/duplicate` — Deep copy config + all shifts
+- `GET/POST /api/admin/capacity/staffing-shifts` — List/create shifts within a config
+- `PUT/DELETE /api/admin/capacity/staffing-shifts/[id]` — Update/delete shift
+- `POST /api/admin/capacity/staffing-shifts/bulk` — Bulk shift operations
+- `GET /api/admin/capacity/staffing-matrix` — Computed weekly matrix (headcount + paid/available/productive MH)
+
+#### Database
+- **Migration M007** — 3 new tables: `rotation_patterns`, `staffing_configs`, `staffing_shifts`
+- **Bootstrap** — Seeds 5 default rotation patterns + 1 default config on first run
+- **Indexes** — config_id, config_id+category, rotation_id for query performance
+
+#### UI Components (7 new)
+- `RotationDots` — 21-dot visual grid (3×7) for rotation pattern display
+- `RotationPatternEditor` — Interactive grid editor dialog with presets
+- `RotationPatternList` — Left panel with bulk select, active toggle, inline actions
+- `StaffingConfigSelector` — Config dropdown with create/rename/duplicate/activate/delete
+- `ShiftDefinitionsGrid` — Center panel with category-grouped card-bars, inline headcount editing
+- `WeeklyMatrixPanel` — Right panel heatmap grid, MH summary cards, key stats, coverage gap warnings
+
+#### Import Schemas (2 new)
+- `rotation-patterns` — Import/export rotation patterns via Data Hub
+- `staffing-shifts` — Import/export shift definitions via Data Hub
+
+#### Staffing Engine (pure functions, unit tested)
+- `isWorkingDay()` — Resolve rotation pattern for any date
+- `computeEffectivePaidHours()` — MH override or computed from shift duration
+- `resolveStaffingDay()` — Per-day headcount by category from rotation engine
+- `computeWeeklyMatrix()` — 7-day matrix with full productivity chain
+- `resolveStaffingForCapacity()` — Output format compatible with existing capacity engine
+- 36 unit tests covering edge cases (pattern wrapping, negative offsets, overnight shifts)
+
 ### Added - Universal Import Hub (v0.2.0)
 
 #### Major Features

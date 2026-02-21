@@ -373,6 +373,77 @@ export const headcountExceptions = sqliteTable(
   }),
 );
 
+// ─── Staffing: Rotation Patterns ────────────────────────────────────────────
+
+export const rotationPatterns = sqliteTable("rotation_patterns", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  pattern: text("pattern").notNull(), // 21-char string: x=work, o=off
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ─── Staffing: Configurations ───────────────────────────────────────────────
+
+export const staffingConfigs = sqliteTable("staffing_configs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  createdBy: integer("created_by").references(() => users.id),
+});
+
+// ─── Staffing: Shift Definitions ────────────────────────────────────────────
+
+export const staffingShifts = sqliteTable(
+  "staffing_shifts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    configId: integer("config_id")
+      .notNull()
+      .references(() => staffingConfigs.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    category: text("category", { enum: ["DAY", "SWING", "NIGHT", "OTHER"] }).notNull(),
+    rotationId: integer("rotation_id").references(() => rotationPatterns.id),
+    rotationStartDate: text("rotation_start_date").notNull(), // DATE (YYYY-MM-DD)
+    startHour: integer("start_hour").notNull(), // 0-23
+    startMinute: integer("start_minute").notNull().default(0), // 0-59
+    endHour: integer("end_hour").notNull(), // 0-23
+    endMinute: integer("end_minute").notNull().default(0), // 0-59
+    breakMinutes: integer("break_minutes").notNull().default(0),
+    lunchMinutes: integer("lunch_minutes").notNull().default(0),
+    mhOverride: real("mh_override"), // nullable — paid hours override (pre-productivity)
+    headcount: integer("headcount").notNull().default(0),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    configIdx: index("idx_ss_config").on(table.configId),
+    configCategoryIdx: index("idx_ss_config_category").on(table.configId, table.category),
+    rotationIdx: index("idx_ss_rotation").on(table.rotationId),
+  }),
+);
+
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────
 
 export const manufacturers = sqliteTable("manufacturers", {
@@ -852,5 +923,30 @@ export const headcountExceptionsRelations = relations(headcountExceptions, ({ on
   createdByUser: one(users, {
     fields: [headcountExceptions.createdBy],
     references: [users.id],
+  }),
+}));
+
+// ─── Staffing Relations ─────────────────────────────────────────────────────
+
+export const rotationPatternsRelations = relations(rotationPatterns, ({ many }) => ({
+  staffingShifts: many(staffingShifts),
+}));
+
+export const staffingConfigsRelations = relations(staffingConfigs, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [staffingConfigs.createdBy],
+    references: [users.id],
+  }),
+  shifts: many(staffingShifts),
+}));
+
+export const staffingShiftsRelations = relations(staffingShifts, ({ one }) => ({
+  config: one(staffingConfigs, {
+    fields: [staffingShifts.configId],
+    references: [staffingConfigs.id],
+  }),
+  rotation: one(rotationPatterns, {
+    fields: [staffingShifts.rotationId],
+    references: [rotationPatterns.id],
   }),
 }));
