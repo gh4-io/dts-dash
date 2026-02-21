@@ -1,0 +1,602 @@
+{
+  "desc": {
+    "maxNameLength": 14,
+    "formats": {
+      "R7-<days>": "Same 7-day pattern repeats for all 3 weeks",
+      "ROT-<days>": "7-day workday pattern rotates/shifts between weeks",
+      "V-<w1>/<w2>/<w3>": "Week-specific workday sets vary across the 21-day cycle"
+    },
+    "dayCodes": {
+      "U": "Sun",
+      "M": "Mon",
+      "T": "Tue",
+      "W": "Wed",
+      "R": "Thu",
+      "F": "Fri",
+      "S": "Sat",
+      "OFF": "No work days that week"
+    },
+    "matrix21": {
+      "X": "On / work day",
+      "O": "Off day"
+    }
+  },
+  "data": [
+    {
+      "code": "A",
+      "name": "R7-MTW",
+      "description": "9ON/12OFF RPT7 MON,TUE,WED",
+      "matrix21": "OXXXOOOOXXXOOOOXXXOOO"
+    },
+    {
+      "code": "AD",
+      "name": "ROT-MTW",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OXXXOOOXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "A1",
+      "name": "R7-UWR",
+      "description": "9ON/12OFF RPT7 SUN,WED,THU",
+      "matrix21": "XOOXXOOXOOXXOOXOOXXOO"
+    },
+    {
+      "code": "A1C",
+      "name": "V-UWR/RFS/RFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOXXOOOOOOXXXOOOOXXX"
+    },
+    {
+      "code": "A2",
+      "name": "R7-URF",
+      "description": "9ON/12OFF RPT7 SUN,THU,FRI",
+      "matrix21": "XOOOXXOXOOOXXOXOOOXXO"
+    },
+    {
+      "code": "A3",
+      "name": "R7-MWR",
+      "description": "9ON/12OFF RPT7 MON,WED,THU",
+      "matrix21": "OXOXXOOOXOXXOOOXOXXOO"
+    },
+    {
+      "code": "A4",
+      "name": "R7-MTR",
+      "description": "9ON/12OFF RPT7 MON,TUE,THU",
+      "matrix21": "OXXOXOOOXXOXOOOXXOXOO"
+    },
+    {
+      "code": "B1",
+      "name": "R7-UMR",
+      "description": "9ON/12OFF RPT7 SUN,MON,THU",
+      "matrix21": "XXOOXOOXXOOXOOXXOOXOO"
+    },
+    {
+      "code": "B1Q2",
+      "name": "V-UMR/MFS/MFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXOOXOOOXOOOXXOXOOOXX"
+    },
+    {
+      "code": "B2",
+      "name": "R7-TFS",
+      "description": "9ON/12OFF RPT7 TUE,FRI,SAT",
+      "matrix21": "OOXOOXXOOXOOXXOOXOOXX"
+    },
+    {
+      "code": "C",
+      "name": "R7-RFS",
+      "description": "9ON/12OFF RPT7 THU,FRI,SAT",
+      "matrix21": "OOOOXXXOOOOXXXOOOOXXX"
+    },
+    {
+      "code": "CQ1",
+      "name": "ROT-RFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOOOXXXOOOXXXOOOOXXXO"
+    },
+    {
+      "code": "CA1",
+      "name": "V-RFS/UWR/UWR",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOOOXXXXOOXXOOXOOXXOO"
+    },
+    {
+      "code": "D",
+      "name": "R7-UMT",
+      "description": "9ON/12OFF RPT7 SUN,MON,TUE",
+      "matrix21": "XXXOOOOXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "DA",
+      "name": "ROT-RFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOOOXXXOXXXOOOOXXXOOO"
+    },
+    {
+      "code": "D1",
+      "name": "R7-MTS",
+      "description": "9ON/12OFF RPT7 MON,TUE,SAT",
+      "matrix21": "OXXOOOXOXXOOOXOXXOOOX"
+    },
+    {
+      "code": "D1D",
+      "name": "V-MTS/UMT/UMT",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OXXOOOXXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "D2",
+      "name": "R7-MTF",
+      "description": "9ON/12OFF RPT7 MON,TUE,FRI",
+      "matrix21": "OXXOOXOOXXOOXOOXXOOXO"
+    },
+    {
+      "code": "DH",
+      "name": "ROT-UMT",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXXOOOOXOOOOXXXOOOOXX"
+    },
+    {
+      "code": "DO",
+      "name": "V-UMT/TWS/TWS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXXOOOOOOXXOOXOOXXOOX"
+    },
+    {
+      "code": "E",
+      "name": "R7-UMS",
+      "description": "9ON/12OFF RPT7 SUN,MON,SAT",
+      "matrix21": "XXOOOOXXXOOOOXXXOOOOX"
+    },
+    {
+      "code": "E1",
+      "name": "R7-UMF",
+      "description": "9ON/12OFF RPT7 SUN,MON,FRI",
+      "matrix21": "XXOOOXOXXOOOXOXXOOOXO"
+    },
+    {
+      "code": "E1Q2",
+      "name": "V-UMF/MFS/MFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXOOOXOOXOOOXXOXOOOXX"
+    },
+    {
+      "code": "EH",
+      "name": "ROT-UMS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXOOOOXXOOOOXXXOOOOXX"
+    },
+    {
+      "code": "F",
+      "name": "R7-MT",
+      "description": "6ON/15OFF RPT7 MON,TUE",
+      "matrix21": "OXXOOOOOXXOOOOOXXOOOO"
+    },
+    {
+      "code": "F1",
+      "name": "R7-MW",
+      "description": "6ON/15OFF RPT7 MON,WED",
+      "matrix21": "OXOXOOOOXOXOOOOXOXOOO"
+    },
+    {
+      "code": "G",
+      "name": "R7-TW",
+      "description": "6ON/15OFF RPT7 TUE,WED",
+      "matrix21": "OOXXOOOOOXXOOOOOXXOOO"
+    },
+    {
+      "code": "G1",
+      "name": "R7-TS",
+      "description": "6ON/15OFF RPT7 TUE,SAT",
+      "matrix21": "OOXOOOXOOXOOOXOOXOOOX"
+    },
+    {
+      "code": "H",
+      "name": "R7-UFS",
+      "description": "9ON/12OFF RPT7 SUN,FRI,SAT",
+      "matrix21": "XOOOOXXXOOOOXXXOOOOXX"
+    },
+    {
+      "code": "HD",
+      "name": "ROT-UFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOOOXXXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "HE",
+      "name": "ROT-UFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOOOXXXXOOOOXXXOOOOX"
+    },
+    {
+      "code": "HN1",
+      "name": "V-UFS/UTW/UTW",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOOOXXXOXXOOOXOXXOOO"
+    },
+    {
+      "code": "I",
+      "name": "R7-RF",
+      "description": "6ON/15OFF RPT7 THU,FRI",
+      "matrix21": "OOOOXXOOOOOXXOOOOOXXO"
+    },
+    {
+      "code": "J",
+      "name": "R7-FS",
+      "description": "6ON/15OFF RPT7 FRI,SAT",
+      "matrix21": "OOOOOXXOOOOOXXOOOOOXX"
+    },
+    {
+      "code": "K1",
+      "name": "R7-UM",
+      "description": "6ON/15OFF RPT7 SUN,MON",
+      "matrix21": "XXOOOOOXXOOOOOXXOOOOO"
+    },
+    {
+      "code": "K2",
+      "name": "R7-US",
+      "description": "6ON/15OFF RPT7 SUN,SAT",
+      "matrix21": "XOOOOOXXOOOOOXXOOOOOX"
+    },
+    {
+      "code": "K3",
+      "name": "R7-UF",
+      "description": "6ON/15OFF RPT7 SUN,FRI",
+      "matrix21": "XOOOOXOXOOOOXOXOOOOXO"
+    },
+    {
+      "code": "K4",
+      "name": "R7-UW",
+      "description": "6ON/15OFF RPT7 SUN,WED",
+      "matrix21": "XOOXOOOXOOXOOOXOOXOOO"
+    },
+    {
+      "code": "K5",
+      "name": "R7-UT",
+      "description": "6ON/15OFF RPT7 SUN,TUE",
+      "matrix21": "XOXOOOOXOXOOOOXOXOOOO"
+    },
+    {
+      "code": "L",
+      "name": "R7-WR",
+      "description": "6ON/15OFF RPT7 WED,THU",
+      "matrix21": "OOOXXOOOOOXXOOOOOXXOO"
+    },
+    {
+      "code": "L1",
+      "name": "R7-WS",
+      "description": "6ON/15OFF RPT7 WED,SAT",
+      "matrix21": "OOOXOOXOOOXOOXOOOXOOX"
+    },
+    {
+      "code": "M",
+      "name": "R7-UWS",
+      "description": "9ON/12OFF RPT7 SUN,WED,SAT",
+      "matrix21": "XOOXOOXXOOXOOXXOOXOOX"
+    },
+    {
+      "code": "N",
+      "name": "R7-UMW",
+      "description": "9ON/12OFF RPT7 SUN,MON,WED",
+      "matrix21": "XXOXOOOXXOXOOOXXOXOOO"
+    },
+    {
+      "code": "N1",
+      "name": "R7-UTW",
+      "description": "9ON/12OFF RPT7 SUN,TUE,WED",
+      "matrix21": "XOXXOOOXOXXOOOXOXXOOO"
+    },
+    {
+      "code": "N1H",
+      "name": "V-UTW/UFS/UFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOXXOOOXOOOOXXXOOOOXX"
+    },
+    {
+      "code": "O",
+      "name": "R7-TWS",
+      "description": "9ON/12OFF RPT7 TUE,WED,SAT",
+      "matrix21": "OOXXOOXOOXXOOXOOXXOOX"
+    },
+    {
+      "code": "OD",
+      "name": "V-TWS/UMT/UMT",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOXXOOXXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "P",
+      "name": "R7-TWR",
+      "description": "9ON/12OFF RPT7 TUE,WED,THU",
+      "matrix21": "OOXXXOOOOXXXOOOOXXXOO"
+    },
+    {
+      "code": "P1",
+      "name": "R7-TWF",
+      "description": "9ON/12OFF RPT7 TUE,WED,FRI",
+      "matrix21": "OOXXOXOOOXXOXOOOXXOXO"
+    },
+    {
+      "code": "Q1",
+      "name": "R7-WRF",
+      "description": "9ON/12OFF RPT7 WED,THU,FRI",
+      "matrix21": "OOOXXXOOOOXXXOOOOXXXO"
+    },
+    {
+      "code": "Q1C",
+      "name": "ROT-WRF",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOOXXXOOOOOXXXOOOOXXX"
+    },
+    {
+      "code": "Q2",
+      "name": "R7-MFS",
+      "description": "9ON/12OFF RPT7 MON,FRI,SAT",
+      "matrix21": "OXOOOXXOXOOOXXOXOOOXX"
+    },
+    {
+      "code": "Q2B1",
+      "name": "V-MFS/UMR/UMR",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OXOOOXXXXOOXOOXXOOXOO"
+    },
+    {
+      "code": "Q2E1",
+      "name": "V-MFS/UMF/UMF",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OXOOOXXXXOOOXOXXOOOXO"
+    },
+    {
+      "code": "Q3",
+      "name": "R7-MRF",
+      "description": "9ON/12OFF RPT7 MON,THU,FRI",
+      "matrix21": "OXOOXXOOXOOXXOOXOOXXO"
+    },
+    {
+      "code": "Q4",
+      "name": "R7-MWF",
+      "description": "9ON/12OFF RPT7 MON,WED,FRI",
+      "matrix21": "OXOXOXOOXOXOXOOXOXOXO"
+    },
+    {
+      "code": "R",
+      "name": "R7-TRF",
+      "description": "9ON/12OFF RPT7 TUE,THU,FRI",
+      "matrix21": "OOXOXXOOOXOXXOOOXOXXO"
+    },
+    {
+      "code": "R1",
+      "name": "R7-WFS",
+      "description": "9ON/12OFF RPT7 WED,FRI,SAT",
+      "matrix21": "OOOXOXXOOOXOXXOOOXOXX"
+    },
+    {
+      "code": "R2",
+      "name": "R7-WRS",
+      "description": "9ON/12OFF RPT7 WED,THU,SAT",
+      "matrix21": "OOOXXOXOOOXXOXOOOXXOX"
+    },
+    {
+      "code": "R3",
+      "name": "R7-TRS",
+      "description": "9ON/12OFF RPT7 TUE,THU,SAT",
+      "matrix21": "OOXOXOXOOXOXOXOOXOXOX"
+    },
+    {
+      "code": "U",
+      "name": "R7-URS",
+      "description": "9ON/12OFF RPT7 SUN,THU,SAT",
+      "matrix21": "XOOOXOXXOOOXOXXOOOXOX"
+    },
+    {
+      "code": "V",
+      "name": "R7-MS",
+      "description": "6ON/15OFF RPT7 MON,SAT",
+      "matrix21": "OXOOOOXOXOOOOXOXOOOOX"
+    },
+    {
+      "code": "CM",
+      "name": "V-RFS/UWS/UWS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOOOXXXXOOXOOXXOOXOOX"
+    },
+    {
+      "code": "DM",
+      "name": "V-UMT/UWS/UWS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXXOOOOXOOXOOXXOOXOOX"
+    },
+    {
+      "code": "MD",
+      "name": "V-UWS/UMT/UMT",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOXOOXXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "MC",
+      "name": "V-UWS/RFS/RFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOXOOXOOOOXXXOOOOXXX"
+    },
+    {
+      "code": "V1",
+      "name": "R7-MF",
+      "description": "6ON/15OFF RPT7 MON,FRI",
+      "matrix21": "OXOOOXOOXOOOXOOXOOOXO"
+    },
+    {
+      "code": "10WTF",
+      "name": "V-WRF/OFF/OFF",
+      "description": "3ON/18OFF VAR21",
+      "matrix21": "OOOXXXOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "10TWT",
+      "name": "V-TWR/OFF/OFF",
+      "description": "3ON/18OFF VAR21",
+      "matrix21": "OOXXXOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "10FSS",
+      "name": "V-UFS/OFF/OFF",
+      "description": "3ON/18OFF VAR21",
+      "matrix21": "XOOOOXXOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "10SSM",
+      "name": "R7-UMS",
+      "description": "9ON/12OFF RPT7 SUN,MON,SAT",
+      "matrix21": "XXOOOOXXXOOOOXXXOOOOX"
+    },
+    {
+      "code": "10SMT",
+      "name": "R7-UMT",
+      "description": "9ON/12OFF RPT7 SUN,MON,TUE",
+      "matrix21": "XXXOOOOXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "10TFS",
+      "name": "V-RFS/OFF/OFF",
+      "description": "3ON/18OFF VAR21",
+      "matrix21": "OOOOXXXOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "10MTW",
+      "name": "V-MTW/OFF/OFF",
+      "description": "3ON/18OFF VAR21",
+      "matrix21": "OXXXOOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "343S",
+      "name": "V-UMTS/UMT/UMT",
+      "description": "10ON/11OFF VAR21",
+      "matrix21": "XXXOOOXXXXOOOOXXXOOOO"
+    },
+    {
+      "code": "343W",
+      "name": "V-WRF/WRFS/WRF",
+      "description": "10ON/11OFF VAR21",
+      "matrix21": "OOOXXXOOOOXXXXOOOXXXO"
+    },
+    {
+      "code": "313MTWT",
+      "name": "V21-TWRM-11",
+      "description": "11ON/10OFF VAR21",
+      "matrix21": "OXXXXOOOOXXXOOOXXXXOO"
+    },
+    {
+      "code": "313TWTF",
+      "name": "V21-WRFT-11",
+      "description": "11ON/10OFF VAR21",
+      "matrix21": "OOXXXXOOOOXXXOOOXXXXO"
+    },
+    {
+      "code": "PD",
+      "name": "R7-OFF",
+      "description": "0ON/21OFF RPT7 NONE",
+      "matrix21": "OOOOOOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "DP",
+      "name": "R7-OFF",
+      "description": "0ON/21OFF RPT7 NONE",
+      "matrix21": "OOOOOOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "OSC10",
+      "name": "R7-TWR",
+      "description": "9ON/12OFF RPT7 TUE,WED,THU",
+      "matrix21": "OOXXXOOOOXXXOOOOXXXOO"
+    },
+    {
+      "code": "OSC81",
+      "name": "R7-UM",
+      "description": "6ON/15OFF RPT7 SUN,MON",
+      "matrix21": "XXOOOOOXXOOOOOXXOOOOO"
+    },
+    {
+      "code": "OSC82",
+      "name": "R7-FS",
+      "description": "6ON/15OFF RPT7 FRI,SAT",
+      "matrix21": "OOOOOXXOOOOOXXOOOOOXX"
+    },
+    {
+      "code": "12TWTF",
+      "name": "V-TWRF/TWR/TWR",
+      "description": "10ON/11OFF VAR21",
+      "matrix21": "OOXXXXOOOXXXOOOOXXXOO"
+    },
+    {
+      "code": "12MTWT",
+      "name": "V-MTWR/OFF/OFF",
+      "description": "4ON/17OFF VAR21",
+      "matrix21": "OXXXXOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8SM",
+      "name": "V-UM/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "XXOOOOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8MT",
+      "name": "V-MT/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "OXXOOOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8TW",
+      "name": "V-TW/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "OOXXOOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8WT",
+      "name": "V-WR/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "OOOXXOOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8TF",
+      "name": "V-RF/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "OOOOXXOOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8FS",
+      "name": "V-FS/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "OOOOOXXOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "8SS",
+      "name": "V-US/OFF/OFF",
+      "description": "2ON/19OFF VAR21",
+      "matrix21": "XOOOOOXOOOOOOOOOOOOOO"
+    },
+    {
+      "code": "EP",
+      "name": "ROT-UMS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XXOOOOXOOXXXOOOOXXXOO"
+    },
+    {
+      "code": "PE",
+      "name": "ROT-TWR",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOXXXOOXXOOOOXXXOOOOX"
+    },
+    {
+      "code": "HP",
+      "name": "ROT-UFS",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "XOOOOXXOOXXXOOOOXXXOO"
+    },
+    {
+      "code": "PH",
+      "name": "ROT-TWR",
+      "description": "9ON/12OFF VAR21",
+      "matrix21": "OOXXXOOXOOOOXXXOOOOXX"
+    }
+  ]
+}

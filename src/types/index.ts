@@ -338,6 +338,15 @@ export interface RotationPattern {
   sortOrder: number;
 }
 
+export interface RotationPreset {
+  id: number;
+  code: string | null;
+  name: string;
+  description: string | null;
+  pattern: string; // 21-char: x=work, o=off (lowercase)
+  sortOrder: number;
+}
+
 export interface StaffingConfig {
   id: number;
   name: string;

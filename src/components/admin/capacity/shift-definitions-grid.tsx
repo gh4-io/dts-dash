@@ -121,6 +121,8 @@ interface ShiftDefinitionsGridProps {
   shifts: StaffingShift[];
   patterns: RotationPattern[];
   onRefresh: () => void;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export function ShiftDefinitionsGrid({
@@ -128,6 +130,8 @@ export function ShiftDefinitionsGrid({
   shifts,
   patterns,
   onRefresh,
+  collapsed,
+  onToggleCollapse,
 }: ShiftDefinitionsGridProps) {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<StaffingShift | null>(null);
@@ -360,7 +364,17 @@ export function ShiftDefinitionsGrid({
     <div className="flex flex-col h-full">
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
+        <div
+          className={`flex items-center gap-2 ${onToggleCollapse ? "lg:pointer-events-none cursor-pointer" : ""}`}
+          onClick={onToggleCollapse}
+        >
+          {onToggleCollapse && (
+            <span className="lg:hidden">
+              <i
+                className={`fa-solid fa-chevron-${collapsed ? "right" : "down"} text-[10px] text-muted-foreground`}
+              />
+            </span>
+          )}
           <i className="fa-solid fa-layer-group text-xs text-muted-foreground" />
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Shift Definitions
@@ -427,222 +441,225 @@ export function ShiftDefinitionsGrid({
         </div>
       </div>
 
-      {/* Shift categories */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {shifts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <i className="fa-solid fa-layer-group text-3xl mb-3 opacity-30" />
-            <p className="text-sm">No shifts defined</p>
-            <p className="text-xs mt-1">Add shifts to build your staffing matrix</p>
-            <Button variant="outline" size="sm" className="mt-4" onClick={openCreate}>
-              <i className="fa-solid fa-plus mr-1.5" />
-              Add First Shift
-            </Button>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {CATEGORY_ORDER.map((cat) => {
-              const catShifts = grouped[cat];
-              if (catShifts.length === 0) return null;
+      {/* Collapsible content — hidden on mobile when collapsed, always visible on lg+ */}
+      <div className={collapsed ? "hidden lg:contents" : "contents"}>
+        {/* Shift categories */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {shifts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <i className="fa-solid fa-layer-group text-3xl mb-3 opacity-30" />
+              <p className="text-sm">No shifts defined</p>
+              <p className="text-xs mt-1">Add shifts to build your staffing matrix</p>
+              <Button variant="outline" size="sm" className="mt-4" onClick={openCreate}>
+                <i className="fa-solid fa-plus mr-1.5" />
+                Add First Shift
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {CATEGORY_ORDER.map((cat) => {
+                const catShifts = grouped[cat];
+                if (catShifts.length === 0) return null;
 
-              const meta = CATEGORY_META[cat];
-              const isCollapsed = collapsedCategories.has(cat);
-              const catHeadcount = catShifts
-                .filter((s) => s.isActive)
-                .reduce((sum, s) => sum + getEffectiveHeadcount(s), 0);
+                const meta = CATEGORY_META[cat];
+                const isCollapsed = collapsedCategories.has(cat);
+                const catHeadcount = catShifts
+                  .filter((s) => s.isActive)
+                  .reduce((sum, s) => sum + getEffectiveHeadcount(s), 0);
 
-              return (
-                <div key={cat}>
-                  {/* Category header */}
-                  <button
-                    type="button"
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold transition-colors hover:bg-accent/30 ${meta.bg}`}
-                    onClick={() => toggleCollapse(cat)}
-                  >
-                    <i
-                      className={`fa-solid ${isCollapsed ? "fa-chevron-right" : "fa-chevron-down"} text-[8px] text-muted-foreground w-3`}
-                    />
-                    <i className={`fa-solid ${meta.icon} ${meta.color}`} />
-                    <span className={meta.color}>{meta.label}</span>
-                    <span className="text-muted-foreground font-normal">
-                      {catShifts.length} shift{catShifts.length !== 1 ? "s" : ""}
-                    </span>
-                    <span className="ml-auto text-muted-foreground font-normal">
-                      {catHeadcount} AMTs
-                    </span>
-                  </button>
+                return (
+                  <div key={cat}>
+                    {/* Category header */}
+                    <button
+                      type="button"
+                      className={`w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold transition-colors hover:bg-accent/30 ${meta.bg}`}
+                      onClick={() => toggleCollapse(cat)}
+                    >
+                      <i
+                        className={`fa-solid ${isCollapsed ? "fa-chevron-right" : "fa-chevron-down"} text-[8px] text-muted-foreground w-3`}
+                      />
+                      <i className={`fa-solid ${meta.icon} ${meta.color}`} />
+                      <span className={meta.color}>{meta.label}</span>
+                      <span className="text-muted-foreground font-normal">
+                        {catShifts.length} shift{catShifts.length !== 1 ? "s" : ""}
+                      </span>
+                      <span className="ml-auto text-muted-foreground font-normal">
+                        {catHeadcount} AMTs
+                      </span>
+                    </button>
 
-                  {/* Shift bars */}
-                  {!isCollapsed && (
-                    <div className="px-2 py-1 space-y-1">
-                      {catShifts.map((s) => {
-                        const rotation = patternMap.get(s.rotationId);
-                        const isOrphaned = s.rotationId === 0 || (!rotation && s.rotationId > 0);
-                        const isSelected = selectedIds.has(s.id);
-                        const displayHC = getEffectiveHeadcount(s);
-                        const isPending = pendingHeadcounts.has(s.id);
+                    {/* Shift bars */}
+                    {!isCollapsed && (
+                      <div className="px-2 py-1 space-y-1">
+                        {catShifts.map((s) => {
+                          const rotation = patternMap.get(s.rotationId);
+                          const isOrphaned = s.rotationId === 0 || (!rotation && s.rotationId > 0);
+                          const isSelected = selectedIds.has(s.id);
+                          const displayHC = getEffectiveHeadcount(s);
+                          const isPending = pendingHeadcounts.has(s.id);
 
-                        return (
-                          <div
-                            key={s.id}
-                            className={`group rounded-lg border transition-all ${
-                              s.isActive
-                                ? `border-border hover:border-primary/40 ${meta.bg}`
-                                : "border-border/50 opacity-40"
-                            } ${isSelected ? "border-primary bg-primary/5" : ""} ${
-                              isOrphaned ? "border-destructive/40" : ""
-                            } border-l-[3px] ${meta.border}`}
-                          >
-                            <div className="flex items-center gap-3 px-3 py-2">
-                              {/* Select checkbox */}
-                              <button
-                                type="button"
-                                className={`w-3.5 h-3.5 rounded border transition-colors flex-shrink-0 ${
-                                  isSelected
-                                    ? "bg-primary border-primary"
-                                    : "border-muted-foreground/30 hover:border-muted-foreground/60"
-                                }`}
-                                onClick={() => toggleSelect(s.id)}
-                              >
-                                {isSelected && (
-                                  <i className="fa-solid fa-check text-[7px] text-primary-foreground block text-center leading-[14px]" />
-                                )}
-                              </button>
+                          return (
+                            <div
+                              key={s.id}
+                              className={`group rounded-lg border transition-all ${
+                                s.isActive
+                                  ? `border-border hover:border-primary/40 ${meta.bg}`
+                                  : "border-border/50 opacity-40"
+                              } ${isSelected ? "border-primary bg-primary/5" : ""} ${
+                                isOrphaned ? "border-destructive/40" : ""
+                              } border-l-[3px] ${meta.border}`}
+                            >
+                              <div className="flex items-center gap-3 px-3 py-2">
+                                {/* Select checkbox */}
+                                <button
+                                  type="button"
+                                  className={`w-3.5 h-3.5 rounded border transition-colors flex-shrink-0 ${
+                                    isSelected
+                                      ? "bg-primary border-primary"
+                                      : "border-muted-foreground/30 hover:border-muted-foreground/60"
+                                  }`}
+                                  onClick={() => toggleSelect(s.id)}
+                                >
+                                  {isSelected && (
+                                    <i className="fa-solid fa-check text-[7px] text-primary-foreground block text-center leading-[14px]" />
+                                  )}
+                                </button>
 
-                              {/* Name + time */}
-                              <div className="w-28 flex-shrink-0 min-w-0">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-sm font-semibold truncate block">
-                                    {s.name}
+                                {/* Name + time */}
+                                <div className="w-28 flex-shrink-0 min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-sm font-semibold truncate block">
+                                      {s.name}
+                                    </span>
+                                    {isOrphaned && (
+                                      <TooltipProvider delayDuration={0}>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <i className="fa-solid fa-triangle-exclamation text-[9px] text-destructive flex-shrink-0" />
+                                          </TooltipTrigger>
+                                          <TooltipContent className="text-[10px] max-w-48 text-destructive">
+                                            Rotation pattern was deleted. Assign a new rotation.
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {fmtTime(s.startHour, s.startMinute)}–
+                                    {fmtTime(s.endHour, s.endMinute)}
                                   </span>
-                                  {isOrphaned && (
-                                    <TooltipProvider delayDuration={0}>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <i className="fa-solid fa-triangle-exclamation text-[9px] text-destructive flex-shrink-0" />
-                                        </TooltipTrigger>
-                                        <TooltipContent className="text-[10px] max-w-48 text-destructive">
-                                          Rotation pattern was deleted. Assign a new rotation.
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </TooltipProvider>
+                                </div>
+
+                                {/* Rotation dots */}
+                                <div className="flex-shrink-0">
+                                  {rotation ? (
+                                    <RotationDots
+                                      pattern={rotation.pattern}
+                                      categoryColor={CATEGORY_DOT_COLOR[s.category]}
+                                    />
+                                  ) : (
+                                    <span className="text-[10px] text-destructive/70 italic">
+                                      No rotation
+                                    </span>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-muted-foreground">
-                                  {fmtTime(s.startHour, s.startMinute)}–
-                                  {fmtTime(s.endHour, s.endMinute)}
-                                </span>
-                              </div>
 
-                              {/* Rotation dots */}
-                              <div className="flex-shrink-0">
-                                {rotation ? (
-                                  <RotationDots
-                                    pattern={rotation.pattern}
-                                    categoryColor={CATEGORY_DOT_COLOR[s.category]}
-                                  />
-                                ) : (
-                                  <span className="text-[10px] text-destructive/70 italic">
-                                    No rotation
+                                {/* Rotation name + start */}
+                                <div className="hidden lg:block flex-shrink-0 w-24 min-w-0">
+                                  <TooltipProvider delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="text-[10px] text-muted-foreground truncate block cursor-default">
+                                          {rotation?.name ?? "—"}
+                                        </span>
+                                      </TooltipTrigger>
+                                      {s.description && (
+                                        <TooltipContent
+                                          side="bottom"
+                                          className="text-[10px] max-w-48"
+                                        >
+                                          {s.description}
+                                        </TooltipContent>
+                                      )}
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                  <span className="text-[9px] text-muted-foreground/60">
+                                    from {s.rotationStartDate}
                                   </span>
-                                )}
-                              </div>
+                                </div>
 
-                              {/* Rotation name + start */}
-                              <div className="hidden lg:block flex-shrink-0 w-24 min-w-0">
-                                <TooltipProvider delayDuration={200}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span className="text-[10px] text-muted-foreground truncate block cursor-default">
-                                        {rotation?.name ?? "—"}
-                                      </span>
-                                    </TooltipTrigger>
-                                    {s.description && (
-                                      <TooltipContent
-                                        side="bottom"
-                                        className="text-[10px] max-w-48"
-                                      >
-                                        {s.description}
-                                      </TooltipContent>
-                                    )}
-                                  </Tooltip>
-                                </TooltipProvider>
-                                <span className="text-[9px] text-muted-foreground/60">
-                                  from {s.rotationStartDate}
-                                </span>
-                              </div>
+                                {/* Spacer */}
+                                <div className="flex-1 min-w-0" />
 
-                              {/* Spacer */}
-                              <div className="flex-1 min-w-0" />
-
-                              {/* Headcount — always-visible normal input, auto-saves on blur */}
-                              <div className="flex-shrink-0">
-                                <HeadcountInput
-                                  key={`${s.id}-${s.headcount}`}
-                                  shiftId={s.id}
-                                  defaultValue={displayHC}
-                                  isPending={isPending}
-                                  onBlur={handleHeadcountBlur}
-                                />
-                              </div>
-
-                              {/* Action buttons */}
-                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => openEdit(s)}
-                                >
-                                  <i className="fa-solid fa-pen-to-square text-[10px]" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0"
-                                  onClick={() => handleToggleActive(s)}
-                                >
-                                  <i
-                                    className={`fa-solid ${s.isActive ? "fa-eye" : "fa-eye-slash"} text-[10px]`}
+                                {/* Headcount — always-visible normal input, auto-saves on blur */}
+                                <div className="flex-shrink-0">
+                                  <HeadcountInput
+                                    key={`${s.id}-${s.headcount}`}
+                                    shiftId={s.id}
+                                    defaultValue={displayHC}
+                                    isPending={isPending}
+                                    onBlur={handleHeadcountBlur}
                                   />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive"
-                                  onClick={() => setDeleteTarget(s)}
-                                >
-                                  <i className="fa-solid fa-trash text-[10px]" />
-                                </Button>
+                                </div>
+
+                                {/* Action buttons */}
+                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={() => openEdit(s)}
+                                  >
+                                    <i className="fa-solid fa-pen-to-square text-[10px]" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={() => handleToggleActive(s)}
+                                  >
+                                    <i
+                                      className={`fa-solid ${s.isActive ? "fa-eye" : "fa-eye-slash"} text-[10px]`}
+                                    />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive"
+                                    onClick={() => setDeleteTarget(s)}
+                                  >
+                                    <i className="fa-solid fa-trash text-[10px]" />
+                                  </Button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer summary */}
+        {shifts.length > 0 && (
+          <div className="px-3 py-2 border-t border-border shrink-0 flex items-center justify-between text-xs text-muted-foreground">
+            <span>
+              Active: {shifts.filter((s) => s.isActive).length}/{shifts.length} shifts
+            </span>
+            <span className="font-semibold text-foreground">
+              <i className="fa-solid fa-users mr-1" />
+              {totalHeadcount} AMTs
+              {hasPendingChanges && (
+                <span className="text-[9px] text-amber-500 ml-1.5 font-normal">(unsaved)</span>
+              )}
+            </span>
           </div>
         )}
       </div>
-
-      {/* Footer summary */}
-      {shifts.length > 0 && (
-        <div className="px-3 py-2 border-t border-border shrink-0 flex items-center justify-between text-xs text-muted-foreground">
-          <span>
-            Active: {shifts.filter((s) => s.isActive).length}/{shifts.length} shifts
-          </span>
-          <span className="font-semibold text-foreground">
-            <i className="fa-solid fa-users mr-1" />
-            {totalHeadcount} AMTs
-            {hasPendingChanges && (
-              <span className="text-[9px] text-amber-500 ml-1.5 font-normal">(unsaved)</span>
-            )}
-          </span>
-        </div>
-      )}
 
       {/* Edit / Create Dialog — NO headcount field */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>

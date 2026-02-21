@@ -710,6 +710,24 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M009: Create rotation_presets table for preset library
+  results.push(
+    applyMigration("M009_rotation_presets", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS rotation_presets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT,
+          name TEXT NOT NULL,
+          description TEXT,
+          pattern TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+      `);
+    }),
+  );
+
   return results;
 }
 

@@ -20,4 +20,5 @@ import "./capacity-shifts";
 import "./headcount-plans";
 import "./headcount-exceptions";
 import "./rotation-patterns";
+import "./rotation-presets";
 import "./staffing-shifts";

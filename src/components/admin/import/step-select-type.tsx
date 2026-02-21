@@ -15,7 +15,7 @@ interface StepSelectTypeProps {
   onSelect: (schemaId: string) => void;
 }
 
-const GRID_CLASSES = "grid gap-3 grid-cols-[repeat(auto-fill,minmax(min(100%,380px),1fr))]";
+const GRID_CLASSES = "grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
 
 function SchemaCard({
   schema,

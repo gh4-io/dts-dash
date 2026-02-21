@@ -390,6 +390,22 @@ export const rotationPatterns = sqliteTable("rotation_patterns", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+// ─── Rotation Presets (reference library for quick-fill) ────────────────────
+export const rotationPresets = sqliteTable("rotation_presets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code"),
+  name: text("name").notNull(),
+  description: text("description"),
+  pattern: text("pattern").notNull(), // 21-char string: x=work, o=off
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
 // ─── Staffing: Configurations ───────────────────────────────────────────────
 
 export const staffingConfigs = sqliteTable("staffing_configs", {

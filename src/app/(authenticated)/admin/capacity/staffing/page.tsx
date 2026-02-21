@@ -14,6 +14,8 @@ export default function StaffingPage() {
   const [shifts, setShifts] = useState<StaffingShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [rotationsCollapsed, setRotationsCollapsed] = useState(false);
+  const [shiftsCollapsed, setShiftsCollapsed] = useState(false);
 
   // Fetch patterns
   useEffect(() => {
@@ -79,12 +81,17 @@ export default function StaffingPage() {
 
       {/* Three-panel layout */}
       <div
-        className="grid grid-cols-1 lg:grid-cols-[280px_1fr_320px] gap-3"
+        className="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-3"
         style={{ minHeight: "calc(100vh - 280px)" }}
       >
         {/* Left: Rotation Patterns */}
         <div className="rounded-lg border border-border bg-card overflow-hidden lg:max-h-[calc(100vh-280px)]">
-          <RotationPatternList patterns={patterns} onRefresh={triggerRefresh} />
+          <RotationPatternList
+            patterns={patterns}
+            onRefresh={triggerRefresh}
+            collapsed={rotationsCollapsed}
+            onToggleCollapse={() => setRotationsCollapsed((v) => !v)}
+          />
         </div>
 
         {/* Center: Shift Definitions */}
@@ -95,6 +102,8 @@ export default function StaffingPage() {
               shifts={shifts}
               patterns={patterns}
               onRefresh={triggerRefresh}
+              collapsed={shiftsCollapsed}
+              onToggleCollapse={() => setShiftsCollapsed((v) => !v)}
             />
           ) : (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

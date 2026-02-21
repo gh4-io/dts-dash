@@ -7,9 +7,15 @@
 
 import { db } from "@/lib/db/client";
 import { eq, and, sql } from "drizzle-orm";
-import { rotationPatterns, staffingConfigs, staffingShifts } from "@/lib/db/schema";
+import {
+  rotationPatterns,
+  rotationPresets,
+  staffingConfigs,
+  staffingShifts,
+} from "@/lib/db/schema";
 import type {
   RotationPattern,
+  RotationPreset,
   StaffingConfig,
   StaffingConfigSummary,
   StaffingShift,
@@ -488,4 +494,30 @@ export function deleteStaffingShift(id: number): boolean {
   const result = db.delete(staffingShifts).where(eq(staffingShifts.id, id)).returning().get();
 
   return !!result;
+}
+
+// ─── Rotation Presets (reference library) ─────────────────────────────────────
+
+export function loadRotationPresets(): RotationPreset[] {
+  return db
+    .select()
+    .from(rotationPresets)
+    .orderBy(rotationPresets.code)
+    .all()
+    .map((r) => ({
+      id: r.id,
+      code: r.code ?? null,
+      name: r.name,
+      description: r.description ?? null,
+      pattern: r.pattern,
+      sortOrder: r.sortOrder,
+    }));
+}
+
+export function loadRotationPresetCount(): number {
+  const result = db
+    .select({ count: sql<number>`count(*)` })
+    .from(rotationPresets)
+    .get();
+  return result?.count ?? 0;
 }

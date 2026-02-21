@@ -5,8 +5,8 @@ const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 interface RotationDotsProps {
   pattern: string; // 21-char: x=work, o=off
   categoryColor?: string; // tailwind bg color class for working dots
-  /** "sm" = compact inline strip (default), "md" = 3×7 grid with week labels */
-  size?: "sm" | "md";
+  /** "sm" = compact inline strip (default), "md" = 3×7 grid with week labels, "inline" = all 21 outlined blocks in a row */
+  size?: "sm" | "md" | "inline";
   showWeekLabels?: boolean;
   interactive?: boolean;
   onToggle?: (index: number) => void;
@@ -14,8 +14,9 @@ interface RotationDotsProps {
 
 /**
  * Visual representation of a 3-week rotation pattern.
- * - "sm" (default): inline 21-square strip, zero gap, 5×10px — used in lists and shift bars.
+ * - "sm" (default): inline 21-square strip, zero gap, 5×10px — used in shift bars.
  * - "md": 3-row × 7-col grid with optional week/day labels — used in dialogs and previews.
+ * - "inline": all 21 outlined blocks in a single row, 8×8px, 1px gap — used in list rows.
  */
 export function RotationDots({
   pattern,
@@ -52,8 +53,8 @@ export function RotationDots({
               return (
                 <span
                   key={day}
-                  className={`w-[14px] h-[14px] rounded-[2px] ${
-                    isWork ? fillColor : "bg-muted-foreground/15"
+                  className={`w-[14px] h-[14px] rounded-[2px] border ${
+                    isWork ? `${fillColor} border-primary/70` : "bg-muted border-border"
                   } ${interactive ? "cursor-pointer hover:opacity-80" : ""}`}
                   onClick={interactive && onToggle ? () => onToggle(idx) : undefined}
                 />
@@ -62,6 +63,26 @@ export function RotationDots({
           </div>
         ))}
       </div>
+    );
+  }
+
+  // inline: all 21 outlined blocks in a single row
+  if (size === "inline") {
+    return (
+      <span className="inline-flex items-center" style={{ gap: "1px" }}>
+        {pattern.split("").map((ch, i) => {
+          const isWork = ch === "x";
+          return (
+            <span
+              key={i}
+              className={`w-2 h-2 rounded-[1px] border ${
+                isWork ? `${fillColor} border-primary/70` : "bg-muted border-border"
+              } ${interactive ? "cursor-pointer hover:opacity-80" : ""}`}
+              onClick={interactive && onToggle ? () => onToggle(i) : undefined}
+            />
+          );
+        })}
+      </span>
     );
   }
 
