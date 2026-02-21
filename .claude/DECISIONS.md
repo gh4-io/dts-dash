@@ -463,3 +463,25 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** MINOR (renamed env var, added normalization — backwards-compatible in behavior; old `AUTH_URL` env var no longer read)
 **Links**: OI-060 (resolved), `src/instrumentation.ts`, `server.config.dev.yml`, `docker/.env.example`, `DEPLOYMENT.md`
+
+## D-038 | 2026-02-21 | Flight Events: No FK on workPackageId (P2-1)
+
+**Context:** Flight events reference work packages but the `work_packages` table is populated from JSON imports with unpredictable timing. A foreign key would cause cascade/import-order issues.
+
+**Decision:** Store `workPackageId` as a nullable integer column with no foreign key constraint — a logical reference only. The application layer can still look up the corresponding work package when needed.
+
+**Rationale:** Avoids coupling flight event lifecycle to import pipeline timing. Consistent with local-first philosophy where data sources are loosely coupled.
+
+**Version impact:** None (new feature, no breaking changes)
+**Links**: P2-1, `src/lib/db/schema.ts` (flightEvents table)
+
+## D-039 | 2026-02-21 | Coverage Windows as Absolute Time Ranges (P2-1)
+
+**Context:** Coverage windows could be stored as relative offsets (e.g., "+30min from arrival") or as absolute ISO datetime ranges.
+
+**Decision:** Coverage windows are computed as absolute `[startTime, endTime]` ISO datetime ranges. The `resolveShiftForHour()` function maps windows to shifts when needed (e.g., for coverage requirements aggregation).
+
+**Rationale:** Absolute ranges are simpler to query, compare, and visualize. The engine already has `resolveShiftForHour()` for shift mapping, so no new infrastructure needed.
+
+**Version impact:** None (new feature)
+**Links**: P2-1, `src/lib/capacity/flight-events-engine.ts`

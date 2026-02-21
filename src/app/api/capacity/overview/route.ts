@@ -14,11 +14,16 @@ import {
   validateHeadcountCoverage,
   computeCapacitySummary,
   computeDailyDemandV2,
+  loadDemandAllocations,
+  loadCustomerNameMap,
+  applyAllocations,
   loadActiveStaffingConfig,
   loadStaffingShifts,
   loadRotationPatterns,
   buildPatternMap,
   resolveStaffingForCapacity,
+  loadFlightEvents,
+  computeAllEventWindows,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import { createChildLogger } from "@/lib/logger";
@@ -102,21 +107,39 @@ export async function GET(request: NextRequest) {
       dateSet.has(d.date),
     );
 
+    // Load active allocations for date range and apply to demand
+    const allocations = loadDemandAllocations(startDate, endDate, true);
+    let adjustedDemand = demand;
+    if (allocations.length > 0) {
+      const customerNameMap = loadCustomerNameMap();
+      adjustedDemand = applyAllocations(demand, allocations, shifts, customerNameMap);
+    }
+
+    // Load flight events and compute coverage windows for date range
+    const flightEvents = loadFlightEvents(startDate, endDate, true);
+    const coverageWindows =
+      flightEvents.length > 0
+        ? computeAllEventWindows(flightEvents, startDate, endDate)
+        : undefined;
+
     // Compute utilization
-    const utilization = computeUtilizationV2(demand, capacity);
+    const utilization = computeUtilizationV2(adjustedDemand, capacity);
 
     // Compute summary and warnings
     const summary = computeCapacitySummary(utilization);
     const warnings = validateHeadcountCoverage(capacity, shifts);
 
     return NextResponse.json({
-      demand,
+      demand: adjustedDemand,
       capacity,
       utilization,
       summary,
       warnings,
       shifts,
       assumptions,
+      allocations: allocations.length > 0 ? allocations : undefined,
+      flightEvents: flightEvents.length > 0 ? flightEvents : undefined,
+      coverageWindows: coverageWindows && coverageWindows.length > 0 ? coverageWindows : undefined,
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

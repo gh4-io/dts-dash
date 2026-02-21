@@ -229,6 +229,68 @@ export interface HeadcountException {
   reason: string | null;
 }
 
+export type AllocationMode = "ADDITIVE" | "MINIMUM_FLOOR";
+
+export interface DemandAllocation {
+  id: number;
+  customerId: number;
+  customerName?: string; // joined for display
+  shiftId: number | null; // null = all shifts
+  dayOfWeek: number | null; // 0=Sun..6=Sat, null = all days
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo: string | null; // null = indefinite
+  allocatedMh: number;
+  mode: AllocationMode;
+  reason: string | null;
+  isActive: boolean;
+  createdBy?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ─── Flight Events (P2-1) ───────────────────────────────────────────────────
+
+export type FlightEventStatus = "scheduled" | "actual" | "cancelled";
+export type FlightEventSource = "work_package" | "manual" | "import";
+
+export interface FlightEvent {
+  id: number;
+  workPackageId: number | null; // logical ref only — no FK
+  aircraftReg: string;
+  customer: string;
+  scheduledArrival: string | null; // ISO datetime
+  actualArrival: string | null;
+  scheduledDeparture: string | null;
+  actualDeparture: string | null;
+  arrivalWindowMinutes: number; // default 30
+  departureWindowMinutes: number; // default 60
+  status: FlightEventStatus;
+  source: FlightEventSource;
+  notes: string | null;
+  isActive: boolean;
+  createdBy?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Computed coverage window from a flight event's effective arrival/departure */
+export interface EventCoverageWindow {
+  eventId: number;
+  aircraftReg: string;
+  customer: string;
+  windowType: "arrival" | "departure";
+  startTime: string; // ISO datetime
+  endTime: string;
+  durationMinutes: number;
+}
+
+/** Per-hour aircraft-on-ground count (foundation for P2-4 Concurrency) */
+export interface ConcurrencyBucket {
+  hour: string; // ISO datetime for the hour start
+  aircraftCount: number;
+  eventIds: number[];
+}
+
 /** Slot: a (date, shift) pair for demand/capacity computation */
 export interface ShiftSlot {
   date: string; // YYYY-MM-DD
@@ -261,6 +323,7 @@ export interface DailyCapacityV2 {
 export interface ShiftDemandV2 {
   shiftCode: string;
   demandMH: number;
+  allocatedDemandMH?: number;
   wpContributions: Array<{
     wpId: number;
     aircraftReg: string;
@@ -274,6 +337,7 @@ export interface ShiftDemandV2 {
 export interface DailyDemandV2 {
   date: string;
   totalDemandMH: number;
+  totalAllocatedDemandMH?: number;
   aircraftCount: number;
   byCustomer: Record<string, number>;
   byShift: ShiftDemandV2[];
@@ -323,6 +387,9 @@ export interface CapacityOverviewResponse {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions;
+  allocations?: DemandAllocation[];
+  flightEvents?: FlightEvent[];
+  coverageWindows?: EventCoverageWindow[];
 }
 
 // ─── Staffing: Rotation-Based Scheduling ────────────────────────────────────

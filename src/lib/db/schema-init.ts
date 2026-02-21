@@ -728,6 +728,65 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M010: Create demand_allocations table for contractual minimum hours
+  results.push(
+    applyMigration("M010_demand_allocations", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS demand_allocations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          shift_id INTEGER REFERENCES capacity_shifts(id),
+          day_of_week INTEGER,
+          effective_from TEXT NOT NULL,
+          effective_to TEXT,
+          allocated_mh REAL NOT NULL,
+          mode TEXT NOT NULL,
+          reason TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_da_customer ON demand_allocations(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_da_effective ON demand_allocations(effective_from, effective_to);
+        CREATE INDEX IF NOT EXISTS idx_da_shift ON demand_allocations(shift_id);
+      `);
+    }),
+  );
+
+  // M011: Create flight_events table for scheduled/actual arrivals and departures
+  results.push(
+    applyMigration("M011_flight_events", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS flight_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_package_id INTEGER,
+          aircraft_reg TEXT NOT NULL,
+          customer TEXT NOT NULL,
+          scheduled_arrival TEXT,
+          actual_arrival TEXT,
+          scheduled_departure TEXT,
+          actual_departure TEXT,
+          arrival_window_minutes INTEGER NOT NULL DEFAULT 30,
+          departure_window_minutes INTEGER NOT NULL DEFAULT 60,
+          status TEXT NOT NULL,
+          source TEXT NOT NULL,
+          notes TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fe_aircraft_reg ON flight_events(aircraft_reg);
+        CREATE INDEX IF NOT EXISTS idx_fe_scheduled_arrival ON flight_events(scheduled_arrival);
+        CREATE INDEX IF NOT EXISTS idx_fe_scheduled_departure ON flight_events(scheduled_departure);
+        CREATE INDEX IF NOT EXISTS idx_fe_work_package_id ON flight_events(work_package_id);
+      `);
+    }),
+  );
+
   return results;
 }
 

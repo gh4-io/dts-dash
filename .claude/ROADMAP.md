@@ -17,11 +17,28 @@
 **Milestone 6**: Complete ✅
 **Milestone 7**: Complete ✅
 
-**All milestones complete. Project is production-ready.**
+**All base milestones (M0–M8) complete. Project is production-ready.**
+
+**Current Focus: Capacity Phase 2** — Advanced capacity lenses on `feat/capacity-mvp` branch.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
 - [x] Cron job management: code defaults + YAML overrides + Admin UI (D-030) — 2026-02-17
+
+### Capacity Phase 1 (Complete)
+- [x] WS-1 through WS-5: Core capacity engine, demand distribution, shifts, assumptions — 2026-02-20
+- [x] WS-6: Integration, import schemas, docs — 2026-02-20
+- [x] WS-7: Rotation-based staffing system — 2026-02-21
+- [x] WS-8: Staffing-driven capacity mode — 2026-02-21
+
+### Capacity Phase 2 (In Progress)
+- [x] P2-6: Demand Allocations — 2026-02-21
+- [ ] P2-1: Flight Events — **NEXT**
+- [ ] P2-5: Rate Forecast
+- [ ] P2-2: Worked Hours
+- [ ] P2-3: Billed Hours
+- [ ] P2-4: Concurrency (blocked by P2-1)
+- [ ] P2-7: Multi-Lens UI (blocked by P2-1 through P2-6)
 
 ## Milestones
 
@@ -342,3 +359,241 @@ See [PLAN.md](PLAN.md) M8 section.
 - Account spec: `.claude/SPECS/REQ_Account.md`
 - Aircraft types spec: `.claude/SPECS/REQ_AircraftTypes.md`
 - Data import spec: `.claude/SPECS/REQ_DataImport.md`
+
+---
+
+# Capacity Phase 2 — Advanced Operational Lenses
+
+> **Branch:** `feat/capacity-mvp`
+> **Started:** 2026-02-21
+> **Builds on:** Phase 1 capacity engine (WS-1 through WS-8, 175 tests)
+>
+> Phase 2 extends the capacity page from a single "Planned Capacity" view into **multiple operational lenses**. Each lens adds a new dimension of analysis — contractual obligations, flight events, actual hours, billing, concurrency, and forecasting — unified through a lens selector UI.
+
+## Lens Concept
+
+| Lens | Source WS | Description |
+|------|-----------|-------------|
+| **Planned** | Phase 1 | Capacity vs WP-based demand (done) |
+| **Allocated** | P2-6 | Plus contractual minimum hours per customer |
+| **Events** | P2-1 | Plus guaranteed capacity windows around arrivals/departures |
+| **Worked** | P2-2 | Plus actual man-hours recorded |
+| **Billed** | P2-3 | Plus invoiced/billable hours |
+| **Concurrent** | P2-4 | Plus overlapping aircraft pressure index |
+| **Forecast** | P2-5 | Plus projected demand based on historical patterns |
+| **Unified** | P2-7 | Switch between all lenses via single endpoint + UI tabs |
+
+## Workstream Tracker
+
+| Priority | WS | Feature | Status | DB Tables | Key Files |
+|----------|-----|---------|--------|-----------|-----------|
+| **P1** | **P2-6** | Demand Allocations | **Done** ✅ | `demand_allocations` | See P2-6 section below |
+| **P1** | **P2-1** | Flight Events | **Done** ✅ | `flight_events` | See P2-1 section below |
+| P2 | **P2-5** | Rate Forecast | **Next** 🔜 | `forecast_models`, `forecast_rates` | — |
+| P2 | **P2-2** | Worked Hours | Planned | `time_bookings` | — |
+| P2 | **P2-3** | Billed Hours | Planned | `billing_entries` | — |
+| P3 | **P2-4** | Concurrency | Planned (needs P2-1) | 0 new | — |
+| P3 | **P2-7** | Multi-Lens UI | Planned (needs all) | 0 new | — |
+
+### Priority Legend
+- **P1** = Start here — no dependencies on other Phase 2 work
+- **P2** = Independent of each other, builds on Phase 1
+- **P3** = Integration — requires earlier Phase 2 workstreams
+
+### Dependency Graph
+
+```
+Phase 1 (WS-1..WS-8) ────┬── P2-6 Demand Allocations ✅
+                          ├── P2-1 Flight Events ──── P2-4 Concurrency
+                          ├── P2-5 Rate Forecast           │
+                          ├── P2-2 Worked Hours             │
+                          └── P2-3 Billed Hours             │
+                                                            ▼
+                          P2-1+P2-2+P2-3+P2-5+P2-6 ── P2-7 Multi-Lens UI
+```
+
+## Established Patterns (Set by P2-6)
+
+Every Phase 2 workstream follows this file structure:
+
+| Layer | File Pattern | Example (P2-6) |
+|-------|-------------|-----------------|
+| Types | `src/types/index.ts` | `DemandAllocation`, `AllocationMode` |
+| Schema | `src/lib/db/schema.ts` | `demandAllocations` table + relations |
+| Migration | `src/lib/db/schema-init.ts` | `M010_demand_allocations` |
+| Engine | `src/lib/capacity/{name}-engine.ts` | `allocation-engine.ts` (pure functions, zero DB) |
+| Data | `src/lib/capacity/{name}-data.ts` | `allocation-data.ts` (Drizzle CRUD) |
+| Barrel | `src/lib/capacity/index.ts` | Export engine + data functions |
+| API Collection | `src/app/api/admin/capacity/{feature}/route.ts` | GET (list) + POST (create) |
+| API Single | `src/app/api/admin/capacity/{feature}/[id]/route.ts` | GET + PUT + DELETE |
+| Admin Page | `src/app/(authenticated)/admin/capacity/{feature}/page.tsx` | Client component, CRUD handlers |
+| Grid | `src/components/admin/capacity/{name}-grid.tsx` | Table + actions + delete dialog |
+| Editor | `src/components/admin/capacity/{name}-editor.tsx` | Dialog form (create/edit) |
+| Tests | `src/__tests__/capacity/{name}-engine.test.ts` | ~30+ vitest tests |
+| Hub Card | `src/app/(authenticated)/admin/capacity/page.tsx` | Add to `CAPACITY_SECTIONS` array |
+| Overview | `src/app/api/capacity/overview/route.ts` | Load data → apply → include in response |
+
+**Key constraints:**
+- All DB access through `*-data.ts` layer — never import `db` in engines
+- All compute logic in pure `*-engine.ts` files — testable without DB
+- Semantic versioning (D-028): no breaking changes without notification
+- Auth: all admin API routes check `["admin", "superadmin"]` role
+- Next.js 15: `await params` in dynamic routes
+
+---
+
+## P2-6: Demand Allocations — DONE ✅
+
+> **Completed:** 2026-02-21 | **Tests:** 35 new (210 total) | **Migration:** M010
+
+### What It Does
+Admin-configurable per-customer minimum hours that adjust demand calculations. Two modes:
+- **MINIMUM_FLOOR**: `effective = max(normalMH, allocatedMH)` — guarantees a floor
+- **ADDITIVE**: `effective = normalMH + allocatedMH` — adds on top
+
+Allocations can be scoped by customer, shift, day-of-week, and date range.
+
+### Design Decisions
+- `dayOfWeek` is single integer (not bitmask) — matches headcount plans pattern. For Mon-Thu, create 4 rows.
+- No separate preview endpoint — allocations integrated into `/api/capacity/overview` response.
+- Hard delete (not soft) — `isActive` toggle for deactivation, delete for permanent removal.
+- No FK cascade on customer delete — admin must remove allocations first.
+- Customer bridging: demand engine uses name strings, allocations use customerId integers, bridged via `loadCustomerNameMap()`.
+
+### Files Created
+| File | Purpose |
+|------|---------|
+| `src/lib/capacity/allocation-engine.ts` | `findMatchingAllocations`, `computeAllocatedMH`, `applyAllocations`, `validateAllocation` |
+| `src/lib/capacity/allocation-data.ts` | CRUD: `loadDemandAllocations`, `createDemandAllocation`, `updateDemandAllocation`, `deleteDemandAllocation`, `loadCustomerNameMap` |
+| `src/app/api/admin/capacity/demand-allocations/route.ts` | GET (list) + POST (create) |
+| `src/app/api/admin/capacity/demand-allocations/[id]/route.ts` | GET + PUT + DELETE |
+| `src/app/(authenticated)/admin/capacity/allocations/page.tsx` | Admin page with CRUD handlers |
+| `src/components/admin/capacity/allocation-grid.tsx` | Table with mode badges (amber=Floor, blue=Additive) |
+| `src/components/admin/capacity/allocation-editor.tsx` | Dialog form with mode selector cards |
+| `src/__tests__/capacity/allocation-engine.test.ts` | 35 tests: matching, compute, apply, validate |
+
+### Files Modified
+| File | Change |
+|------|--------|
+| `src/types/index.ts` | Added `AllocationMode`, `DemandAllocation`; optional `allocatedDemandMH` on `ShiftDemandV2`; `totalAllocatedDemandMH` on `DailyDemandV2`; `allocations?` on `CapacityOverviewResponse` |
+| `src/lib/db/schema.ts` | Added `demandAllocations` table (13 cols, 3 indexes) + relations; updated `capacityShiftsRelations`, `customersRelations` |
+| `src/lib/db/schema-init.ts` | Added `M010_demand_allocations` migration |
+| `src/lib/capacity/index.ts` | Added allocation engine + data exports |
+| `src/app/api/capacity/overview/route.ts` | Loads active allocations → `applyAllocations()` → uses adjusted demand for utilization |
+| `src/app/(authenticated)/admin/capacity/page.tsx` | Added "Demand Allocations" hub card (fa-handshake, amber) |
+
+### DB Schema: `demand_allocations`
+```
+id              INTEGER PK AUTOINCREMENT
+customer_id     INTEGER NOT NULL FK(customers.id)
+shift_id        INTEGER FK(capacity_shifts.id)  -- null = all shifts
+day_of_week     INTEGER                          -- 0-6 or null = all days
+effective_from  TEXT NOT NULL                     -- YYYY-MM-DD
+effective_to    TEXT                              -- null = indefinite
+allocated_mh    REAL NOT NULL
+mode            TEXT NOT NULL                     -- ADDITIVE | MINIMUM_FLOOR
+reason          TEXT
+is_active       INTEGER NOT NULL DEFAULT 1
+created_by      INTEGER FK(users.id)
+created_at      TEXT NOT NULL
+updated_at      TEXT NOT NULL
+
+Indexes: idx_da_customer, idx_da_effective, idx_da_shift
+```
+
+---
+
+## P2-1: Flight Events — Done ✅
+
+> **Priority:** P1 (no dependencies) | **Effort:** 1 session | **Migration:** M011
+> **Completed:** 2026-02-21
+
+### What It Adds
+`flight_events` table tracking scheduled vs actual arrivals and departures. Coverage engine computes guaranteed capacity windows (e.g., arrival+30min, departure-60min). Foundation for P2-4 Concurrency.
+
+### Files Created/Modified
+- `src/types/index.ts` — FlightEvent, EventCoverageWindow, ConcurrencyBucket types
+- `src/lib/db/schema.ts` — flightEvents table + relations
+- `src/lib/db/schema-init.ts` — M011_flight_events migration
+- `src/lib/capacity/flight-events-engine.ts` — computeEventWindows, computeAllEventWindows, computeCoverageRequirements, computeConcurrencyPressure, validateFlightEvent
+- `src/lib/capacity/flight-events-data.ts` — CRUD (loadFlightEvents, loadFlightEvent, create, update, delete)
+- `src/lib/capacity/index.ts` — barrel exports
+- `src/app/api/admin/capacity/flight-events/route.ts` — GET/POST
+- `src/app/api/admin/capacity/flight-events/[id]/route.ts` — GET/PUT/DELETE
+- `src/app/(authenticated)/admin/capacity/flight-events/page.tsx` — admin page
+- `src/components/admin/capacity/flight-events-grid.tsx` — grid component
+- `src/components/admin/capacity/flight-events-editor.tsx` — editor dialog
+- `src/__tests__/capacity/flight-events-engine.test.ts` — 33 tests
+- `src/app/(authenticated)/admin/capacity/page.tsx` — hub card (sky, fa-plane-arrival)
+- `src/app/api/capacity/overview/route.ts` — optional flightEvents + coverageWindows in response
+
+### Design Decisions
+- **workPackageId — no FK constraint.** Stored as nullable integer, logical reference only (avoids cascade/import-order issues)
+- **Coverage windows as absolute time ranges.** Stored as ISO datetime start/end. `resolveShiftForHour()` maps to shifts when needed
+- **Effective time = actual if available, else scheduled.** Mirrors real-world ops
+- **Overview integration is read-only.** Events and coverage windows appended as optional fields; demand/capacity unchanged
+
+### User Value
+"Guaranteed capacity windows: arrival+30min, departure-60min" — ensures staffing coverage during critical flight events.
+
+---
+
+## P2-5: Rate Forecast — NEXT 🔜
+
+> **Priority:** P2 (independent) | **Effort:** 1-2 sessions
+
+### What It Adds
+`forecast_models` + `forecast_rates` tables. Rate projection algorithm based on historical demand patterns. "Forecast" lens on capacity page.
+
+### User Value
+"Project future demand based on history" — helps staffing decisions weeks ahead.
+
+---
+
+## P2-2: Worked Hours — Planned
+
+> **Priority:** P2 (independent) | **Effort:** 1-2 sessions
+
+### What It Adds
+`time_bookings` table tracking actual man-hours spent per work package. "Worked" lens compares planned vs actual.
+
+### User Value
+"Actual MH spent vs planned" — reveals estimation accuracy and productivity gaps.
+
+---
+
+## P2-3: Billed Hours — Planned
+
+> **Priority:** P2 (independent) | **Effort:** 1-2 sessions
+
+### What It Adds
+`billing_entries` table tracking invoiced/billable hours. "Billed" lens shows revenue recognition.
+
+### User Value
+"Revenue recognition + billing reconciliation" — compares worked vs billed hours.
+
+---
+
+## P2-4: Concurrency — Planned
+
+> **Priority:** P3 (requires P2-1) | **Effort:** 1 session
+
+### What It Adds
+Concurrency pressure index computed from P2-1 flight events. No new tables — derived metric from overlapping aircraft windows.
+
+### User Value
+"How many aircraft overlap?" — workload intensity beyond just MH totals.
+
+---
+
+## P2-7: Multi-Lens UI — Planned
+
+> **Priority:** P3 (requires P2-1 through P2-6) | **Effort:** 1-2 sessions
+
+### What It Adds
+- Unified `/api/capacity/lenses` endpoint combining all lens data
+- Lens selector UI (tabs or dropdown on capacity page)
+- "Switch lenses: Planned → Allocated → Events → Worked → Billed → Forecast → Concurrent"
+
+### User Value
+Single capacity page that can show any operational perspective.

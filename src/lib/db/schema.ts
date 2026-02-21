@@ -373,6 +373,71 @@ export const headcountExceptions = sqliteTable(
   }),
 );
 
+export const demandAllocations = sqliteTable(
+  "demand_allocations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    shiftId: integer("shift_id").references(() => capacityShifts.id),
+    dayOfWeek: integer("day_of_week"), // 0=Sun..6=Sat, null = all days
+    effectiveFrom: text("effective_from").notNull(), // YYYY-MM-DD
+    effectiveTo: text("effective_to"), // null = indefinite
+    allocatedMh: real("allocated_mh").notNull(),
+    mode: text("mode").notNull(), // ADDITIVE | MINIMUM_FLOOR
+    reason: text("reason"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    customerIdx: index("idx_da_customer").on(table.customerId),
+    effectiveIdx: index("idx_da_effective").on(table.effectiveFrom, table.effectiveTo),
+    shiftIdx: index("idx_da_shift").on(table.shiftId),
+  }),
+);
+
+// ─── Flight Events (P2-1) ──────────────────────────────────────────────────
+
+export const flightEvents = sqliteTable(
+  "flight_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id"), // logical ref only — no FK
+    aircraftReg: text("aircraft_reg").notNull(),
+    customer: text("customer").notNull(),
+    scheduledArrival: text("scheduled_arrival"),
+    actualArrival: text("actual_arrival"),
+    scheduledDeparture: text("scheduled_departure"),
+    actualDeparture: text("actual_departure"),
+    arrivalWindowMinutes: integer("arrival_window_minutes").notNull().default(30),
+    departureWindowMinutes: integer("departure_window_minutes").notNull().default(60),
+    status: text("status").notNull(), // scheduled | actual | cancelled
+    source: text("source").notNull(), // work_package | manual | import
+    notes: text("notes"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    aircraftRegIdx: index("idx_fe_aircraft_reg").on(table.aircraftReg),
+    schedArrivalIdx: index("idx_fe_scheduled_arrival").on(table.scheduledArrival),
+    schedDepartureIdx: index("idx_fe_scheduled_departure").on(table.scheduledDeparture),
+    workPackageIdx: index("idx_fe_work_package_id").on(table.workPackageId),
+  }),
+);
+
 // ─── Staffing: Rotation Patterns ────────────────────────────────────────────
 
 export const rotationPatterns = sqliteTable("rotation_patterns", {
@@ -724,6 +789,7 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
     relationName: "customerUpdatedBy",
   }),
   aircraft: many(aircraft),
+  demandAllocations: many(demandAllocations),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -907,6 +973,7 @@ export const inviteCodesRelations = relations(inviteCodes, ({ one }) => ({
 export const capacityShiftsRelations = relations(capacityShifts, ({ many }) => ({
   headcountPlans: many(headcountPlans),
   headcountExceptions: many(headcountExceptions),
+  demandAllocations: many(demandAllocations),
 }));
 
 export const capacityAssumptionsRelations = relations(capacityAssumptions, ({ one }) => ({
@@ -938,6 +1005,28 @@ export const headcountExceptionsRelations = relations(headcountExceptions, ({ on
   }),
   createdByUser: one(users, {
     fields: [headcountExceptions.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const demandAllocationsRelations = relations(demandAllocations, ({ one }) => ({
+  customer: one(customers, {
+    fields: [demandAllocations.customerId],
+    references: [customers.id],
+  }),
+  shift: one(capacityShifts, {
+    fields: [demandAllocations.shiftId],
+    references: [capacityShifts.id],
+  }),
+  createdByUser: one(users, {
+    fields: [demandAllocations.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const flightEventsRelations = relations(flightEvents, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [flightEvents.createdBy],
     references: [users.id],
   }),
 }));

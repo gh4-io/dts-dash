@@ -20,6 +20,22 @@ const CAPACITY_SECTIONS = [
     color: "text-blue-400",
   },
   {
+    title: "Demand Allocations",
+    description:
+      "Contractual minimum hours per customer — guaranteed MH floors or additive allocations by shift and day-of-week.",
+    href: "/admin/capacity/allocations",
+    icon: "fa-solid fa-handshake",
+    color: "text-amber-400",
+  },
+  {
+    title: "Flight Events",
+    description:
+      "Track scheduled and actual aircraft arrivals/departures with coverage windows for guaranteed capacity periods.",
+    href: "/admin/capacity/flight-events",
+    icon: "fa-solid fa-plane-arrival",
+    color: "text-sky-400",
+  },
+  {
     title: "Model Assumptions",
     description:
       "Configure productivity factors (paid-to-available, available-to-productive, night factor), demand curve weights, and default MH.",

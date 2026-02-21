@@ -64,3 +64,39 @@ export {
   loadRotationPresets,
   loadRotationPresetCount,
 } from "./staffing-data";
+
+// Allocation engine (pure functions)
+export {
+  findMatchingAllocations,
+  computeAllocatedMH,
+  applyAllocations,
+  validateAllocation,
+} from "./allocation-engine";
+
+// Allocation data access (CRUD)
+export {
+  loadDemandAllocations,
+  loadDemandAllocation,
+  createDemandAllocation,
+  updateDemandAllocation,
+  deleteDemandAllocation,
+  loadCustomerNameMap,
+} from "./allocation-data";
+
+// Flight events engine (pure functions)
+export {
+  computeEventWindows,
+  computeAllEventWindows,
+  computeCoverageRequirements,
+  computeConcurrencyPressure,
+  validateFlightEvent,
+} from "./flight-events-engine";
+
+// Flight events data access (CRUD)
+export {
+  loadFlightEvents,
+  loadFlightEvent,
+  createFlightEvent,
+  updateFlightEvent,
+  deleteFlightEvent,
+} from "./flight-events-data";
