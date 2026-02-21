@@ -485,3 +485,47 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** None (new feature)
 **Links**: P2-1, `src/lib/capacity/flight-events-engine.ts`
+
+## D-040 | 2026-02-21 | CASCADE Delete on Forecast Rates FK (P2-5)
+
+**Context:** Forecast rates are wholly owned by their parent model. When a model is deleted, should rates be orphaned or cascade-deleted?
+
+**Decision:** `forecast_rates.model_id` uses `ON DELETE CASCADE`. Deleting a model automatically deletes all its rates.
+
+**Rationale:** Rates have no meaning without their model. Cascading simplifies cleanup and prevents orphaned data. Different from P2-6 (no cascade on customer delete) because allocations can reference customers that still exist independently.
+
+**Version impact:** None (new feature)
+**Links**: P2-5, `src/lib/db/schema.ts`
+
+## D-041 | 2026-02-21 | Forecast as Informational Overlay (P2-5)
+
+**Context:** Forecast rates could either replace demand values for future dates or be an additive overlay.
+
+**Decision:** Forecast adds optional `forecastedDemandMH` fields to DailyDemandV2/ShiftDemandV2. Does NOT modify `totalDemandMH` or utilization calculations. Forecast data is for comparison/visualization only.
+
+**Rationale:** Prevents double-counting with real demand data. Keeps the existing pipeline intact. The UI can display forecast as a separate series alongside actual demand.
+
+**Version impact:** None (new optional fields, backwards-compatible)
+**Links**: P2-5, `src/lib/capacity/forecast-engine.ts`, `src/types/index.ts`
+
+## D-042 | 2026-02-21 | Single Active Forecast Model for Overview (P2-5)
+
+**Context:** Multiple forecast models may exist. Which model's rates should the overview endpoint use?
+
+**Decision:** `loadActiveForecastModel()` returns the first active model ordered by ID. Only one model's rates are applied to the overview.
+
+**Rationale:** Mirrors the `loadActiveStaffingConfig()` pattern. Avoids ambiguity and conflicting forecasts. Admin can toggle which model is active.
+
+**Version impact:** None (new feature)
+**Links**: P2-5, `src/lib/capacity/forecast-data.ts`
+
+## D-043 | 2026-02-21 | Bulk Insert Preserves Manual Overrides (P2-5)
+
+**Context:** When regenerating forecast rates, should manual overrides be preserved or overwritten?
+
+**Decision:** `bulkInsertForecastRates()` deletes only non-manual rates (where `isManualOverride = false`) before inserting new generated rates. Manual overrides survive regeneration.
+
+**Rationale:** Admins may lock in specific values that should persist across regeneration cycles. This is a safe default that prevents accidental data loss.
+
+**Version impact:** None (new feature)
+**Links**: P2-5, `src/lib/capacity/forecast-data.ts`

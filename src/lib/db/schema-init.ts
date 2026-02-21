@@ -787,6 +787,51 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M012: Create forecast_models and forecast_rates tables for rate projection
+  results.push(
+    applyMigration("M012_forecast_models_rates", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS forecast_models (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          method TEXT NOT NULL,
+          lookback_days INTEGER NOT NULL DEFAULT 30,
+          forecast_horizon_days INTEGER NOT NULL DEFAULT 14,
+          granularity TEXT NOT NULL DEFAULT 'shift',
+          customer_filter TEXT,
+          weight_recent REAL NOT NULL DEFAULT 0.7,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fm_active ON forecast_models(is_active);
+
+        CREATE TABLE IF NOT EXISTS forecast_rates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          model_id INTEGER NOT NULL REFERENCES forecast_models(id) ON DELETE CASCADE,
+          forecast_date TEXT NOT NULL,
+          shift_code TEXT,
+          customer TEXT,
+          forecasted_mh REAL NOT NULL,
+          confidence REAL,
+          is_manual_override INTEGER NOT NULL DEFAULT 0,
+          notes TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fr_model ON forecast_rates(model_id);
+        CREATE INDEX IF NOT EXISTS idx_fr_date ON forecast_rates(forecast_date);
+        CREATE INDEX IF NOT EXISTS idx_fr_model_date ON forecast_rates(model_id, forecast_date);
+      `);
+    }),
+  );
+
   return results;
 }
 

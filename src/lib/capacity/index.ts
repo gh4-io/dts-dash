@@ -100,3 +100,32 @@ export {
   updateFlightEvent,
   deleteFlightEvent,
 } from "./flight-events-data";
+
+// Forecast engine (pure functions)
+export {
+  generateForecast,
+  applyForecastRates,
+  extractHistoricalSeries,
+  computeMovingAverage,
+  computeWeightedAverage,
+  fitLinearRegression,
+  validateForecastModel,
+  validateForecastRate,
+} from "./forecast-engine";
+
+// Forecast data access (CRUD)
+export {
+  loadForecastModels,
+  loadForecastModel,
+  createForecastModel,
+  updateForecastModel,
+  deleteForecastModel,
+  loadActiveForecastModel,
+  loadForecastRates,
+  loadForecastRate,
+  createForecastRate,
+  bulkInsertForecastRates,
+  updateForecastRate,
+  deleteForecastRate,
+  clearGeneratedRates,
+} from "./forecast-data";

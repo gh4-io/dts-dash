@@ -389,8 +389,8 @@ See [PLAN.md](PLAN.md) M8 section.
 |----------|-----|---------|--------|-----------|-----------|
 | **P1** | **P2-6** | Demand Allocations | **Done** ✅ | `demand_allocations` | See P2-6 section below |
 | **P1** | **P2-1** | Flight Events | **Done** ✅ | `flight_events` | See P2-1 section below |
-| P2 | **P2-5** | Rate Forecast | **Next** 🔜 | `forecast_models`, `forecast_rates` | — |
-| P2 | **P2-2** | Worked Hours | Planned | `time_bookings` | — |
+| **P2** | **P2-5** | Rate Forecast | **Done** ✅ | `forecast_models`, `forecast_rates` | See P2-5 section below |
+| P2 | **P2-2** | Worked Hours | **Next** 🔜 | `time_bookings` | — |
 | P2 | **P2-3** | Billed Hours | Planned | `billing_entries` | — |
 | P3 | **P2-4** | Concurrency | Planned (needs P2-1) | 0 new | — |
 | P3 | **P2-7** | Multi-Lens UI | Planned (needs all) | 0 new | — |
@@ -560,19 +560,45 @@ Indexes: idx_da_customer, idx_da_effective, idx_da_shift
 
 ---
 
-## P2-5: Rate Forecast — NEXT 🔜
+## P2-5: Rate Forecast — Done ✅
 
-> **Priority:** P2 (independent) | **Effort:** 1-2 sessions
+> **Priority:** P2 (independent) | **Completed:** 2026-02-21
 
 ### What It Adds
-`forecast_models` + `forecast_rates` tables. Rate projection algorithm based on historical demand patterns. "Forecast" lens on capacity page.
+`forecast_models` + `forecast_rates` tables (M012 migration). Three forecasting algorithms (moving average, weighted average, linear trend). Admin CRUD for models and rates. Generate endpoint to compute rates from historical demand. Overview integration with `forecastedDemandMH` overlay.
+
+### Files Created
+1. `src/types/index.ts` — ForecastModel, ForecastRate, GeneratedForecastRate, ForecastMethod, ForecastGranularity types + optional forecastedDemandMH on DailyDemandV2/ShiftDemandV2
+2. `src/lib/db/schema.ts` — forecastModels + forecastRates tables with relations (CASCADE delete)
+3. `src/lib/db/schema-init.ts` — M012_forecast_models_rates migration
+4. `src/lib/capacity/forecast-engine.ts` — 8 pure functions: extractHistoricalSeries, computeMovingAverage, computeWeightedAverage, fitLinearRegression, generateForecast, applyForecastRates, validateForecastModel, validateForecastRate
+5. `src/lib/capacity/forecast-data.ts` — Full CRUD for models + rates, bulkInsertForecastRates, clearGeneratedRates, loadActiveForecastModel
+6. `src/lib/capacity/index.ts` — Barrel exports for engine + data
+7. `src/app/api/admin/capacity/forecast-models/route.ts` — GET list + POST create
+8. `src/app/api/admin/capacity/forecast-models/[id]/route.ts` — GET + PUT + DELETE
+9. `src/app/api/admin/capacity/forecast-models/[id]/generate/route.ts` — POST generate rates
+10. `src/app/api/admin/capacity/rate-forecasts/route.ts` — GET list + POST create manual
+11. `src/app/api/admin/capacity/rate-forecasts/[id]/route.ts` — GET + PUT + DELETE
+12. `src/components/admin/capacity/forecast-model-editor.tsx` — Dialog form for models
+13. `src/components/admin/capacity/forecast-rate-editor.tsx` — Dialog form for manual rates
+14. `src/components/admin/capacity/forecast-grid.tsx` — Two-section grid (models + rates)
+15. `src/app/(authenticated)/admin/capacity/rate-forecasts/page.tsx` — Admin page
+16. `src/app/(authenticated)/admin/capacity/page.tsx` — Hub card added
+17. `src/app/api/capacity/overview/route.ts` — Forecast integration
+18. `src/__tests__/capacity/forecast-engine.test.ts` — 43 tests
+
+### Design Decisions
+- **D-040**: CASCADE delete on forecast_rates FK — rates are wholly owned by model
+- **D-041**: Forecast overlay (forecastedDemandMH) is informational — does NOT change core utilization calc
+- **D-042**: Only first active model used for overview (mirrors loadActiveStaffingConfig pattern)
+- **D-043**: bulkInsertForecastRates preserves manual overrides when regenerating
 
 ### User Value
 "Project future demand based on history" — helps staffing decisions weeks ahead.
 
 ---
 
-## P2-2: Worked Hours — Planned
+## P2-2: Worked Hours — NEXT 🔜
 
 > **Priority:** P2 (independent) | **Effort:** 1-2 sessions
 

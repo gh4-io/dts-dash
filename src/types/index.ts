@@ -291,6 +291,53 @@ export interface ConcurrencyBucket {
   eventIds: number[];
 }
 
+// ─── Rate Forecast (P2-5) ────────────────────────────────────────────────
+
+export type ForecastMethod = "moving_average" | "weighted_average" | "linear_trend";
+export type ForecastGranularity = "daily" | "shift";
+
+export interface ForecastModel {
+  id: number;
+  name: string;
+  description: string | null;
+  method: ForecastMethod;
+  lookbackDays: number; // 7-365, days of history to analyze
+  forecastHorizonDays: number; // 1-90, days ahead to project
+  granularity: ForecastGranularity;
+  customerFilter: string | null; // comma-separated names, null = all
+  weightRecent: number; // 0.0-1.0, exponential decay for weighted_average
+  isActive: boolean;
+  createdBy?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ForecastRate {
+  id: number;
+  modelId: number;
+  modelName?: string; // joined for display
+  forecastDate: string; // YYYY-MM-DD
+  shiftCode: string | null; // DAY/SWING/NIGHT or null (daily granularity)
+  customer: string | null; // null = aggregate
+  forecastedMh: number;
+  confidence: number | null; // 0.0-1.0
+  isManualOverride: boolean;
+  notes: string | null;
+  isActive: boolean;
+  createdBy?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** Engine output before DB persistence */
+export interface GeneratedForecastRate {
+  forecastDate: string;
+  shiftCode: string | null;
+  customer: string | null;
+  forecastedMh: number;
+  confidence: number;
+}
+
 /** Slot: a (date, shift) pair for demand/capacity computation */
 export interface ShiftSlot {
   date: string; // YYYY-MM-DD
@@ -324,6 +371,7 @@ export interface ShiftDemandV2 {
   shiftCode: string;
   demandMH: number;
   allocatedDemandMH?: number;
+  forecastedDemandMH?: number;
   wpContributions: Array<{
     wpId: number;
     aircraftReg: string;
@@ -338,6 +386,7 @@ export interface DailyDemandV2 {
   date: string;
   totalDemandMH: number;
   totalAllocatedDemandMH?: number;
+  totalForecastedDemandMH?: number;
   aircraftCount: number;
   byCustomer: Record<string, number>;
   byShift: ShiftDemandV2[];

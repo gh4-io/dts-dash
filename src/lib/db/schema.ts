@@ -1031,6 +1031,85 @@ export const flightEventsRelations = relations(flightEvents, ({ one }) => ({
   }),
 }));
 
+// ─── Forecast Models (P2-5) ─────────────────────────────────────────────────
+
+export const forecastModels = sqliteTable(
+  "forecast_models",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    description: text("description"),
+    method: text("method").notNull(), // moving_average | weighted_average | linear_trend
+    lookbackDays: integer("lookback_days").notNull().default(30),
+    forecastHorizonDays: integer("forecast_horizon_days").notNull().default(14),
+    granularity: text("granularity").notNull().default("shift"), // daily | shift
+    customerFilter: text("customer_filter"), // comma-separated or null
+    weightRecent: real("weight_recent").notNull().default(0.7),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    activeIdx: index("idx_fm_active").on(table.isActive),
+  }),
+);
+
+// ─── Forecast Rates (P2-5) ──────────────────────────────────────────────────
+
+export const forecastRates = sqliteTable(
+  "forecast_rates",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    modelId: integer("model_id")
+      .notNull()
+      .references(() => forecastModels.id, { onDelete: "cascade" }),
+    forecastDate: text("forecast_date").notNull(), // YYYY-MM-DD
+    shiftCode: text("shift_code"), // DAY/SWING/NIGHT or null
+    customer: text("customer"), // null = aggregate
+    forecastedMh: real("forecasted_mh").notNull(),
+    confidence: real("confidence"), // 0.0-1.0
+    isManualOverride: integer("is_manual_override", { mode: "boolean" }).notNull().default(false),
+    notes: text("notes"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    modelIdx: index("idx_fr_model").on(table.modelId),
+    dateIdx: index("idx_fr_date").on(table.forecastDate),
+    modelDateIdx: index("idx_fr_model_date").on(table.modelId, table.forecastDate),
+  }),
+);
+
+export const forecastModelsRelations = relations(forecastModels, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [forecastModels.createdBy],
+    references: [users.id],
+  }),
+  rates: many(forecastRates),
+}));
+
+export const forecastRatesRelations = relations(forecastRates, ({ one }) => ({
+  model: one(forecastModels, {
+    fields: [forecastRates.modelId],
+    references: [forecastModels.id],
+  }),
+  createdByUser: one(users, {
+    fields: [forecastRates.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // ─── Staffing Relations ─────────────────────────────────────────────────────
 
 export const rotationPatternsRelations = relations(rotationPatterns, ({ many }) => ({

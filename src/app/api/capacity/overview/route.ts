@@ -24,6 +24,9 @@ import {
   resolveStaffingForCapacity,
   loadFlightEvents,
   computeAllEventWindows,
+  loadActiveForecastModel,
+  loadForecastRates,
+  applyForecastRates,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import { createChildLogger } from "@/lib/logger";
@@ -122,6 +125,21 @@ export async function GET(request: NextRequest) {
         ? computeAllEventWindows(flightEvents, startDate, endDate)
         : undefined;
 
+    // Load active forecast model and overlay rates on demand
+    const activeForecastModel = loadActiveForecastModel();
+    let forecastRates;
+    if (activeForecastModel) {
+      const rates = loadForecastRates(activeForecastModel.id, startDate, endDate, true);
+      if (rates.length > 0) {
+        forecastRates = rates;
+        adjustedDemand = applyForecastRates(
+          adjustedDemand,
+          rates,
+          activeForecastModel.granularity as "daily" | "shift",
+        );
+      }
+    }
+
     // Compute utilization
     const utilization = computeUtilizationV2(adjustedDemand, capacity);
 
@@ -140,6 +158,8 @@ export async function GET(request: NextRequest) {
       allocations: allocations.length > 0 ? allocations : undefined,
       flightEvents: flightEvents.length > 0 ? flightEvents : undefined,
       coverageWindows: coverageWindows && coverageWindows.length > 0 ? coverageWindows : undefined,
+      forecastRates: forecastRates && forecastRates.length > 0 ? forecastRates : undefined,
+      forecastModel: activeForecastModel ?? undefined,
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

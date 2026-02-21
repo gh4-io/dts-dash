@@ -36,6 +36,14 @@ const CAPACITY_SECTIONS = [
     color: "text-sky-400",
   },
   {
+    title: "Rate Forecasts",
+    description:
+      "Project future demand based on historical patterns using moving average, weighted average, or linear trend models.",
+    href: "/admin/capacity/rate-forecasts",
+    icon: "fa-solid fa-chart-line",
+    color: "text-teal-400",
+  },
+  {
     title: "Model Assumptions",
     description:
       "Configure productivity factors (paid-to-available, available-to-productive, night factor), demand curve weights, and default MH.",
