@@ -9,10 +9,16 @@ import {
   loadPlans,
   loadExceptions,
   computeDailyCapacityV2,
+  computeDailyCapacityFromStaffing,
   computeUtilizationV2,
   validateHeadcountCoverage,
   computeCapacitySummary,
   computeDailyDemandV2,
+  loadActiveStaffingConfig,
+  loadStaffingShifts,
+  loadRotationPatterns,
+  buildPatternMap,
+  resolveStaffingForCapacity,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import { createChildLogger } from "@/lib/logger";
@@ -52,15 +58,25 @@ export async function GET(request: NextRequest) {
     const startDate = toDateOnly(filterParams.start ?? getDefaultStartDate());
     const endDate = toDateOnly(filterParams.end ?? getDefaultEndDate());
 
-    // Load headcount data for the date range
-    const plans = loadPlans(startDate, endDate);
-    const exceptions = loadExceptions(startDate, endDate);
-
     // Generate date array
     const dates = generateDateRange(startDate, endDate);
 
-    // Compute capacity (not filtered by customer/aircraft)
-    const capacity = computeDailyCapacityV2(dates, shifts, plans, exceptions, assumptions);
+    // Compute capacity: use active staffing config (rotation-based) if available,
+    // otherwise fall back to simple headcount plans.
+    const activeConfig = loadActiveStaffingConfig();
+    let capacity;
+
+    if (activeConfig) {
+      const staffingShifts = loadStaffingShifts(activeConfig.id);
+      const patterns = loadRotationPatterns(true);
+      const patternMap = buildPatternMap(patterns);
+      const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
+      capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
+    } else {
+      const plans = loadPlans(startDate, endDate);
+      const exceptions = loadExceptions(startDate, endDate);
+      capacity = computeDailyCapacityV2(dates, shifts, plans, exceptions, assumptions);
+    }
 
     // Read and transform work packages, apply filters for demand
     const rawData = readWorkPackages();
@@ -78,8 +94,13 @@ export async function GET(request: NextRequest) {
       mhSource: wp.mhSource,
     }));
 
-    // Compute demand with distribution
-    const demand = computeDailyDemandV2(demandWPs, shifts, assumptions);
+    // Compute demand with distribution, then clamp to the requested date range.
+    // WPs that overlap the filter can extend ground-time beyond [startDate, endDate];
+    // without clamping, extra dates leak into the heatmap with no capacity data.
+    const dateSet = new Set(dates);
+    const demand = computeDailyDemandV2(demandWPs, shifts, assumptions).filter((d) =>
+      dateSet.has(d.date),
+    );
 
     // Compute utilization
     const utilization = computeUtilizationV2(demand, capacity);

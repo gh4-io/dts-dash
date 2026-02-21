@@ -145,6 +145,64 @@ export function computeDailyCapacityV2(
   });
 }
 
+/**
+ * Compute capacity from the rotation-based staffing matrix.
+ * Uses per-date headcount and effectivePaidHours from the staffing engine
+ * instead of static headcount plans.
+ */
+export function computeDailyCapacityFromStaffing(
+  dates: string[],
+  shifts: CapacityShift[],
+  staffingMap: Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>,
+  assumptions: CapacityAssumptions,
+): DailyCapacityV2[] {
+  const activeShifts = shifts.filter((s) => s.isActive);
+
+  return dates.map((date) => {
+    const dayStaffing = staffingMap.get(date);
+
+    const byShift: ShiftCapacityV2[] = activeShifts.map((shift) => {
+      const staffing = dayStaffing?.get(shift.code);
+      const headcount = staffing?.headcount ?? 0;
+      const paidHoursPerPerson = staffing?.effectivePaidHours ?? shift.paidHours;
+
+      const isNight = shift.code === "NIGHT";
+      const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
+      const productiveMHPerPerson =
+        paidHoursPerPerson *
+        assumptions.paidToAvailable *
+        assumptions.availableToProductive *
+        nightFactor;
+
+      const paidMH = headcount * paidHoursPerPerson;
+      const availableMH = headcount * paidHoursPerPerson * assumptions.paidToAvailable;
+      const productiveMH = headcount * productiveMHPerPerson;
+
+      return {
+        shiftCode: shift.code,
+        shiftName: shift.name,
+        effectiveHeadcount: headcount,
+        paidMH,
+        availableMH,
+        productiveMH,
+        hasExceptions: false,
+        belowMinHeadcount: headcount < shift.minHeadcount,
+      };
+    });
+
+    const totalProductiveMH = byShift.reduce((sum, s) => sum + s.productiveMH, 0);
+    const totalPaidMH = byShift.reduce((sum, s) => sum + s.paidMH, 0);
+
+    return {
+      date,
+      totalProductiveMH,
+      totalPaidMH,
+      byShift,
+      hasExceptions: false,
+    };
+  });
+}
+
 // ─── Utilization ───────────────────────────────────────────────────────────
 
 /**

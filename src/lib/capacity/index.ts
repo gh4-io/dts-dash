@@ -9,6 +9,7 @@ export {
   resolveHeadcount,
   computeProductiveHoursPerPerson,
   computeDailyCapacityV2,
+  computeDailyCapacityFromStaffing,
   computeUtilizationV2,
   validateHeadcountCoverage,
   computeCapacitySummary,
