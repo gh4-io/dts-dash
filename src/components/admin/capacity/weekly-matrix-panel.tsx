@@ -394,25 +394,26 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
               </div>
             </div>
 
-            {/* Coverage warnings */}
-            {matrix.days.some((d) =>
-              CATEGORIES.slice(0, 3).some((cat) => d.byCategory[cat].headcount === 0),
-            ) && (
+            {/* Coverage warnings — time-based gap detection */}
+            {matrix.coverageGaps && matrix.coverageGaps.length > 0 && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-amber-500 mb-1">
                   <i className="fa-solid fa-triangle-exclamation" />
                   Coverage Gaps
                 </div>
                 <div className="text-[10px] text-muted-foreground space-y-0.5">
-                  {matrix.days.map((d) =>
-                    CATEGORIES.slice(0, 3).map((cat) =>
-                      d.byCategory[cat].headcount === 0 ? (
-                        <div key={`${d.date}-${cat}`}>
-                          {DAY_NAMES[d.dayOfWeek]}: No {CATEGORY_LABELS[cat].toLowerCase()} coverage
-                        </div>
-                      ) : null,
-                    ),
-                  )}
+                  {matrix.coverageGaps.map((gap) => (
+                    <div key={gap.date}>
+                      {DAY_NAMES[gap.dayOfWeek]}:{" "}
+                      {gap.uncoveredRanges
+                        .map(
+                          (r) =>
+                            `${String(r.startHour).padStart(2, "0")}:00–${String(r.endHour).padStart(2, "0")}:00`,
+                        )
+                        .join(", ")}{" "}
+                      uncovered
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

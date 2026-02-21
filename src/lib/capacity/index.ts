@@ -33,6 +33,7 @@ export {
   computeEffectivePaidHours,
   resolveStaffingDay,
   computeWeeklyMatrix,
+  computeCoverageGaps,
   resolveStaffingForCapacity,
   buildPatternMap,
   validatePattern,

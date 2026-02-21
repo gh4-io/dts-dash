@@ -47,8 +47,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Determine date range from filters or default to 30 days
-    const startDate = filterParams.start ?? getDefaultStartDate();
-    const endDate = filterParams.end ?? getDefaultEndDate();
+    // Filter store sends full ISO datetimes (e.g. "2026-02-20T15:00:00.000Z")
+    // but date-range/plan queries need YYYY-MM-DD only.
+    const startDate = toDateOnly(filterParams.start ?? getDefaultStartDate());
+    const endDate = toDateOnly(filterParams.end ?? getDefaultEndDate());
 
     // Load headcount data for the date range
     const plans = loadPlans(startDate, endDate);
@@ -113,10 +115,17 @@ function getDefaultEndDate(): string {
   return d.toISOString().split("T")[0];
 }
 
+/** Extract YYYY-MM-DD from an ISO datetime or date-only string. */
+function toDateOnly(s: string): string {
+  return s.split("T")[0].split(" ")[0];
+}
+
 function generateDateRange(start: string, end: string): string[] {
   const dates: string[] = [];
-  const current = new Date(start + "T00:00:00Z");
-  const endDate = new Date(end + "T00:00:00Z");
+  const startStr = toDateOnly(start);
+  const endStr = toDateOnly(end);
+  const current = new Date(startStr + "T00:00:00Z");
+  const endDate = new Date(endStr + "T00:00:00Z");
 
   while (current <= endDate) {
     dates.push(current.toISOString().split("T")[0]);

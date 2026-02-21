@@ -405,6 +405,12 @@ export interface WeeklyMatrixCell {
   productiveMH: number;
 }
 
+export interface CoverageGap {
+  date: string;
+  dayOfWeek: number;
+  uncoveredRanges: Array<{ startHour: number; endHour: number }>;
+}
+
 /** Full weekly matrix result for the right panel visualization */
 export interface WeeklyMatrixResult {
   weekStart: string; // YYYY-MM-DD (Sunday)
@@ -417,6 +423,7 @@ export interface WeeklyMatrixResult {
   categoryTotals: Record<StaffingShiftCategory, WeeklyMatrixCell>;
   grandTotal: WeeklyMatrixCell;
   totalConfigHeadcount: number; // sum of all shift headcounts in config
+  coverageGaps: CoverageGap[]; // time-based coverage gap analysis
 }
 
 // ─── Pagination (D-017) ────────────────────────────────────────────────────

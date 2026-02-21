@@ -16,6 +16,7 @@ import type {
   WeeklyMatrixCell,
   WeeklyMatrixResult,
   CapacityAssumptions,
+  CoverageGap,
 } from "@/types";
 
 // ─── Core Rotation Logic ────────────────────────────────────────────────────
@@ -213,13 +214,109 @@ export function computeWeeklyMatrix(
     days.push({ date: dateStr, dayOfWeek, byCategory, total: dayTotal });
   }
 
+  // Compute time-based coverage gaps
+  const coverageGaps = computeCoverageGaps(days, shifts, patterns);
+
   return {
     weekStart,
     days,
     categoryTotals,
     grandTotal,
     totalConfigHeadcount,
+    coverageGaps,
   };
+}
+
+// ─── Coverage Gap Analysis ────────────────────────────────────────────────
+
+/**
+ * Mark which hours in a 24-hour day are covered by a shift's time range.
+ * Handles overnight wrapping (e.g., 23:00→07:00 covers hours 23,0,1,2,3,4,5,6).
+ */
+function markCoveredHours(
+  covered: boolean[],
+  startHour: number,
+  startMinute: number,
+  endHour: number,
+  endMinute: number,
+): void {
+  // Convert to fractional hours for edge handling
+  const startFrac = startHour + startMinute / 60;
+  const endFrac = endHour + endMinute / 60;
+
+  if (startFrac < endFrac) {
+    // Normal range (e.g., 07:00→15:00)
+    for (let h = 0; h < 24; h++) {
+      if (h + 1 > startFrac && h < endFrac) covered[h] = true;
+    }
+  } else if (startFrac > endFrac) {
+    // Overnight range (e.g., 23:00→07:00)
+    for (let h = 0; h < 24; h++) {
+      if (h + 1 > startFrac || h < endFrac) covered[h] = true;
+    }
+  }
+  // startFrac === endFrac means 0 duration — covers nothing
+}
+
+/**
+ * Find contiguous ranges of uncovered hours from a 24-hour boolean array.
+ */
+function findUncoveredRanges(covered: boolean[]): Array<{ startHour: number; endHour: number }> {
+  const ranges: Array<{ startHour: number; endHour: number }> = [];
+  let i = 0;
+  while (i < 24) {
+    if (!covered[i]) {
+      const start = i;
+      while (i < 24 && !covered[i]) i++;
+      ranges.push({ startHour: start, endHour: i });
+    } else {
+      i++;
+    }
+  }
+  return ranges;
+}
+
+/**
+ * Compute time-based coverage gaps for each day in the matrix.
+ * Checks which hours (0-23) are covered by at least one working shift.
+ * Returns only days that have uncovered hours.
+ */
+export function computeCoverageGaps(
+  days: Array<{ date: string; dayOfWeek: number }>,
+  shifts: StaffingShift[],
+  patterns: Map<number, RotationPattern>,
+): CoverageGap[] {
+  const gaps: CoverageGap[] = [];
+  const activeShifts = shifts.filter((s) => s.isActive);
+
+  for (const day of days) {
+    const covered = new Array<boolean>(24).fill(false);
+
+    for (const shift of activeShifts) {
+      // Check if this shift is working on this day
+      const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
+      if (pat) {
+        if (!isWorkingDay(day.date, pat.pattern, shift.rotationStartDate)) continue;
+      } else if (shift.rotationId === 0 || shift.rotationId === null) {
+        // Orphaned shift (no rotation) — skip, treated as not working
+        continue;
+      }
+
+      // Mark hours covered by this shift
+      markCoveredHours(covered, shift.startHour, shift.startMinute, shift.endHour, shift.endMinute);
+    }
+
+    const uncoveredRanges = findUncoveredRanges(covered);
+    if (uncoveredRanges.length > 0) {
+      gaps.push({
+        date: day.date,
+        dayOfWeek: day.dayOfWeek,
+        uncoveredRanges,
+      });
+    }
+  }
+
+  return gaps;
 }
 
 // ─── Capacity Engine Integration ────────────────────────────────────────────
