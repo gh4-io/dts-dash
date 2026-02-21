@@ -529,3 +529,16 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** None (new feature)
 **Links**: P2-5, `src/lib/capacity/forecast-data.ts`
+
+---
+
+## D-044 | 2026-02-21 | Time Bookings Multi-Entry with Task Types (P2-2)
+
+**Context:** How should worked hours be tracked — one entry per event, or multiple entries per event with task breakdown?
+
+**Decision:** Multi-entry per event with task name/type. Each booking is a single task line item (e.g., "Main gear strut — routine — 2.5 MH"). Multiple bookings can reference the same work package. Five task types: `routine`, `non_routine`, `aog`, `training`, `admin`. `workedMH` overlay is informational only — does NOT change utilization calculation (mirrors D-041 forecast pattern).
+
+**Rationale:** Enables granular time tracking and breakdown analysis by task type. Multiple entries per WP allow realistic modeling of composite maintenance work (e.g., routine check + AOG repair on same aircraft). Informational overlay avoids confusion between planned and actual utilization.
+
+**Version impact:** None (new feature, backwards-compatible)
+**Links**: P2-2, `src/lib/capacity/time-bookings-engine.ts`, `src/types/index.ts`

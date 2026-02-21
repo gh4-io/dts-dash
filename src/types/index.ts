@@ -338,6 +338,30 @@ export interface GeneratedForecastRate {
   confidence: number;
 }
 
+// ─── Time Bookings / Worked Hours (P2-2) ────────────────────────────────────
+
+export type TimeBookingTaskType = "routine" | "non_routine" | "aog" | "training" | "admin";
+export type TimeBookingSource = "manual" | "import";
+
+export interface TimeBooking {
+  id: number;
+  workPackageId: number | null; // logical ref only — no FK
+  aircraftReg: string;
+  customer: string;
+  bookingDate: string; // YYYY-MM-DD
+  shiftCode: string; // DAY/SWING/NIGHT
+  taskName: string | null;
+  taskType: TimeBookingTaskType;
+  workedMh: number;
+  technicianCount: number | null;
+  notes: string | null;
+  source: TimeBookingSource;
+  isActive: boolean;
+  createdBy?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /** Slot: a (date, shift) pair for demand/capacity computation */
 export interface ShiftSlot {
   date: string; // YYYY-MM-DD
@@ -372,6 +396,7 @@ export interface ShiftDemandV2 {
   demandMH: number;
   allocatedDemandMH?: number;
   forecastedDemandMH?: number;
+  workedMH?: number;
   wpContributions: Array<{
     wpId: number;
     aircraftReg: string;
@@ -387,6 +412,7 @@ export interface DailyDemandV2 {
   totalDemandMH: number;
   totalAllocatedDemandMH?: number;
   totalForecastedDemandMH?: number;
+  totalWorkedMH?: number;
   aircraftCount: number;
   byCustomer: Record<string, number>;
   byShift: ShiftDemandV2[];
@@ -439,6 +465,7 @@ export interface CapacityOverviewResponse {
   allocations?: DemandAllocation[];
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];
+  timeBookings?: TimeBooking[];
 }
 
 // ─── Staffing: Rotation-Based Scheduling ────────────────────────────────────

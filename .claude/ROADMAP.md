@@ -33,10 +33,10 @@
 
 ### Capacity Phase 2 (In Progress)
 - [x] P2-6: Demand Allocations — 2026-02-21
-- [ ] P2-1: Flight Events — **NEXT**
-- [ ] P2-5: Rate Forecast
-- [ ] P2-2: Worked Hours
-- [ ] P2-3: Billed Hours
+- [x] P2-1: Flight Events — 2026-02-21
+- [x] P2-5: Rate Forecast — 2026-02-21
+- [x] P2-2: Worked Hours — 2026-02-21
+- [ ] P2-3: Billed Hours — **NEXT**
 - [ ] P2-4: Concurrency (blocked by P2-1)
 - [ ] P2-7: Multi-Lens UI (blocked by P2-1 through P2-6)
 
@@ -390,8 +390,8 @@ See [PLAN.md](PLAN.md) M8 section.
 | **P1** | **P2-6** | Demand Allocations | **Done** ✅ | `demand_allocations` | See P2-6 section below |
 | **P1** | **P2-1** | Flight Events | **Done** ✅ | `flight_events` | See P2-1 section below |
 | **P2** | **P2-5** | Rate Forecast | **Done** ✅ | `forecast_models`, `forecast_rates` | See P2-5 section below |
-| P2 | **P2-2** | Worked Hours | **Next** 🔜 | `time_bookings` | — |
-| P2 | **P2-3** | Billed Hours | Planned | `billing_entries` | — |
+| **P2** | **P2-2** | Worked Hours | **Done** ✅ | `time_bookings` | See P2-2 section below |
+| P2 | **P2-3** | Billed Hours | **Next** 🔜 | `billing_entries` | — |
 | P3 | **P2-4** | Concurrency | Planned (needs P2-1) | 0 new | — |
 | P3 | **P2-7** | Multi-Lens UI | Planned (needs all) | 0 new | — |
 
@@ -598,12 +598,34 @@ Indexes: idx_da_customer, idx_da_effective, idx_da_shift
 
 ---
 
-## P2-2: Worked Hours — NEXT 🔜
+## P2-2: Worked Hours — Done ✅
 
-> **Priority:** P2 (independent) | **Effort:** 1-2 sessions
+> **Priority:** P2 (independent) | **Completed:** 2026-02-21
 
 ### What It Adds
-`time_bookings` table tracking actual man-hours spent per work package. "Worked" lens compares planned vs actual.
+`time_bookings` table tracking actual man-hours per task with multi-entry per event support. Five task types: routine, non_routine, aog, training, admin. M013 migration. Engine computes aggregated worked hours overlay on demand (`workedMH` / `totalWorkedMH`). Informational only — does not change utilization calculation (D-044).
+
+### Files Created
+1. `src/types/index.ts` — TimeBooking, TimeBookingTaskType, TimeBookingSource; optional workedMH on ShiftDemandV2; totalWorkedMH on DailyDemandV2; timeBookings on CapacityOverviewResponse
+2. `src/lib/db/schema.ts` — timeBookings table + timeBookingsRelations
+3. `src/lib/db/schema-init.ts` — M013_time_bookings migration
+4. `src/lib/capacity/time-bookings-engine.ts` — aggregateWorkedHours, applyWorkedHours, computeVariance, validateTimeBooking
+5. `src/lib/capacity/time-bookings-data.ts` — CRUD (loadTimeBookings, loadTimeBooking, create, update, delete)
+6. `src/lib/capacity/index.ts` — barrel exports for engine + data
+7. `src/app/api/admin/capacity/time-bookings/route.ts` — GET/POST
+8. `src/app/api/admin/capacity/time-bookings/[id]/route.ts` — GET/PUT/DELETE
+9. `src/app/(authenticated)/admin/capacity/time-bookings/page.tsx` — admin page
+10. `src/components/admin/capacity/time-bookings-grid.tsx` — grid with task type badges
+11. `src/components/admin/capacity/time-bookings-editor.tsx` — dialog form
+12. `src/__tests__/capacity/time-bookings-engine.test.ts` — 41 tests
+13. `src/app/(authenticated)/admin/capacity/page.tsx` — hub card (green, fa-stopwatch)
+14. `src/app/api/capacity/overview/route.ts` — time bookings integration
+
+### Design Decisions
+- **D-044**: Multi-entry per event with task name/type. workedMH overlay is informational only (mirrors D-041)
+- Task types: `routine`, `non_routine`, `aog`, `training`, `admin`
+- Source types: `manual`, `import`
+- `workPackageId` is optional logical reference (no FK constraint, like flight_events)
 
 ### User Value
 "Actual MH spent vs planned" — reveals estimation accuracy and productivity gaps.

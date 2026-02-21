@@ -44,6 +44,14 @@ const CAPACITY_SECTIONS = [
     color: "text-teal-400",
   },
   {
+    title: "Worked Hours",
+    description:
+      "Track actual man-hours per task \u2014 routine, non-routine, AOG, training, admin \u2014 with planned vs actual variance analysis.",
+    href: "/admin/capacity/time-bookings",
+    icon: "fa-solid fa-stopwatch",
+    color: "text-green-400",
+  },
+  {
     title: "Model Assumptions",
     description:
       "Configure productivity factors (paid-to-available, available-to-productive, night factor), demand curve weights, and default MH.",

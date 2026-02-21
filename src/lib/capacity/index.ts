@@ -113,6 +113,23 @@ export {
   validateForecastRate,
 } from "./forecast-engine";
 
+// Time bookings engine (pure functions)
+export {
+  aggregateWorkedHours,
+  applyWorkedHours,
+  computeVariance,
+  validateTimeBooking,
+} from "./time-bookings-engine";
+
+// Time bookings data access (CRUD)
+export {
+  loadTimeBookings,
+  loadTimeBooking,
+  createTimeBooking,
+  updateTimeBooking,
+  deleteTimeBooking,
+} from "./time-bookings-data";
+
 // Forecast data access (CRUD)
 export {
   loadForecastModels,

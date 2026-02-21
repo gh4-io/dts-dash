@@ -1110,6 +1110,46 @@ export const forecastRatesRelations = relations(forecastRates, ({ one }) => ({
   }),
 }));
 
+// ─── Time Bookings (P2-2: Worked Hours) ─────────────────────────────────────
+
+export const timeBookings = sqliteTable(
+  "time_bookings",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id"), // logical ref, no FK
+    aircraftReg: text("aircraft_reg").notNull(),
+    customer: text("customer").notNull(),
+    bookingDate: text("booking_date").notNull(), // YYYY-MM-DD
+    shiftCode: text("shift_code").notNull(), // DAY/SWING/NIGHT
+    taskName: text("task_name"),
+    taskType: text("task_type").notNull().default("routine"), // routine|non_routine|aog|training|admin
+    workedMh: real("worked_mh").notNull(),
+    technicianCount: integer("technician_count"),
+    notes: text("notes"),
+    source: text("source").notNull().default("manual"), // manual|import
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    dateIdx: index("idx_tb_date").on(table.bookingDate),
+    customerIdx: index("idx_tb_customer").on(table.customer),
+    wpIdx: index("idx_tb_wp").on(table.workPackageId),
+  }),
+);
+
+export const timeBookingsRelations = relations(timeBookings, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [timeBookings.createdBy],
+    references: [users.id],
+  }),
+}));
+
 // ─── Staffing Relations ─────────────────────────────────────────────────────
 
 export const rotationPatternsRelations = relations(rotationPatterns, ({ many }) => ({

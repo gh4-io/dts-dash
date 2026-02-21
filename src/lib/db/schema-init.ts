@@ -832,6 +832,36 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M013: Time Bookings (P2-2 Worked Hours)
+  results.push(
+    applyMigration("M013_time_bookings", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS time_bookings (
+          id                INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_package_id   INTEGER,
+          aircraft_reg      TEXT NOT NULL,
+          customer          TEXT NOT NULL,
+          booking_date      TEXT NOT NULL,
+          shift_code        TEXT NOT NULL,
+          task_name         TEXT,
+          task_type         TEXT NOT NULL DEFAULT 'routine',
+          worked_mh         REAL NOT NULL,
+          technician_count  INTEGER,
+          notes             TEXT,
+          source            TEXT NOT NULL DEFAULT 'manual',
+          is_active         INTEGER NOT NULL DEFAULT 1,
+          created_by        INTEGER REFERENCES users(id),
+          created_at        TEXT NOT NULL,
+          updated_at        TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tb_date ON time_bookings(booking_date);
+        CREATE INDEX IF NOT EXISTS idx_tb_customer ON time_bookings(customer);
+        CREATE INDEX IF NOT EXISTS idx_tb_wp ON time_bookings(work_package_id);
+      `);
+    }),
+  );
+
   return results;
 }
 
