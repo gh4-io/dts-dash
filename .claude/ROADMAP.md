@@ -533,6 +533,28 @@ Indexes: idx_da_customer, idx_da_effective, idx_da_shift
 - **Effective time = actual if available, else scheduled.** Mirrors real-world ops
 - **Overview integration is read-only.** Events and coverage windows appended as optional fields; demand/capacity unchanged
 
+### Automated Tests (33 passing)
+| Suite | Tests | Covers |
+|-------|-------|--------|
+| `computeEventWindows` | 10 | arrival/departure windows, actual-over-scheduled precedence, cancelled/inactive exclusion, custom durations, zero durations, overnight, eventId propagation |
+| `computeAllEventWindows` | 4 | batch processing, date range filtering, empty input, cancelled exclusion |
+| `computeConcurrencyPressure` | 8 | empty, single aircraft, overlapping, sequential, cancelled exclusion, missing times, date filter, peak detection |
+| `validateFlightEvent` | 10+1 | required fields, enum validation, negative windows, bad datetimes, departure<=arrival, null allowance, multi-error collection |
+
+### Manual Testing Expectations
+1. **Hub card** — Navigate to `/admin/capacity`. Verify "Flight Events" card appears with sky color and `fa-plane-arrival` icon. Clicking navigates to `/admin/capacity/flight-events`.
+2. **Empty state** — `/admin/capacity/flight-events` shows airplane icon with "No flight events configured" message and helper text.
+3. **Create** — Click "Add Event". Fill in Aircraft Reg (`N12345`), Customer (`DHL`), status=Scheduled, source=Manual, Scheduled Arrival (any datetime), Scheduled Departure (later datetime). Save. Event appears in table with correct badges (blue "scheduled", slate "manual").
+4. **Edit** — Click pencil icon on existing event. Change status to "actual", add an actual arrival time. Save. Row updates — status badge turns green "actual".
+5. **Delete** — Click trash icon. Confirmation dialog appears with event details. Confirm. Row removed.
+6. **Active/Inactive** — Edit an event, uncheck "Active". Save. Row appears dimmed (opacity-50).
+7. **Window display** — Table shows "+30m / -60m" by default. Create an event with custom windows (e.g., 45/90). Verify display shows "+45m / -90m".
+8. **Status badges** — Scheduled=blue, Actual=green, Cancelled=muted.
+9. **Source badges** — Work Package=violet "WP", Manual=slate "manual", Import=amber "import".
+10. **Cancelled exclusion** — Create a cancelled event. Check `/api/capacity/overview` — the event should appear in `flightEvents` array but NOT generate any `coverageWindows`.
+11. **Overview integration** — With active events, call `/api/capacity/overview`. Response includes `flightEvents` array and `coverageWindows` array. With no events, those fields are absent (not empty arrays).
+12. **Breadcrumb** — "Capacity > Flight Events" breadcrumb at top. "Capacity" links back to hub.
+
 ### User Value
 "Guaranteed capacity windows: arrival+30min, departure-60min" — ensures staffing coverage during critical flight events.
 
