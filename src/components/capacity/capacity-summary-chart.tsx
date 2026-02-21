@@ -14,13 +14,20 @@ import {
   ReferenceLine,
   Cell,
 } from "recharts";
-import type { DailyCapacityV2, DailyDemandV2, DailyUtilizationV2, CapacityShift } from "@/types";
+import type {
+  DailyCapacityV2,
+  DailyDemandV2,
+  DailyUtilizationV2,
+  CapacityShift,
+  CapacityLensId,
+} from "@/types";
 
 interface CapacitySummaryChartProps {
   capacity: DailyCapacityV2[];
   demand: DailyDemandV2[];
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
+  activeLens: CapacityLensId;
 }
 
 type ViewMode = "stacked" | "total";
@@ -39,6 +46,14 @@ const SHIFT_BAR_COLORS: Record<string, string> = {
   NIGHT: "#6366f1",
 };
 
+// Lens overlay line config (only MH-compatible lenses)
+const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: string }> = {
+  allocated: { stroke: "#f59e0b", dash: "6 3", name: "Allocated" },
+  forecast: { stroke: "#14b8a6", dash: "3 3", name: "Forecast" },
+  worked: { stroke: "#22c55e", dash: "", name: "Worked" },
+  billed: { stroke: "#6366f1", dash: "", name: "Billed" },
+};
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", {
@@ -54,6 +69,7 @@ export function CapacitySummaryChart({
   demand,
   utilization,
   shifts,
+  activeLens,
 }: CapacitySummaryChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("stacked");
 
@@ -61,6 +77,8 @@ export function CapacitySummaryChart({
     () => shifts.filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
     [shifts],
   );
+
+  const lensLineConfig = activeLens !== "planned" ? LENS_LINE_CONFIG[activeLens] : null;
 
   const chartData = useMemo(() => {
     const capMap = new Map(capacity.map((c) => [c.date, c]));
@@ -71,6 +89,25 @@ export function CapacitySummaryChart({
       const dem = demMap.get(u.date);
       const label = formatDate(u.date);
 
+      // Compute lens overlay value
+      let lensOverlayMH: number | null = null;
+      if (lensLineConfig && dem) {
+        switch (activeLens) {
+          case "allocated":
+            lensOverlayMH = dem.totalAllocatedDemandMH ?? null;
+            break;
+          case "forecast":
+            lensOverlayMH = dem.totalForecastedDemandMH ?? null;
+            break;
+          case "worked":
+            lensOverlayMH = dem.totalWorkedMH ?? null;
+            break;
+          case "billed":
+            lensOverlayMH = dem.totalBilledMH ?? null;
+            break;
+        }
+      }
+
       if (viewMode === "total") {
         return {
           date: u.date,
@@ -80,6 +117,7 @@ export function CapacitySummaryChart({
           utilization:
             u.utilizationPercent !== null ? Math.round(u.utilizationPercent * 10) / 10 : null,
           aircraftCount: dem?.aircraftCount ?? 0,
+          ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
         };
       }
 
@@ -91,6 +129,7 @@ export function CapacitySummaryChart({
         utilization:
           u.utilizationPercent !== null ? Math.round(u.utilizationPercent * 10) / 10 : null,
         aircraftCount: dem?.aircraftCount ?? 0,
+        ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
       };
 
       for (const shift of activeShifts) {
@@ -103,7 +142,7 @@ export function CapacitySummaryChart({
 
       return row;
     });
-  }, [demand, capacity, utilization, activeShifts, viewMode]);
+  }, [demand, capacity, utilization, activeShifts, viewMode, activeLens, lensLineConfig]);
 
   if (chartData.length === 0) {
     return (
@@ -281,6 +320,22 @@ export function CapacitySummaryChart({
               activeDot={{ r: 5, strokeWidth: 0 }}
               connectNulls
             />
+
+            {/* Lens overlay line (MH-compatible lenses only) */}
+            {lensLineConfig && (
+              <Line
+                yAxisId="mh"
+                dataKey="lensOverlayMH"
+                name={lensLineConfig.name}
+                type="monotone"
+                stroke={lensLineConfig.stroke}
+                strokeWidth={2}
+                strokeDasharray={lensLineConfig.dash || undefined}
+                dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                activeDot={{ r: 5, strokeWidth: 0 }}
+                connectNulls
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { useFilters } from "./use-filters";
 import { useEffect } from "react";
+import { getAvailableLenses } from "@/lib/capacity/lens-config";
 import type {
   DailyDemandV2,
   DailyCapacityV2,
@@ -11,6 +12,15 @@ import type {
   CapacityShift,
   CapacityAssumptions,
   CapacityOverviewResponse,
+  CapacityLensId,
+  DemandAllocation,
+  FlightEvent,
+  EventCoverageWindow,
+  ConcurrencyBucket,
+  ForecastRate,
+  ForecastModel,
+  TimeBooking,
+  BillingEntry,
 } from "@/types";
 
 interface CapacityV2State {
@@ -21,6 +31,20 @@ interface CapacityV2State {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
+  // Phase 2 overlay collections
+  allocations: DemandAllocation[];
+  flightEvents: FlightEvent[];
+  coverageWindows: EventCoverageWindow[];
+  concurrencyBuckets: ConcurrencyBucket[];
+  forecastRates: ForecastRate[];
+  forecastModel: ForecastModel | null;
+  timeBookings: TimeBooking[];
+  billingEntries: BillingEntry[];
+  // Lens state
+  activeLens: CapacityLensId;
+  availableLenses: Set<CapacityLensId>;
+  setActiveLens: (lens: CapacityLensId) => void;
+  // Fetch state
   isLoading: boolean;
   error: string | null;
   fetchOverview: (filters: Record<string, string>) => Promise<void>;
@@ -34,6 +58,20 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   warnings: [],
   shifts: [],
   assumptions: null,
+  // Phase 2 overlay collections
+  allocations: [],
+  flightEvents: [],
+  coverageWindows: [],
+  concurrencyBuckets: [],
+  forecastRates: [],
+  forecastModel: null,
+  timeBookings: [],
+  billingEntries: [],
+  // Lens state
+  activeLens: "planned" as CapacityLensId,
+  availableLenses: new Set<CapacityLensId>(["planned"]),
+  setActiveLens: (lens: CapacityLensId) => set({ activeLens: lens }),
+  // Fetch state
   isLoading: false,
   error: null,
 
@@ -47,7 +85,8 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         throw new Error(data.error ?? "Failed to fetch capacity data");
       }
       const json: CapacityOverviewResponse = await res.json();
-      set({
+      const available = getAvailableLenses(json);
+      set((state) => ({
         demand: json.demand,
         capacity: json.capacity,
         utilization: json.utilization,
@@ -55,8 +94,19 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         warnings: json.warnings,
         shifts: json.shifts,
         assumptions: json.assumptions,
+        allocations: json.allocations ?? [],
+        flightEvents: json.flightEvents ?? [],
+        coverageWindows: json.coverageWindows ?? [],
+        concurrencyBuckets: json.concurrencyBuckets ?? [],
+        forecastRates: json.forecastRates ?? [],
+        forecastModel: json.forecastModel ?? null,
+        timeBookings: json.timeBookings ?? [],
+        billingEntries: json.billingEntries ?? [],
+        availableLenses: available,
+        // Reset to planned if active lens is no longer available
+        activeLens: available.has(state.activeLens) ? state.activeLens : "planned",
         isLoading: false,
-      });
+      }));
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }
@@ -91,6 +141,17 @@ export function useCapacityV2() {
     warnings: store.warnings,
     shifts: store.shifts,
     assumptions: store.assumptions,
+    allocations: store.allocations,
+    flightEvents: store.flightEvents,
+    coverageWindows: store.coverageWindows,
+    concurrencyBuckets: store.concurrencyBuckets,
+    forecastRates: store.forecastRates,
+    forecastModel: store.forecastModel,
+    timeBookings: store.timeBookings,
+    billingEntries: store.billingEntries,
+    activeLens: store.activeLens,
+    availableLenses: store.availableLenses,
+    setActiveLens: store.setActiveLens,
     isLoading: store.isLoading,
     error: store.error,
     refetch: () => {

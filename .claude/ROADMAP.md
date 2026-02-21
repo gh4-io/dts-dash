@@ -38,7 +38,7 @@
 - [x] P2-2: Worked Hours — 2026-02-21
 - [x] P2-4: Concurrency — 2026-02-21
 - [x] P2-3: Billed Hours — 2026-02-21
-- [ ] P2-7: Multi-Lens UI — **NEXT** (blocked by P2-1 through P2-6)
+- [x] P2-7: Multi-Lens UI — 2026-02-21
 
 ## Milestones
 
@@ -393,7 +393,7 @@ See [PLAN.md](PLAN.md) M8 section.
 | **P2** | **P2-2** | Worked Hours | **Done** ✅ | `time_bookings` | See P2-2 section below |
 | **P2** | **P2-3** | Billed Hours | **Done** ✅ | `billing_entries` | See P2-3 section below |
 | **P3** | **P2-4** | Concurrency | **Done** ✅ | 0 new (computed) | See P2-4 section below |
-| P3 | **P2-7** | Multi-Lens UI | **Next** 🔜 (needs all) | 0 new | — |
+| **P3** | **P2-7** | Multi-Lens UI | **Done** ✅ | 0 new (UI only) | See P2-7 section below |
 
 ### Priority Legend
 - **P1** = Start here — no dependencies on other Phase 2 work
@@ -706,14 +706,43 @@ Concurrency pressure index computed from P2-1 flight events. No new tables — p
 
 ---
 
-## P2-7: Multi-Lens UI — Planned
+## P2-7: Multi-Lens UI — Done ✅
 
-> **Priority:** P3 (requires P2-1 through P2-6) | **Effort:** 1-2 sessions
+> **Priority:** P3 (requires P2-1 through P2-6) | **Completed:** 2026-02-21
 
 ### What It Adds
-- Unified `/api/capacity/lenses` endpoint combining all lens data
-- Lens selector UI (tabs or dropdown on capacity page)
-- "Switch lenses: Planned → Allocated → Events → Worked → Billed → Forecast → Concurrent"
+- 7 operational lenses: Planned, Allocated, Events, Forecast, Worked, Billed, Concurrent
+- Lens selector pill bar on capacity page with color-coded active states
+- Lens-aware KPI strip (extra contextual cards per lens)
+- Lens-aware heatmap tooltips (overlay line per lens)
+- Lens-aware chart (overlay line for MH-compatible lenses)
+- V1→V2 table migration + dynamic lens columns + updated CSV export
+- Lens-aware drilldown drawer (detail cards per lens)
+- `getAvailableLenses()` — auto-detects which lenses have data
 
-### User Value
-Single capacity page that can show any operational perspective.
+### Key Decision
+- **D-047**: Client-side view toggle. No new API — reuses `/api/capacity/overview`. Zustand store expanded. Concurrent/Events skip chart overlay (incompatible units).
+
+### Files Created (3)
+| File | Purpose |
+|------|---------|
+| `src/lib/capacity/lens-config.ts` | Lens definitions + `getAvailableLenses()` |
+| `src/components/capacity/lens-selector.tsx` | Horizontal pill bar UI |
+| `src/__tests__/capacity/lens-config.test.ts` | 15 tests |
+
+### Files Modified (9)
+| File | Change |
+|------|--------|
+| `src/types/index.ts` | `CapacityLensId` type + fix `CapacityOverviewResponse` gap |
+| `src/lib/hooks/use-capacity-v2.ts` | Overlay collections + lens state in Zustand |
+| `src/lib/capacity/index.ts` | Barrel exports for lens-config |
+| `src/components/capacity/capacity-kpi-strip.tsx` | Lens-aware extra KPI cards |
+| `src/components/capacity/capacity-heatmap.tsx` | Lens-aware tooltip lines |
+| `src/components/capacity/capacity-summary-chart.tsx` | Lens overlay line on chart |
+| `src/components/capacity/capacity-table.tsx` | V1→V2 migration + dynamic lens columns |
+| `src/components/capacity/shift-drilldown-drawer.tsx` | Lens detail section cards |
+| `src/app/(authenticated)/capacity/page.tsx` | Wire all lens state + remove V1 transforms |
+
+### Tests
+- 15 new tests (lens-config.test.ts)
+- **412 total** (all passing)

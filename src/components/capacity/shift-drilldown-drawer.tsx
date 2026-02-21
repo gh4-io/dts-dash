@@ -16,6 +16,14 @@ import type {
   CapacityAssumptions,
   ShiftCapacityV2,
   ShiftDemandV2,
+  CapacityLensId,
+  DemandAllocation,
+  FlightEvent,
+  TimeBooking,
+  BillingEntry,
+  ForecastRate,
+  ForecastModel,
+  ConcurrencyBucket,
 } from "@/types";
 
 interface ShiftDrilldownDrawerProps {
@@ -28,6 +36,14 @@ interface ShiftDrilldownDrawerProps {
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
+  activeLens: CapacityLensId;
+  allocations?: DemandAllocation[];
+  flightEvents?: FlightEvent[];
+  timeBookings?: TimeBooking[];
+  billingEntries?: BillingEntry[];
+  forecastRates?: ForecastRate[];
+  forecastModel?: ForecastModel | null;
+  concurrencyBuckets?: ConcurrencyBucket[];
 }
 
 const SHIFT_ICONS: Record<string, string> = {
@@ -229,6 +245,31 @@ function DemandBreakdown({ shiftDem }: { shiftDem: ShiftDemandV2 }) {
   );
 }
 
+/** Lens detail section card */
+function LensDetailCard({
+  icon,
+  color,
+  title,
+  children,
+}: {
+  icon: string;
+  color: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`rounded-md border border-${color}-500/30 bg-${color}-500/5 p-3 space-y-2`}>
+      <div
+        className={`text-xs font-medium uppercase tracking-wider text-${color}-400 flex items-center gap-1.5`}
+      >
+        <i className={`fa-solid ${icon} text-[10px]`} />
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function ShiftDrilldownDrawer({
   open,
   onClose,
@@ -239,6 +280,14 @@ export function ShiftDrilldownDrawer({
   utilization,
   shifts,
   assumptions,
+  activeLens,
+  allocations,
+  flightEvents,
+  timeBookings,
+  billingEntries,
+  forecastRates,
+  forecastModel,
+  concurrencyBuckets,
 }: ShiftDrilldownDrawerProps) {
   if (!date) return null;
 
@@ -258,6 +307,208 @@ export function ShiftDrilldownDrawer({
   const title = isDailyTotal ? "Daily Overview" : `${shift?.name ?? shiftCode} Shift`;
 
   const shiftIcon = shiftCode ? (SHIFT_ICONS[shiftCode] ?? "fa-clock") : "fa-calendar-day";
+
+  // Lens detail rendering
+  const renderLensDetail = () => {
+    if (activeLens === "planned") return null;
+
+    switch (activeLens) {
+      case "allocated": {
+        if (!allocations || allocations.length === 0) return null;
+        const dowNum = new Date(date + "T12:00:00Z").getUTCDay();
+        const matching = allocations.filter((a) => {
+          // dayOfWeek null = all days, otherwise must match
+          if (a.dayOfWeek !== null && a.dayOfWeek !== dowNum) return false;
+          // shiftId null = all shifts (can't easily match shiftCode to shiftId here, skip)
+          return true;
+        });
+        if (matching.length === 0) return null;
+        return (
+          <LensDetailCard
+            icon="fa-handshake"
+            color="amber"
+            title={`Allocations (${matching.length})`}
+          >
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {matching.map((a) => (
+                <div key={a.id} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <span className="text-xs">{a.customerName ?? `Customer #${a.customerId}`}</span>
+                    <span
+                      className={`text-[9px] px-1 py-0.5 rounded ${a.mode === "MINIMUM_FLOOR" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}
+                    >
+                      {a.mode === "ADDITIVE" ? "add" : "floor"}
+                    </span>
+                  </span>
+                  <span className="tabular-nums font-medium text-amber-400">
+                    {a.allocatedMh.toFixed(1)} MH
+                  </span>
+                </div>
+              ))}
+            </div>
+          </LensDetailCard>
+        );
+      }
+      case "events": {
+        if (!flightEvents || flightEvents.length === 0) return null;
+        const matching = flightEvents.filter((e) => {
+          const arrDate = (e.actualArrival ?? e.scheduledArrival ?? "").split("T")[0];
+          return arrDate === date;
+        });
+        if (matching.length === 0) return null;
+        return (
+          <LensDetailCard
+            icon="fa-plane-arrival"
+            color="sky"
+            title={`Flight Events (${matching.length})`}
+          >
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {matching.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between text-sm rounded-md border border-border bg-muted/20 px-2 py-1"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-mono text-xs">{e.aircraftReg}</span>
+                    <span
+                      className={`text-[9px] px-1 py-0.5 rounded ${e.status === "actual" ? "bg-sky-500/15 text-sky-400" : e.status === "cancelled" ? "bg-red-500/15 text-red-400" : "bg-orange-500/15 text-orange-400"}`}
+                    >
+                      {e.status}
+                    </span>
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {(e.actualArrival ?? e.scheduledArrival ?? "").split("T")[1]?.slice(0, 5) ?? ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </LensDetailCard>
+        );
+      }
+      case "forecast": {
+        if (!forecastRates || forecastRates.length === 0) return null;
+        const matching = forecastRates.filter((r) => {
+          if (r.forecastDate !== date) return false;
+          if (shiftCode && r.shiftCode && r.shiftCode !== shiftCode) return false;
+          return true;
+        });
+        if (matching.length === 0) return null;
+        return (
+          <LensDetailCard icon="fa-chart-line" color="teal" title="Forecast">
+            <div className="space-y-1">
+              {forecastModel && (
+                <div className="text-xs text-muted-foreground">Model: {forecastModel.name}</div>
+              )}
+              {matching.map((r, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{r.shiftCode ?? "Daily"}</span>
+                  <span className="tabular-nums font-medium text-teal-400">
+                    {r.forecastedMh.toFixed(1)} MH
+                  </span>
+                </div>
+              ))}
+            </div>
+          </LensDetailCard>
+        );
+      }
+      case "worked": {
+        if (!timeBookings || timeBookings.length === 0) return null;
+        const matching = timeBookings.filter((t) => {
+          if (t.bookingDate !== date) return false;
+          if (shiftCode && t.shiftCode !== shiftCode) return false;
+          return true;
+        });
+        if (matching.length === 0) return null;
+        const total = matching.reduce((s, t) => s + t.workedMh, 0);
+        return (
+          <LensDetailCard
+            icon="fa-stopwatch"
+            color="green"
+            title={`Worked Hours (${matching.length} bookings)`}
+          >
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {matching.map((t) => (
+                <div key={t.id} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    {t.aircraftReg} — {t.taskType ?? "General"}
+                  </span>
+                  <span className="tabular-nums font-medium text-green-400">
+                    {t.workedMh.toFixed(1)} MH
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between text-sm font-medium border-t border-border pt-1">
+              <span>Total</span>
+              <span className="tabular-nums text-green-400">{total.toFixed(1)} MH</span>
+            </div>
+          </LensDetailCard>
+        );
+      }
+      case "billed": {
+        if (!billingEntries || billingEntries.length === 0) return null;
+        const matching = billingEntries.filter((b) => {
+          if (b.billingDate !== date) return false;
+          if (shiftCode && b.shiftCode !== shiftCode) return false;
+          return true;
+        });
+        if (matching.length === 0) return null;
+        const total = matching.reduce((s, b) => s + b.billedMh, 0);
+        return (
+          <LensDetailCard
+            icon="fa-file-invoice-dollar"
+            color="indigo"
+            title={`Billed Hours (${matching.length} entries)`}
+          >
+            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+              {matching.map((b) => (
+                <div key={b.id} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
+                    {b.aircraftReg} — {b.customer}
+                    {b.invoiceRef && <span className="text-[10px]">({b.invoiceRef})</span>}
+                  </span>
+                  <span className="tabular-nums font-medium text-indigo-400">
+                    {b.billedMh.toFixed(1)} MH
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-between text-sm font-medium border-t border-border pt-1">
+              <span>Total</span>
+              <span className="tabular-nums text-indigo-400">{total.toFixed(1)} MH</span>
+            </div>
+          </LensDetailCard>
+        );
+      }
+      case "concurrent": {
+        if (!concurrencyBuckets || concurrencyBuckets.length === 0) return null;
+        const matching = concurrencyBuckets.filter((c) => c.hour.split("T")[0] === date);
+        if (matching.length === 0) return null;
+        const peak = Math.max(...matching.map((c) => c.aircraftCount));
+        const avg = matching.reduce((s, c) => s + c.aircraftCount, 0) / matching.length;
+        return (
+          <LensDetailCard icon="fa-layer-group" color="purple" title="Concurrency">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Peak Aircraft</span>
+                <span className="tabular-nums font-medium text-purple-400">{peak}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Avg Aircraft</span>
+                <span className="tabular-nums font-medium text-purple-400">{avg.toFixed(1)}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Time Buckets</span>
+                <span className="tabular-nums text-muted-foreground">{matching.length}</span>
+              </div>
+            </div>
+          </LensDetailCard>
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -322,6 +573,14 @@ export function ShiftDrilldownDrawer({
                   </>
                 )}
               </div>
+
+              {/* Lens detail section */}
+              {renderLensDetail() && (
+                <>
+                  <Separator />
+                  {renderLensDetail()}
+                </>
+              )}
             </>
           ) : isDailyTotal && util ? (
             <>
@@ -355,6 +614,14 @@ export function ShiftDrilldownDrawer({
                   <span className="font-medium tabular-nums">{dem?.aircraftCount ?? 0}</span>
                 </div>
               </div>
+
+              {/* Lens detail section */}
+              {renderLensDetail() && (
+                <>
+                  <Separator />
+                  {renderLensDetail()}
+                </>
+              )}
 
               <Separator />
 

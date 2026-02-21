@@ -24,7 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { exportToCsv } from "@/lib/utils/csv-export";
 import { usePreferences } from "@/lib/hooks/use-preferences";
-import type { DailyDemand, DailyCapacity, DailyUtilization } from "@/types";
+import type { DailyDemandV2, DailyCapacityV2, DailyUtilizationV2, CapacityLensId } from "@/types";
 
 interface CapacityRow {
   date: string;
@@ -37,6 +37,13 @@ interface CapacityRow {
   aircraftCount: number;
   byCustomer: Record<string, number>;
   byShift: { shift: string; headcount: number; realMH: number }[];
+  // Lens overlay fields
+  allocatedMH?: number;
+  forecastMH?: number;
+  workedMH?: number;
+  billedMH?: number;
+  peakConcurrency?: number;
+  eventCount?: number;
   subRows?: CapacitySubRow[];
 }
 
@@ -53,12 +60,20 @@ interface CapacitySubRow {
   aircraftCount: number;
   byCustomer: Record<string, number>;
   byShift: { shift: string; headcount: number; realMH: number }[];
+  allocatedMH?: number;
+  forecastMH?: number;
+  workedMH?: number;
+  billedMH?: number;
+  peakConcurrency?: number;
+  eventCount?: number;
 }
 
 interface CapacityTableProps {
-  demand: DailyDemand[];
-  capacity: DailyCapacity[];
-  utilization: DailyUtilization[];
+  demand: DailyDemandV2[];
+  capacity: DailyCapacityV2[];
+  utilization: DailyUtilizationV2[];
+  activeLens: CapacityLensId;
+  eventCountByDate?: Map<string, number>;
 }
 
 function formatDate(dateStr: string): string {
@@ -102,7 +117,13 @@ function getUtilizationBadge(percent: number, critical: boolean, overtime: boole
   );
 }
 
-export function CapacityTable({ demand, capacity, utilization }: CapacityTableProps) {
+export function CapacityTable({
+  demand,
+  capacity,
+  utilization,
+  activeLens,
+  eventCountByDate,
+}: CapacityTableProps) {
   const { tablePageSize } = usePreferences();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
@@ -137,15 +158,15 @@ export function CapacityTable({ demand, capacity, utilization }: CapacityTablePr
         });
       }
 
-      // Shift breakdown
+      // Shift breakdown (V2 → legacy sub-row format)
       if (cap) {
         for (const shift of cap.byShift) {
           subRows.push({
             date: d.date,
-            label: `${shift.shift} Shift`,
+            label: `${shift.shiftName} Shift`,
             type: "shift",
             demandMH: 0,
-            capacityMH: shift.realMH,
+            capacityMH: shift.productiveMH,
             utilizationPercent: 0,
             surplusDeficit: 0,
             overtimeFlag: false,
@@ -160,21 +181,33 @@ export function CapacityTable({ demand, capacity, utilization }: CapacityTablePr
       return {
         date: d.date,
         demandMH: d.totalDemandMH,
-        capacityMH: cap?.realCapacityMH ?? 0,
+        capacityMH: cap?.totalProductiveMH ?? 0,
         utilizationPercent: util?.utilizationPercent ?? 0,
-        surplusDeficit: util?.surplusDeficitMH ?? 0,
+        surplusDeficit: util?.gapMH ?? 0,
         overtimeFlag: util?.overtimeFlag ?? false,
         criticalFlag: util?.criticalFlag ?? false,
         aircraftCount: d.aircraftCount,
         byCustomer: d.byCustomer,
-        byShift: cap?.byShift ?? [],
+        byShift:
+          cap?.byShift.map((s) => ({
+            shift: s.shiftName,
+            headcount: s.effectiveHeadcount,
+            realMH: s.productiveMH,
+          })) ?? [],
+        // Lens overlay fields
+        allocatedMH: d.totalAllocatedDemandMH,
+        forecastMH: d.totalForecastedDemandMH,
+        workedMH: d.totalWorkedMH,
+        billedMH: d.totalBilledMH,
+        peakConcurrency: d.peakConcurrency,
+        eventCount: eventCountByDate?.get(d.date),
         subRows,
       };
     });
-  }, [demand, capacity, utilization]);
+  }, [demand, capacity, utilization, eventCountByDate]);
 
-  const columns = useMemo(
-    (): ColumnDef<CapacityRow>[] => [
+  const columns = useMemo((): ColumnDef<CapacityRow>[] => {
+    const base: ColumnDef<CapacityRow>[] = [
       {
         id: "expander",
         header: () => null,
@@ -277,9 +310,131 @@ export function CapacityTable({ demand, capacity, utilization }: CapacityTablePr
         },
         size: 130,
       },
-    ],
-    [],
-  );
+    ];
+
+    // Dynamic lens columns
+    switch (activeLens) {
+      case "allocated":
+        base.push({
+          accessorKey: "allocatedMH",
+          header: () => <span className="text-amber-400">Allocated MH</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original.allocatedMH;
+            return val != null ? (
+              <span className="tabular-nums text-amber-400">{val.toFixed(1)}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 110,
+        });
+        break;
+      case "forecast":
+        base.push({
+          accessorKey: "forecastMH",
+          header: () => <span className="text-teal-400">Forecast MH</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original.forecastMH;
+            return val != null ? (
+              <span className="tabular-nums text-teal-400">{val.toFixed(1)}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 110,
+        });
+        break;
+      case "worked":
+        base.push({
+          accessorKey: "workedMH",
+          header: () => <span className="text-green-400">Worked MH</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original.workedMH;
+            return val != null ? (
+              <span className="tabular-nums text-green-400">{val.toFixed(1)}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 100,
+        });
+        base.push({
+          id: "workedVariance",
+          header: () => <span className="text-green-400">Variance</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const worked = row.original.workedMH;
+            const demand = row.original.demandMH;
+            if (worked == null || demand === 0)
+              return <span className="text-muted-foreground">—</span>;
+            const variance = ((demand - worked) / demand) * 100;
+            return (
+              <span
+                className={`tabular-nums ${Math.abs(variance) > 20 ? "text-amber-400" : "text-green-400"}`}
+              >
+                {variance >= 0 ? "+" : ""}
+                {variance.toFixed(1)}%
+              </span>
+            );
+          },
+          size: 90,
+        });
+        break;
+      case "billed":
+        base.push({
+          accessorKey: "billedMH",
+          header: () => <span className="text-indigo-400">Billed MH</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original.billedMH;
+            return val != null ? (
+              <span className="tabular-nums text-indigo-400">{val.toFixed(1)}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 100,
+        });
+        break;
+      case "concurrent":
+        base.push({
+          accessorKey: "peakConcurrency",
+          header: () => <span className="text-purple-400">Peak Concurrent</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original.peakConcurrency;
+            return val != null ? (
+              <span className="tabular-nums text-purple-400">{val}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 130,
+        });
+        break;
+      case "events":
+        base.push({
+          accessorKey: "eventCount",
+          header: () => <span className="text-sky-400">Events</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original.eventCount;
+            return val != null && val > 0 ? (
+              <span className="tabular-nums text-sky-400">{val}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 80,
+        });
+        break;
+    }
+
+    return base;
+  }, [activeLens]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is safe here
   const table = useReactTable({
@@ -301,23 +456,47 @@ export function CapacityTable({ demand, capacity, utilization }: CapacityTablePr
   });
 
   const handleExportCsv = useCallback(() => {
-    exportToCsv("capacity-report.csv", rows, [
+    const csvColumns: { header: string; accessor: (r: CapacityRow) => string }[] = [
       { header: "Date", accessor: (r) => r.date },
-      { header: "Aircraft Count", accessor: (r) => r.aircraftCount },
+      { header: "Aircraft Count", accessor: (r) => String(r.aircraftCount) },
       { header: "Demand MH", accessor: (r) => r.demandMH.toFixed(1) },
       { header: "Capacity MH", accessor: (r) => r.capacityMH.toFixed(1) },
-      {
-        header: "Utilization %",
-        accessor: (r) => r.utilizationPercent.toFixed(1),
-      },
-      {
-        header: "Surplus/Deficit MH",
-        accessor: (r) => r.surplusDeficit.toFixed(1),
-      },
+      { header: "Utilization %", accessor: (r) => r.utilizationPercent.toFixed(1) },
+      { header: "Surplus/Deficit MH", accessor: (r) => r.surplusDeficit.toFixed(1) },
       { header: "Overtime Flag", accessor: (r) => (r.overtimeFlag ? "Yes" : "No") },
       { header: "Critical Flag", accessor: (r) => (r.criticalFlag ? "Yes" : "No") },
-    ]);
-  }, [rows]);
+    ];
+
+    // Add lens-specific columns to CSV
+    switch (activeLens) {
+      case "allocated":
+        csvColumns.push({
+          header: "Allocated MH",
+          accessor: (r) => (r.allocatedMH ?? 0).toFixed(1),
+        });
+        break;
+      case "forecast":
+        csvColumns.push({ header: "Forecast MH", accessor: (r) => (r.forecastMH ?? 0).toFixed(1) });
+        break;
+      case "worked":
+        csvColumns.push({ header: "Worked MH", accessor: (r) => (r.workedMH ?? 0).toFixed(1) });
+        break;
+      case "billed":
+        csvColumns.push({ header: "Billed MH", accessor: (r) => (r.billedMH ?? 0).toFixed(1) });
+        break;
+      case "concurrent":
+        csvColumns.push({
+          header: "Peak Concurrency",
+          accessor: (r) => String(r.peakConcurrency ?? 0),
+        });
+        break;
+      case "events":
+        csvColumns.push({ header: "Events", accessor: (r) => String(r.eventCount ?? 0) });
+        break;
+    }
+
+    exportToCsv("capacity-report.csv", rows, csvColumns);
+  }, [rows, activeLens]);
 
   return (
     <div className="rounded-lg border border-border bg-card">

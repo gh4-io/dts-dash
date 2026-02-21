@@ -10,13 +10,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { DailyCapacityV2, DailyDemandV2, DailyUtilizationV2, CapacityShift } from "@/types";
+import type {
+  DailyCapacityV2,
+  DailyDemandV2,
+  DailyUtilizationV2,
+  CapacityShift,
+  CapacityLensId,
+} from "@/types";
 
 interface CapacityHeatmapProps {
   capacity: DailyCapacityV2[];
   demand: DailyDemandV2[];
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
+  activeLens: CapacityLensId;
   onCellClick?: (date: string, shiftCode: string | null) => void;
 }
 
@@ -70,11 +77,78 @@ function formatDate(dateStr: string): { day: string; weekday: string; isWeekend:
   };
 }
 
+const LENS_TOOLTIP_CONFIG: Record<string, { label: string; color: string }> = {
+  allocated: { label: "Allocated", color: "text-amber-400" },
+  forecast: { label: "Forecast", color: "text-teal-400" },
+  worked: { label: "Worked", color: "text-green-400" },
+  billed: { label: "Billed", color: "text-indigo-400" },
+  concurrent: { label: "Peak", color: "text-purple-400" },
+  events: { label: "Events", color: "text-sky-400" },
+};
+
+function getLensShiftValue(
+  lens: CapacityLensId,
+  shiftDem:
+    | {
+        demandMH: number;
+        allocatedDemandMH?: number;
+        forecastedDemandMH?: number;
+        workedMH?: number;
+        billedMH?: number;
+        peakConcurrency?: number;
+        avgConcurrency?: number;
+      }
+    | undefined,
+): string | null {
+  if (!shiftDem) return null;
+  switch (lens) {
+    case "allocated":
+      return shiftDem.allocatedDemandMH != null
+        ? `${shiftDem.allocatedDemandMH.toFixed(1)} MH`
+        : null;
+    case "forecast":
+      return shiftDem.forecastedDemandMH != null
+        ? `${shiftDem.forecastedDemandMH.toFixed(1)} MH`
+        : null;
+    case "worked":
+      return shiftDem.workedMH != null ? `${shiftDem.workedMH.toFixed(1)} MH` : null;
+    case "billed":
+      return shiftDem.billedMH != null ? `${shiftDem.billedMH.toFixed(1)} MH` : null;
+    case "concurrent":
+      return shiftDem.peakConcurrency != null ? `${shiftDem.peakConcurrency} aircraft` : null;
+    default:
+      return null;
+  }
+}
+
+function getLensDailyValue(lens: CapacityLensId, dem: DailyDemandV2 | undefined): string | null {
+  if (!dem) return null;
+  switch (lens) {
+    case "allocated":
+      return dem.totalAllocatedDemandMH != null
+        ? `${dem.totalAllocatedDemandMH.toFixed(1)} MH`
+        : null;
+    case "forecast":
+      return dem.totalForecastedDemandMH != null
+        ? `${dem.totalForecastedDemandMH.toFixed(1)} MH`
+        : null;
+    case "worked":
+      return dem.totalWorkedMH != null ? `${dem.totalWorkedMH.toFixed(1)} MH` : null;
+    case "billed":
+      return dem.totalBilledMH != null ? `${dem.totalBilledMH.toFixed(1)} MH` : null;
+    case "concurrent":
+      return dem.peakConcurrency != null ? `${dem.peakConcurrency} aircraft` : null;
+    default:
+      return null;
+  }
+}
+
 export function CapacityHeatmap({
   capacity,
   demand,
   utilization,
   shifts,
+  activeLens,
   onCellClick,
 }: CapacityHeatmapProps) {
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
@@ -101,6 +175,8 @@ export function CapacityHeatmap({
     },
     [onCellClick],
   );
+
+  const lensConfig = activeLens !== "planned" ? LENS_TOOLTIP_CONFIG[activeLens] : null;
 
   if (dates.length === 0) {
     return (
@@ -213,6 +289,9 @@ export function CapacityHeatmap({
                       const cellKey = `${date}:${shift.code}`;
                       const isHovered = hoveredCell === cellKey;
 
+                      const lensValue =
+                        lensConfig && shiftDem ? getLensShiftValue(activeLens, shiftDem) : null;
+
                       return (
                         <TableCell key={shift.code} className="py-1 px-1 text-center">
                           <Tooltip>
@@ -268,6 +347,11 @@ export function CapacityHeatmap({
                                       )}
                                     </div>
                                     <div>Gap: {(shiftUtil?.gapMH ?? 0).toFixed(1)} MH</div>
+                                    {lensValue && lensConfig && (
+                                      <div className={lensConfig.color}>
+                                        {lensConfig.label}: {lensValue}
+                                      </div>
+                                    )}
                                   </>
                                 )}
                               </div>
@@ -312,6 +396,16 @@ export function CapacityHeatmap({
                             <div>Capacity: {(util?.totalProductiveMH ?? 0).toFixed(1)} MH</div>
                             <div>Gap: {(util?.gapMH ?? 0).toFixed(1)} MH</div>
                             <div>Aircraft: {dem?.aircraftCount ?? 0}</div>
+                            {(() => {
+                              const dailyLensValue = lensConfig
+                                ? getLensDailyValue(activeLens, dem)
+                                : null;
+                              return dailyLensValue && lensConfig ? (
+                                <div className={lensConfig.color}>
+                                  {lensConfig.label}: {dailyLensValue}
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                         </TooltipContent>
                       </Tooltip>

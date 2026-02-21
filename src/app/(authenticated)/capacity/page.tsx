@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useCallback } from "react";
+import { Suspense, useState, useCallback, useMemo } from "react";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { CapacityKpiStrip } from "@/components/capacity/capacity-kpi-strip";
@@ -8,6 +8,7 @@ import { CapacityHeatmap } from "@/components/capacity/capacity-heatmap";
 import { CapacitySummaryChart } from "@/components/capacity/capacity-summary-chart";
 import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
+import { LensSelector } from "@/components/capacity/lens-selector";
 import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
 import { Button } from "@/components/ui/button";
 
@@ -20,6 +21,17 @@ function CapacityPageInner() {
     warnings,
     shifts,
     assumptions,
+    allocations,
+    flightEvents,
+    coverageWindows,
+    concurrencyBuckets,
+    forecastRates,
+    forecastModel,
+    timeBookings,
+    billingEntries,
+    activeLens,
+    availableLenses,
+    setActiveLens,
     isLoading,
     error,
     refetch,
@@ -40,33 +52,16 @@ function CapacityPageInner() {
     setDrawerOpen(false);
   }, []);
 
-  // Build legacy-compatible data for the CapacityTable (backwards compat)
-  const legacyDemand = demand.map((d) => ({
-    date: d.date,
-    totalDemandMH: d.totalDemandMH,
-    aircraftCount: d.aircraftCount,
-    byCustomer: d.byCustomer,
-  }));
-
-  const legacyCapacity = capacity.map((c) => ({
-    date: c.date,
-    theoreticalCapacityMH: c.totalPaidMH,
-    realCapacityMH: c.totalProductiveMH,
-    byShift: c.byShift.map((s) => ({
-      shift: s.shiftName,
-      headcount: s.effectiveHeadcount,
-      theoreticalMH: s.paidMH,
-      realMH: s.productiveMH,
-    })),
-  }));
-
-  const legacyUtilization = utilization.map((u) => ({
-    date: u.date,
-    utilizationPercent: u.utilizationPercent ?? 0,
-    surplusDeficitMH: u.gapMH,
-    overtimeFlag: u.overtimeFlag,
-    criticalFlag: u.criticalFlag,
-  }));
+  // Pre-compute event count by date for table (events lens)
+  const eventCountByDate = useMemo(() => {
+    if (!flightEvents || flightEvents.length === 0) return undefined;
+    const map = new Map<string, number>();
+    for (const e of flightEvents) {
+      const eDate = (e.actualArrival ?? e.scheduledArrival ?? "")?.split("T")[0];
+      map.set(eDate, (map.get(eDate) ?? 0) + 1);
+    }
+    return map;
+  }, [flightEvents]);
 
   if (error) {
     return (
@@ -101,6 +96,13 @@ function CapacityPageInner() {
         <LoadingSkeleton variant="page" />
       ) : (
         <>
+          {/* Lens selector */}
+          <LensSelector
+            activeLens={activeLens}
+            availableLenses={availableLenses}
+            onLensChange={setActiveLens}
+          />
+
           {/* Warnings banner */}
           {warnings.length > 0 && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
@@ -124,7 +126,16 @@ function CapacityPageInner() {
           )}
 
           {/* KPI Strip */}
-          {summary && <CapacityKpiStrip summary={summary} dayCount={utilization.length} />}
+          {summary && (
+            <CapacityKpiStrip
+              summary={summary}
+              dayCount={utilization.length}
+              activeLens={activeLens}
+              demand={demand}
+              flightEvents={flightEvents}
+              coverageWindows={coverageWindows}
+            />
+          )}
 
           {/* Heatmap */}
           <CapacityHeatmap
@@ -132,6 +143,7 @@ function CapacityPageInner() {
             demand={demand}
             utilization={utilization}
             shifts={shifts}
+            activeLens={activeLens}
             onCellClick={handleCellClick}
           />
 
@@ -141,13 +153,16 @@ function CapacityPageInner() {
             demand={demand}
             utilization={utilization}
             shifts={shifts}
+            activeLens={activeLens}
           />
 
-          {/* Detail Table (using legacy-compatible wrapper) */}
+          {/* Detail Table (V2 direct) */}
           <CapacityTable
-            demand={legacyDemand}
-            capacity={legacyCapacity}
-            utilization={legacyUtilization}
+            demand={demand}
+            capacity={capacity}
+            utilization={utilization}
+            activeLens={activeLens}
+            eventCountByDate={eventCountByDate}
           />
 
           {/* Drilldown drawer */}
@@ -161,6 +176,14 @@ function CapacityPageInner() {
             utilization={utilization}
             shifts={shifts}
             assumptions={assumptions}
+            activeLens={activeLens}
+            allocations={allocations}
+            flightEvents={flightEvents}
+            timeBookings={timeBookings}
+            billingEntries={billingEntries}
+            forecastRates={forecastRates}
+            forecastModel={forecastModel}
+            concurrencyBuckets={concurrencyBuckets}
           />
         </>
       )}

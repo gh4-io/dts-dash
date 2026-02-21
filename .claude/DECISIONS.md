@@ -566,3 +566,19 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** None (new feature, backwards-compatible — all new fields are optional)
 **Links**: P2-3, `src/lib/capacity/billing-engine.ts`, `src/lib/capacity/billing-data.ts`
+
+---
+
+## D-047 | 2026-02-21 | Multi-Lens UI as Client-Side View Toggle (P2-7)
+
+**Context:** Six Phase 2 workstreams added overlay data (allocations, events, forecast, worked, billed, concurrency) to the `/api/capacity/overview` response. The capacity page needed a way to visualize each overlay.
+
+**Decision:** Multi-Lens UI implemented as a purely client-side view toggle. 7 lenses (1 base + 6 overlays): Planned, Allocated, Events, Forecast, Worked, Billed, Concurrent. Single-select — one overlay active at a time on top of the "Planned" base. No new API endpoint — reuses existing overview response. Lens state stored in Zustand (not URL-persisted). Concurrent and Events lenses skip chart overlay (aircraft count / event count ≠ MH — incompatible unit types for shared yAxis). V1→V2 table migration included as prerequisite (capacity-table.tsx moved from legacy DailyDemand/DailyCapacity/DailyUtilization to V2 types).
+
+**Key constraint discovered:** "use client" components cannot import from barrel `@/lib/capacity/index.ts` because it re-exports server-only modules (better-sqlite3, node-cron). Client components must use direct imports (e.g., `@/lib/capacity/lens-config`).
+
+**Files created:** `lens-config.ts`, `lens-selector.tsx`, `lens-config.test.ts` (15 tests)
+**Files modified:** types, store, barrel exports, KPI strip, heatmap, chart, table, drilldown drawer, capacity page (9 files)
+
+**Version impact:** None (UI-only, backwards-compatible — all overlay data already in API response)
+**Links**: P2-7, `src/lib/capacity/lens-config.ts`, `src/components/capacity/lens-selector.tsx`

@@ -488,9 +488,22 @@ export interface CapacityOverviewResponse {
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];
   concurrencyBuckets?: ConcurrencyBucket[];
+  forecastRates?: ForecastRate[];
+  forecastModel?: ForecastModel;
   timeBookings?: TimeBooking[];
   billingEntries?: BillingEntry[];
 }
+
+// ─── Capacity Lens (P2-7) ───────────────────────────────────────────────────
+
+export type CapacityLensId =
+  | "planned"
+  | "allocated"
+  | "events"
+  | "forecast"
+  | "worked"
+  | "billed"
+  | "concurrent";
 
 // ─── Billing Entries / Billed Hours (P2-3) ───────────────────────────────────
 

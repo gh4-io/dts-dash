@@ -155,6 +155,10 @@ export {
   deleteBillingEntry,
 } from "./billing-data";
 
+// Lens configuration (P2-7, pure constants)
+export { CAPACITY_LENSES, getAvailableLenses } from "./lens-config";
+export type { CapacityLensDefinition } from "./lens-config";
+
 // Forecast data access (CRUD)
 export {
   loadForecastModels,
