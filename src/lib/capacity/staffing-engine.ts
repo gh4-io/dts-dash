@@ -239,23 +239,35 @@ function markCoveredHours(
   startMinute: number,
   endHour: number,
   endMinute: number,
+  portion: "full" | "evening" | "morning",
 ): void {
   // Convert to fractional hours for edge handling
   const startFrac = startHour + startMinute / 60;
   const endFrac = endHour + endMinute / 60;
+  const isOvernight = startFrac >= endFrac;
 
-  if (startFrac < endFrac) {
-    // Normal range (e.g., 07:00→15:00)
-    for (let h = 0; h < 24; h++) {
-      if (h + 1 > startFrac && h < endFrac) covered[h] = true;
+  if (!isOvernight) {
+    // Normal range (e.g., 07:00→15:00) — only has a "full" portion
+    if (portion !== "morning") {
+      for (let h = 0; h < 24; h++) {
+        if (h + 1 > startFrac && h < endFrac) covered[h] = true;
+      }
     }
-  } else if (startFrac > endFrac) {
-    // Overnight range (e.g., 23:00→07:00)
-    for (let h = 0; h < 24; h++) {
-      if (h + 1 > startFrac || h < endFrac) covered[h] = true;
+  } else {
+    // Overnight range (e.g., 19:00→08:00)
+    // "evening" = the startHour→23:59 portion (belongs to the start day)
+    // "morning" = the 00:00→endHour portion (belongs to the next day)
+    if (portion === "evening" || portion === "full") {
+      for (let h = 0; h < 24; h++) {
+        if (h + 1 > startFrac) covered[h] = true;
+      }
+    }
+    if (portion === "morning" || portion === "full") {
+      for (let h = 0; h < 24; h++) {
+        if (h < endFrac) covered[h] = true;
+      }
     }
   }
-  // startFrac === endFrac means 0 duration — covers nothing
 }
 
 /**
@@ -289,21 +301,70 @@ export function computeCoverageGaps(
   const gaps: CoverageGap[] = [];
   const activeShifts = shifts.filter((s) => s.isActive);
 
+  /** Check if a shift is working on the given date */
+  function isShiftWorking(shift: StaffingShift, dateStr: string): boolean {
+    const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
+    if (pat) return isWorkingDay(dateStr, pat.pattern, shift.rotationStartDate);
+    // Orphaned shift (rotationId 0 or null) — not working
+    return false;
+  }
+
+  /** Get the previous calendar day as YYYY-MM-DD */
+  function prevDay(dateStr: string): string {
+    const d = new Date(dateStr + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().split("T")[0];
+  }
+
+  /** Is this shift an overnight shift (crosses midnight)? */
+  function isOvernightShift(shift: StaffingShift): boolean {
+    const startFrac = shift.startHour + shift.startMinute / 60;
+    const endFrac = shift.endHour + shift.endMinute / 60;
+    return startFrac >= endFrac;
+  }
+
   for (const day of days) {
     const covered = new Array<boolean>(24).fill(false);
+    const yesterday = prevDay(day.date);
 
     for (const shift of activeShifts) {
-      // Check if this shift is working on this day
-      const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
-      if (pat) {
-        if (!isWorkingDay(day.date, pat.pattern, shift.rotationStartDate)) continue;
-      } else if (shift.rotationId === 0 || shift.rotationId === null) {
-        // Orphaned shift (no rotation) — skip, treated as not working
-        continue;
+      if (isOvernightShift(shift)) {
+        // Overnight shift (e.g., 19:00→08:00):
+        // If working TODAY: covers today's evening (19:00→23:59)
+        if (isShiftWorking(shift, day.date)) {
+          markCoveredHours(
+            covered,
+            shift.startHour,
+            shift.startMinute,
+            shift.endHour,
+            shift.endMinute,
+            "evening",
+          );
+        }
+        // If working YESTERDAY: covers today's morning (00:00→08:00)
+        if (isShiftWorking(shift, yesterday)) {
+          markCoveredHours(
+            covered,
+            shift.startHour,
+            shift.startMinute,
+            shift.endHour,
+            shift.endMinute,
+            "morning",
+          );
+        }
+      } else {
+        // Normal shift (e.g., 07:00→15:00): only affects today
+        if (isShiftWorking(shift, day.date)) {
+          markCoveredHours(
+            covered,
+            shift.startHour,
+            shift.startMinute,
+            shift.endHour,
+            shift.endMinute,
+            "full",
+          );
+        }
       }
-
-      // Mark hours covered by this shift
-      markCoveredHours(covered, shift.startHour, shift.startMinute, shift.endHour, shift.endMinute);
     }
 
     const uncoveredRanges = findUncoveredRanges(covered);
