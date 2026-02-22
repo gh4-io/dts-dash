@@ -6,6 +6,7 @@ import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { CapacityKpiStrip } from "@/components/capacity/capacity-kpi-strip";
 import { CapacityHeatmap } from "@/components/capacity/capacity-heatmap";
 import { CapacitySummaryChart } from "@/components/capacity/capacity-summary-chart";
+import { CapacityMixChart } from "@/components/capacity/capacity-mix-chart";
 import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
 import { LensSelector } from "@/components/capacity/lens-selector";
@@ -137,24 +138,35 @@ function CapacityPageInner() {
             />
           )}
 
-          {/* Heatmap */}
-          <CapacityHeatmap
-            capacity={capacity}
-            demand={demand}
-            utilization={utilization}
-            shifts={shifts}
-            activeLens={activeLens}
-            onCellClick={handleCellClick}
-          />
+          {/* Main 2-column grid: chart left, heatmap + mix chart right */}
+          <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-3 items-start">
+            {/* Left: Demand vs Capacity chart */}
+            <CapacitySummaryChart
+              capacity={capacity}
+              demand={demand}
+              utilization={utilization}
+              shifts={shifts}
+              activeLens={activeLens}
+            />
 
-          {/* Chart */}
-          <CapacitySummaryChart
-            capacity={capacity}
-            demand={demand}
-            utilization={utilization}
-            shifts={shifts}
-            activeLens={activeLens}
-          />
+            {/* Right column: heatmap stacked above sunburst */}
+            <div className="flex flex-col gap-3">
+              {/* Right top: Shift Utilization Heatmap */}
+              <div className="overflow-x-auto">
+                <CapacityHeatmap
+                  capacity={capacity}
+                  demand={demand}
+                  utilization={utilization}
+                  shifts={shifts}
+                  activeLens={activeLens}
+                  onCellClick={handleCellClick}
+                />
+              </div>
+
+              {/* Right bottom: Demand Mix sunburst */}
+              <CapacityMixChart demand={demand} shifts={shifts} activeLens={activeLens} />
+            </div>
+          </div>
 
           {/* Detail Table (V2 direct) */}
           <CapacityTable
