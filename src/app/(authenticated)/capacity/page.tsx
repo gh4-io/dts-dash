@@ -93,10 +93,47 @@ function CapacityPageInner() {
         title="Capacity Modeling"
         icon="fa-solid fa-gauge-high"
         actions={
-          <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
-            <i className={`fa-solid fa-rotate mr-1.5 ${isLoading ? "fa-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Warning bell — only shown when warnings exist */}
+            {warnings.length > 0 && (
+              <button
+                onClick={() => setWarningsDismissed(false)}
+                disabled={!warningsDismissed}
+                title={
+                  warningsDismissed
+                    ? `Show ${warnings.length} staffing warning${warnings.length !== 1 ? "s" : ""}`
+                    : `${warnings.length} staffing warning${warnings.length !== 1 ? "s" : ""}`
+                }
+                className={`relative transition-opacity ${
+                  warningsDismissed ? "opacity-100 cursor-pointer" : "opacity-40 cursor-default"
+                }`}
+              >
+                <i
+                  className={`fa-solid fa-bell text-base ${
+                    (summary?.criticalDays ?? 0) > 0
+                      ? "text-red-400"
+                      : (summary?.overtimeDays ?? 0) > 0
+                        ? "text-amber-400"
+                        : "text-yellow-400"
+                  }`}
+                />
+                {/* Badge */}
+                <span
+                  className={`absolute -top-1.5 -right-1.5 text-[9px] font-bold leading-none rounded-full px-1 py-0.5 min-w-[14px] text-center ${
+                    (summary?.criticalDays ?? 0) > 0
+                      ? "bg-red-500 text-white"
+                      : "bg-amber-500 text-white"
+                  }`}
+                >
+                  {warnings.length}
+                </span>
+              </button>
+            )}
+            <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
+              <i className={`fa-solid fa-rotate mr-1.5 ${isLoading ? "fa-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         }
       />
 
