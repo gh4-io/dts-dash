@@ -1230,6 +1230,23 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-066 | Capacity Dev Overview — Temporary Debug Tool
+
+| Field | Value |
+|-------|-------|
+| **Type** | Temporary debug tool |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-02-22 |
+| **Context** | Capacity model has many variables, overlays, and computation layers. Developers need a way to inspect all intermediate values in one place — headcount, productive MH formula, demand sources, which overlays are active, and per-day breakdowns with WP attribution. |
+| **Implementation** | Single-file admin-only page at `/admin/capacity/dev-overview`. Displays: (1) dev banner + date range, (2) pipeline status bar (6 stages), (3) model config (2-col: assumptions + shifts), (4) formula trace with night factor highlighting, (5) daily numbers table (dynamic shift columns, util% color coding, flag icons, row selection), (6) selected day detail panel (per-shift cards, WP contributions with mhSource badges, overlay values), (7) raw data inspector (collapsible JSON sections). Uses existing `useCapacityV2()` hook — no new API routes or DB changes. |
+| **Removal** | Delete `src/app/(authenticated)/admin/capacity/dev-overview/` folder + remove "Dev Overview" entry from `CAPACITY_SECTIONS` in `src/app/(authenticated)/admin/capacity/page.tsx`. Zero residual impact. |
+| **Decision** | Remove once capacity model is production-stable and developers no longer need real-time intermediate value inspection. ~4-8 weeks estimated, depending on Phase 3 schedule. |
+| **Links** | PLAN.md (Capacity Model Dev Overview), commit with page creation |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
@@ -1237,9 +1254,11 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 | P0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 1 | 0 | 15 |
 | P2 | 4 | 1 | 0 | 14 |
-| P3 | 3 | 0 | 2 | 0 |
-| **Total** | **11** | **2** | **2** | **45** |
+| P3 | 4 | 0 | 2 | 0 |
+| **Total** | **12** | **2** | **2** | **45** |
 
-**Latest update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
+**Latest update (2026-02-22)**: OI-066 opened — Capacity Dev Overview (temporary debug tool). Admin-only inspection page for intermediate model values. Clear removal path planned for 4-8 weeks out.
+
+**Previous update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
 
 **Previous update (2026-02-20)**: OI-064 fully resolved — 17 total fixes: 6 showstopper bugs, 2 UI regressions, 8 code review items (parser, validator, mapping, exporter, history, toolbar, source downgrade), and 5 missing empty-key validations across schemas.

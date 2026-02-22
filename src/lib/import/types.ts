@@ -5,6 +5,26 @@
  * export, and commit interfaces used by all import schemas.
  */
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+/**
+ * Reserved key name for auto-detecting schema type from imported data.
+ *
+ * When present in JSON or CSV data, its value selects the import schema
+ * automatically (e.g. `"customers"`, `"work-packages"`).
+ *
+ * Detection priority:
+ *   1. Explicit `_importType` key in the data → use that schema ID
+ *   2. No key found → default to `"work-packages"` (most common type)
+ *   3. User can always override via "Choose Type" in the UI
+ *
+ * Templates downloaded from the Data Hub include this key automatically.
+ */
+export const IMPORT_TYPE_KEY = "_importType";
+
+/** Default schema when no `_importType` key is found */
+export const DEFAULT_SCHEMA_ID = "work-packages";
+
 // ─── Field & Schema Types ────────────────────────────────────────────────────
 
 export type FieldType = "string" | "number" | "boolean" | "date" | "json";

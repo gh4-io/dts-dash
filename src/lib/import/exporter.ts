@@ -6,6 +6,7 @@
  */
 
 import { toCSV } from "@/lib/utils/csv-parser";
+import { IMPORT_TYPE_KEY } from "./types";
 import type { ImportSchema } from "./types";
 
 export interface ExportOutput {
@@ -54,10 +55,16 @@ export async function exportData(
  * Uses schema.templateRecords if provided, otherwise synthesizes from fields.
  */
 export function generateTemplate(schema: ImportSchema, format: "json" | "csv"): ExportOutput {
-  const records =
+  const rawRecords =
     schema.templateRecords && schema.templateRecords.length > 0
       ? schema.templateRecords
       : synthesizeTemplateRecords(schema);
+
+  // Inject _importType into each record for auto-detection on re-import
+  const records = rawRecords.map((rec) => ({
+    [IMPORT_TYPE_KEY]: schema.id,
+    ...rec,
+  }));
 
   const filename = `${schema.id}-template.${format}`;
 
@@ -69,8 +76,8 @@ export function generateTemplate(schema: ImportSchema, format: "json" | "csv"): 
     };
   }
 
-  // CSV: use all field names as headers
-  const headers = schema.fields.map((f) => f.name);
+  // CSV: _importType + all field names as headers
+  const headers = [IMPORT_TYPE_KEY, ...schema.fields.map((f) => f.name)];
 
   return {
     content: toCSV(records as Record<string, unknown>[], headers),

@@ -1,22 +1,29 @@
 "use client";
 
 /**
- * Step 2: Load Data
+ * Step: Load Data
  *
  * Textarea + file upload for raw data input.
+ * In data-first mode (schema=null), shows generic format hints
+ * and an info button to browse available import types.
  */
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SerializableSchema } from "@/lib/import/types";
 
 interface StepLoadDataProps {
-  schema: SerializableSchema;
+  schema: SerializableSchema | null;
   content: string;
   onContentChange: (content: string, fileName?: string) => void;
   onNext: () => void;
   onBack: () => void;
   loading?: boolean;
+  /** Whether we're in data-first mode (no step 1 type selection) */
+  dataFirstMode?: boolean;
+  /** All available schemas (for the info popover) */
+  schemas?: SerializableSchema[];
 }
 
 export function StepLoadData({
@@ -26,6 +33,8 @@ export function StepLoadData({
   onNext,
   onBack,
   loading,
+  dataFirstMode,
+  schemas,
 }: StepLoadDataProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -53,10 +62,98 @@ export function StepLoadData({
     if (file) handleFileSelect(file);
   };
 
-  const formatHint = schema.formats.join(" or ").toUpperCase();
+  const formatHint = schema ? schema.formats.join(" or ").toUpperCase() : "JSON or CSV";
+  const maxSizeMB = schema?.maxSizeMB || 50;
+
+  // Group schemas by category for the info popover
+  const schemasByCategory: Record<string, SerializableSchema[]> = {};
+  if (schemas) {
+    for (const s of schemas) {
+      const cat = s.display.category;
+      if (!schemasByCategory[cat]) schemasByCategory[cat] = [];
+      schemasByCategory[cat].push(s);
+    }
+  }
+  const categoryOrder = ["Operations", "Master Data", "Administration", "Configuration"];
+  const sortedCategories = Object.keys(schemasByCategory).sort(
+    (a, b) =>
+      (categoryOrder.indexOf(a) === -1 ? 99 : categoryOrder.indexOf(a)) -
+      (categoryOrder.indexOf(b) === -1 ? 99 : categoryOrder.indexOf(b)),
+  );
 
   return (
     <div className="space-y-4">
+      {/* Schema indicator (data-first mode) */}
+      {dataFirstMode && (
+        <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-4 py-2.5">
+          {schema ? (
+            <>
+              <i className={`${schema.display.icon} text-primary`} />
+              <span className="text-sm font-medium">{schema.display.name}</span>
+              <span className="text-xs text-muted-foreground">selected</span>
+            </>
+          ) : (
+            <>
+              <i className="fa-solid fa-wand-magic-sparkles text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">
+                Defaults to Work Packages. Add{" "}
+                <code className="rounded bg-muted px-1 text-xs font-mono">_importType</code> field
+                to specify type.
+              </span>
+            </>
+          )}
+          {/* Info button — shows all available types */}
+          {schemas && schemas.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                  title="Available import types"
+                >
+                  <i className="fa-solid fa-circle-info text-sm" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 max-h-96 overflow-y-auto p-0">
+                <div className="border-b border-border px-4 py-3">
+                  <p className="text-sm font-medium">Available Import Types</p>
+                  <p className="text-xs text-muted-foreground">
+                    Use <code className="rounded bg-muted px-1 font-mono">_importType</code> value
+                    in your data
+                  </p>
+                </div>
+                <div className="divide-y divide-border">
+                  {sortedCategories.map((cat) => (
+                    <div key={cat} className="px-4 py-2.5">
+                      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        {cat}
+                      </p>
+                      <div className="space-y-1.5">
+                        {schemasByCategory[cat].map((s) => (
+                          <div key={s.id} className="flex items-start gap-2">
+                            <i
+                              className={`${s.display.icon} mt-0.5 w-4 text-center text-xs text-muted-foreground`}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium leading-tight">{s.display.name}</p>
+                              <p className="text-[10px] leading-tight text-muted-foreground">
+                                <code className="font-mono">{s.id}</code>
+                                {" — "}
+                                {s.display.description}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
+        </div>
+      )}
+
       {/* File drop zone */}
       <div
         className={`relative rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
@@ -121,16 +218,18 @@ export function StepLoadData({
       {content && (
         <p className="text-xs text-muted-foreground">
           {(new Blob([content]).size / 1024).toFixed(1)} KB
-          {schema.maxSizeMB && ` / ${schema.maxSizeMB} MB max`}
+          {maxSizeMB && ` / ${maxSizeMB} MB max`}
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-between pt-2">
-        <Button variant="outline" onClick={onBack}>
-          <i className="fa-solid fa-arrow-left mr-2" />
-          Back
-        </Button>
+      <div className="flex items-center justify-end pt-2">
+        {!dataFirstMode && (
+          <Button variant="outline" onClick={onBack} className="mr-auto">
+            <i className="fa-solid fa-arrow-left mr-2" />
+            Back
+          </Button>
+        )}
         <Button onClick={onNext} disabled={!content.trim() || loading}>
           {loading ? (
             <>

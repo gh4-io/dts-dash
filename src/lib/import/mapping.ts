@@ -7,6 +7,7 @@
  * 3. Fuzzy normalized match (strip separators, compare lowercase)
  */
 
+import { IMPORT_TYPE_KEY } from "./types";
 import type { FieldDef, FieldMapping } from "./types";
 
 /**
@@ -177,6 +178,9 @@ export function extractSourceFields(
   for (let i = 0; i < len && fields.size < 500; i += step) {
     walk(records[i], "", 0);
   }
+
+  // Remove reserved _importType key (metadata, not a data field)
+  fields.delete(IMPORT_TYPE_KEY);
 
   return Array.from(fields).sort();
 }

@@ -9,7 +9,13 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 import { createChildLogger } from "@/lib/logger";
 import { ensureSchemasLoaded, getSchema } from "@/lib/import/registry";
-import { parseContent, detectFormat, checkContentSize } from "@/lib/import/parser";
+import {
+  parseContent,
+  detectFormat,
+  checkContentSize,
+  detectImportType,
+  stripImportTypeKey,
+} from "@/lib/import/parser";
 import { autoMap, extractSourceFields } from "@/lib/import/mapping";
 
 const log = createChildLogger("api/admin/import/parse");
@@ -22,16 +28,33 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { schemaId, content, format: requestedFormat } = body;
+    const { schemaId: explicitSchemaId, content, format: requestedFormat } = body;
 
-    if (!schemaId || !content) {
-      return NextResponse.json({ error: "schemaId and content are required" }, { status: 400 });
+    if (!content) {
+      return NextResponse.json({ error: "content is required" }, { status: 400 });
     }
 
     await ensureSchemasLoaded();
-    const schema = getSchema(schemaId);
+
+    // Resolve schema: explicit > _importType auto-detect > work-packages default
+    let detectedSchemaId: string | null = null;
+    let resolvedSchemaId: string;
+
+    if (explicitSchemaId) {
+      resolvedSchemaId = explicitSchemaId;
+    } else {
+      detectedSchemaId = detectImportType(content);
+      // Validate the detected ID maps to a real schema; fall back to work-packages
+      const detectedSchema = getSchema(detectedSchemaId);
+      resolvedSchemaId = detectedSchema ? detectedSchemaId : "work-packages";
+      if (!detectedSchema) {
+        detectedSchemaId = "work-packages";
+      }
+    }
+
+    const schema = getSchema(resolvedSchemaId);
     if (!schema) {
-      return NextResponse.json({ error: `Unknown schema: ${schemaId}` }, { status: 400 });
+      return NextResponse.json({ error: `Unknown schema: ${resolvedSchemaId}` }, { status: 400 });
     }
 
     // Check size limit
@@ -58,6 +81,9 @@ export async function POST(request: NextRequest) {
       records = schema.preProcess(records);
     }
 
+    // Strip reserved _importType key before field extraction
+    records = stripImportTypeKey(records);
+
     // Extract source fields from the (possibly preprocessed) records
     const sourceFields = extractSourceFields(records);
 
@@ -69,6 +95,8 @@ export async function POST(request: NextRequest) {
       suggestedMapping,
       recordCount: records.length,
       detectedFormat,
+      detectedSchemaId,
+      schemaId: resolvedSchemaId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

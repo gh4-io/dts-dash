@@ -13,7 +13,12 @@ import { auth } from "@/lib/auth";
 import { createChildLogger } from "@/lib/logger";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
 import { ensureSchemasLoaded, getSchema } from "@/lib/import/registry";
-import { parseContent, detectFormat, checkContentSize } from "@/lib/import/parser";
+import {
+  parseContent,
+  detectFormat,
+  checkContentSize,
+  stripImportTypeKey,
+} from "@/lib/import/parser";
 import { autoMap, applyMapping, extractSourceFields } from "@/lib/import/mapping";
 import type { FieldMapping, ImportContext } from "@/lib/import/types";
 
@@ -76,6 +81,9 @@ export async function POST(request: NextRequest) {
     if (schema.preProcess) {
       records = schema.preProcess(records);
     }
+
+    // Strip reserved _importType key
+    records = stripImportTypeKey(records);
 
     // Map fields
     const mapping = fieldMapping || autoMap(extractSourceFields(records), schema.fields);

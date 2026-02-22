@@ -12,7 +12,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createChildLogger } from "@/lib/logger";
 import { ensureSchemasLoaded, getSchema } from "@/lib/import/registry";
-import { parseContent, detectFormat, checkContentSize } from "@/lib/import/parser";
+import {
+  parseContent,
+  detectFormat,
+  checkContentSize,
+  stripImportTypeKey,
+} from "@/lib/import/parser";
 import { autoMap, extractSourceFields } from "@/lib/import/mapping";
 import { validateRecords } from "@/lib/import/validator";
 import type { FieldMapping, ImportContext } from "@/lib/import/types";
@@ -73,6 +78,9 @@ export async function POST(request: NextRequest) {
     if (schema.preProcess) {
       records = schema.preProcess(records);
     }
+
+    // Strip reserved _importType key
+    records = stripImportTypeKey(records);
 
     // Auto-map if no mapping provided
     const mapping = fieldMapping || autoMap(extractSourceFields(records), schema.fields);
