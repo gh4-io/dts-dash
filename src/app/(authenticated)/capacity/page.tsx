@@ -93,7 +93,7 @@ function CapacityPageInner() {
         title="Capacity Modeling"
         icon="fa-solid fa-gauge-high"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             {/* Warning bell — only shown when warnings exist */}
             {warnings.length > 0 && (
               <button
@@ -105,11 +105,13 @@ function CapacityPageInner() {
                     : `${warnings.length} staffing warning${warnings.length !== 1 ? "s" : ""}`
                 }
                 className={`relative transition-opacity ${
-                  warningsDismissed ? "opacity-100 cursor-pointer" : "opacity-40 cursor-default"
+                  warningsDismissed
+                    ? "opacity-50 hover:opacity-75 cursor-pointer"
+                    : "opacity-25 cursor-default"
                 }`}
               >
                 <i
-                  className={`fa-solid fa-bell text-base ${
+                  className={`fa-solid fa-bell text-sm ${
                     (summary?.criticalDays ?? 0) > 0
                       ? "text-red-400"
                       : (summary?.overtimeDays ?? 0) > 0
@@ -119,7 +121,7 @@ function CapacityPageInner() {
                 />
                 {/* Badge */}
                 <span
-                  className={`absolute -top-1.5 -right-1.5 text-[9px] font-bold leading-none rounded-full px-1 py-0.5 min-w-[14px] text-center ${
+                  className={`absolute -top-1.5 -right-1.5 text-[8px] font-semibold leading-none rounded-full px-[3px] py-px min-w-[13px] text-center opacity-80 ${
                     (summary?.criticalDays ?? 0) > 0
                       ? "bg-red-500 text-white"
                       : "bg-amber-500 text-white"
