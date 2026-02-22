@@ -38,6 +38,13 @@ function CapacityPageInner() {
     refetch,
   } = useCapacityV2();
 
+  // Warnings dismiss state — resets when data is refreshed
+  const [warningsDismissed, setWarningsDismissed] = useState(false);
+  const handleRefetch = useCallback(() => {
+    setWarningsDismissed(false);
+    refetch();
+  }, [refetch]);
+
   // Drilldown drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerDate, setDrawerDate] = useState<string | null>(null);
@@ -86,7 +93,7 @@ function CapacityPageInner() {
         title="Capacity Modeling"
         icon="fa-solid fa-gauge-high"
         actions={
-          <Button variant="outline" size="sm" onClick={refetch} disabled={isLoading}>
+          <Button variant="outline" size="sm" onClick={handleRefetch} disabled={isLoading}>
             <i className={`fa-solid fa-rotate mr-1.5 ${isLoading ? "fa-spin" : ""}`} />
             Refresh
           </Button>
@@ -105,11 +112,11 @@ function CapacityPageInner() {
           />
 
           {/* Warnings banner */}
-          {warnings.length > 0 && (
+          {warnings.length > 0 && !warningsDismissed && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <div className="flex items-start gap-2">
-                <i className="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5" />
-                <div className="space-y-1">
+                <i className="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5 shrink-0" />
+                <div className="space-y-1 flex-1">
                   <p className="text-xs font-medium text-amber-400">
                     Staffing Warnings ({warnings.length})
                   </p>
@@ -122,6 +129,13 @@ function CapacityPageInner() {
                     )}
                   </ul>
                 </div>
+                <button
+                  onClick={() => setWarningsDismissed(true)}
+                  className="shrink-0 text-amber-400/60 hover:text-amber-400 transition-colors ml-1"
+                  aria-label="Dismiss warnings"
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
               </div>
             </div>
           )}
