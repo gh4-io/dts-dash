@@ -981,6 +981,17 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M017: Add aircraft_type column to flight_events
+  // M016 was applied before aircraft_type was added to it.
+  results.push(
+    applyMigration("M017_flight_events_aircraft_type", () => {
+      const cols = sqlite.pragma("table_info(flight_events)") as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "aircraft_type")) {
+        sqlite.exec(`ALTER TABLE flight_events ADD COLUMN aircraft_type TEXT`);
+      }
+    }),
+  );
+
   return results;
 }
 
