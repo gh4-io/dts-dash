@@ -116,6 +116,12 @@ export function findMatchingAllocations(
     if (c.effectiveFrom > date) continue;
     if (c.effectiveTo !== null && c.effectiveTo < date) continue;
 
+    // PER_EVENT with no lines: use contractedMh directly as per-event MH
+    if (c.periodType === "PER_EVENT" && c.lines.length === 0 && c.contractedMh !== null) {
+      results.push({ mode: c.mode, allocatedMh: c.contractedMh });
+      continue;
+    }
+
     // Contract matches — now find matching lines
     for (const line of c.lines) {
       if (line.dayOfWeek !== null && line.dayOfWeek !== dow) continue;

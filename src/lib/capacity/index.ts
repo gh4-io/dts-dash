@@ -83,6 +83,7 @@ export {
   updateDemandContract,
   deleteDemandContract,
   loadCustomerNameMap,
+  loadPerEventContractMap,
 } from "./allocation-data";
 
 // Flight events engine (pure functions)

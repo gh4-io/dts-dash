@@ -4,6 +4,7 @@ import { eq, isNotNull } from "drizzle-orm";
 import type { SharePointWorkPackage, WorkPackage, MHSource, AppConfig } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 import { normalizeAircraftTypes, invalidateMappingsCache } from "@/lib/utils/aircraft-type";
+import { loadPerEventContractMap } from "@/lib/capacity/allocation-data";
 import {
   DEFAULT_MH,
   DEFAULT_WP_MH_MODE,
@@ -20,12 +21,13 @@ const log = createChildLogger("transformer");
 /**
  * Work Package Transformer
  * Converts raw SharePoint data to normalized WorkPackage format
- * Applies effectiveMH formula: override > WP MH (if include) > default 3.0
+ * Applies effectiveMH formula: override > WP MH (if include) > contract PER_EVENT > default 3.0
  */
 
 let cachedConfig: AppConfig | null = null;
 let cachedOverrides: Map<string, number> | null = null; // GUID -> overrideMH
 let cachedAircraftTypes: Map<string, string> | null = null; // registration -> aircraftType
+let cachedContractMap: Map<string, number> | null = null; // customerName (lower) -> perEventMH
 
 /**
  * Load app config from SQLite
@@ -144,12 +146,33 @@ async function loadAircraftTypes(): Promise<Map<string, string>> {
 }
 
 /**
+ * Load PER_EVENT contract map — keyed by lowercase customer name.
+ * Returns max allocatedMh per customer across all active PER_EVENT contracts.
+ */
+function loadContractMap(): Map<string, number> {
+  if (cachedContractMap) {
+    return cachedContractMap;
+  }
+
+  try {
+    cachedContractMap = loadPerEventContractMap();
+    log.info(`Loaded ${cachedContractMap.size} PER_EVENT contract mappings`);
+    return cachedContractMap;
+  } catch (error) {
+    log.error({ err: error }, "Failed to load PER_EVENT contract map");
+    cachedContractMap = new Map();
+    return cachedContractMap;
+  }
+}
+
+/**
  * Invalidate caches (e.g., after config/override changes or import)
  */
 export function invalidateTransformerCache(): void {
   cachedConfig = null;
   cachedOverrides = null;
   cachedAircraftTypes = null;
+  cachedContractMap = null;
   invalidateMappingsCache(); // ensure type mapping rules are also refreshed
   log.info("Cache invalidated");
 }
@@ -165,6 +188,9 @@ export async function transformWorkPackages(
 
   // Load aircraft master type map (registration → aircraftType from ac.json field_5)
   const aircraftTypeMap = await loadAircraftTypes();
+
+  // Load PER_EVENT contract map (customerName lowercase → max allocatedMh)
+  const contractMap = loadContractMap();
 
   // Resolve type per WP:
   //   1. Aircraft master data (truth source — populated from ac.json field_5)
@@ -195,12 +221,14 @@ export async function transformWorkPackages(
     const manualOverride = overrides.get(wp.GUID) ?? null;
     const wpMH = wp.TotalMH;
     const hasWP = wp.HasWorkpackage ?? false;
+    const contractMH = contractMap.get(wp.Customer.toLowerCase()) ?? null;
     const { effectiveMH, mhSource } = computeEffectiveMH(
       manualOverride,
       wpMH,
       hasWP,
       config.defaultMH,
-      config.wpMHMode
+      config.wpMHMode,
+      contractMH,
     );
 
     return {
@@ -233,14 +261,15 @@ export async function transformWorkPackages(
 
 /**
  * Compute effectiveMH using priority chain
- * Priority: manual override > WP MH (if include mode) > default MH
+ * Priority: manual override > WP MH (if include mode) > contract PER_EVENT > default MH
  */
-function computeEffectiveMH(
+export function computeEffectiveMH(
   manualOverride: number | null,
   wpMH: number | null,
   hasWorkpackage: boolean,
   defaultMH: number,
-  wpMHMode: "include" | "exclude"
+  wpMHMode: "include" | "exclude",
+  contractMH: number | null = null,
 ): { effectiveMH: number; mhSource: MHSource } {
   // 1. Manual override takes precedence
   if (manualOverride !== null) {
@@ -252,6 +281,11 @@ function computeEffectiveMH(
     return { effectiveMH: wpMH, mhSource: "workpackage" };
   }
 
-  // 3. Default MH
+  // 3. Contract PER_EVENT MH
+  if (contractMH !== null && contractMH > 0) {
+    return { effectiveMH: contractMH, mhSource: "contract" };
+  }
+
+  // 4. Default MH
   return { effectiveMH: defaultMH, mhSource: "default" };
 }

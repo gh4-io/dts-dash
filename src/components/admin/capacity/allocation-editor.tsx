@@ -213,9 +213,10 @@ export function AllocationEditor({
       return;
     }
 
-    // Validate lines
+    // Validate lines (PER_EVENT contracts can skip lines — uses contractedMh directly)
+    const isPEREvent = ptVal === "PER_EVENT";
     const validLines = lines.filter((l) => l.allocatedMh && parseFloat(l.allocatedMh) > 0);
-    if (validLines.length === 0) {
+    if (!isPEREvent && validLines.length === 0) {
       setError("At least one allocation line with positive MH is required");
       return;
     }
@@ -445,97 +446,99 @@ export function AllocationEditor({
             </Label>
           </div>
 
-          {/* ─── Lines Section ─── */}
-          <div className="space-y-2 pt-2 border-t border-border">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold">Allocation Lines</Label>
-              <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                <i className="fa-solid fa-plus mr-1" />
-                Add Line
-              </Button>
-            </div>
+          {/* ─── Lines Section (hidden for PER_EVENT — uses contractedMh directly) ─── */}
+          {periodType !== "PER_EVENT" && (
+            <div className="space-y-2 pt-2 border-t border-border">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Allocation Lines</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                  <i className="fa-solid fa-plus mr-1" />
+                  Add Line
+                </Button>
+              </div>
 
-            <div className="space-y-2">
-              {lines.map((line) => (
-                <div
-                  key={line.key}
-                  className="flex items-end gap-2 rounded-md border border-border/50 bg-muted/20 p-2"
-                >
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[10px] text-muted-foreground">Shift</span>
-                    <Select
-                      value={line.shiftId}
-                      onValueChange={(v) => updateLine(line.key, "shiftId", v)}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="null">All Shifts</SelectItem>
-                        {shifts
-                          .filter((s) => s.isActive)
-                          .sort((a, b) => a.sortOrder - b.sortOrder)
-                          .map((s) => (
-                            <SelectItem key={s.id} value={String(s.id)}>
-                              {s.name}
+              <div className="space-y-2">
+                {lines.map((line) => (
+                  <div
+                    key={line.key}
+                    className="flex items-end gap-2 rounded-md border border-border/50 bg-muted/20 p-2"
+                  >
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[10px] text-muted-foreground">Shift</span>
+                      <Select
+                        value={line.shiftId}
+                        onValueChange={(v) => updateLine(line.key, "shiftId", v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="null">All Shifts</SelectItem>
+                          {shifts
+                            .filter((s) => s.isActive)
+                            .sort((a, b) => a.sortOrder - b.sortOrder)
+                            .map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[10px] text-muted-foreground">Day</span>
+                      <Select
+                        value={line.dayOfWeek}
+                        onValueChange={(v) => updateLine(line.key, "dayOfWeek", v)}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DAYS_OF_WEEK.map((d) => (
+                            <SelectItem key={d.value} value={d.value}>
+                              {d.label}
                             </SelectItem>
                           ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[10px] text-muted-foreground">Day</span>
-                    <Select
-                      value={line.dayOfWeek}
-                      onValueChange={(v) => updateLine(line.key, "dayOfWeek", v)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="w-20 space-y-1">
+                      <span className="text-[10px] text-muted-foreground">MH *</span>
+                      <Input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={line.allocatedMh}
+                        onChange={(e) => updateLine(line.key, "allocatedMh", e.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="MH"
+                      />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <span className="text-[10px] text-muted-foreground">Label</span>
+                      <Input
+                        value={line.label}
+                        onChange={(e) => updateLine(line.key, "label", e.target.value)}
+                        className="h-8 text-xs"
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeLine(line.key)}
+                      className="h-8 w-8 p-0 text-destructive/70 hover:text-destructive"
+                      disabled={lines.length <= 1}
                     >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DAYS_OF_WEEK.map((d) => (
-                          <SelectItem key={d.value} value={d.value}>
-                            {d.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      <i className="fa-solid fa-xmark text-xs" />
+                    </Button>
                   </div>
-                  <div className="w-20 space-y-1">
-                    <span className="text-[10px] text-muted-foreground">MH *</span>
-                    <Input
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      value={line.allocatedMh}
-                      onChange={(e) => updateLine(line.key, "allocatedMh", e.target.value)}
-                      className="h-8 text-xs"
-                      placeholder="MH"
-                    />
-                  </div>
-                  <div className="flex-1 space-y-1">
-                    <span className="text-[10px] text-muted-foreground">Label</span>
-                    <Input
-                      value={line.label}
-                      onChange={(e) => updateLine(line.key, "label", e.target.value)}
-                      className="h-8 text-xs"
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeLine(line.key)}
-                    className="h-8 w-8 p-0 text-destructive/70 hover:text-destructive"
-                    disabled={lines.length <= 1}
-                  >
-                    <i className="fa-solid fa-xmark text-xs" />
-                  </Button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <DialogFooter>

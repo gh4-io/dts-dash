@@ -5,6 +5,7 @@ import { customers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { loadDemandContracts, createDemandContract } from "@/lib/capacity";
 import { validateContract } from "@/lib/capacity/allocation-engine";
+import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/admin/capacity/demand-contracts");
@@ -57,8 +58,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid customerId" }, { status: 400 });
     }
 
-    // Require at least one line
-    if (!body.lines || body.lines.length === 0) {
+    // Require at least one line (except PER_EVENT which uses contractedMh directly)
+    if ((!body.lines || body.lines.length === 0) && body.periodType !== "PER_EVENT") {
       return NextResponse.json({ error: "At least one line is required" }, { status: 400 });
     }
 
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
       lines: body.lines,
     });
 
+    invalidateTransformerCache();
     return NextResponse.json(contract, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");

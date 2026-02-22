@@ -250,6 +250,56 @@ export function loadCustomerNameMap(): Map<number, string> {
   return new Map(rows.map((r) => [r.id, r.name]));
 }
 
+/**
+ * Build a map: customerName (lowercase) → max allocatedMh
+ * from all active PER_EVENT demand contracts.
+ *
+ * Resolution rules:
+ * - Only contracts with periodType = 'PER_EVENT' and isActive = true
+ * - Multiple contracts per customer: take highest max-line allocatedMh
+ * - Multiple lines per contract: take max allocatedMh (no shift context in transformer)
+ */
+export function loadPerEventContractMap(): Map<string, number> {
+  const contractRows = db
+    .select()
+    .from(demandContracts)
+    .where(and(eq(demandContracts.isActive, true), eq(demandContracts.periodType, "PER_EVENT")))
+    .all();
+
+  if (contractRows.length === 0) return new Map();
+
+  const contractIds = contractRows.map((c) => c.id);
+  const allLines = db.select().from(demandAllocationLines).all();
+
+  const customerRows = db.select({ id: customers.id, name: customers.name }).from(customers).all();
+  const customerIdToName = new Map(customerRows.map((c) => [c.id, c.name.toLowerCase()]));
+
+  const result = new Map<string, number>();
+
+  for (const contract of contractRows) {
+    const custName = customerIdToName.get(contract.customerId);
+    if (!custName) continue;
+
+    const lines = allLines.filter(
+      (l) => contractIds.includes(l.contractId) && l.contractId === contract.id,
+    );
+    if (lines.length === 0) {
+      // PER_EVENT with no lines: use contractedMh (matches findMatchingAllocations behavior)
+      if (contract.contractedMh !== null && contract.contractedMh > 0) {
+        const existing = result.get(custName) ?? 0;
+        result.set(custName, Math.max(existing, contract.contractedMh));
+      }
+      continue;
+    }
+
+    const maxMh = Math.max(...lines.map((l) => l.allocatedMh));
+    const existing = result.get(custName) ?? 0;
+    result.set(custName, Math.max(existing, maxMh));
+  }
+
+  return result;
+}
+
 // ─── DTO Helpers ──────────────────────────────────────────────────────────────
 
 function toContractDTO(

@@ -33,7 +33,7 @@ export type TimeFormat = "12h" | "24h";
 
 export type WpStatus = "New" | "Approved" | "Closed" | "Printed" | "Canceled";
 
-export type MHSource = "workpackage" | "default" | "manual";
+export type MHSource = "workpackage" | "default" | "manual" | "contract";
 
 export type ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback";
 
