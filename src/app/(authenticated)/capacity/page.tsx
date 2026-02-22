@@ -6,7 +6,7 @@ import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { CapacityKpiStrip } from "@/components/capacity/capacity-kpi-strip";
 import { CapacityHeatmap } from "@/components/capacity/capacity-heatmap";
 import { CapacitySummaryChart } from "@/components/capacity/capacity-summary-chart";
-import { CapacityMixChart } from "@/components/capacity/capacity-mix-chart";
+import { CapacityPieCharts } from "@/components/capacity/capacity-pie-charts";
 import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
 import { LensSelector } from "@/components/capacity/lens-selector";
@@ -138,18 +138,21 @@ function CapacityPageInner() {
             />
           )}
 
-          {/* Main 2-column grid: chart left, heatmap + mix chart right */}
-          <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-3 items-start">
-            {/* Left: Demand vs Capacity chart */}
-            <CapacitySummaryChart
-              capacity={capacity}
-              demand={demand}
-              utilization={utilization}
-              shifts={shifts}
-              activeLens={activeLens}
-            />
+          {/* Main 2-column grid: chart left (full height), heatmap + pies right */}
+          <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-3">
+            {/* Left: stretches to match right column height */}
+            <div className="flex flex-col min-h-0">
+              <CapacitySummaryChart
+                capacity={capacity}
+                demand={demand}
+                utilization={utilization}
+                shifts={shifts}
+                activeLens={activeLens}
+                fillHeight
+              />
+            </div>
 
-            {/* Right column: heatmap stacked above sunburst */}
+            {/* Right column: heatmap top, 3 pies bottom */}
             <div className="flex flex-col gap-3">
               {/* Right top: Shift Utilization Heatmap */}
               <div className="overflow-x-auto">
@@ -163,8 +166,13 @@ function CapacityPageInner() {
                 />
               </div>
 
-              {/* Right bottom: Demand Mix sunburst */}
-              <CapacityMixChart demand={demand} shifts={shifts} activeLens={activeLens} />
+              {/* Right bottom: 3 demand breakdown pies */}
+              <CapacityPieCharts
+                demand={demand}
+                utilization={utilization}
+                shifts={shifts}
+                activeLens={activeLens}
+              />
             </div>
           </div>
 

@@ -28,6 +28,8 @@ interface CapacitySummaryChartProps {
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
   activeLens: CapacityLensId;
+  /** When true, fills parent container height instead of using a fixed 340px */
+  fillHeight?: boolean;
 }
 
 type ViewMode = "stacked" | "total";
@@ -70,6 +72,7 @@ export function CapacitySummaryChart({
   utilization,
   shifts,
   activeLens,
+  fillHeight = false,
 }: CapacitySummaryChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("stacked");
 
@@ -156,7 +159,9 @@ export function CapacitySummaryChart({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div
+      className={`rounded-lg border border-border bg-card${fillHeight ? " flex flex-col h-full" : ""}`}
+    >
       <div className="flex items-center justify-between p-3 border-b border-border">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
           <i className="fa-solid fa-chart-bar" />
@@ -186,8 +191,8 @@ export function CapacitySummaryChart({
         </div>
       </div>
 
-      <div className="p-3">
-        <ResponsiveContainer width="100%" height={340}>
+      <div className={`p-3${fillHeight ? " flex-1 min-h-0" : ""}`}>
+        <ResponsiveContainer width="100%" height={fillHeight ? "100%" : 340}>
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
             <XAxis
