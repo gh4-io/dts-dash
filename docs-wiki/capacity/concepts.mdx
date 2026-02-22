@@ -1,0 +1,149 @@
+---
+title: Key Concepts
+description: Core terminology and formulas used in capacity modeling
+---
+
+# Key Concepts
+
+This page defines the core terms and formulas used throughout the capacity modeling system. Bookmark it as a reference while learning the other sections.
+
+## Demand (Man-Hours)
+
+**Demand** is the total maintenance work required, measured in **Man-Hours (MH)**. It comes from work packages imported into the system.
+
+Each work package has an `effectiveMH` value determined by a priority chain:
+
+1. **Manual override** — an admin-set value (highest priority)
+2. **WP TotalMH** — the man-hours from the work package data (if `wpMHMode` is `include`)
+3. **Default MH** — a configurable fallback (default: 3.0 MH)
+
+> **Example:** A 737 landing gear check requires 3.0 MH by default. If the work package specifies `TotalMH: 4.5`, that value is used instead. An admin can override either to, say, 5.0 MH.
+
+### Demand Distribution
+
+When an aircraft is on the ground for multiple shifts, demand is **distributed** across those shifts — not duplicated. A 3-day work package with 6 MH allocates roughly 2 MH per shift-day slot, not 6 MH to each day.
+
+Two distribution modes are available:
+
+- **EVEN** — equal MH to every on-ground shift slot
+- **WEIGHTED** — more MH allocated to the arrival and departure shifts (configurable percentages), with the remainder spread evenly across middle slots
+
+## Capacity (Productive MH)
+
+**Capacity** is the total productive maintenance hours your team can deliver per shift. It's computed through the **productivity chain**:
+
+```
+Productive MH per person = Paid Hours
+                           x Paid-to-Available
+                           x Available-to-Productive
+                           x Night Factor
+```
+
+| Factor | Typical Value | Meaning |
+|--------|---------------|---------|
+| Paid Hours | 8.0 | Hours per person per shift |
+| Paid-to-Available | 0.95 | 5% lost to meetings, breaks, admin |
+| Available-to-Productive | 0.80 | 20% lost to task switching, handoffs, idle |
+| Night Factor | 0.85 (NIGHT only) | 15% efficiency reduction at night; 1.0 for DAY/SWING |
+
+**Total shift capacity** = Productive MH/person x headcount
+
+### Example Calculation
+
+DAY shift, 10 technicians:
+
+```
+8.0 x 0.95 x 0.80 x 1.0 = 6.08 productive hours/person
+6.08 x 10 people = 60.8 productive MH available
+```
+
+NIGHT shift, 4 technicians:
+
+```
+8.0 x 0.95 x 0.80 x 0.85 = 5.17 productive hours/person
+5.17 x 4 people = 20.7 productive MH available
+```
+
+## Shifts
+
+The system defines three standard shifts:
+
+| Shift | Hours (UTC) | Typical Headcount |
+|-------|-------------|-------------------|
+| **DAY** | 07:00 – 15:00 | 8 |
+| **SWING** | 15:00 – 23:00 | 6 |
+| **NIGHT** | 23:00 – 07:00 | 4 |
+
+Headcount can be configured two ways:
+
+- **Headcount Plans** — fixed headcount per shift with effective dating and day-of-week overrides
+- **Staffing Matrix** — rotation-based scheduling with 21-day cycles, supporting variable patterns per shift
+
+## Utilization
+
+**Utilization** measures how much of your available capacity is consumed by demand:
+
+```
+Utilization % = (Total Demand MH / Total Productive MH) x 100
+```
+
+### Color Thresholds
+
+| Range | Color | Meaning |
+|-------|-------|---------|
+| 0 – 75% | Green | Healthy — room for additional work |
+| 75 – 100% | Amber | Caution — approaching full capacity |
+| > 100% | Red | Overloaded — demand exceeds capacity |
+
+A **gap** value shows the difference between capacity and demand:
+
+- **Positive gap** = surplus capacity (MH available beyond demand)
+- **Negative gap** = deficit (more demand than capacity — overtime or understaffing)
+
+### Key Metrics
+
+| Metric | Formula |
+|--------|---------|
+| Average Utilization | Mean of daily utilization percentages |
+| Peak Utilization | Highest single-day utilization |
+| Capacity Gap | Total Productive MH - Total Demand MH |
+| Critical Days | Days with utilization > 100% |
+| No-Coverage Days | Days where a shift has zero productive MH |
+
+## Lenses
+
+**Lenses** are 7 different perspectives on the same capacity data. Each lens highlights a specific aspect of operations:
+
+| Lens | Color | What It Shows |
+|------|-------|---------------|
+| **Planned** | Blue | Base WP demand vs shift capacity |
+| **Allocated** | Amber | Customer contract minimums overlaid on demand |
+| **Events** | Sky | Flight arrivals/departures and coverage windows |
+| **Forecast** | Teal | Projected future demand from forecast models |
+| **Worked** | Green | Actual hours worked vs planned |
+| **Billed** | Indigo | Invoiced hours vs worked/planned |
+| **Concurrent** | Purple | Simultaneous aircraft on ground |
+
+The Planned lens is always available. Other lenses activate when their corresponding data exists (e.g., the Allocated lens enables when demand allocations have been configured).
+
+See [Understanding Lenses](/capacity/lenses) for full details.
+
+## Glossary
+
+| Term | Definition |
+|------|-----------|
+| **MH** | Man-Hours — the unit of maintenance work measurement |
+| **WP** | Work Package — a unit of maintenance work on an aircraft |
+| **Utilization** | Demand divided by capacity, expressed as a percentage |
+| **Shift** | A fixed time window (DAY, SWING, NIGHT) with assigned headcount |
+| **Headcount** | Number of technicians assigned to a shift |
+| **Allocation** | Contractual minimum hours guaranteed to a customer |
+| **Coverage Window** | Time buffer around flight arrivals/departures requiring staff availability |
+| **Concurrency** | Number of aircraft on the ground simultaneously |
+| **Forecast** | Projected future demand based on historical patterns |
+| **Overlay** | Additional data layer displayed on top of the base demand/capacity view |
+| **Productivity Chain** | The formula converting paid hours to productive hours through efficiency factors |
+| **Demand Curve** | The method used to distribute a WP's MH across its on-ground shift slots |
+| **Effective MH** | The resolved man-hours for a WP after applying the priority chain (override > WP > default) |
+| **Gap MH** | Productive MH minus demand MH (positive = surplus, negative = deficit) |
+| **Rotation Pattern** | A 21-day work/off cycle (e.g., "xxxxxxoxxxxxxoxxxxooo") used in staffing matrix |

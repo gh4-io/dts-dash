@@ -1,0 +1,489 @@
+---
+title: Capacity API Reference
+description: Complete reference for all capacity-related API endpoints
+---
+
+# Capacity API Reference
+
+All capacity endpoints require authentication. Admin endpoints (`/api/admin/capacity/*`) require `admin` or `superadmin` role. The overview endpoint (`/api/capacity/overview`) is available to any authenticated user.
+
+## Overview Endpoint
+
+### GET /api/capacity/overview
+
+Returns the complete capacity analysis for a date range, including demand, capacity, utilization, and all overlay data (allocations, events, forecast, worked, billed, concurrency).
+
+**Auth:** Any authenticated user
+
+#### Query Parameters
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `start` | ISO date | 7 days ago | Start of date range |
+| `end` | ISO date | 23 days ahead | End of date range |
+| `operators` | comma-separated | *(all)* | Filter by customer names |
+| `aircraft` | comma-separated | *(all)* | Filter by aircraft registrations |
+| `types` | comma-separated | *(all)* | Filter by aircraft types |
+
+#### Example Request
+
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "http://localhost:3000/api/capacity/overview?start=2026-02-01&end=2026-02-28"
+```
+
+#### Response Shape
+
+```json
+{
+  "demand": [
+    {
+      "date": "2026-02-01",
+      "totalDemandMH": 42.5,
+      "totalAllocatedDemandMH": 48.0,
+      "totalForecastedDemandMH": 40.2,
+      "totalWorkedMH": 38.0,
+      "totalBilledMH": 41.0,
+      "peakConcurrency": 3,
+      "avgConcurrency": 1.8,
+      "aircraftCount": 5,
+      "byCustomer": { "DHL": 24.0, "Atlas": 18.5 },
+      "byShift": [
+        {
+          "shiftCode": "DAY",
+          "demandMH": 18.2,
+          "allocatedDemandMH": 20.0,
+          "forecastedDemandMH": 17.5,
+          "workedMH": 16.0,
+          "billedMH": 17.5,
+          "peakConcurrency": 2,
+          "avgConcurrency": 1.5,
+          "wpContributions": [
+            {
+              "wpId": 101,
+              "aircraftReg": "N12345",
+              "customer": "DHL",
+              "allocatedMH": 3.2,
+              "mhSource": "wp"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "capacity": [
+    {
+      "date": "2026-02-01",
+      "totalProductiveMH": 87.4,
+      "totalPaidMH": 144.0,
+      "hasExceptions": false,
+      "byShift": [
+        {
+          "shiftCode": "DAY",
+          "shiftName": "Day",
+          "effectiveHeadcount": 8,
+          "paidMH": 64.0,
+          "availableMH": 60.8,
+          "productiveMH": 48.6,
+          "hasExceptions": false,
+          "belowMinHeadcount": false
+        }
+      ]
+    }
+  ],
+  "utilization": [
+    {
+      "date": "2026-02-01",
+      "utilizationPercent": 48.6,
+      "totalDemandMH": 42.5,
+      "totalProductiveMH": 87.4,
+      "gapMH": 44.9,
+      "overtimeFlag": false,
+      "criticalFlag": false,
+      "noCoverageDays": 0,
+      "byShift": [
+        {
+          "shiftCode": "DAY",
+          "utilization": 37.4,
+          "gapMH": 30.4,
+          "demandMH": 18.2,
+          "productiveMH": 48.6,
+          "noCoverage": false
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "avgUtilization": 52.3,
+    "peakUtilization": 98.1,
+    "totalDemandMH": 1190.0,
+    "totalCapacityMH": 2447.2,
+    "criticalDays": 2,
+    "overtimeDays": 0,
+    "worstDeficit": {
+      "date": "2026-02-15",
+      "shift": "NIGHT",
+      "gapMH": -3.2
+    },
+    "noCoverageDays": 0
+  },
+  "warnings": ["NIGHT shift below minimum headcount on 2026-02-14"],
+  "shifts": [ { "id": 1, "code": "DAY", "name": "Day", "startHour": 7, "endHour": 15, "paidHours": 8.0, "minHeadcount": 2, "sortOrder": 1, "isActive": true } ],
+  "assumptions": { "paidToAvailable": 0.95, "availableToProductive": 0.80, "nightProductivityFactor": 0.85, "defaultMhNoWp": 3.0, "demandCurve": "WEIGHTED", "arrivalWeight": 0.30, "departureWeight": 0.25 },
+  "allocations": [],
+  "flightEvents": [],
+  "coverageWindows": [],
+  "concurrencyBuckets": [],
+  "forecastRates": [],
+  "forecastModel": null,
+  "timeBookings": [],
+  "billingEntries": []
+}
+```
+
+> **Note:** Overlay arrays (`allocations`, `flightEvents`, etc.) are only present when non-empty.
+
+---
+
+## Admin CRUD Endpoints
+
+All admin endpoints follow the same pattern:
+
+| Method | Pattern | Description |
+|--------|---------|-------------|
+| GET | `/api/admin/capacity/{feature}` | List all records (optional date range filter) |
+| POST | `/api/admin/capacity/{feature}` | Create a new record |
+| GET | `/api/admin/capacity/{feature}/[id]` | Get a single record |
+| PUT | `/api/admin/capacity/{feature}/[id]` | Update a record |
+| DELETE | `/api/admin/capacity/{feature}/[id]` | Delete a record |
+
+**Auth:** All require `admin` or `superadmin` role.
+
+**Error responses:** 400 (validation), 403 (forbidden), 404 (not found), 409 (conflict), 500 (server error).
+
+---
+
+### Demand Allocations
+
+**Base path:** `/api/admin/capacity/demand-allocations`
+
+**List:** `GET ?start=YYYY-MM-DD&end=YYYY-MM-DD` (both optional)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `customerId` | number | Yes | Customer ID |
+| `shiftId` | number | No | Null = all shifts |
+| `dayOfWeek` | number | No | 0=Sun..6=Sat, null = all days |
+| `effectiveFrom` | YYYY-MM-DD | Yes | Start date |
+| `effectiveTo` | YYYY-MM-DD | No | End date (null = indefinite) |
+| `allocatedMh` | number | Yes | Must be > 0 |
+| `mode` | string | Yes | `ADDITIVE` or `MINIMUM_FLOOR` |
+| `reason` | string | No | Description |
+| `isActive` | boolean | No | Default: true |
+
+---
+
+### Flight Events
+
+**Base path:** `/api/admin/capacity/flight-events`
+
+**List:** `GET ?start=YYYY-MM-DD&end=YYYY-MM-DD` (both optional)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `aircraftReg` | string | Yes | Aircraft registration |
+| `customer` | string | Yes | Customer name |
+| `scheduledArrival` | ISO datetime | No | Planned arrival |
+| `actualArrival` | ISO datetime | No | Real arrival |
+| `scheduledDeparture` | ISO datetime | No | Planned departure |
+| `actualDeparture` | ISO datetime | No | Real departure |
+| `arrivalWindowMinutes` | number | No | Default: 30 |
+| `departureWindowMinutes` | number | No | Default: 60 |
+| `status` | string | Yes | `scheduled`, `actual`, `cancelled` |
+| `source` | string | Yes | `work_package`, `manual`, `import` |
+| `workPackageId` | number | No | Link to WP |
+| `notes` | string | No | |
+| `isActive` | boolean | No | Default: true |
+
+---
+
+### Forecast Models
+
+**Base path:** `/api/admin/capacity/forecast-models`
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `name` | string | Yes | Model name |
+| `description` | string | No | |
+| `method` | string | Yes | `moving_average`, `weighted_average`, `linear_trend` |
+| `lookbackDays` | number | No | 7-365, default: 30 |
+| `forecastHorizonDays` | number | No | 1-90, default: 14 |
+| `granularity` | string | No | `daily` or `shift`, default: `shift` |
+| `customerFilter` | string | No | Comma-separated names |
+| `weightRecent` | number | No | 0.0-1.0, default: 0.7 |
+| `isActive` | boolean | No | Default: true |
+
+**Additional endpoint:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/admin/capacity/forecast-models/[id]/generate` | Generate forecast rates from historical demand |
+
+**Generate response:**
+
+```json
+{
+  "generated": 42,
+  "forecastStart": "2026-02-22",
+  "forecastEnd": "2026-03-07",
+  "historicalDays": 30
+}
+```
+
+---
+
+### Rate Forecasts
+
+**Base path:** `/api/admin/capacity/rate-forecasts`
+
+**List:** `GET ?modelId=<required>&start=YYYY-MM-DD&end=YYYY-MM-DD`
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `modelId` | number | Yes | Parent forecast model |
+| `forecastDate` | YYYY-MM-DD | Yes | The forecasted date |
+| `shiftCode` | string | No | `DAY`, `SWING`, `NIGHT`, or null |
+| `customer` | string | No | Null = aggregate |
+| `forecastedMh` | number | Yes | >= 0 |
+| `confidence` | number | No | 0.0-1.0 |
+| `notes` | string | No | |
+| `isActive` | boolean | No | Default: true |
+
+---
+
+### Time Bookings (Worked Hours)
+
+**Base path:** `/api/admin/capacity/time-bookings`
+
+**List:** `GET ?start=YYYY-MM-DD&end=YYYY-MM-DD` (both optional)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `aircraftReg` | string | Yes | Aircraft registration |
+| `customer` | string | Yes | Customer name |
+| `bookingDate` | YYYY-MM-DD | Yes | Date of work |
+| `shiftCode` | string | Yes | `DAY`, `SWING`, `NIGHT` |
+| `taskName` | string | No | Description of task |
+| `taskType` | string | No | `routine`, `non_routine`, `aog`, `training`, `admin` (default: `routine`) |
+| `workedMh` | number | Yes | Must be > 0 |
+| `technicianCount` | number | No | People involved |
+| `workPackageId` | number | No | Link to WP |
+| `notes` | string | No | |
+| `source` | string | No | `manual` or `import` (default: `manual`) |
+| `isActive` | boolean | No | Default: true |
+
+---
+
+### Billing Entries (Billed Hours)
+
+**Base path:** `/api/admin/capacity/billing-entries`
+
+**List:** `GET ?start=YYYY-MM-DD&end=YYYY-MM-DD` (both optional)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `aircraftReg` | string | Yes | Aircraft registration |
+| `customer` | string | Yes | Customer name |
+| `billingDate` | YYYY-MM-DD | Yes | Invoice date |
+| `shiftCode` | string | Yes | `DAY`, `SWING`, `NIGHT` |
+| `description` | string | No | Line item description |
+| `billedMh` | number | Yes | Must be > 0 |
+| `invoiceRef` | string | No | Invoice number |
+| `workPackageId` | number | No | Link to WP |
+| `notes` | string | No | |
+| `source` | string | No | `manual` or `import` (default: `manual`) |
+| `isActive` | boolean | No | Default: true |
+
+---
+
+### Headcount Plans
+
+**Base path:** `/api/admin/capacity/headcount-plans`
+
+**List:** `GET ?start=YYYY-MM-DD&end=YYYY-MM-DD` (both optional)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `shiftId` | number | Yes | Which shift |
+| `headcount` | number | Yes | Non-negative integer |
+| `effectiveFrom` | YYYY-MM-DD | Yes | Start date |
+| `effectiveTo` | YYYY-MM-DD | No | End date (null = indefinite) |
+| `dayOfWeek` | number | No | 0-6 (null = all days) |
+| `label` | string | No | Description |
+| `notes` | string | No | |
+
+---
+
+### Headcount Exceptions
+
+**Base path:** `/api/admin/capacity/headcount-exceptions`
+
+**List:** `GET ?start=YYYY-MM-DD&end=YYYY-MM-DD` (both optional)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `shiftId` | number | Yes | Which shift |
+| `exceptionDate` | YYYY-MM-DD | Yes | The specific date |
+| `headcountDelta` | number | Yes | +/- adjustment |
+| `reason` | string | No | Why this exception |
+
+> **Note:** Returns 409 if a (shift, date) combination already exists.
+
+---
+
+### Staffing Configurations
+
+**Base path:** `/api/admin/capacity/staffing-configs`
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `name` | string | Yes | Configuration name |
+| `description` | string | No | |
+
+**Additional endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `[id]/activate` | Set as active configuration (deactivates others) |
+| POST | `[id]/duplicate` | Deep copy with new name (body: `{ "name": "Copy Name" }`) |
+
+> **Note:** Cannot delete an active configuration (returns 409).
+
+---
+
+### Staffing Shifts
+
+**Base path:** `/api/admin/capacity/staffing-shifts`
+
+**List:** `GET ?configId=<required>`
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `configId` | number | Yes | Parent configuration |
+| `name` | string | Yes | Shift line name |
+| `category` | string | Yes | `DAY`, `SWING`, `NIGHT`, `OTHER` |
+| `rotationId` | number | Yes | Rotation pattern to follow |
+| `rotationStartDate` | YYYY-MM-DD | Yes | Cycle start date |
+| `startHour` | number | Yes | 0-23 |
+| `endHour` | number | Yes | 0-23 |
+| `headcount` | number | Yes | Non-negative |
+| `startMinute` | number | No | 0-59 |
+| `endMinute` | number | No | 0-59 |
+| `breakMinutes` | number | No | Break duration |
+| `lunchMinutes` | number | No | Lunch duration |
+| `mhOverride` | number | No | Override computed MH |
+| `isActive` | boolean | No | Default: true |
+| `sortOrder` | number | No | Display order |
+
+**Bulk endpoint:** `POST /api/admin/capacity/staffing-shifts/bulk`
+
+```json
+{
+  "action": "activate | deactivate | delete | update-category",
+  "ids": [1, 2, 3],
+  "category": "DAY"
+}
+```
+
+---
+
+### Rotation Patterns
+
+**Base path:** `/api/admin/capacity/rotation-patterns`
+
+**List:** `GET ?active=true` (optional filter)
+
+**Create/Update fields:**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `name` | string | Yes | Pattern name |
+| `pattern` | string | Yes | 21-char string of `x` and `o` |
+| `isActive` | boolean | No | Default: true |
+| `sortOrder` | number | No | Display order |
+
+**Bulk endpoint:** `POST /api/admin/capacity/rotation-patterns/bulk`
+
+```json
+{ "action": "activate | deactivate | delete", "ids": [1, 2] }
+```
+
+---
+
+### Assumptions
+
+**Base path:** `/api/admin/capacity/assumptions`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/capacity/assumptions` | Read active assumptions |
+| PUT | `/api/admin/capacity/assumptions` | Update assumptions |
+
+**Update fields:**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `paidToAvailable` | number | 0-1.0 |
+| `availableToProductive` | number | 0-1.0 |
+| `nightProductivityFactor` | number | 0-1.0 |
+| `defaultMhNoWp` | number | > 0 |
+| `demandCurve` | string | `EVEN` or `WEIGHTED` |
+| `arrivalWeight` | number | 0-1.0 |
+| `departureWeight` | number | 0-1.0 |
+
+---
+
+### Shifts (Read-Only)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/capacity/shifts` | List active capacity shifts |
+
+---
+
+### Staffing Matrix (Computed)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/capacity/staffing-matrix?configId=<id>&weekStart=YYYY-MM-DD` | Computed weekly matrix |
+
+Returns the resolved headcount, paid MH, available MH, and productive MH for each day and category in the specified week.
+
+---
+
+### Rotation Presets
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/admin/capacity/rotation-presets` | List all preset patterns |
+| GET | `/api/admin/capacity/rotation-presets/count` | Count available presets |

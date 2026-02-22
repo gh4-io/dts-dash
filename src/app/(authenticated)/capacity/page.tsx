@@ -21,7 +21,7 @@ function CapacityPageInner() {
     warnings,
     shifts,
     assumptions,
-    allocations,
+    contracts,
     flightEvents,
     coverageWindows,
     concurrencyBuckets,
@@ -177,7 +177,7 @@ function CapacityPageInner() {
             shifts={shifts}
             assumptions={assumptions}
             activeLens={activeLens}
-            allocations={allocations}
+            contracts={contracts}
             flightEvents={flightEvents}
             timeBookings={timeBookings}
             billingEntries={billingEntries}

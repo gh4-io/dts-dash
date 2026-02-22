@@ -373,19 +373,19 @@ export const headcountExceptions = sqliteTable(
   }),
 );
 
-export const demandAllocations = sqliteTable(
-  "demand_allocations",
+export const demandContracts = sqliteTable(
+  "demand_contracts",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     customerId: integer("customer_id")
       .notNull()
       .references(() => customers.id),
-    shiftId: integer("shift_id").references(() => capacityShifts.id),
-    dayOfWeek: integer("day_of_week"), // 0=Sun..6=Sat, null = all days
+    name: text("name").notNull(),
+    mode: text("mode").notNull(), // ADDITIVE | MINIMUM_FLOOR
     effectiveFrom: text("effective_from").notNull(), // YYYY-MM-DD
     effectiveTo: text("effective_to"), // null = indefinite
-    allocatedMh: real("allocated_mh").notNull(),
-    mode: text("mode").notNull(), // ADDITIVE | MINIMUM_FLOOR
+    contractedMh: real("contracted_mh"), // null = no sanity check
+    periodType: text("period_type"), // WEEKLY|MONTHLY|ANNUAL|TOTAL (null if no contractedMh)
     reason: text("reason"),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     createdBy: integer("created_by").references(() => users.id),
@@ -397,9 +397,25 @@ export const demandAllocations = sqliteTable(
       .$defaultFn(() => new Date().toISOString()),
   },
   (table) => ({
-    customerIdx: index("idx_da_customer").on(table.customerId),
-    effectiveIdx: index("idx_da_effective").on(table.effectiveFrom, table.effectiveTo),
-    shiftIdx: index("idx_da_shift").on(table.shiftId),
+    customerIdx: index("idx_dc_customer").on(table.customerId),
+    effectiveIdx: index("idx_dc_effective").on(table.effectiveFrom, table.effectiveTo),
+  }),
+);
+
+export const demandAllocationLines = sqliteTable(
+  "demand_allocation_lines",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    contractId: integer("contract_id")
+      .notNull()
+      .references(() => demandContracts.id, { onDelete: "cascade" }),
+    shiftId: integer("shift_id").references(() => capacityShifts.id),
+    dayOfWeek: integer("day_of_week"), // 0=Sun..6=Sat, null = all days
+    allocatedMh: real("allocated_mh").notNull(),
+    label: text("label"),
+  },
+  (table) => ({
+    contractIdx: index("idx_dal_contract").on(table.contractId),
   }),
 );
 
@@ -789,7 +805,7 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
     relationName: "customerUpdatedBy",
   }),
   aircraft: many(aircraft),
-  demandAllocations: many(demandAllocations),
+  demandContracts: many(demandContracts),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -973,7 +989,7 @@ export const inviteCodesRelations = relations(inviteCodes, ({ one }) => ({
 export const capacityShiftsRelations = relations(capacityShifts, ({ many }) => ({
   headcountPlans: many(headcountPlans),
   headcountExceptions: many(headcountExceptions),
-  demandAllocations: many(demandAllocations),
+  demandAllocationLines: many(demandAllocationLines),
 }));
 
 export const capacityAssumptionsRelations = relations(capacityAssumptions, ({ one }) => ({
@@ -1009,18 +1025,26 @@ export const headcountExceptionsRelations = relations(headcountExceptions, ({ on
   }),
 }));
 
-export const demandAllocationsRelations = relations(demandAllocations, ({ one }) => ({
+export const demandContractsRelations = relations(demandContracts, ({ one, many }) => ({
   customer: one(customers, {
-    fields: [demandAllocations.customerId],
+    fields: [demandContracts.customerId],
     references: [customers.id],
   }),
-  shift: one(capacityShifts, {
-    fields: [demandAllocations.shiftId],
-    references: [capacityShifts.id],
-  }),
   createdByUser: one(users, {
-    fields: [demandAllocations.createdBy],
+    fields: [demandContracts.createdBy],
     references: [users.id],
+  }),
+  lines: many(demandAllocationLines),
+}));
+
+export const demandAllocationLinesRelations = relations(demandAllocationLines, ({ one }) => ({
+  contract: one(demandContracts, {
+    fields: [demandAllocationLines.contractId],
+    references: [demandContracts.id],
+  }),
+  shift: one(capacityShifts, {
+    fields: [demandAllocationLines.shiftId],
+    references: [capacityShifts.id],
   }),
 }));
 

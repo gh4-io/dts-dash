@@ -17,7 +17,7 @@ import type {
   ShiftCapacityV2,
   ShiftDemandV2,
   CapacityLensId,
-  DemandAllocation,
+  DemandContract,
   FlightEvent,
   TimeBooking,
   BillingEntry,
@@ -37,7 +37,7 @@ interface ShiftDrilldownDrawerProps {
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
   activeLens: CapacityLensId;
-  allocations?: DemandAllocation[];
+  contracts?: DemandContract[];
   flightEvents?: FlightEvent[];
   timeBookings?: TimeBooking[];
   billingEntries?: BillingEntry[];
@@ -281,7 +281,7 @@ export function ShiftDrilldownDrawer({
   shifts,
   assumptions,
   activeLens,
-  allocations,
+  contracts,
   flightEvents,
   timeBookings,
   billingEntries,
@@ -314,34 +314,49 @@ export function ShiftDrilldownDrawer({
 
     switch (activeLens) {
       case "allocated": {
-        if (!allocations || allocations.length === 0) return null;
+        if (!contracts || contracts.length === 0) return null;
         const dowNum = new Date(date + "T12:00:00Z").getUTCDay();
-        const matching = allocations.filter((a) => {
-          // dayOfWeek null = all days, otherwise must match
-          if (a.dayOfWeek !== null && a.dayOfWeek !== dowNum) return false;
-          // shiftId null = all shifts (can't easily match shiftCode to shiftId here, skip)
-          return true;
-        });
-        if (matching.length === 0) return null;
+        // Flatten contracts to matching lines for this date
+        const matchingEntries: {
+          contractName: string;
+          customerName: string;
+          mode: string;
+          allocatedMh: number;
+        }[] = [];
+        for (const c of contracts) {
+          if (!c.isActive) continue;
+          if (c.effectiveFrom > date) continue;
+          if (c.effectiveTo !== null && c.effectiveTo < date) continue;
+          for (const line of c.lines) {
+            if (line.dayOfWeek !== null && line.dayOfWeek !== dowNum) continue;
+            matchingEntries.push({
+              contractName: c.name,
+              customerName: c.customerName ?? `Customer #${c.customerId}`,
+              mode: c.mode,
+              allocatedMh: line.allocatedMh,
+            });
+          }
+        }
+        if (matchingEntries.length === 0) return null;
         return (
           <LensDetailCard
             icon="fa-handshake"
             color="amber"
-            title={`Allocations (${matching.length})`}
+            title={`Allocations (${matchingEntries.length})`}
           >
             <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {matching.map((a) => (
-                <div key={a.id} className="flex items-center justify-between text-sm">
+              {matchingEntries.map((entry, idx) => (
+                <div key={idx} className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <span className="text-xs">{a.customerName ?? `Customer #${a.customerId}`}</span>
+                    <span className="text-xs">{entry.customerName}</span>
                     <span
-                      className={`text-[9px] px-1 py-0.5 rounded ${a.mode === "MINIMUM_FLOOR" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}
+                      className={`text-[9px] px-1 py-0.5 rounded ${entry.mode === "MINIMUM_FLOOR" ? "bg-blue-500/15 text-blue-400" : "bg-emerald-500/15 text-emerald-400"}`}
                     >
-                      {a.mode === "ADDITIVE" ? "add" : "floor"}
+                      {entry.mode === "ADDITIVE" ? "add" : "floor"}
                     </span>
                   </span>
                   <span className="tabular-nums font-medium text-amber-400">
-                    {a.allocatedMh.toFixed(1)} MH
+                    {entry.allocatedMh.toFixed(1)} MH
                   </span>
                 </div>
               ))}

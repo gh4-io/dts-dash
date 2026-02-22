@@ -1,0 +1,365 @@
+---
+title: Admin Configuration Guide
+description: Complete guide to configuring all 8 capacity admin sections
+---
+
+# Admin Configuration Guide
+
+The capacity model is configured through 8 admin sections, accessible from **Admin > Capacity** (`/admin/capacity`). This guide covers each section in detail.
+
+**Required role:** admin or superadmin.
+
+---
+
+## Staffing Matrix
+
+**Path:** `/admin/capacity/staffing`
+
+The Staffing Matrix provides advanced rotation-based shift scheduling with 3-week (21-day) cycles. Use it when your team rotates between shifts on a fixed pattern.
+
+### When to Use
+
+Use Staffing Matrix **instead of** Headcount Plans if your team follows rotation patterns (e.g., 14 days on / 7 days off, or cycling between DAY and NIGHT shifts).
+
+> **Note:** If an active staffing configuration exists, it takes priority over headcount plans for capacity calculation.
+
+### How It Works
+
+The staffing matrix has three layers:
+
+1. **Staffing Configuration** — a named container (e.g., "2026 Q1 Schedule")
+2. **Staffing Shifts** — individual shift definitions within a configuration
+3. **Rotation Patterns** — 21-character work/off patterns (e.g., `xxxxxxoxxxxxxoxxxxooo`)
+
+### Setting Up a Configuration
+
+1. Click **New Configuration** and give it a name
+2. Add shifts to the configuration:
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| Name | "A-Team Day" | Descriptive name for this shift line |
+| Category | DAY | Maps to DAY, SWING, NIGHT, or OTHER |
+| Start/End Hour | 07:00 – 15:00 | Shift time range |
+| Headcount | 4 | Technicians on this shift line |
+| Rotation Pattern | Select from library | Which 21-day rotation to follow |
+| Rotation Start Date | 2026-01-06 | The Monday the pattern cycle begins |
+
+3. Add rotation patterns or select from the preset library
+4. Click **Activate** to make this configuration the active one
+
+### Rotation Patterns
+
+A rotation pattern is a 21-character string where `x` = working day and `o` = off day:
+
+```
+xxxxxxoxxxxxxoxxxxooo
+```
+
+This example means: 6 on, 1 off, 6 on, 1 off, 4 on, 3 off (21 total days, then repeats).
+
+The system computes which day of the cycle each calendar date falls on, starting from the rotation start date.
+
+### Shift Categories
+
+| Category | Purpose |
+|----------|---------|
+| DAY | Maps to DAY shift capacity |
+| SWING | Maps to SWING shift capacity |
+| NIGHT | Maps to NIGHT shift capacity |
+| OTHER | Supplemental (training, admin) — excluded from capacity calculations |
+
+### Weekly Matrix View
+
+After configuring shifts, the matrix view shows a 7-day grid with:
+
+- Headcount per category per day
+- Paid MH, Available MH, Productive MH
+- Coverage gaps (hours with no shift coverage)
+
+### Bulk Operations
+
+Select multiple shifts to apply bulk actions: activate, deactivate, delete, or change category.
+
+---
+
+## Headcount Plans
+
+**Path:** `/admin/capacity/headcount`
+
+Headcount Plans define fixed staffing levels per shift with effective dating. Use this when shifts have stable, predictable headcounts.
+
+### When to Use
+
+Use Headcount Plans for simple, stable staffing. If you need rotation patterns, use the Staffing Matrix instead.
+
+### Creating a Plan
+
+| Field | Required | Example | Notes |
+|-------|----------|---------|-------|
+| Shift | Yes | DAY | Which shift this plan covers |
+| Headcount | Yes | 8 | Number of technicians |
+| Effective From | Yes | 2026-01-01 | Start date (YYYY-MM-DD) |
+| Effective To | No | 2026-06-30 | End date (leave blank for indefinite) |
+| Day of Week | No | Monday | Specific day override (leave blank for all days) |
+| Label | No | "Winter staffing" | Optional description |
+| Notes | No | | Additional context |
+
+### Resolution Priority
+
+When multiple plans overlap for the same shift and date:
+
+1. **Day-of-week specific** plans beat generic (all-days) plans
+2. Among ties, the plan with the **latest effective date** wins
+3. Headcount exceptions are added on top of the resolved plan
+
+### Headcount Exceptions
+
+One-off adjustments for specific dates:
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| Shift | NIGHT | Which shift to adjust |
+| Exception Date | 2026-12-25 | The specific date |
+| Headcount Delta | -2 | Positive adds, negative removes |
+| Reason | "Christmas Day" | Optional explanation |
+
+> **Example:** NIGHT shift normally has 4 people. An exception of `-2` on Dec 25 means 2 technicians that night.
+
+---
+
+## Demand Allocations
+
+**Path:** `/admin/capacity/allocations`
+
+Demand allocations define contractual minimum hours guaranteed to specific customers. They ensure a customer's demand meets their contracted level even if work packages show less.
+
+### Two Modes
+
+| Mode | Behavior | Example |
+|------|----------|---------|
+| **MINIMUM_FLOOR** | Ensures at least X MH — only adds if WP demand is below the floor | "DHL gets at least 8 MH/day — if WPs only show 5 MH, system bumps to 8" |
+| **ADDITIVE** | Adds X MH on top of whatever WPs show | "Add 2 extra MH for DHL beyond what WPs generate" |
+
+When both modes are present for the same customer, the system computes: `max(normalMH + sum(ADDITIVE), max(MINIMUM_FLOOR))`.
+
+### Creating an Allocation
+
+| Field | Required | Example | Notes |
+|-------|----------|---------|-------|
+| Customer | Yes | DHL | Which customer this applies to |
+| Shift | No | DAY | Specific shift, or leave blank for all shifts |
+| Day of Week | No | Mon-Fri | Specific days, or leave blank for all days |
+| Effective From | Yes | 2026-01-01 | Start date |
+| Effective To | No | 2026-12-31 | End date (blank = indefinite) |
+| Allocated MH | Yes | 8.0 | The contracted hours |
+| Mode | Yes | MINIMUM_FLOOR | ADDITIVE or MINIMUM_FLOOR |
+| Reason | No | "Annual contract" | Explanation |
+
+> **Example:** "DHL contract guarantees 8 MH/day on DAY shift, Monday through Friday" — create one allocation with: Customer=DHL, Shift=DAY, Day of Week=1-5, Allocated MH=8.0, Mode=MINIMUM_FLOOR.
+
+### Viewing Allocations in Action
+
+After creating allocations, switch to the **Allocated** lens on the `/capacity` page. The table shows an "Allocated MH" column comparing contracted vs. actual demand.
+
+---
+
+## Flight Events
+
+**Path:** `/admin/capacity/flight-events`
+
+Flight events track aircraft arrivals and departures with coverage windows — time buffers during which staff must be available.
+
+### Coverage Windows
+
+Each flight event generates up to two coverage windows:
+
+- **Arrival window:** Staff needed from landing time through `arrivalWindowMinutes` after (default: 30 minutes)
+- **Departure window:** Staff needed from `departureWindowMinutes` before departure through departure time (default: 60 minutes)
+
+> **Example:** Aircraft N12345 arrives at 14:30 with a 30-minute arrival window. Staff must be available from 14:30 to 15:00. If it departs at 22:00 with a 60-minute departure window, staff must be available from 21:00 to 22:00.
+
+### Creating a Flight Event
+
+| Field | Required | Example | Notes |
+|-------|----------|---------|-------|
+| Aircraft Reg | Yes | N12345 | Aircraft registration |
+| Customer | Yes | DHL | Operating customer |
+| Scheduled Arrival | No | 2026-02-20T14:30:00Z | Planned arrival time |
+| Actual Arrival | No | 2026-02-20T14:45:00Z | Real arrival (overrides scheduled for windows) |
+| Scheduled Departure | No | 2026-02-20T22:00:00Z | Planned departure time |
+| Actual Departure | No | | Real departure (overrides scheduled for windows) |
+| Arrival Window (min) | No | 30 | Minutes of coverage after arrival |
+| Departure Window (min) | No | 60 | Minutes of coverage before departure |
+| Status | Yes | scheduled | `scheduled`, `actual`, or `cancelled` |
+| Source | Yes | manual | `manual`, `work_package`, or `import` |
+
+### Event Statuses
+
+| Status | Behavior |
+|--------|----------|
+| `scheduled` | Uses scheduled times for coverage windows |
+| `actual` | Uses actual times (falls back to scheduled if actual is missing) |
+| `cancelled` | No coverage windows generated |
+
+### Viewing Events in Action
+
+Switch to the **Events** lens on the `/capacity` page. The table shows an "Events" column with event counts per date. The **Concurrent** lens shows how many aircraft overlap on the ground simultaneously.
+
+---
+
+## Rate Forecasts
+
+**Path:** `/admin/capacity/rate-forecasts`
+
+Rate forecasts project future demand based on historical patterns. The system provides a two-level setup: **models** (algorithm configuration) and **rates** (computed output).
+
+### Step 1: Create a Forecast Model
+
+| Field | Required | Example | Notes |
+|-------|----------|---------|-------|
+| Name | Yes | "Q1 2026 Forecast" | Descriptive name |
+| Method | Yes | moving_average | Algorithm to use |
+| Lookback Days | No | 30 | Historical days to analyze (7-365, default: 30) |
+| Forecast Horizon | No | 14 | Days to project forward (1-90, default: 14) |
+| Granularity | No | shift | `daily` (aggregate) or `shift` (per-shift) |
+| Customer Filter | No | | Comma-separated names, or blank for all |
+| Weight Recent | No | 0.7 | How much to weight recent data (0-1, for weighted average) |
+
+### Forecast Methods
+
+| Method | How It Works | Best For |
+|--------|-------------|----------|
+| **Moving Average** | Simple average of the last N days | Stable, predictable demand |
+| **Weighted Average** | Recent days weighted more heavily (exponential decay) | Trending demand with recent changes |
+| **Linear Trend** | Fits a straight line through historical data, projects forward | Steadily growing or declining demand |
+
+### Step 2: Generate Rates
+
+After creating a model, click **Generate Rates**. The system:
+
+1. Extracts historical demand for the lookback period
+2. Applies the selected algorithm
+3. Creates forecast rate entries for each day in the horizon
+
+The response shows: number of rates generated, forecast start/end dates, and historical days analyzed.
+
+### Manual Overrides
+
+Generated rates can be individually edited. Manual overrides are **preserved** when you re-generate — only non-overridden rates are replaced.
+
+### Viewing Forecasts in Action
+
+Switch to the **Forecast** lens on the `/capacity` page. The chart shows a teal dotted overlay line representing projected demand.
+
+---
+
+## Worked Hours
+
+**Path:** `/admin/capacity/time-bookings`
+
+Worked hours record the actual time technicians spend on maintenance tasks. This data feeds the **Worked** lens for plan-vs-actual analysis.
+
+### Creating a Time Booking
+
+| Field | Required | Example | Notes |
+|-------|----------|---------|-------|
+| Aircraft Reg | Yes | N12345 | Aircraft registration |
+| Customer | Yes | DHL | Customer name |
+| Booking Date | Yes | 2026-02-20 | Date the work was performed |
+| Shift | Yes | DAY | DAY, SWING, or NIGHT |
+| Task Name | No | "Main gear inspection" | Description of work |
+| Task Type | No | routine | `routine`, `non_routine`, `aog`, `training`, or `admin` |
+| Worked MH | Yes | 2.5 | Man-hours spent |
+| Technician Count | No | 2 | Number of technicians involved |
+| Notes | No | | Additional context |
+
+Multiple bookings per work package are allowed — one entry per task.
+
+### Task Types
+
+| Type | Description |
+|------|-------------|
+| routine | Scheduled maintenance tasks |
+| non_routine | Unplanned findings during inspection |
+| aog | Aircraft-on-ground emergency work |
+| training | Training or supervised tasks |
+| admin | Administrative or non-wrench time |
+
+### Viewing Worked Hours in Action
+
+Switch to the **Worked** lens on the `/capacity` page. KPIs show total worked hours and plan-vs-actual variance. The chart shows a green overlay line comparing actual to planned.
+
+---
+
+## Billed Hours
+
+**Path:** `/admin/capacity/billing-entries`
+
+Billed hours track invoiced man-hours for revenue reconciliation. Compare billed vs. worked to identify discrepancies.
+
+### Creating a Billing Entry
+
+| Field | Required | Example | Notes |
+|-------|----------|---------|-------|
+| Aircraft Reg | Yes | N12345 | Aircraft registration |
+| Customer | Yes | DHL | Customer name |
+| Billing Date | Yes | 2026-02-20 | Invoice date |
+| Shift | Yes | DAY | DAY, SWING, or NIGHT |
+| Description | No | "Scheduled maintenance" | Line item description |
+| Billed MH | Yes | 3.0 | Man-hours invoiced |
+| Invoice Ref | No | INV-2026-042 | Invoice number for cross-reference |
+| Notes | No | | Additional context |
+
+### Variance Analysis
+
+The system computes two variance chains:
+
+1. **Planned vs. Worked** — were estimates accurate?
+2. **Worked vs. Billed** — are we billing what we work?
+
+Positive variance means under-billed (worked more than invoiced). Negative means over-billed.
+
+### Viewing Billed Hours in Action
+
+Switch to the **Billed** lens on the `/capacity` page. KPIs show total billed hours and worked-vs-billed variance. The chart shows an indigo overlay line.
+
+---
+
+## Model Assumptions
+
+**Path:** `/admin/capacity/assumptions`
+
+Model Assumptions configure the productivity calculation chain and demand distribution settings. These affect all capacity calculations system-wide.
+
+### Productivity Factors
+
+| Factor | Default | Range | Meaning |
+|--------|---------|-------|---------|
+| Paid-to-Available | 0.95 | 0 – 1.0 | Fraction of paid time available for work (rest = meetings, breaks) |
+| Available-to-Productive | 0.80 | 0 – 1.0 | Fraction of available time spent on productive maintenance |
+| Night Productivity Factor | 0.85 | 0 – 1.0 | Efficiency multiplier for NIGHT shift (1.0 = no reduction) |
+| Default MH (no WP) | 3.0 | > 0 | Man-hours assigned when a work package has no MH value |
+
+The full formula: `Productive MH = Paid Hours x Paid-to-Available x Available-to-Productive x Night Factor`
+
+### When to Adjust
+
+- **Paid-to-Available:** Lower if your team has more mandatory meetings/admin time
+- **Available-to-Productive:** Lower if there's more idle time, task switching, or waiting
+- **Night Factor:** Lower if night shift is significantly less efficient; set to 1.0 if no difference
+- **Default MH:** Raise if your typical work packages require more than 3 hours
+
+### Demand Curve Settings
+
+| Setting | Default | Options | Meaning |
+|---------|---------|---------|---------|
+| Demand Curve | WEIGHTED | EVEN, WEIGHTED | How MH is distributed across on-ground shift slots |
+| Arrival Weight | 0.30 | 0 – 1.0 | Extra weight on the arrival shift (WEIGHTED mode only) |
+| Departure Weight | 0.25 | 0 – 1.0 | Extra weight on the departure shift (WEIGHTED mode only) |
+
+> **Constraint:** Arrival Weight + Departure Weight must be ≤ 1.0.
+
+### Restoring Defaults
+
+To reset all assumptions to their original values, use the reset controls on the assumptions page.

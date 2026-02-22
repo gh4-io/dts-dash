@@ -891,6 +891,45 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M015: Replace demand_allocations with demand_contracts + demand_allocation_lines
+  results.push(
+    applyMigration("M015_demand_contracts", () => {
+      sqlite.exec(`
+        DROP TABLE IF EXISTS demand_allocations;
+
+        CREATE TABLE IF NOT EXISTS demand_contracts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          name TEXT NOT NULL,
+          mode TEXT NOT NULL,
+          effective_from TEXT NOT NULL,
+          effective_to TEXT,
+          contracted_mh REAL,
+          period_type TEXT,
+          reason TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dc_customer ON demand_contracts(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_dc_effective ON demand_contracts(effective_from, effective_to);
+
+        CREATE TABLE IF NOT EXISTS demand_allocation_lines (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contract_id INTEGER NOT NULL REFERENCES demand_contracts(id) ON DELETE CASCADE,
+          shift_id INTEGER REFERENCES capacity_shifts(id),
+          day_of_week INTEGER,
+          allocated_mh REAL NOT NULL,
+          label TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dal_contract ON demand_allocation_lines(contract_id);
+      `);
+    }),
+  );
+
   return results;
 }
 

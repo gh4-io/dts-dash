@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AllocationGrid } from "@/components/admin/capacity/allocation-grid";
 import Link from "next/link";
-import type { DemandAllocation, CapacityShift } from "@/types";
+import type { DemandContract, CapacityShift } from "@/types";
 
 interface CustomerOption {
   id: number;
@@ -12,7 +12,7 @@ interface CustomerOption {
 }
 
 export default function AdminAllocationsPage() {
-  const [allocations, setAllocations] = useState<DemandAllocation[]>([]);
+  const [contracts, setContracts] = useState<DemandContract[]>([]);
   const [shifts, setShifts] = useState<CapacityShift[]>([]);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,17 +21,17 @@ export default function AdminAllocationsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [allocRes, shiftsRes, custRes] = await Promise.all([
-        fetch("/api/admin/capacity/demand-allocations"),
+      const [contractsRes, shiftsRes, custRes] = await Promise.all([
+        fetch("/api/admin/capacity/demand-contracts"),
         fetch("/api/admin/capacity/shifts"),
         fetch("/api/admin/customers"),
       ]);
 
-      if (!allocRes.ok || !shiftsRes.ok || !custRes.ok) {
+      if (!contractsRes.ok || !shiftsRes.ok || !custRes.ok) {
         throw new Error("Failed to load data");
       }
 
-      setAllocations(await allocRes.json());
+      setContracts(await contractsRes.json());
       setShifts(await shiftsRes.json());
       setCustomers(await custRes.json());
     } catch (err) {
@@ -51,36 +51,36 @@ export default function AdminAllocationsPage() {
   };
 
   const handleCreate = useCallback(
-    async (data: Omit<DemandAllocation, "id" | "customerName" | "createdAt" | "updatedAt">) => {
-      const res = await fetch("/api/admin/capacity/demand-allocations", {
+    async (data: Record<string, unknown>) => {
+      const res = await fetch("/api/admin/capacity/demand-contracts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
       if (!res.ok) {
         const d = await res.json();
-        showMessage("error", d.error ?? "Failed to create allocation");
+        showMessage("error", d.error ?? "Failed to create contract");
         throw new Error(d.error);
       }
-      showMessage("success", "Allocation created");
+      showMessage("success", "Contract created");
       fetchData();
     },
     [fetchData],
   );
 
   const handleUpdate = useCallback(
-    async (id: number, updates: Partial<DemandAllocation>) => {
-      const res = await fetch(`/api/admin/capacity/demand-allocations/${id}`, {
+    async (id: number, updates: Record<string, unknown>) => {
+      const res = await fetch(`/api/admin/capacity/demand-contracts/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
       if (!res.ok) {
         const d = await res.json();
-        showMessage("error", d.error ?? "Failed to update allocation");
+        showMessage("error", d.error ?? "Failed to update contract");
         throw new Error(d.error);
       }
-      showMessage("success", "Allocation updated");
+      showMessage("success", "Contract updated");
       fetchData();
     },
     [fetchData],
@@ -88,15 +88,15 @@ export default function AdminAllocationsPage() {
 
   const handleDelete = useCallback(
     async (id: number) => {
-      const res = await fetch(`/api/admin/capacity/demand-allocations/${id}`, {
+      const res = await fetch(`/api/admin/capacity/demand-contracts/${id}`, {
         method: "DELETE",
       });
       if (!res.ok) {
         const d = await res.json();
-        showMessage("error", d.error ?? "Failed to delete allocation");
+        showMessage("error", d.error ?? "Failed to delete contract");
         return;
       }
-      showMessage("success", "Allocation deleted");
+      showMessage("success", "Contract deleted");
       fetchData();
     },
     [fetchData],
@@ -104,7 +104,7 @@ export default function AdminAllocationsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <div className="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
           <i className="fa-solid fa-spinner fa-spin text-2xl" />
         </div>
@@ -114,7 +114,7 @@ export default function AdminAllocationsPage() {
 
   if (error) {
     return (
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
           <p className="text-sm text-destructive">{error}</p>
@@ -124,13 +124,13 @@ export default function AdminAllocationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4">
+    <div className="mx-auto max-w-6xl space-y-4">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Link href="/admin/capacity" className="hover:text-foreground transition-colors">
           Capacity
         </Link>
         <i className="fa-solid fa-chevron-right text-[8px]" />
-        <span className="text-foreground">Demand Allocations</span>
+        <span className="text-foreground">Demand Contracts</span>
       </div>
 
       {message && (
@@ -148,18 +148,19 @@ export default function AdminAllocationsPage() {
       <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-1">
         <div className="flex items-center gap-2 text-sm font-medium text-amber-400">
           <i className="fa-solid fa-circle-info" />
-          About Demand Allocations
+          About Demand Contracts
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Allocations define contractual minimum hours per customer. <strong>Minimum Floor</strong>{" "}
-          guarantees a minimum MH demand regardless of actual work packages.{" "}
-          <strong>Additive</strong> adds MH on top of actual demand. Allocations can be scoped to
-          specific shifts and days of the week.
+          Contracts define named customer obligations with scheduled allocation lines.{" "}
+          <strong>Minimum Floor</strong> guarantees a minimum MH demand regardless of actual work
+          packages. <strong>Additive</strong> adds MH on top of actual demand. Each contract can
+          have multiple lines scoped to specific shifts and days of the week. Set contracted MH for
+          sanity-check projections.
         </p>
       </div>
 
       <AllocationGrid
-        allocations={allocations}
+        contracts={contracts}
         shifts={shifts}
         customers={customers}
         onCreate={handleCreate}

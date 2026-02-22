@@ -230,22 +230,41 @@ export interface HeadcountException {
 }
 
 export type AllocationMode = "ADDITIVE" | "MINIMUM_FLOOR";
+export type ContractPeriodType = "WEEKLY" | "MONTHLY" | "ANNUAL" | "TOTAL" | "PER_EVENT";
+export type ProjectionStatus = "SHORTFALL" | "OK" | "EXCESS";
 
-export interface DemandAllocation {
+export interface MatchedAllocation {
+  mode: AllocationMode;
+  allocatedMh: number;
+}
+
+export interface DemandAllocationLine {
+  id: number;
+  contractId: number;
+  shiftId: number | null;
+  dayOfWeek: number | null; // 0=Sun..6=Sat, null = all days
+  allocatedMh: number;
+  label: string | null;
+}
+
+export interface DemandContract {
   id: number;
   customerId: number;
   customerName?: string; // joined for display
-  shiftId: number | null; // null = all shifts
-  dayOfWeek: number | null; // 0=Sun..6=Sat, null = all days
+  name: string;
+  mode: AllocationMode;
   effectiveFrom: string; // YYYY-MM-DD
   effectiveTo: string | null; // null = indefinite
-  allocatedMh: number;
-  mode: AllocationMode;
+  contractedMh: number | null; // null = no sanity check
+  periodType: ContractPeriodType | null; // null if no contractedMh
   reason: string | null;
   isActive: boolean;
   createdBy?: number;
   createdAt?: string;
   updatedAt?: string;
+  lines: DemandAllocationLine[];
+  projectedMh?: number | null;
+  projectionStatus?: ProjectionStatus | null;
 }
 
 // ─── Flight Events (P2-1) ───────────────────────────────────────────────────
@@ -484,7 +503,7 @@ export interface CapacityOverviewResponse {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions;
-  allocations?: DemandAllocation[];
+  contracts?: DemandContract[];
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];
   concurrencyBuckets?: ConcurrencyBucket[];

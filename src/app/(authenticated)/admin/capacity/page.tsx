@@ -20,9 +20,9 @@ const CAPACITY_SECTIONS = [
     color: "text-blue-400",
   },
   {
-    title: "Demand Allocations",
+    title: "Demand Contracts",
     description:
-      "Contractual minimum hours per customer — guaranteed MH floors or additive allocations by shift and day-of-week.",
+      "Named customer contracts with scheduled allocation lines — contractual MH floors or additive allocations by shift and day-of-week.",
     href: "/admin/capacity/allocations",
     icon: "fa-solid fa-handshake",
     color: "text-amber-400",

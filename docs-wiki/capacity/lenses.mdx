@@ -1,0 +1,202 @@
+---
+title: Understanding Lenses
+description: How the 7 capacity lenses show different perspectives on your data
+---
+
+# Understanding Lenses
+
+Lenses are **7 different ways to look at the same capacity data**. The capacity page fetches all data in a single API call; switching lenses is instant (client-side, no additional loading).
+
+One overlay lens can be active at a time, and the **Planned** base layer is always visible.
+
+## How Lenses Work
+
+Each lens controls what appears in the four capacity page components:
+
+| Component | What Changes Per Lens |
+|-----------|----------------------|
+| **KPI Strip** | Different summary metrics displayed |
+| **Heatmap Tooltip** | Additional overlay values in the tooltip |
+| **Chart** | Overlay line/bar added on top of base demand/capacity |
+| **Table** | Additional columns appear for the active lens |
+
+A lens is **enabled** (clickable) when its data exists in the current date range. If a lens button appears disabled/grayed out, it means no data of that type has been configured for the visible period.
+
+---
+
+## Planned (Blue) — Default
+
+**Always available.** Shows base work-package demand vs. shift capacity.
+
+### What You See
+
+- **KPIs:** Average Utilization, Peak Utilization, Capacity Gap (MH), Total Demand MH, Total Capacity MH
+- **Heatmap:** Utilization color per (date, shift) cell
+- **Chart:** Demand bars vs. capacity line
+- **Table:** Date, Total Demand, Total Capacity, Utilization %, Gap, per-shift breakdown
+
+### Best For
+
+Day-to-day staffing decisions. "Do we have enough people on each shift this week?"
+
+---
+
+## Allocated (Amber)
+
+**Enabled when:** Demand allocations exist in Admin > Capacity > Demand Allocations.
+
+Shows customer contract minimums overlaid on demand. Use this to verify that contracted hours are being met.
+
+### What You See
+
+- **KPIs:** Total Allocated Demand MH (in addition to planned KPIs)
+- **Chart:** Amber dashed overlay line showing allocated demand level
+- **Table:** "Allocated MH" column per date showing the effective demand after allocations
+
+### How Allocations Affect Demand
+
+- **MINIMUM_FLOOR:** If WP demand is below the contracted floor, the system raises effective demand to the floor
+- **ADDITIVE:** Extra MH are added on top of WP demand
+
+The "Allocated MH" column shows the effective demand after allocation logic is applied. Compare it to the base "Demand MH" column to see the impact.
+
+### Best For
+
+Contract compliance. "Are we meeting DHL's guaranteed 8 MH/day?"
+
+---
+
+## Events (Sky)
+
+**Enabled when:** Flight events exist in Admin > Capacity > Flight Events.
+
+Shows flight arrivals and departures with coverage window counts.
+
+### What You See
+
+- **KPIs:** Event count, Coverage window count for the date range
+- **Table:** "Events" column showing the number of flight events per date
+- **Chart:** No overlay line (events are point-in-time counts, not a time series of MH)
+
+### Coverage Windows
+
+Each event generates arrival and/or departure coverage windows — time periods when staff must be available. The event count in the table helps identify high-traffic days.
+
+### Best For
+
+Checking staffing around arrivals and departures. "Which days have the most flight activity?"
+
+---
+
+## Forecast (Teal)
+
+**Enabled when:** Forecast rates have been generated from an active model in Admin > Capacity > Rate Forecasts.
+
+Shows projected future demand based on historical patterns.
+
+### What You See
+
+- **KPIs:** Total Forecasted Demand MH
+- **Chart:** Teal dotted overlay line showing forecasted demand
+- **Table:** "Forecast MH" column per date
+
+### Reading the Forecast
+
+The forecast line represents what the algorithm **predicts** demand will be, based on the configured model (moving average, weighted average, or linear trend). Compare it against:
+
+- The blue demand bars (actual WP demand) for dates with data
+- The capacity line for future dates to see if projected demand fits within capacity
+
+### Best For
+
+Future planning. "Based on the last 30 days, what should we expect next week?"
+
+---
+
+## Worked (Green)
+
+**Enabled when:** Time bookings exist in Admin > Capacity > Worked Hours.
+
+Shows actual hours worked compared to planned demand.
+
+### What You See
+
+- **KPIs:** Total Worked Hours, Plan vs. Actual variance (%)
+- **Chart:** Green solid overlay line showing actual worked hours
+- **Table:** "Worked MH" column per date
+
+### Variance
+
+- **Positive variance** — planned more than worked (over-estimated)
+- **Negative variance** — worked more than planned (under-estimated)
+
+### Best For
+
+Productivity analysis. "Did we actually use the hours we planned? Are our estimates accurate?"
+
+---
+
+## Billed (Indigo)
+
+**Enabled when:** Billing entries exist in Admin > Capacity > Billed Hours.
+
+Shows invoiced hours compared to worked and planned hours.
+
+### What You See
+
+- **KPIs:** Total Billed Hours, Worked vs. Billed variance (%)
+- **Chart:** Indigo solid overlay line showing billed hours
+- **Table:** "Billed MH" column per date
+
+### Variance
+
+- **Positive variance** (worked > billed) — under-billing, leaving revenue on the table
+- **Negative variance** (billed > worked) — over-billing, potential audit risk
+
+### Best For
+
+Revenue reconciliation. "Are we invoicing accurately for the work performed?"
+
+---
+
+## Concurrent (Purple)
+
+**Enabled when:** Flight events with arrivals/departures exist (same data as Events lens, but analyzed differently).
+
+Shows how many aircraft overlap on the ground simultaneously.
+
+### What You See
+
+- **KPIs:** Peak concurrent aircraft, Average concurrent aircraft
+- **Chart:** No overlay line (aircraft count and MH are different units — they can't share the same axis)
+- **Table:** "Peak Concurrent" and "Avg Concurrent" columns per date
+
+### Why It Matters
+
+High concurrency means multiple aircraft need attention at once. Even if total MH fits within capacity, having 5 aircraft arrive within the same hour creates coordination challenges that raw MH numbers don't capture.
+
+### Best For
+
+Understanding workload intensity. "How many aircraft are we juggling at once during peak hours?"
+
+---
+
+## Lens Comparison Matrix
+
+| Lens | Overlay Color | Chart Overlay | Table Column(s) | Enables When |
+|------|--------------|---------------|-----------------|-------------|
+| Planned | Blue | *(base layer)* | Demand, Capacity, Utilization, Gap | Always |
+| Allocated | Amber | Dashed line | Allocated MH | Allocations exist |
+| Events | Sky | None | Events count | Flight events exist |
+| Forecast | Teal | Dotted line | Forecast MH | Forecast rates generated |
+| Worked | Green | Solid line | Worked MH | Time bookings exist |
+| Billed | Indigo | Solid line | Billed MH | Billing entries exist |
+| Concurrent | Purple | None | Peak/Avg Concurrent | Flight events exist |
+
+## Tips
+
+- **Start with Planned** to understand basic demand vs. capacity
+- **Add lenses progressively** as you enter more data types
+- **Compare Worked vs. Planned** to validate your estimation accuracy
+- **Use Forecast** for dates beyond your current work package data
+- **Check Concurrent** during high-traffic periods to understand coordination complexity

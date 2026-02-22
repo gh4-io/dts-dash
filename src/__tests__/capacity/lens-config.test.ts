@@ -45,10 +45,10 @@ describe("getAvailableLenses", () => {
     expect(result.size).toBe(1);
   });
 
-  it("should include 'allocated' when allocations have data", () => {
+  it("should include 'allocated' when contracts have data", () => {
     const result = getAvailableLenses({
-      allocations: [
-        { id: 1 } as CapacityOverviewResponse["allocations"] extends (infer T)[] | undefined
+      contracts: [
+        { id: 1 } as CapacityOverviewResponse["contracts"] extends (infer T)[] | undefined
           ? T
           : never,
       ],
@@ -57,8 +57,8 @@ describe("getAvailableLenses", () => {
     expect(result.has("allocated")).toBe(true);
   });
 
-  it("should NOT include 'allocated' with empty allocations array", () => {
-    const result = getAvailableLenses({ allocations: [] });
+  it("should NOT include 'allocated' with empty contracts array", () => {
+    const result = getAvailableLenses({ contracts: [] });
     expect(result.has("allocated")).toBe(false);
   });
 
@@ -101,7 +101,7 @@ describe("getAvailableLenses", () => {
 
   it("should return all 7 lenses when all data is present", () => {
     const result = getAvailableLenses({
-      allocations: [{ id: 1 }] as unknown as CapacityOverviewResponse["allocations"],
+      contracts: [{ id: 1 }] as unknown as CapacityOverviewResponse["contracts"],
       flightEvents: [{ id: 1 }] as unknown as CapacityOverviewResponse["flightEvents"],
       forecastRates: [{ id: 1 }] as unknown as CapacityOverviewResponse["forecastRates"],
       timeBookings: [{ id: 1 }] as unknown as CapacityOverviewResponse["timeBookings"],
@@ -115,7 +115,7 @@ describe("getAvailableLenses", () => {
 
   it("should not include lenses for undefined collections", () => {
     const result = getAvailableLenses({
-      allocations: undefined,
+      contracts: undefined,
       flightEvents: undefined,
     });
     expect(result.size).toBe(1);

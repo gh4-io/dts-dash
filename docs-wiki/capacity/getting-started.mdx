@@ -1,0 +1,120 @@
+---
+title: Getting Started with Capacity
+description: Step-by-step guide to configuring capacity modeling for first use
+---
+
+# Getting Started with Capacity
+
+This guide walks you through the minimum setup to get the capacity page showing useful data. You'll configure shifts, set headcount, adjust assumptions, and view results.
+
+**Prerequisites:** You must be logged in as an **admin** or **superadmin**.
+
+## Step 1: Navigate to the Admin Hub
+
+Go to **Admin > Capacity** (or visit `/admin/capacity` directly).
+
+You'll see 8 feature cards. For a basic setup, you need to configure at least **one capacity source** (Headcount Plans or Staffing Matrix) and review **Model Assumptions**.
+
+## Step 2: Configure Headcount
+
+The simplest way to define capacity is with **Headcount Plans** — fixed headcount per shift.
+
+1. Click the **Headcount Plans** card
+2. You'll see reference cards showing the three shifts (DAY 07-15, SWING 15-23, NIGHT 23-07)
+3. Click **Add Headcount Plan**
+4. Fill in the fields:
+
+| Field | Example | Notes |
+|-------|---------|-------|
+| Shift | DAY | Select which shift this plan covers |
+| Headcount | 8 | Number of technicians on this shift |
+| Effective From | 2026-01-01 | When this headcount takes effect |
+| Effective To | *(leave empty)* | Leave blank for indefinite |
+| Day of Week | *(leave empty)* | Leave blank to apply every day, or pick a specific day |
+| Label | "Standard DAY staffing" | Optional description |
+
+5. Repeat for SWING and NIGHT shifts
+6. Click **Save** for each
+
+> **Tip:** You can create multiple plans per shift with different date ranges. The system uses the most specific match (day-of-week plan beats generic, latest effective date wins ties).
+
+### Headcount Exceptions
+
+For one-off adjustments (holidays, special events), use the **Headcount Exceptions** section on the same page:
+
+- **Shift:** Which shift to adjust
+- **Exception Date:** The specific date
+- **Headcount Delta:** How many to add (+) or remove (-)
+- **Reason:** "Christmas Day" or "Maintenance surge"
+
+> **Example:** Setting NIGHT shift to delta `-2` on 2026-12-25 means 2 fewer technicians than the plan specifies.
+
+## Step 3: Review Model Assumptions
+
+Go back to the Admin Hub and click **Model Assumptions**.
+
+These factors control how paid hours convert to productive hours:
+
+| Factor | Default | What It Means |
+|--------|---------|---------------|
+| Paid-to-Available | 0.95 | 5% of paid time lost to breaks, meetings, admin |
+| Available-to-Productive | 0.80 | 20% lost to task switching, handoffs, idle time |
+| Night Productivity Factor | 0.85 | NIGHT shift is 15% less efficient |
+| Default MH (no WP data) | 3.0 | Man-hours assigned when a work package has no MH value |
+
+Adjust these to match your operation's reality. The defaults are reasonable starting points.
+
+### Demand Curve Settings
+
+| Setting | Default | What It Controls |
+|---------|---------|-----------------|
+| Demand Curve | WEIGHTED | How MH is spread across an aircraft's on-ground shifts |
+| Arrival Weight | 0.30 | 30% of MH allocated to the arrival shift |
+| Departure Weight | 0.25 | 25% of MH allocated to the departure shift |
+
+See [Key Concepts — Demand Distribution](/capacity/concepts#demand-distribution) for details.
+
+## Step 4: View the Capacity Page
+
+Navigate to `/capacity` (or click **Capacity** in the sidebar).
+
+You'll see four components:
+
+1. **KPI Strip** — summary metrics (average utilization, peak utilization, capacity gap, total demand/capacity)
+2. **Heatmap** — color-coded grid of utilization by date and shift (green = healthy, amber = caution, red = overloaded)
+3. **Chart** — demand vs. capacity over time as a bar/line chart
+4. **Table** — detailed daily breakdown with per-shift columns
+
+### Reading the Heatmap
+
+- **Green cells** — utilization under 75%, room for more work
+- **Amber cells** — utilization 75-100%, approaching capacity
+- **Red cells** — utilization over 100%, demand exceeds capacity
+- **Gray cells** — no capacity data (no headcount configured for that shift/date)
+
+Click any cell to see a detailed drilldown of which work packages contribute to demand on that date and shift.
+
+## Step 5: Import Work Packages
+
+Work packages are the **demand source**. If you haven't imported any yet, the capacity page will show zero demand.
+
+Go to **Admin > Data Hub** to import work packages from a JSON file or paste JSON directly. See the [Data Hub documentation](/getting-started/configuration) for import instructions.
+
+## What You Should See
+
+After completing steps 1-4 with work package data imported:
+
+- The KPI strip shows non-zero utilization metrics
+- The heatmap displays colored cells for dates with work packages
+- The chart shows demand bars against the capacity line
+- The table lists daily figures with per-shift breakdowns
+
+## Next Steps
+
+Once the basics are working, explore the advanced features:
+
+- [Demand Allocations](/capacity/admin-guide#demand-allocations) — set customer contract minimums
+- [Flight Events](/capacity/admin-guide#flight-events) — track arrivals/departures with coverage windows
+- [Rate Forecasts](/capacity/admin-guide#rate-forecasts) — project future demand from historical patterns
+- [Staffing Matrix](/capacity/admin-guide#staffing-matrix) — rotation-based scheduling (alternative to fixed headcounts)
+- [Understanding Lenses](/capacity/lenses) — view data from 7 different perspectives

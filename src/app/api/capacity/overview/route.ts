@@ -14,7 +14,7 @@ import {
   validateHeadcountCoverage,
   computeCapacitySummary,
   computeDailyDemandV2,
-  loadDemandAllocations,
+  loadDemandContracts,
   loadCustomerNameMap,
   applyAllocations,
   loadActiveStaffingConfig,
@@ -120,12 +120,12 @@ export async function GET(request: NextRequest) {
       dateSet.has(d.date),
     );
 
-    // Load active allocations for date range and apply to demand
-    const allocations = loadDemandAllocations(startDate, endDate, true);
+    // Load active contracts for date range and apply allocations to demand
+    const contracts = loadDemandContracts(startDate, endDate, true);
     let adjustedDemand = demand;
-    if (allocations.length > 0) {
+    if (contracts.length > 0) {
       const customerNameMap = loadCustomerNameMap();
-      adjustedDemand = applyAllocations(demand, allocations, shifts, customerNameMap);
+      adjustedDemand = applyAllocations(demand, contracts, shifts, customerNameMap);
     }
 
     // Load flight events and compute coverage windows for date range
@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
       warnings,
       shifts,
       assumptions,
-      allocations: allocations.length > 0 ? allocations : undefined,
+      contracts: contracts.length > 0 ? contracts : undefined,
       flightEvents: flightEvents.length > 0 ? flightEvents : undefined,
       coverageWindows: coverageWindows && coverageWindows.length > 0 ? coverageWindows : undefined,
       concurrencyBuckets:

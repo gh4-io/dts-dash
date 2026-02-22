@@ -78,7 +78,7 @@ export const CAPACITY_LENSES: readonly CapacityLensDefinition[] = [
 export function getAvailableLenses(data: Partial<CapacityOverviewResponse>): Set<CapacityLensId> {
   const available = new Set<CapacityLensId>(["planned"]);
 
-  if (data.allocations && data.allocations.length > 0) {
+  if (data.contracts && data.contracts.length > 0) {
     available.add("allocated");
   }
   if (data.flightEvents && data.flightEvents.length > 0) {

@@ -1,8 +1,9 @@
 /**
- * Allocation Engine (P2-6)
+ * Allocation Engine — Demand Contracts + Lines
  *
- * Pure compute functions for demand allocations — contractual minimum hours
- * per customer that adjust demand calculations. Zero DB dependencies.
+ * Pure compute functions for demand contracts with allocation lines.
+ * Contracts represent customer obligations; lines define scheduled coverage.
+ * Zero DB dependencies.
  *
  * Two modes:
  * - MINIMUM_FLOOR: effective = max(normalMH, allocatedMH)
@@ -10,43 +11,122 @@
  */
 
 import type {
-  DemandAllocation,
+  DemandContract,
+  DemandAllocationLine,
+  MatchedAllocation,
   AllocationMode,
+  ContractPeriodType,
+  ProjectionStatus,
   DailyDemandV2,
-  ShiftDemandV2,
   CapacityShift,
 } from "@/types";
+
+// ─── Projection / Sanity Check ──────────────────────────────────────────────
+
+/**
+ * Compute projected MH for a contract based on its lines and period type.
+ * Returns null if contract has no contracted_mh (sanity check not configured).
+ *
+ * Scaling: counts day occurrences per week per line, sums to weekly_projected,
+ * then scales to the contract's period_type.
+ */
+export function computeContractProjection(
+  contract: Pick<DemandContract, "contractedMh" | "periodType" | "effectiveFrom" | "effectiveTo">,
+  lines: Pick<DemandAllocationLine, "dayOfWeek" | "allocatedMh">[],
+): number | null {
+  if (contract.contractedMh === null || contract.contractedMh === undefined) return null;
+  if (!contract.periodType) return null;
+
+  // Each line contributes: allocatedMh × occurrences_per_week
+  // dayOfWeek = null → 7 occ/week; specific day → 1 occ/week
+  let weeklyProjected = 0;
+  for (const line of lines) {
+    const occPerWeek = line.dayOfWeek === null ? 7 : 1;
+    weeklyProjected += line.allocatedMh * occPerWeek;
+  }
+
+  // Scale to period
+  switch (contract.periodType) {
+    case "WEEKLY":
+      return Math.round(weeklyProjected * 100) / 100;
+    case "MONTHLY":
+      return Math.round(weeklyProjected * 4.348 * 100) / 100;
+    case "ANNUAL":
+      return Math.round(weeklyProjected * 52.143 * 100) / 100;
+    case "TOTAL": {
+      if (!contract.effectiveTo) {
+        // No end date → use 52-week lookahead
+        return Math.round(weeklyProjected * 52 * 100) / 100;
+      }
+      const from = new Date(contract.effectiveFrom + "T00:00:00Z");
+      const to = new Date(contract.effectiveTo + "T00:00:00Z");
+      const diffMs = to.getTime() - from.getTime();
+      const diffWeeks = Math.max(diffMs / (7 * 24 * 60 * 60 * 1000), 0);
+      return Math.round(weeklyProjected * diffWeeks * 100) / 100;
+    }
+    case "PER_EVENT":
+      return null; // Per-event contracts can't be projected without event count
+    default:
+      return null;
+  }
+}
+
+/**
+ * Compare projected MH against contracted MH to get status.
+ * - SHORTFALL: projected < contracted
+ * - EXCESS: projected > contracted × 1.20 (>20% over)
+ * - OK: within range
+ */
+export function getProjectionStatus(
+  projected: number | null,
+  contracted: number | null,
+): ProjectionStatus | null {
+  if (projected === null || contracted === null) return null;
+  if (contracted <= 0) return null;
+
+  if (projected < contracted) return "SHORTFALL";
+  if (projected > contracted * 1.2) return "EXCESS";
+  return "OK";
+}
 
 // ─── Matching ─────────────────────────────────────────────────────────────────
 
 /**
- * Find allocations that apply to a specific date/shift/customer combination.
+ * Find matching allocation lines from active contracts for a specific
+ * date/shift/customer combination.
  *
- * Filters by: isActive, effectiveFrom <= date, effectiveTo null or >= date,
- * dayOfWeek match (null = all), shiftId match (null = all shifts, else lookup
- * via shift code).
+ * For each contract: check active, date overlap, customer match.
+ * For each matching contract: find lines where shift_id and day_of_week match.
+ * Returns flat array of MatchedAllocation (mode from contract, MH from line).
  */
 export function findMatchingAllocations(
   date: string,
   shiftCode: string,
   customerId: number,
-  allocations: DemandAllocation[],
+  contracts: DemandContract[],
   shifts: CapacityShift[],
-): DemandAllocation[] {
+): MatchedAllocation[] {
   const dow = new Date(date + "T00:00:00Z").getUTCDay();
   const shiftObj = shifts.find((s) => s.code === shiftCode);
+  const results: MatchedAllocation[] = [];
 
-  return allocations.filter((a) => {
-    if (!a.isActive) return false;
-    if (a.customerId !== customerId) return false;
-    if (a.effectiveFrom > date) return false;
-    if (a.effectiveTo !== null && a.effectiveTo < date) return false;
-    if (a.dayOfWeek !== null && a.dayOfWeek !== dow) return false;
-    if (a.shiftId !== null) {
-      if (!shiftObj || a.shiftId !== shiftObj.id) return false;
+  for (const c of contracts) {
+    if (!c.isActive) continue;
+    if (c.customerId !== customerId) continue;
+    if (c.effectiveFrom > date) continue;
+    if (c.effectiveTo !== null && c.effectiveTo < date) continue;
+
+    // Contract matches — now find matching lines
+    for (const line of c.lines) {
+      if (line.dayOfWeek !== null && line.dayOfWeek !== dow) continue;
+      if (line.shiftId !== null) {
+        if (!shiftObj || line.shiftId !== shiftObj.id) continue;
+      }
+      results.push({ mode: c.mode, allocatedMh: line.allocatedMh });
     }
-    return true;
-  });
+  }
+
+  return results;
 }
 
 // ─── Compute ──────────────────────────────────────────────────────────────────
@@ -60,7 +140,7 @@ export function findMatchingAllocations(
  */
 export function computeAllocatedMH(
   normalMH: number,
-  matchingAllocations: DemandAllocation[],
+  matchingAllocations: MatchedAllocation[],
 ): number {
   if (matchingAllocations.length === 0) return normalMH;
 
@@ -82,23 +162,21 @@ export function computeAllocatedMH(
 // ─── Apply to Demand ──────────────────────────────────────────────────────────
 
 /**
- * Apply allocations to computed demand data. Returns a new array (immutable).
+ * Apply contracts to computed demand data. Returns a new array (immutable).
  *
  * For each (date, shift):
  * - Gather per-customer normalMH from wpContributions
- * - For each customer with active allocations: compute adjusted MH, accumulate delta
- * - Key: customer with allocation but no WPs still creates demand from the allocation
+ * - For each customer with active contracts: compute adjusted MH, accumulate delta
+ * - Key: customer with contract but no WPs still creates demand from the allocation
  * - Sets allocatedDemandMH on shifts, totalAllocatedDemandMH on days
- *
- * @param customerMap Map from customerId to customerName (for bridging)
  */
 export function applyAllocations(
   demand: DailyDemandV2[],
-  allocations: DemandAllocation[],
+  contracts: DemandContract[],
   shifts: CapacityShift[],
   customerMap: Map<number, string>,
 ): DailyDemandV2[] {
-  if (allocations.length === 0) return demand;
+  if (contracts.length === 0) return demand;
 
   // Build reverse map: customerName -> customerId
   const nameToId = new Map<string, number>();
@@ -106,14 +184,11 @@ export function applyAllocations(
     nameToId.set(name, id);
   }
 
-  // Get all unique customer IDs from allocations
-  const allocCustomerIds = new Set(allocations.map((a) => a.customerId));
+  // Get all unique customer IDs from contracts
+  const contractCustomerIds = new Set(contracts.map((c) => c.customerId));
 
   // Build a set of all dates in demand
   const demandDates = new Set(demand.map((d) => d.date));
-
-  // Also identify dates that allocations could apply to but demand has no entry for
-  // (customer with allocation but no WPs — we need to create demand entries)
   const allDates = new Set(demandDates);
 
   // Clone demand into a map for easy mutation
@@ -122,7 +197,7 @@ export function applyAllocations(
     demandMap.set(d.date, deepCloneDay(d));
   }
 
-  // Process each date in demand
+  // Process each date
   for (const date of allDates) {
     let day = demandMap.get(date);
     if (!day) {
@@ -136,7 +211,6 @@ export function applyAllocations(
       demandMap.set(date, day);
     }
 
-    // Process each shift
     const activeShifts = shifts.filter((s) => s.isActive);
     for (const shift of activeShifts) {
       let shiftDemand = day.byShift.find((s) => s.shiftCode === shift.code);
@@ -157,12 +231,11 @@ export function applyAllocations(
 
       let shiftDelta = 0;
 
-      // Check each allocation customer
-      for (const custId of allocCustomerIds) {
+      for (const custId of contractCustomerIds) {
         const custName = customerMap.get(custId);
         if (!custName) continue;
 
-        const matching = findMatchingAllocations(date, shift.code, custId, allocations, shifts);
+        const matching = findMatchingAllocations(date, shift.code, custId, contracts, shifts);
         if (matching.length === 0) continue;
 
         const normalMH = customerMH.get(custName) ?? 0;
@@ -171,7 +244,6 @@ export function applyAllocations(
 
         if (delta > 0) {
           shiftDelta += delta;
-          // Update byCustomer at the day level
           day.byCustomer[custName] = (day.byCustomer[custName] ?? 0) + delta;
         }
       }
@@ -199,16 +271,33 @@ export function applyAllocations(
     }
   }
 
-  // Return sorted by date
   return Array.from(demandMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
+const VALID_MODES: AllocationMode[] = ["ADDITIVE", "MINIMUM_FLOOR"];
+const VALID_PERIOD_TYPES: ContractPeriodType[] = [
+  "WEEKLY",
+  "MONTHLY",
+  "ANNUAL",
+  "TOTAL",
+  "PER_EVENT",
+];
+
 /**
- * Validate allocation data before create/update.
+ * Validate contract data before create/update.
  */
-export function validateAllocation(data: Partial<DemandAllocation>): {
+export function validateContract(data: {
+  customerId?: number;
+  name?: string;
+  mode?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+  contractedMh?: number | null;
+  periodType?: string | null;
+  lines?: { allocatedMh?: number; dayOfWeek?: number | null }[];
+}): {
   valid: boolean;
   errors: string[];
 } {
@@ -218,10 +307,8 @@ export function validateAllocation(data: Partial<DemandAllocation>): {
     errors.push("customerId is required");
   }
 
-  if (data.dayOfWeek !== null && data.dayOfWeek !== undefined) {
-    if (!Number.isInteger(data.dayOfWeek) || data.dayOfWeek < 0 || data.dayOfWeek > 6) {
-      errors.push("dayOfWeek must be 0-6 (Sun-Sat) or null");
-    }
+  if (!data.name || data.name.trim().length === 0) {
+    errors.push("name is required");
   }
 
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -240,17 +327,42 @@ export function validateAllocation(data: Partial<DemandAllocation>): {
     }
   }
 
-  if (data.allocatedMh === undefined || data.allocatedMh === null) {
-    errors.push("allocatedMh is required");
-  } else if (typeof data.allocatedMh !== "number" || data.allocatedMh <= 0) {
-    errors.push("allocatedMh must be a positive number");
-  }
-
-  const validModes: AllocationMode[] = ["ADDITIVE", "MINIMUM_FLOOR"];
   if (!data.mode) {
     errors.push("mode is required");
-  } else if (!validModes.includes(data.mode as AllocationMode)) {
+  } else if (!VALID_MODES.includes(data.mode as AllocationMode)) {
     errors.push("mode must be ADDITIVE or MINIMUM_FLOOR");
+  }
+
+  // contractedMh and periodType: both set or both null
+  const hasMh = data.contractedMh !== null && data.contractedMh !== undefined;
+  const hasPeriod =
+    data.periodType !== null && data.periodType !== undefined && data.periodType !== "";
+  if (hasMh && !hasPeriod) {
+    errors.push("periodType is required when contractedMh is set");
+  }
+  if (!hasMh && hasPeriod) {
+    errors.push("contractedMh is required when periodType is set");
+  }
+  if (hasMh && typeof data.contractedMh === "number" && data.contractedMh <= 0) {
+    errors.push("contractedMh must be a positive number");
+  }
+  if (hasPeriod && !VALID_PERIOD_TYPES.includes(data.periodType as ContractPeriodType)) {
+    errors.push("periodType must be WEEKLY, MONTHLY, ANNUAL, TOTAL, or PER_EVENT");
+  }
+
+  // Validate lines
+  if (data.lines) {
+    for (let i = 0; i < data.lines.length; i++) {
+      const line = data.lines[i];
+      if (line.allocatedMh === undefined || line.allocatedMh === null || line.allocatedMh <= 0) {
+        errors.push(`lines[${i}].allocatedMh must be a positive number`);
+      }
+      if (line.dayOfWeek !== null && line.dayOfWeek !== undefined) {
+        if (!Number.isInteger(line.dayOfWeek) || line.dayOfWeek < 0 || line.dayOfWeek > 6) {
+          errors.push(`lines[${i}].dayOfWeek must be 0-6 (Sun-Sat) or null`);
+        }
+      }
+    }
   }
 
   return { valid: errors.length === 0, errors };

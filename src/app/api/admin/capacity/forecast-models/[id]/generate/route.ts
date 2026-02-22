@@ -7,7 +7,7 @@ import {
   loadShifts,
   loadAssumptions,
   computeDailyDemandV2,
-  loadDemandAllocations,
+  loadDemandContracts,
   loadCustomerNameMap,
   applyAllocations,
   generateForecast,
@@ -87,12 +87,12 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       });
     }
 
-    // Apply allocations to historical demand (so forecast reflects allocated minimums)
-    const allocations = loadDemandAllocations(lookbackStart, today, true);
+    // Apply contracts to historical demand (so forecast reflects allocated minimums)
+    const contracts = loadDemandContracts(lookbackStart, today, true);
     let adjustedDemand = historicalDemand;
-    if (allocations.length > 0) {
+    if (contracts.length > 0) {
       const customerNameMap = loadCustomerNameMap();
-      adjustedDemand = applyAllocations(historicalDemand, allocations, shifts, customerNameMap);
+      adjustedDemand = applyAllocations(historicalDemand, contracts, shifts, customerNameMap);
     }
 
     // Generate forecast starting tomorrow

@@ -1,0 +1,196 @@
+---
+title: FAQ & Troubleshooting
+description: Common questions and solutions for capacity modeling
+---
+
+# FAQ & Troubleshooting
+
+## General
+
+### The capacity page shows "No data" or everything is blank
+
+The capacity page needs at least one **capacity source** configured:
+
+1. Go to **Admin > Capacity**
+2. Set up either **Headcount Plans** (fixed headcount per shift) or **Staffing Matrix** (rotation-based scheduling)
+3. Make sure the headcount plan's effective date range covers the dates you're viewing
+
+If capacity is configured but demand is zero, you also need work packages imported. Go to **Admin > Data Hub** to import work package data.
+
+### A lens button is grayed out / disabled
+
+That lens has **no data** for the current date range. Each lens requires specific data to be entered:
+
+| Lens | Required Data | Where to Add It |
+|------|---------------|-----------------|
+| Allocated | Demand allocations | Admin > Capacity > Demand Allocations |
+| Events | Flight events | Admin > Capacity > Flight Events |
+| Forecast | Generated forecast rates | Admin > Capacity > Rate Forecasts |
+| Worked | Time bookings | Admin > Capacity > Worked Hours |
+| Billed | Billing entries | Admin > Capacity > Billed Hours |
+| Concurrent | Flight events with arrivals/departures | Admin > Capacity > Flight Events |
+
+The **Planned** lens is always available — it only needs headcount/staffing configured.
+
+### Utilization shows ">100%" — what does that mean?
+
+Demand exceeds capacity for that shift/day. Options:
+
+- **Add staff** to the affected shift (increase headcount or add an exception)
+- **Move work packages** to a less-loaded shift or day
+- **Adjust assumptions** if the productivity factors are too aggressive
+
+### What's the difference between Staffing Matrix and Headcount Plans?
+
+| Feature | Headcount Plans | Staffing Matrix |
+|---------|----------------|-----------------|
+| Complexity | Simple | Advanced |
+| Scheduling | Fixed headcount per shift | 21-day rotation cycles |
+| Day-of-week variation | Via separate plans per day | Built into rotation patterns |
+| Exceptions | Headcount exceptions (delta adjustments) | Not needed (rotation handles it) |
+| Best for | Stable, predictable staffing | Rotating teams, variable schedules |
+
+If an active staffing configuration exists, it takes **priority** over headcount plans.
+
+---
+
+## Configuration
+
+### How do I reset the capacity model?
+
+Go to **Admin > Capacity > Model Assumptions** and use the reset controls to restore default values. This resets the productivity factors and demand curve settings, not the headcount or allocation data.
+
+### What are coverage windows?
+
+Time buffers around flight arrivals and departures that require staff presence:
+
+- **Arrival window:** Staff available for N minutes **after** landing (default: 30 min)
+- **Departure window:** Staff available for N minutes **before** takeoff (default: 60 min)
+
+Configure per-event window durations in **Admin > Capacity > Flight Events**.
+
+### How is "Productive MH" calculated?
+
+The full productivity chain:
+
+```
+Productive MH per person = Paid Hours (8.0)
+                           x Paid-to-Available (0.95)
+                           x Available-to-Productive (0.80)
+                           x Night Factor (0.85 for NIGHT, 1.0 otherwise)
+```
+
+**DAY shift example:** 8.0 x 0.95 x 0.80 x 1.0 = **6.08 MH/person**
+
+**NIGHT shift example:** 8.0 x 0.95 x 0.80 x 0.85 = **5.17 MH/person**
+
+Total shift capacity = MH/person x headcount. Adjust factors in **Admin > Capacity > Model Assumptions**.
+
+### Can I export capacity data?
+
+Yes. The capacity table includes a CSV export button that exports all visible columns, including any active lens overlay columns.
+
+---
+
+## Forecasting
+
+### The forecast line looks wrong or unexpected
+
+Check these settings in your forecast model (**Admin > Capacity > Rate Forecasts**):
+
+1. **Lookback days** — is the historical period representative? A 7-day lookback may miss patterns a 30-day lookback would catch
+2. **Method** — moving average produces flat projections, linear trend can project steep growth/decline
+3. **Is the model active?** — inactive models don't generate rates
+4. **Weight Recent** (weighted average only) — higher values (0.8-0.9) make the forecast more responsive to recent changes
+5. Try **regenerating rates** — click "Generate Rates" to recompute from current historical data
+
+### Which forecast method should I use?
+
+| Situation | Recommended Method |
+|-----------|-------------------|
+| Stable, consistent demand | Moving Average |
+| Recently changing demand | Weighted Average (weightRecent: 0.7-0.8) |
+| Steadily growing or declining | Linear Trend |
+
+### Can I manually override forecast values?
+
+Yes. Edit individual forecast rates in the rate forecasts list. Manual overrides are **preserved** when you regenerate — only auto-generated rates are replaced.
+
+---
+
+## Lenses
+
+### Which lens should I use?
+
+| Your Question | Recommended Lens |
+|---------------|-----------------|
+| "Do we have enough staff this week?" | **Planned** |
+| "Are we meeting customer contracts?" | **Allocated** |
+| "When are the busiest arrival/departure times?" | **Events** |
+| "What should we expect next month?" | **Forecast** |
+| "Did we work the hours we planned?" | **Worked** |
+| "Are we billing accurately?" | **Billed** |
+| "How many aircraft are we handling at once?" | **Concurrent** |
+
+### Why doesn't the Concurrent lens show a chart overlay?
+
+Concurrency is measured in **aircraft count**, while the chart Y-axis is in **man-hours**. These are incompatible units — plotting them on the same axis would be misleading. The concurrent data is shown in the KPI strip and table columns instead.
+
+### Why doesn't the Events lens show a chart overlay?
+
+Events are **point-in-time counts**, not a continuous time series of man-hours. The event count per day appears in the table column.
+
+---
+
+## Data Entry
+
+### Can I have multiple time bookings per work package?
+
+Yes. Each time booking is a separate entry. You might record multiple tasks for the same work package (e.g., "gear inspection" for 2.5 MH and "brake check" for 1.0 MH on the same aircraft and date).
+
+### What are the task types for worked hours?
+
+| Type | When to Use |
+|------|-------------|
+| `routine` | Standard scheduled maintenance |
+| `non_routine` | Unplanned findings during inspection |
+| `aog` | Aircraft-on-ground emergency work |
+| `training` | Training or supervised tasks |
+| `admin` | Administrative, non-wrench time |
+
+### How does demand allocation mode work?
+
+- **MINIMUM_FLOOR:** "At least X MH" — only raises demand if WP demand is below the floor. If WP demand is 10 MH and floor is 8 MH, effective demand stays at 10 MH.
+- **ADDITIVE:** "X MH on top" — always adds to WP demand. If WP demand is 10 MH and additive is 2 MH, effective demand becomes 12 MH.
+
+When both modes apply to the same customer/shift/date:
+```
+effective = max(normalMH + sum(ADDITIVE), max(MINIMUM_FLOOR))
+```
+
+---
+
+## Troubleshooting
+
+### Capacity shows zero even though headcount is configured
+
+Check that:
+1. The headcount plan's **effective date range** covers the dates you're viewing
+2. The plan's **shift** matches an active capacity shift
+3. If using Staffing Matrix, the configuration is **activated** (only one can be active)
+4. Model assumptions have non-zero productivity factors
+
+### Demand shows zero even though work packages are imported
+
+Check that:
+1. Work packages have **arrival and departure dates** within the viewed range
+2. The filter bar isn't restricting results (check operator, aircraft, type filters)
+3. Work packages haven't been excluded by the `wpMHMode` setting
+
+### Heatmap shows gray cells
+
+Gray means **no capacity data** for that shift/date combination. Ensure headcount plans or staffing rotation covers that shift and date.
+
+### API returns 403 Forbidden
+
+Capacity admin endpoints require `admin` or `superadmin` role. The `/api/capacity/overview` endpoint is available to any authenticated user. Check your account role in **Admin > Users**.

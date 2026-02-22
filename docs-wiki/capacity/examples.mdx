@@ -1,0 +1,168 @@
+---
+title: Worked Examples
+description: Four realistic scenarios showing capacity modeling in practice
+---
+
+# Worked Examples
+
+These scenarios walk through common capacity modeling tasks end-to-end. Each starts with a question, shows the steps to answer it, and explains what to look for.
+
+---
+
+## Example 1: "Is my team staffed correctly for next week?"
+
+**Scenario:** You're an operations manager reviewing next week's schedule. You want to know if any shifts are overloaded or understaffed.
+
+### Steps
+
+1. **Navigate to `/capacity`**
+2. **Set the date range** to cover the next 7 days using the filter bar
+3. **Read the KPI strip:**
+   - Average Utilization: 78% (amber — close to capacity)
+   - Peak Utilization: 115% (red — at least one day exceeds capacity)
+   - Capacity Gap: -12.4 MH (negative = more demand than capacity overall)
+
+4. **Scan the heatmap:**
+   - Most cells are green or amber
+   - Wednesday NIGHT is red (115%)
+   - Thursday DAY is red (108%)
+
+5. **Click the red Wednesday NIGHT cell** to open the drilldown:
+   - 3 work packages overlapping: N12345 (DHL, 2.5 MH), N67890 (Atlas, 3.0 MH), N24680 (DHL, 1.8 MH)
+   - Total demand: 7.3 MH
+   - NIGHT capacity: 4 people x 5.17 MH/person = 20.7 MH... wait, that should be fine
+
+6. **Check the headcount:** The exception shows only 1 technician on Wednesday NIGHT (holiday coverage)
+   - 1 person x 5.17 = 5.17 MH available
+   - 7.3 MH demand / 5.17 MH capacity = 141% utilization
+
+### Action
+
+Contact the scheduler to add staff to Wednesday NIGHT, or move the N24680 work package to Thursday.
+
+---
+
+## Example 2: "Are we meeting DHL's contracted hours?"
+
+**Scenario:** DHL's contract guarantees at least 8 MH/day on the DAY shift, Monday through Friday. You need to verify compliance.
+
+### Setup (Admin — one-time)
+
+1. Go to **Admin > Capacity > Demand Allocations**
+2. Click **Add Allocation** with these values:
+   - Customer: DHL
+   - Shift: DAY
+   - Day of Week: *(leave blank for Mon-Fri, or create one per day)*
+   - Effective From: 2026-01-01
+   - Allocated MH: 8.0
+   - Mode: MINIMUM_FLOOR
+   - Reason: "Annual maintenance contract"
+3. Save
+
+### Verification
+
+1. Navigate to `/capacity`
+2. Set date range to this month
+3. **Switch to the Allocated lens** (amber button)
+4. Look at the table:
+
+| Date | Demand MH | Allocated MH | Capacity MH | Utilization |
+|------|-----------|-------------|-------------|-------------|
+| Feb 17 (Mon) | 5.2 | **8.0** | 60.8 | 13% |
+| Feb 18 (Tue) | 9.4 | 9.4 | 60.8 | 15% |
+| Feb 19 (Wed) | 3.1 | **8.0** | 60.8 | 13% |
+
+- Feb 17: WP demand was only 5.2 MH, but the MINIMUM_FLOOR raised it to 8.0 MH
+- Feb 18: WP demand (9.4) exceeds the floor (8.0), so actual demand is used
+- Feb 19: WP demand was 3.1 MH, raised to 8.0 MH
+
+### Insight
+
+The allocation ensures capacity planning accounts for the contract even on light days. Without it, Wednesday's 3.1 MH demand would understate the actual work commitment.
+
+---
+
+## Example 3: "What's the demand trend for the next month?"
+
+**Scenario:** You're planning staffing for March and want to know if demand is trending up or down based on recent history.
+
+### Setup (Admin — one-time)
+
+1. Go to **Admin > Capacity > Rate Forecasts**
+2. Click **New Model** with:
+   - Name: "March Planning Forecast"
+   - Method: moving_average
+   - Lookback Days: 30
+   - Forecast Horizon: 30
+   - Granularity: shift (per-shift forecasts)
+3. Save the model
+4. Click **Generate Rates** — the system analyzes the last 30 days and creates forecast rates for the next 30
+
+The response shows: "Generated 90 rates (30 days x 3 shifts), forecast period 2026-02-22 to 2026-03-23, based on 30 historical days"
+
+### Viewing the Forecast
+
+1. Navigate to `/capacity`
+2. Set end date to 2026-03-23
+3. **Switch to the Forecast lens** (teal button)
+4. The chart now shows:
+   - Blue bars: actual WP demand (where work packages exist)
+   - Teal dotted line: forecasted demand (extends into the future)
+   - Gray capacity line: available productive hours
+
+5. Compare the teal line to the capacity line:
+   - If forecast stays well below capacity: no staffing changes needed
+   - If forecast approaches or crosses capacity: plan additional staff
+
+### Refining
+
+If the moving average seems too flat, try:
+- **Weighted Average** with `weightRecent: 0.7` to emphasize recent trends
+- **Linear Trend** to see if demand is steadily increasing
+
+---
+
+## Example 4: "How much did we actually work vs. what we billed?"
+
+**Scenario:** Month-end reconciliation. You want to compare planned demand, actual hours worked, and invoiced hours to find discrepancies.
+
+### Prerequisites
+
+- Time bookings (worked hours) entered for the period via Admin > Capacity > Worked Hours
+- Billing entries entered for the period via Admin > Capacity > Billed Hours
+
+### Step-by-Step Comparison
+
+1. Navigate to `/capacity`
+2. Set date range to the billing period (e.g., Feb 1-28)
+
+**Check planned vs. worked:**
+
+3. Switch to the **Worked lens** (green button)
+4. Read KPIs:
+   - Total Demand (Planned): 480 MH
+   - Total Worked: 442 MH
+   - Plan vs. Actual: +8% (planned 8% more than worked — estimates were slightly high)
+5. The green line on the chart tracks below the blue demand bars most days — estimates were conservative
+
+**Check worked vs. billed:**
+
+6. Switch to the **Billed lens** (indigo button)
+7. Read KPIs:
+   - Total Billed: 468 MH
+   - Worked vs. Billed: -6% (billed 6% more than worked)
+
+### Insight
+
+| Metric | Value | Interpretation |
+|--------|-------|---------------|
+| Planned | 480 MH | Initial demand estimates |
+| Worked | 442 MH | Actual time spent — 8% less than planned |
+| Billed | 468 MH | Invoiced amount — 6% more than worked |
+
+- **Planned vs. Worked gap (+8%):** Estimates were slightly high. Consider lowering the default MH or reviewing WP estimates.
+- **Worked vs. Billed gap (-6%):** Billing exceeds actual work by 26 MH. Review billing entries for the period — could be rounding, minimum billing increments, or data entry errors.
+
+### Drill Down
+
+Check the table for specific dates where the gap is largest. Sort by the difference between Worked MH and Billed MH columns to find outliers worth investigating.

@@ -70,16 +70,18 @@ export {
   findMatchingAllocations,
   computeAllocatedMH,
   applyAllocations,
-  validateAllocation,
+  validateContract,
+  computeContractProjection,
+  getProjectionStatus,
 } from "./allocation-engine";
 
 // Allocation data access (CRUD)
 export {
-  loadDemandAllocations,
-  loadDemandAllocation,
-  createDemandAllocation,
-  updateDemandAllocation,
-  deleteDemandAllocation,
+  loadDemandContracts,
+  loadDemandContract,
+  createDemandContract,
+  updateDemandContract,
+  deleteDemandContract,
   loadCustomerNameMap,
 } from "./allocation-data";
 

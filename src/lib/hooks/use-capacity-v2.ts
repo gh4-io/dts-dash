@@ -13,7 +13,7 @@ import type {
   CapacityAssumptions,
   CapacityOverviewResponse,
   CapacityLensId,
-  DemandAllocation,
+  DemandContract,
   FlightEvent,
   EventCoverageWindow,
   ConcurrencyBucket,
@@ -32,7 +32,7 @@ interface CapacityV2State {
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
   // Phase 2 overlay collections
-  allocations: DemandAllocation[];
+  contracts: DemandContract[];
   flightEvents: FlightEvent[];
   coverageWindows: EventCoverageWindow[];
   concurrencyBuckets: ConcurrencyBucket[];
@@ -59,7 +59,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   shifts: [],
   assumptions: null,
   // Phase 2 overlay collections
-  allocations: [],
+  contracts: [],
   flightEvents: [],
   coverageWindows: [],
   concurrencyBuckets: [],
@@ -94,7 +94,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         warnings: json.warnings,
         shifts: json.shifts,
         assumptions: json.assumptions,
-        allocations: json.allocations ?? [],
+        contracts: json.contracts ?? [],
         flightEvents: json.flightEvents ?? [],
         coverageWindows: json.coverageWindows ?? [],
         concurrencyBuckets: json.concurrencyBuckets ?? [],
@@ -141,7 +141,7 @@ export function useCapacityV2() {
     warnings: store.warnings,
     shifts: store.shifts,
     assumptions: store.assumptions,
-    allocations: store.allocations,
+    contracts: store.contracts,
     flightEvents: store.flightEvents,
     coverageWindows: store.coverageWindows,
     concurrencyBuckets: store.concurrencyBuckets,
