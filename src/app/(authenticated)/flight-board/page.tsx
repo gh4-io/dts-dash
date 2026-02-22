@@ -27,6 +27,7 @@ function FlightBoardPageInner() {
   const [selectedWp, setSelectedWp] = useState<SerializedWorkPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const {
     loaded: prefsLoaded,
     compactMode: condensed,
@@ -37,8 +38,9 @@ function FlightBoardPageInner() {
 
   // Sync from localStorage after hydration to avoid mismatch
   useEffect(() => {
-    const stored = localStorage.getItem("flightBoardExpanded");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
+    setHydrated(true);
+    const stored = localStorage.getItem("flightBoardExpanded");
     if (stored === "true") setIsExpanded(true);
   }, []);
 
@@ -252,15 +254,17 @@ function FlightBoardPageInner() {
               </Button>
 
               {/* Condensed view */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={toggleCondensed}
-                title={condensed ? "Normal density" : "Condensed view"}
-              >
-                <i className={cn("fa-solid", condensed ? "fa-bars" : "fa-bars-staggered")} />
-              </Button>
+              {hydrated && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 p-0 shrink-0"
+                  onClick={toggleCondensed}
+                  title={condensed ? "Normal density" : "Condensed view"}
+                >
+                  <i className={cn("fa-solid", condensed ? "fa-bars" : "fa-bars-staggered")} />
+                </Button>
+              )}
 
               {/* Center on Now */}
               <Button
