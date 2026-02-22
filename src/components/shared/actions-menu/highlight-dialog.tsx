@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/select";
 import { useActions, ACTION_COLUMNS } from "@/lib/hooks/use-actions";
 import { useWorkPackagesStore } from "@/lib/hooks/use-work-packages";
-import { getUniqueValues } from "@/lib/utils/data-transforms";
-import type { HighlightRule, ActionColumnKey } from "@/lib/hooks/use-actions";
+import type { HighlightRule } from "@/lib/hooks/use-actions";
+import type { Facets } from "@/lib/utils/filter-helpers";
 
 const OPERATORS = ["=", "!=", ">", "<", ">=", "<="] as const;
 
@@ -56,7 +56,7 @@ interface HighlightDialogProps {
 
 export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
   const { highlights, setHighlights } = useActions();
-  const { workPackages } = useWorkPackagesStore();
+  const { facets } = useWorkPackagesStore();
   const [draft, setDraft] = useState<HighlightRule[]>([]);
 
   // Hydrate draft when dialog opens — always show at least 1 row
@@ -66,22 +66,13 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Memoize unique values for string columns used in draft
-  const uniqueValuesCache = useMemo(() => {
-    const cache = new Map<string, string[]>();
-    const cols = new Set(
-      draft
-        .map((r) => r.column)
-        .filter((c) => {
-          const col = ACTION_COLUMNS.find((ac) => ac.key === c);
-          return col?.type === "string";
-        }),
-    );
-    for (const col of cols) {
-      cache.set(col, getUniqueValues(workPackages, col as ActionColumnKey));
-    }
-    return cache;
-  }, [workPackages, draft]);
+  /** Facet-based lookup for string column values */
+  const FACET_KEYS: Record<string, keyof Facets> = {
+    customer: "customer",
+    aircraftReg: "aircraftReg",
+    inferredType: "inferredType",
+    status: "status",
+  };
 
   const addRule = () => {
     setDraft([...draft, makeBlankRule()]);
@@ -120,7 +111,9 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
             const colDef = ACTION_COLUMNS.find((c) => c.key === rule.column);
             const colType = colDef?.type ?? "string";
             const isString = colType === "string";
-            const uniqueVals = isString ? (uniqueValuesCache.get(rule.column) ?? []) : [];
+            const uniqueVals = isString
+              ? (facets[FACET_KEYS[rule.column] as keyof Facets] ?? [])
+              : [];
 
             return (
               <div key={rule.id} className="flex items-center gap-1.5 flex-wrap">

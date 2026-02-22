@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { useFilters } from "./use-filters";
 import { useEffect } from "react";
+import type { Facets } from "@/lib/utils/filter-helpers";
 
 // Serialized work package from API (dates come as strings over JSON)
 export interface SerializedWorkPackage {
@@ -29,14 +30,18 @@ export interface SerializedWorkPackage {
 
 interface WorkPackagesState {
   workPackages: SerializedWorkPackage[];
+  facets: Facets;
   isLoading: boolean;
   error: string | null;
   total: number;
   fetchAll: (filters: Record<string, string>) => Promise<void>;
 }
 
+const EMPTY_FACETS: Facets = { customer: [], aircraftReg: [], inferredType: [], status: [] };
+
 export const useWorkPackagesStore = create<WorkPackagesState>()((set) => ({
   workPackages: [],
+  facets: EMPTY_FACETS,
   isLoading: false,
   error: null,
   total: 0,
@@ -50,6 +55,7 @@ export const useWorkPackagesStore = create<WorkPackagesState>()((set) => ({
       const json = await res.json();
       set({
         workPackages: json.data,
+        facets: json.facets ?? EMPTY_FACETS,
         total: json.total,
         isLoading: false,
       });
@@ -64,8 +70,7 @@ export const useWorkPackagesStore = create<WorkPackagesState>()((set) => ({
  */
 export function useWorkPackages() {
   const { start, end, operators, aircraft, types } = useFilters();
-  const { workPackages, isLoading, error, total, fetchAll } =
-    useWorkPackagesStore();
+  const { workPackages, isLoading, error, total, fetchAll } = useWorkPackagesStore();
 
   useEffect(() => {
     const filters: Record<string, string> = {};
