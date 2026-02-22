@@ -13,6 +13,8 @@ import type {
   CapacityAssumptions,
   CapacityOverviewResponse,
   CapacityLensId,
+  CapacityComputeMode,
+  ResolvedShiftInfo,
   DemandContract,
   FlightEvent,
   EventCoverageWindow,
@@ -31,6 +33,10 @@ interface CapacityV2State {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
+  // Compute metadata
+  computeMode: CapacityComputeMode;
+  resolvedShifts: ResolvedShiftInfo[];
+  activeStaffingConfigName: string | null;
   // Phase 2 overlay collections
   contracts: DemandContract[];
   flightEvents: FlightEvent[];
@@ -58,6 +64,10 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   warnings: [],
   shifts: [],
   assumptions: null,
+  // Compute metadata
+  computeMode: "headcount" as CapacityComputeMode,
+  resolvedShifts: [],
+  activeStaffingConfigName: null,
   // Phase 2 overlay collections
   contracts: [],
   flightEvents: [],
@@ -94,6 +104,9 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         warnings: json.warnings,
         shifts: json.shifts,
         assumptions: json.assumptions,
+        computeMode: json.computeMode ?? "headcount",
+        resolvedShifts: json.resolvedShifts ?? [],
+        activeStaffingConfigName: json.activeStaffingConfigName ?? null,
         contracts: json.contracts ?? [],
         flightEvents: json.flightEvents ?? [],
         coverageWindows: json.coverageWindows ?? [],
@@ -141,6 +154,9 @@ export function useCapacityV2() {
     warnings: store.warnings,
     shifts: store.shifts,
     assumptions: store.assumptions,
+    computeMode: store.computeMode,
+    resolvedShifts: store.resolvedShifts,
+    activeStaffingConfigName: store.activeStaffingConfigName,
     contracts: store.contracts,
     flightEvents: store.flightEvents,
     coverageWindows: store.coverageWindows,

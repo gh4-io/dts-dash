@@ -38,8 +38,10 @@ import {
   loadBillingEntries,
   aggregateBilledHours,
   applyBilledHours,
+  computeEffectivePaidHours,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
+import type { ResolvedShiftInfo, CapacityComputeMode } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/capacity/overview");
@@ -84,6 +86,8 @@ export async function GET(request: NextRequest) {
     // otherwise fall back to simple headcount plans.
     const activeConfig = loadActiveStaffingConfig();
     let capacity;
+    let computeMode: CapacityComputeMode;
+    let resolvedShifts: ResolvedShiftInfo[];
 
     if (activeConfig) {
       const staffingShifts = loadStaffingShifts(activeConfig.id);
@@ -91,10 +95,46 @@ export async function GET(request: NextRequest) {
       const patternMap = buildPatternMap(patterns);
       const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
       capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
+      computeMode = "staffing";
+      resolvedShifts = staffingShifts
+        .filter((ss) => ss.isActive)
+        .map((ss) => ({
+          code: ss.category,
+          name: ss.name,
+          startHour: ss.startHour,
+          startMinute: ss.startMinute,
+          endHour: ss.endHour,
+          endMinute: ss.endMinute,
+          effectivePaidHours: computeEffectivePaidHours(ss),
+          breakMinutes: ss.breakMinutes,
+          lunchMinutes: ss.lunchMinutes,
+          headcount: ss.headcount,
+          mhOverride: ss.mhOverride,
+          isActive: ss.isActive,
+          source: "staffing" as const,
+        }));
     } else {
       const plans = loadPlans(startDate, endDate);
       const exceptions = loadExceptions(startDate, endDate);
       capacity = computeDailyCapacityV2(dates, shifts, plans, exceptions, assumptions);
+      computeMode = "headcount";
+      resolvedShifts = shifts
+        .filter((s) => s.isActive)
+        .map((s) => ({
+          code: s.code,
+          name: s.name,
+          startHour: s.startHour,
+          startMinute: 0,
+          endHour: s.endHour,
+          endMinute: 0,
+          effectivePaidHours: s.paidHours,
+          breakMinutes: 0,
+          lunchMinutes: 0,
+          headcount: 0,
+          mhOverride: null,
+          isActive: s.isActive,
+          source: "capacity" as const,
+        }));
     }
 
     // Read and transform work packages, apply filters for demand
@@ -234,6 +274,9 @@ export async function GET(request: NextRequest) {
       forecastModel: activeForecastModel ?? undefined,
       timeBookings: timeBookings.length > 0 ? timeBookings : undefined,
       billingEntries: billingEntries.length > 0 ? billingEntries : undefined,
+      computeMode,
+      resolvedShifts,
+      activeStaffingConfigName: activeConfig?.name ?? undefined,
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

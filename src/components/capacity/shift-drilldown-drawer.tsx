@@ -91,7 +91,7 @@ function getUtilBadge(util: number | null, noCoverage: boolean): React.ReactNode
   );
 }
 
-/** Capacity chain visualization */
+/** Capacity chain visualization — 4-step layout */
 function CapacityChain({
   shiftCap,
   shift,
@@ -104,7 +104,7 @@ function CapacityChain({
   const isNight = shift.code === "NIGHT";
   const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
   const productiveMHPerPerson =
-    shift.paidHours * assumptions.paidToAvailable * assumptions.availableToProductive * nightFactor;
+    shiftCap.paidHoursPerPerson * assumptions.availableToProductive * nightFactor;
 
   return (
     <div className="space-y-2">
@@ -112,14 +112,14 @@ function CapacityChain({
         Capacity Chain
       </div>
 
-      {/* Headcount */}
+      {/* Roster Headcount */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-muted-foreground">
-          <i className="fa-solid fa-users mr-1.5 text-xs" />
-          Effective Headcount
+          <i className="fa-solid fa-clipboard-list mr-1.5 text-xs" />
+          Roster Headcount
         </span>
         <span className="font-medium tabular-nums">
-          {shiftCap.effectiveHeadcount}
+          {shiftCap.rosterHeadcount}
           {shiftCap.belowMinHeadcount && (
             <span className="ml-1.5 text-amber-400 text-xs">
               <i className="fa-solid fa-triangle-exclamation text-[9px] mr-0.5" />
@@ -134,27 +134,36 @@ function CapacityChain({
         </span>
       </div>
 
-      {/* 3-tier chain */}
+      {/* 4-step chain */}
       <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2 text-sm">
+        {/* Step 1: Attendance rate */}
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-4">
+          <i className="fa-solid fa-arrow-down text-[8px]" />x{" "}
+          {assumptions.paidToAvailable.toFixed(2)} (attendance rate)
+        </div>
+        <ChainRow
+          label="Effective Heads"
+          formula={`${shiftCap.rosterHeadcount} roster x ${assumptions.paidToAvailable.toFixed(2)}`}
+          value={shiftCap.effectiveHeadcount}
+          unit="heads"
+        />
+
+        {/* Step 2: Paid hours */}
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-4">
+          <i className="fa-solid fa-arrow-down text-[8px]" />x {shiftCap.paidHoursPerPerson}h per
+          person
+        </div>
         <ChainRow
           label="Paid Hours"
-          formula={`${shiftCap.effectiveHeadcount} heads x ${shift.paidHours}h`}
+          formula={`${shiftCap.effectiveHeadcount.toFixed(1)} heads x ${shiftCap.paidHoursPerPerson}h`}
           value={shiftCap.paidMH}
           unit="MH"
         />
+
+        {/* Step 3: Productive efficiency */}
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-4">
           <i className="fa-solid fa-arrow-down text-[8px]" />x{" "}
-          {assumptions.paidToAvailable.toFixed(2)} (paid-to-available)
-        </div>
-        <ChainRow
-          label="Available Hours"
-          formula={`Absence/vacation factor`}
-          value={shiftCap.availableMH}
-          unit="MH"
-        />
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground pl-4">
-          <i className="fa-solid fa-arrow-down text-[8px]" />x{" "}
-          {assumptions.availableToProductive.toFixed(2)} (available-to-productive)
+          {assumptions.availableToProductive.toFixed(2)} (productive efficiency)
           {isNight && ` x ${assumptions.nightProductivityFactor.toFixed(2)} (night factor)`}
         </div>
         <ChainRow
@@ -665,9 +674,12 @@ export function ShiftDrilldownDrawer({
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
                         <div>
-                          <span className="block text-[10px] uppercase">Heads</span>
-                          <span className="text-foreground font-medium tabular-nums">
-                            {s.effectiveHeadcount}
+                          <span className="block text-[10px] uppercase">Eff. Heads</span>
+                          <span
+                            className="text-foreground font-medium tabular-nums"
+                            title={`Roster: ${s.rosterHeadcount}`}
+                          >
+                            {s.effectiveHeadcount.toFixed(1)}
                             {s.belowMinHeadcount && (
                               <i className="fa-solid fa-triangle-exclamation text-amber-400 text-[8px] ml-1" />
                             )}
@@ -736,7 +748,7 @@ export function ShiftDrilldownDrawer({
                   Model Assumptions
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                  <span>Paid-to-Available</span>
+                  <span>Attendance Rate</span>
                   <span className="text-foreground tabular-nums text-right">
                     {assumptions.paidToAvailable.toFixed(2)}
                   </span>

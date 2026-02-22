@@ -418,12 +418,32 @@ export interface ShiftSlot {
 export interface ShiftCapacityV2 {
   shiftCode: string;
   shiftName: string;
+  rosterHeadcount: number;
   effectiveHeadcount: number;
+  paidHoursPerPerson: number;
   paidMH: number;
   availableMH: number;
   productiveMH: number;
   hasExceptions: boolean;
   belowMinHeadcount: boolean;
+}
+
+export type CapacityComputeMode = "headcount" | "staffing";
+
+export interface ResolvedShiftInfo {
+  code: string;
+  name: string;
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  effectivePaidHours: number;
+  breakMinutes: number;
+  lunchMinutes: number;
+  headcount: number;
+  mhOverride: number | null;
+  isActive: boolean;
+  source: "capacity" | "staffing";
 }
 
 /** Daily capacity with per-shift breakdown */
@@ -521,6 +541,9 @@ export interface CapacityOverviewResponse {
   forecastModel?: ForecastModel;
   timeBookings?: TimeBooking[];
   billingEntries?: BillingEntry[];
+  computeMode?: CapacityComputeMode;
+  resolvedShifts?: ResolvedShiftInfo[];
+  activeStaffingConfigName?: string;
 }
 
 // ─── Capacity Lens (P2-7) ───────────────────────────────────────────────────

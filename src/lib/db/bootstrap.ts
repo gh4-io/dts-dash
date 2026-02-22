@@ -105,10 +105,35 @@ function ensureDefaultCapacityData(): void {
   };
 
   if (shiftCount.cnt === 0) {
+    // Derive paidHours from start/end times instead of hardcoding
+    const computeShiftHours = (start: number, end: number): number =>
+      end > start ? end - start : 24 - start + end;
+
     const shifts = [
-      { code: "DAY", name: "Day", startHour: 7, endHour: 15, paidHours: 8.0, sortOrder: 0 },
-      { code: "SWING", name: "Swing", startHour: 15, endHour: 23, paidHours: 8.0, sortOrder: 1 },
-      { code: "NIGHT", name: "Night", startHour: 23, endHour: 7, paidHours: 8.0, sortOrder: 2 },
+      {
+        code: "DAY",
+        name: "Day",
+        startHour: 7,
+        endHour: 15,
+        paidHours: computeShiftHours(7, 15),
+        sortOrder: 0,
+      },
+      {
+        code: "SWING",
+        name: "Swing",
+        startHour: 15,
+        endHour: 23,
+        paidHours: computeShiftHours(15, 23),
+        sortOrder: 1,
+      },
+      {
+        code: "NIGHT",
+        name: "Night",
+        startHour: 23,
+        endHour: 7,
+        paidHours: computeShiftHours(23, 7),
+        sortOrder: 2,
+      },
     ];
 
     const insertShift = sqlite.prepare(

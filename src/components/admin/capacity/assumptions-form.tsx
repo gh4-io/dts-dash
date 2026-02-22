@@ -33,7 +33,7 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
 
   // Live preview calculations
   const preview = useMemo(() => {
-    const dayMH = 8.0 * paidToAvailable * availableToProductive;
+    const dayMH = 8.0 * availableToProductive;
     const nightMH = dayMH * nightProductivityFactor;
     const overallEfficiency = paidToAvailable * availableToProductive;
     return {
@@ -139,11 +139,10 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
           </div>
         </div>
         <div className="mt-2 text-[10px] text-muted-foreground text-center">
-          Formula: 8.0h paid x {paidToAvailable.toFixed(2)} x {availableToProductive.toFixed(2)}
-          {" = "}
-          {preview.dayMH.toFixed(2)} MH/person (Day)
-          {" | "}x {nightProductivityFactor.toFixed(2)} = {preview.nightMH.toFixed(2)} MH/person
-          (Night)
+          Heads x {paidToAvailable.toFixed(2)} (attendance) = eff. heads | 8.0h x{" "}
+          {availableToProductive.toFixed(2)} = {preview.dayMH.toFixed(2)} MH/eff. person (Day)
+          {" | "}x {nightProductivityFactor.toFixed(2)} = {preview.nightMH.toFixed(2)} MH/eff.
+          person (Night)
         </div>
       </div>
 
@@ -155,7 +154,7 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
         </h2>
 
         <SliderField
-          label="Paid-to-Available"
+          label="Attendance Rate"
           description="What % of scheduled staff actually show up? Accounts for call-offs, sick leave, vacation."
           value={paidToAvailable}
           onChange={setPaidToAvailable}

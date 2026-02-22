@@ -90,9 +90,7 @@ export function computeProductiveHoursPerPerson(
   const isNight = shift.code === "NIGHT";
   const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
 
-  return (
-    shift.paidHours * assumptions.paidToAvailable * assumptions.availableToProductive * nightFactor
-  );
+  return shift.paidHours * assumptions.availableToProductive * nightFactor;
 }
 
 // ─── Daily Capacity ────────────────────────────────────────────────────────
@@ -113,16 +111,19 @@ export function computeDailyCapacityV2(
   return dates.map((date) => {
     const byShift: ShiftCapacityV2[] = activeShifts.map((shift) => {
       const { headcount, hasExceptions } = resolveHeadcount(date, shift.id, plans, exceptions);
+      const effectiveHeadcount = headcount * assumptions.paidToAvailable;
 
       const productiveMHPerPerson = computeProductiveHoursPerPerson(shift, assumptions);
-      const paidMH = headcount * shift.paidHours;
-      const availableMH = headcount * shift.paidHours * assumptions.paidToAvailable;
-      const productiveMH = headcount * productiveMHPerPerson;
+      const paidMH = effectiveHeadcount * shift.paidHours;
+      const availableMH = paidMH;
+      const productiveMH = effectiveHeadcount * productiveMHPerPerson;
 
       return {
         shiftCode: shift.code,
         shiftName: shift.name,
-        effectiveHeadcount: headcount,
+        rosterHeadcount: headcount,
+        effectiveHeadcount,
+        paidHoursPerPerson: shift.paidHours,
         paidMH,
         availableMH,
         productiveMH,
@@ -165,23 +166,23 @@ export function computeDailyCapacityFromStaffing(
       const staffing = dayStaffing?.get(shift.code);
       const headcount = staffing?.headcount ?? 0;
       const paidHoursPerPerson = staffing?.effectivePaidHours ?? shift.paidHours;
+      const effectiveHeadcount = headcount * assumptions.paidToAvailable;
 
       const isNight = shift.code === "NIGHT";
       const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
       const productiveMHPerPerson =
-        paidHoursPerPerson *
-        assumptions.paidToAvailable *
-        assumptions.availableToProductive *
-        nightFactor;
+        paidHoursPerPerson * assumptions.availableToProductive * nightFactor;
 
-      const paidMH = headcount * paidHoursPerPerson;
-      const availableMH = headcount * paidHoursPerPerson * assumptions.paidToAvailable;
-      const productiveMH = headcount * productiveMHPerPerson;
+      const paidMH = effectiveHeadcount * paidHoursPerPerson;
+      const availableMH = paidMH;
+      const productiveMH = effectiveHeadcount * productiveMHPerPerson;
 
       return {
         shiftCode: shift.code,
         shiftName: shift.name,
-        effectiveHeadcount: headcount,
+        rosterHeadcount: headcount,
+        effectiveHeadcount,
+        paidHoursPerPerson,
         paidMH,
         availableMH,
         productiveMH,
@@ -300,7 +301,7 @@ export function validateHeadcountCoverage(
       const shift = shiftMap.get(shiftCap.shiftCode);
       if (shift && shiftCap.belowMinHeadcount) {
         warnings.push(
-          `${day.date} ${shiftCap.shiftName}: headcount ${shiftCap.effectiveHeadcount} below minimum ${shift.minHeadcount}`,
+          `${day.date} ${shiftCap.shiftName}: roster headcount ${shiftCap.rosterHeadcount} below minimum ${shift.minHeadcount}`,
         );
       }
     }

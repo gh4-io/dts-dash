@@ -262,14 +262,14 @@ describe("resolveHeadcount", () => {
 // ─── computeProductiveHoursPerPerson ───────────────────────────────────────
 
 describe("computeProductiveHoursPerPerson", () => {
-  it("computes Day shift: 8.0 × 0.89 × 0.73 = 5.20", () => {
+  it("computes Day shift: 8.0 × 0.73 = 5.84 (paidToAvailable is on headcount now)", () => {
     const result = computeProductiveHoursPerPerson(shifts[0], defaultAssumptions);
-    expect(result).toBeCloseTo(5.1976, 2);
+    expect(result).toBeCloseTo(8.0 * 0.73, 2);
   });
 
-  it("computes Night shift with factor: 8.0 × 0.89 × 0.73 × 0.85 = 4.42", () => {
+  it("computes Night shift with factor: 8.0 × 0.73 × 0.85 = 4.96", () => {
     const result = computeProductiveHoursPerPerson(shifts[2], defaultAssumptions);
-    expect(result).toBeCloseTo(4.418, 2);
+    expect(result).toBeCloseTo(8.0 * 0.73 * 0.85, 2);
   });
 
   it("does not apply night factor to non-night shifts", () => {
@@ -278,10 +278,10 @@ describe("computeProductiveHoursPerPerson", () => {
     expect(dayResult).toEqual(swingResult);
   });
 
-  it("returns 0 when paidToAvailable is 0", () => {
+  it("returns non-zero even when paidToAvailable is 0 (paidToAvailable is on headcount)", () => {
     const assumptions = { ...defaultAssumptions, paidToAvailable: 0 };
     const result = computeProductiveHoursPerPerson(shifts[0], assumptions);
-    expect(result).toBe(0);
+    expect(result).toBeCloseTo(8.0 * 0.73, 2);
   });
 });
 
@@ -301,9 +301,14 @@ describe("computeDailyCapacityV2", () => {
     expect(result[0].date).toBe("2025-03-10");
     expect(result[0].byShift).toHaveLength(3);
 
-    // Day: 8 heads × 5.20 = 41.58 MH
-    expect(result[0].byShift[0].effectiveHeadcount).toBe(8);
-    expect(result[0].byShift[0].productiveMH).toBeCloseTo(8 * 5.1976, 1);
+    // Day: roster 8, effective 8×0.89=7.12, productiveMH = 7.12 × 5.84 = 41.58
+    expect(result[0].byShift[0].rosterHeadcount).toBe(8);
+    expect(result[0].byShift[0].effectiveHeadcount).toBeCloseTo(8 * 0.89, 2);
+    expect(result[0].byShift[0].paidHoursPerPerson).toBe(8.0);
+    expect(result[0].byShift[0].paidMH).toBeCloseTo(8 * 0.89 * 8.0, 1);
+    expect(result[0].byShift[0].availableMH).toBeCloseTo(result[0].byShift[0].paidMH, 4);
+    // productiveMH total unchanged: 8 × 0.89 × 8.0 × 0.73 = 41.58
+    expect(result[0].byShift[0].productiveMH).toBeCloseTo(8 * 0.89 * 8.0 * 0.73, 1);
     expect(result[0].byShift[0].belowMinHeadcount).toBe(false);
   });
 
@@ -316,10 +321,14 @@ describe("computeDailyCapacityV2", () => {
       defaultAssumptions,
     );
 
+    // Total unchanged: roster × p2a × paidHours × a2p [× nightFactor]
+    const p2a = 0.89;
+    const a2p = 0.73;
+    const nf = 0.85;
     const expectedTotal =
-      8 * 5.1976 + // Day
-      6 * 5.1976 + // Swing
-      4 * 4.418; // Night
+      8 * p2a * 8.0 * a2p + // Day
+      6 * p2a * 8.0 * a2p + // Swing
+      4 * p2a * 8.0 * a2p * nf; // Night
 
     expect(result[0].totalProductiveMH).toBeCloseTo(expectedTotal, 0);
   });
@@ -343,16 +352,58 @@ describe("computeDailyCapacityV2", () => {
       defaultAssumptions,
     );
 
-    // Day: 8 + (-7) = 1, but minHeadcount = 2
-    expect(result[0].byShift[0].effectiveHeadcount).toBe(1);
+    // Day: roster 8 + (-7) = 1, effective = 1 × 0.89 = 0.89
+    // belowMinHeadcount compares roster (1) vs min (2) → true
+    expect(result[0].byShift[0].rosterHeadcount).toBe(1);
+    expect(result[0].byShift[0].effectiveHeadcount).toBeCloseTo(1 * 0.89, 2);
+    expect(result[0].byShift[0].paidHoursPerPerson).toBe(8.0);
     expect(result[0].byShift[0].belowMinHeadcount).toBe(true);
   });
 
   it("handles empty data (no plans)", () => {
     const result = computeDailyCapacityV2(["2025-03-10"], shifts, [], [], defaultAssumptions);
 
+    expect(result[0].byShift[0].rosterHeadcount).toBe(0);
     expect(result[0].byShift[0].effectiveHeadcount).toBe(0);
+    expect(result[0].byShift[0].paidHoursPerPerson).toBe(8.0);
     expect(result[0].totalProductiveMH).toBe(0);
+  });
+
+  it("belowMinHeadcount compares roster, not effective", () => {
+    // Roster = 3, effective = 3 × 0.89 = 2.67, minHeadcount = 2
+    // Should NOT be below min because roster (3) >= min (2)
+    const plans: HeadcountPlan[] = [
+      {
+        id: 10,
+        station: "CVG",
+        shiftId: 1,
+        headcount: 3,
+        effectiveFrom: "2020-01-01",
+        effectiveTo: null,
+        dayOfWeek: null,
+        label: "Test",
+        notes: null,
+      },
+    ];
+    const result = computeDailyCapacityV2(["2025-03-10"], shifts, plans, [], defaultAssumptions);
+
+    expect(result[0].byShift[0].rosterHeadcount).toBe(3);
+    expect(result[0].byShift[0].effectiveHeadcount).toBeCloseTo(3 * 0.89, 2);
+    expect(result[0].byShift[0].belowMinHeadcount).toBe(false);
+  });
+
+  it("availableMH equals paidMH (paidToAvailable absorbed into headcount)", () => {
+    const result = computeDailyCapacityV2(
+      ["2025-03-10"],
+      shifts,
+      basePlans,
+      [],
+      defaultAssumptions,
+    );
+
+    for (const shiftCap of result[0].byShift) {
+      expect(shiftCap.availableMH).toBeCloseTo(shiftCap.paidMH, 4);
+    }
   });
 });
 

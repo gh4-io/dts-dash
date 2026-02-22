@@ -20,6 +20,8 @@ import type {
   DailyUtilizationV2,
   CapacityShift,
   CapacityAssumptions,
+  CapacityComputeMode,
+  ResolvedShiftInfo,
 } from "@/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -125,13 +127,56 @@ function PipelineStatusBar({ stages }: { stages: PipelineStage[] }) {
   );
 }
 
+function ComputeModeBanner({
+  computeMode,
+  activeStaffingConfigName,
+}: {
+  computeMode: CapacityComputeMode;
+  activeStaffingConfigName: string | null;
+}) {
+  const isStaffing = computeMode === "staffing";
+  return (
+    <div
+      className={`rounded-lg border px-4 py-3 flex items-center gap-3 ${
+        isStaffing ? "border-sky-500/30 bg-sky-500/10" : "border-border bg-muted/30"
+      }`}
+    >
+      <i
+        className={`fa-solid ${isStaffing ? "fa-users-gear text-sky-400" : "fa-calculator text-muted-foreground"} text-lg`}
+      />
+      <div>
+        <p
+          className={`text-sm font-semibold ${isStaffing ? "text-sky-400" : "text-muted-foreground"}`}
+        >
+          {isStaffing ? "Staffing Mode" : "Headcount Plan Mode"}
+          {isStaffing && activeStaffingConfigName && (
+            <span className="ml-2 font-normal text-xs text-muted-foreground">
+              — {activeStaffingConfigName}
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {isStaffing
+            ? "Capacity computed from rotation-based staffing shifts with dynamic paid hours"
+            : "Capacity computed from static headcount plans and shift definitions"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ModelConfigSection({
   assumptions,
   shifts,
+  resolvedShifts,
+  computeMode,
 }: {
   assumptions: CapacityAssumptions | null;
   shifts: CapacityShift[];
+  resolvedShifts: ResolvedShiftInfo[];
+  computeMode: CapacityComputeMode;
 }) {
+  const isStaffing = computeMode === "staffing";
   const activeShifts = shifts.filter((s) => s.isActive);
 
   return (
@@ -144,7 +189,7 @@ function ModelConfigSection({
         </h2>
         {assumptions ? (
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-            <dt className="text-muted-foreground">Paid → Available</dt>
+            <dt className="text-muted-foreground">Attendance Rate</dt>
             <dd className="font-mono text-foreground">
               {(assumptions.paidToAvailable * 100).toFixed(0)}%
             </dd>
@@ -170,13 +215,71 @@ function ModelConfigSection({
         )}
       </div>
 
-      {/* Shifts */}
+      {/* Resolved Shifts */}
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-          <i className="fa-solid fa-clock mr-1.5" />
-          Shifts
+          <i className={`fa-solid ${isStaffing ? "fa-users-gear" : "fa-clock"} mr-1.5`} />
+          {isStaffing ? "Staffing Shifts" : "Capacity Shifts"}
+          <span className="ml-2 text-[10px] font-normal normal-case">
+            ({resolvedShifts.length > 0 ? resolvedShifts.length : activeShifts.length} active)
+          </span>
         </h2>
-        {activeShifts.length > 0 ? (
+        {resolvedShifts.length > 0 ? (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Name</TableHead>
+                <TableHead className="text-xs">Eff. Hours</TableHead>
+                <TableHead className="text-xs">Window</TableHead>
+                {isStaffing && <TableHead className="text-xs">Break/Lunch</TableHead>}
+                {isStaffing && <TableHead className="text-xs">HC</TableHead>}
+                {!isStaffing && <TableHead className="text-xs">Min HC</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {resolvedShifts.map((rs, i) => (
+                <TableRow key={`${rs.code}-${i}`}>
+                  <TableCell className="text-xs font-medium">
+                    <i className={`fa-solid ${shiftIcon(rs.code)} mr-1.5 text-muted-foreground`} />
+                    {rs.name}
+                    {rs.mhOverride !== null && (
+                      <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-400">
+                        override
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">
+                    {rs.mhOverride !== null ? (
+                      <span className="text-blue-400">{rs.mhOverride}h (MH)</span>
+                    ) : (
+                      `${rs.effectivePaidHours.toFixed(1)}h`
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">
+                    {String(rs.startHour).padStart(2, "0")}:
+                    {String(rs.startMinute).padStart(2, "0")}–{String(rs.endHour).padStart(2, "0")}:
+                    {String(rs.endMinute).padStart(2, "0")}
+                  </TableCell>
+                  {isStaffing && (
+                    <TableCell className="text-xs font-mono">
+                      {rs.breakMinutes > 0 || rs.lunchMinutes > 0
+                        ? `${rs.breakMinutes}m / ${rs.lunchMinutes}m`
+                        : "—"}
+                    </TableCell>
+                  )}
+                  {isStaffing && (
+                    <TableCell className="text-xs font-mono">{rs.headcount}</TableCell>
+                  )}
+                  {!isStaffing && (
+                    <TableCell className="text-xs font-mono">
+                      {activeShifts.find((s) => s.code === rs.code)?.minHeadcount ?? "—"}
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : activeShifts.length > 0 ? (
           <Table>
             <TableHeader>
               <TableRow>
@@ -184,7 +287,6 @@ function ModelConfigSection({
                 <TableHead className="text-xs">Hours</TableHead>
                 <TableHead className="text-xs">Window</TableHead>
                 <TableHead className="text-xs">Min HC</TableHead>
-                <TableHead className="text-xs">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -202,11 +304,6 @@ function ModelConfigSection({
                       {String(s.endHour).padStart(2, "0")}:00
                     </TableCell>
                     <TableCell className="text-xs font-mono">{s.minHeadcount}</TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                        Active
-                      </span>
-                    </TableCell>
                   </TableRow>
                 ))}
             </TableBody>
@@ -222,19 +319,45 @@ function ModelConfigSection({
 function FormulaTrace({
   assumptions,
   shifts,
+  resolvedShifts,
 }: {
   assumptions: CapacityAssumptions | null;
   shifts: CapacityShift[];
+  resolvedShifts: ResolvedShiftInfo[];
 }) {
   if (!assumptions) return null;
-  const activeShifts = shifts.filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
-  if (activeShifts.length === 0) return null;
 
   const {
     paidToAvailable: p2a,
     availableToProductive: a2p,
     nightProductivityFactor: nf,
   } = assumptions;
+
+  // Use resolved shifts if available, otherwise fall back to static capacity shifts
+  const traceShifts: {
+    code: string;
+    name: string;
+    paidHours: number;
+    mhOverride: number | null;
+  }[] =
+    resolvedShifts.length > 0
+      ? resolvedShifts.map((rs) => ({
+          code: rs.code,
+          name: rs.name,
+          paidHours: rs.effectivePaidHours,
+          mhOverride: rs.mhOverride,
+        }))
+      : shifts
+          .filter((s) => s.isActive)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((s) => ({
+            code: s.code,
+            name: s.name,
+            paidHours: s.paidHours,
+            mhOverride: null,
+          }));
+
+  if (traceShifts.length === 0) return null;
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
@@ -243,27 +366,37 @@ function FormulaTrace({
         Productive MH Formula Trace
       </h2>
       <p className="text-xs text-muted-foreground font-mono">
-        paidHours × paidToAvailable × availableToProductive [× nightFactor] = MH/person
+        effHeads = roster × {p2a.toFixed(2)} (attendance) | MH/person = paidHours ×
+        availableToProductive [× nightFactor]
       </p>
       <div className="space-y-1.5">
-        {activeShifts.map((s) => {
+        {traceShifts.map((s, i) => {
           const isNight = s.code.toUpperCase() === "NIGHT";
           const factor = isNight ? nf : 1.0;
-          const result = s.paidHours * p2a * a2p * factor;
+          const mhPerPerson = s.paidHours * a2p * factor;
           return (
-            <div key={s.code} className="flex items-center gap-2 text-xs font-mono">
+            <div key={`${s.code}-${i}`} className="flex items-center gap-2 text-xs font-mono">
               <i
                 className={`fa-solid ${shiftIcon(s.code)} w-4 text-center text-muted-foreground`}
               />
-              <span className="w-14 text-muted-foreground">{s.code}:</span>
+              <span className="w-20 text-muted-foreground truncate" title={s.name}>
+                {s.name}:
+              </span>
               <span>
-                {s.paidHours.toFixed(1)} × {p2a.toFixed(2)} × {a2p.toFixed(2)} ×{" "}
+                {s.paidHours.toFixed(1)} × {a2p.toFixed(2)} ×{" "}
                 <span className={isNight ? "text-indigo-400 font-semibold" : ""}>
                   {factor.toFixed(2)}
                 </span>
               </span>
               <span className="text-muted-foreground">=</span>
-              <span className="text-emerald-400 font-semibold">{result.toFixed(2)} MH/person</span>
+              <span className="text-emerald-400 font-semibold">
+                {mhPerPerson.toFixed(2)} MH/person
+              </span>
+              {s.mhOverride !== null && (
+                <span className="text-[9px] px-1 py-0.5 rounded bg-blue-500/15 text-blue-400">
+                  override
+                </span>
+              )}
             </div>
           );
         })}
@@ -377,8 +510,11 @@ function DailyTable({
                         colSpan={2}
                         className="px-3 py-2 text-center font-mono border-l border-border/50"
                       >
-                        <span className={sc?.belowMinHeadcount ? "text-amber-400" : ""}>
-                          {sc?.effectiveHeadcount ?? "—"}
+                        <span
+                          className={sc?.belowMinHeadcount ? "text-amber-400" : ""}
+                          title={sc ? `Roster: ${sc.rosterHeadcount}` : undefined}
+                        >
+                          {sc ? fmtNum(sc.effectiveHeadcount) : "—"}
                         </span>
                         <span className="mx-2 text-muted-foreground">/</span>
                         <span>{sc ? fmtNum(sc.productiveMH) : "—"}</span>
@@ -477,8 +613,13 @@ function SelectedDayPanel({
                 )}
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                <dt className="text-muted-foreground">Headcount</dt>
-                <dd className="font-mono text-right">{sc?.effectiveHeadcount ?? "—"}</dd>
+                <dt className="text-muted-foreground">Eff. Heads</dt>
+                <dd
+                  className="font-mono text-right"
+                  title={sc ? `Roster: ${sc.rosterHeadcount}` : undefined}
+                >
+                  {sc ? fmtNum(sc.effectiveHeadcount) : "—"}
+                </dd>
                 <dt className="text-muted-foreground">Cap MH</dt>
                 <dd className="font-mono text-right">{sc ? fmtNum(sc.productiveMH) : "—"}</dd>
                 <dt className="text-muted-foreground">Demand MH</dt>
@@ -666,6 +807,9 @@ export default function DevOverviewPage() {
     forecastRates,
     timeBookings,
     billingEntries,
+    computeMode,
+    resolvedShifts,
+    activeStaffingConfigName,
     isLoading,
     error,
   } = useCapacityV2();
@@ -711,6 +855,8 @@ export default function DevOverviewPage() {
   const selectedDem = selectedDate ? demand.find((d) => d.date === selectedDate) : null;
 
   const rawSections = [
+    { label: "Compute Mode", key: "compute-mode", data: { computeMode, activeStaffingConfigName } },
+    { label: "Resolved Shifts", key: "resolved-shifts", data: resolvedShifts },
     { label: "Assumptions", key: "assumptions", data: assumptions },
     { label: "Shifts", key: "shifts", data: shifts },
     {
@@ -770,11 +916,22 @@ export default function DevOverviewPage() {
       {/* 2. Pipeline Status */}
       <PipelineStatusBar stages={stages} />
 
+      {/* 2b. Compute Mode Banner */}
+      <ComputeModeBanner
+        computeMode={computeMode}
+        activeStaffingConfigName={activeStaffingConfigName}
+      />
+
       {/* 3. Model Config */}
-      <ModelConfigSection assumptions={assumptions} shifts={shifts} />
+      <ModelConfigSection
+        assumptions={assumptions}
+        shifts={shifts}
+        resolvedShifts={resolvedShifts}
+        computeMode={computeMode}
+      />
 
       {/* 4. Formula Trace */}
-      <FormulaTrace assumptions={assumptions} shifts={shifts} />
+      <FormulaTrace assumptions={assumptions} shifts={shifts} resolvedShifts={resolvedShifts} />
 
       {/* 5. Daily Table */}
       <DailyTable
