@@ -930,6 +930,56 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M016: Nullable aircraft_reg + recurrence fields for flight_events
+  // SQLite cannot ALTER COLUMN — full table rebuild required.
+  results.push(
+    applyMigration("M016_flight_events_recurrence", () => {
+      sqlite.exec(`
+        CREATE TABLE flight_events_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_package_id INTEGER,
+          aircraft_reg TEXT,
+          customer TEXT NOT NULL,
+          scheduled_arrival TEXT,
+          actual_arrival TEXT,
+          scheduled_departure TEXT,
+          actual_departure TEXT,
+          arrival_window_minutes INTEGER NOT NULL DEFAULT 30,
+          departure_window_minutes INTEGER NOT NULL DEFAULT 60,
+          status TEXT NOT NULL,
+          source TEXT NOT NULL,
+          notes TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          is_recurring INTEGER NOT NULL DEFAULT 0,
+          day_pattern TEXT,
+          recurrence_start TEXT,
+          recurrence_end TEXT,
+          arrival_time_utc TEXT,
+          departure_time_utc TEXT,
+          suppressed_dates TEXT,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO flight_events_new
+          SELECT id, work_package_id, aircraft_reg, customer,
+                 scheduled_arrival, actual_arrival, scheduled_departure, actual_departure,
+                 arrival_window_minutes, departure_window_minutes,
+                 status, source, notes, is_active,
+                 0, NULL, NULL, NULL, NULL, NULL, '[]',
+                 created_by, created_at, updated_at
+          FROM flight_events;
+        DROP TABLE flight_events;
+        ALTER TABLE flight_events_new RENAME TO flight_events;
+        CREATE INDEX idx_fe_aircraft_reg ON flight_events(aircraft_reg);
+        CREATE INDEX idx_fe_scheduled_arrival ON flight_events(scheduled_arrival);
+        CREATE INDEX idx_fe_scheduled_departure ON flight_events(scheduled_departure);
+        CREATE INDEX idx_fe_work_package_id ON flight_events(work_package_id);
+        CREATE INDEX idx_fe_is_recurring ON flight_events(is_recurring);
+      `);
+    }),
+  );
+
   return results;
 }
 

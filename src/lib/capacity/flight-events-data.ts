@@ -14,7 +14,8 @@ import type { FlightEvent, FlightEventStatus, FlightEventSource } from "@/types"
 
 /**
  * Load flight events, optionally filtered by date range.
- * Date range matches if ANY of the 4 datetime columns falls within range.
+ * Date range matches if ANY of the 4 datetime columns falls within range,
+ * OR if the event is a recurring template whose recurrence range overlaps.
  */
 export function loadFlightEvents(
   startDate?: string,
@@ -28,12 +29,15 @@ export function loadFlightEvents(
   }
 
   if (startDate && endDate) {
-    // Include events where any datetime column overlaps [startDate, endDate]
     const startISO = startDate.includes("T") ? startDate : startDate + "T00:00:00.000Z";
     const endISO = endDate.includes("T") ? endDate : endDate + "T23:59:59.999Z";
+    // Extract date-only for recurring range comparison
+    const startDateOnly = startDate.split("T")[0];
+    const endDateOnly = endDate.split("T")[0];
 
     conditions.push(
       or(
+        // One-off events: any datetime column overlaps [startDate, endDate]
         and(
           gte(flightEvents.scheduledArrival, startISO),
           lte(flightEvents.scheduledArrival, endISO),
@@ -44,6 +48,12 @@ export function loadFlightEvents(
           lte(flightEvents.scheduledDeparture, endISO),
         ),
         and(gte(flightEvents.actualDeparture, startISO), lte(flightEvents.actualDeparture, endISO)),
+        // Recurring templates: recurrence range overlaps query range
+        and(
+          eq(flightEvents.isRecurring, true),
+          lte(flightEvents.recurrenceStart, endDateOnly),
+          gte(flightEvents.recurrenceEnd, startDateOnly),
+        ),
       ),
     );
   }
@@ -76,7 +86,7 @@ export function createFlightEvent(
     .insert(flightEvents)
     .values({
       workPackageId: data.workPackageId ?? null,
-      aircraftReg: data.aircraftReg,
+      aircraftReg: data.aircraftReg ?? null,
       customer: data.customer,
       scheduledArrival: data.scheduledArrival ?? null,
       actualArrival: data.actualArrival ?? null,
@@ -88,6 +98,13 @@ export function createFlightEvent(
       source: data.source,
       notes: data.notes ?? null,
       isActive: data.isActive ?? true,
+      isRecurring: data.isRecurring ?? false,
+      dayPattern: data.dayPattern ?? null,
+      recurrenceStart: data.recurrenceStart ?? null,
+      recurrenceEnd: data.recurrenceEnd ?? null,
+      arrivalTimeUtc: data.arrivalTimeUtc ?? null,
+      departureTimeUtc: data.departureTimeUtc ?? null,
+      suppressedDates: JSON.stringify(data.suppressedDates ?? []),
       createdBy: data.createdBy ?? null,
       createdAt: now,
       updatedAt: now,
@@ -121,6 +138,14 @@ export function updateFlightEvent(id: number, data: Partial<FlightEvent>): Fligh
   if (data.source !== undefined) updates.source = data.source;
   if (data.notes !== undefined) updates.notes = data.notes;
   if (data.isActive !== undefined) updates.isActive = data.isActive;
+  if (data.isRecurring !== undefined) updates.isRecurring = data.isRecurring;
+  if (data.dayPattern !== undefined) updates.dayPattern = data.dayPattern;
+  if (data.recurrenceStart !== undefined) updates.recurrenceStart = data.recurrenceStart;
+  if (data.recurrenceEnd !== undefined) updates.recurrenceEnd = data.recurrenceEnd;
+  if (data.arrivalTimeUtc !== undefined) updates.arrivalTimeUtc = data.arrivalTimeUtc;
+  if (data.departureTimeUtc !== undefined) updates.departureTimeUtc = data.departureTimeUtc;
+  if (data.suppressedDates !== undefined)
+    updates.suppressedDates = JSON.stringify(data.suppressedDates);
 
   db.update(flightEvents).set(updates).where(eq(flightEvents.id, id)).run();
 
@@ -139,6 +164,15 @@ export function deleteFlightEvent(id: number): boolean {
 // ─── DTO Helper ───────────────────────────────────────────────────────────────
 
 function toDTO(row: typeof flightEvents.$inferSelect): FlightEvent {
+  let suppressedDates: string[] = [];
+  if (row.suppressedDates) {
+    try {
+      suppressedDates = JSON.parse(row.suppressedDates);
+    } catch {
+      suppressedDates = [];
+    }
+  }
+
   return {
     id: row.id,
     workPackageId: row.workPackageId,
@@ -154,6 +188,13 @@ function toDTO(row: typeof flightEvents.$inferSelect): FlightEvent {
     source: row.source as FlightEventSource,
     notes: row.notes,
     isActive: row.isActive,
+    isRecurring: row.isRecurring,
+    dayPattern: row.dayPattern,
+    recurrenceStart: row.recurrenceStart,
+    recurrenceEnd: row.recurrenceEnd,
+    arrivalTimeUtc: row.arrivalTimeUtc,
+    departureTimeUtc: row.departureTimeUtc,
+    suppressedDates,
     createdBy: row.createdBy ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

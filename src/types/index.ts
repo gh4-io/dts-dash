@@ -269,13 +269,13 @@ export interface DemandContract {
 
 // ─── Flight Events (P2-1) ───────────────────────────────────────────────────
 
-export type FlightEventStatus = "scheduled" | "actual" | "cancelled";
+export type FlightEventStatus = "planned" | "scheduled" | "actual" | "cancelled";
 export type FlightEventSource = "work_package" | "manual" | "import";
 
 export interface FlightEvent {
   id: number;
   workPackageId: number | null; // logical ref only — no FK
-  aircraftReg: string;
+  aircraftReg: string | null; // tail number OR flight number; null for unassigned planned
   customer: string;
   scheduledArrival: string | null; // ISO datetime
   actualArrival: string | null;
@@ -283,10 +283,19 @@ export interface FlightEvent {
   actualDeparture: string | null;
   arrivalWindowMinutes: number; // default 30
   departureWindowMinutes: number; // default 60
-  status: FlightEventStatus;
+  status: FlightEventStatus; // planned | scheduled | actual | cancelled
   source: FlightEventSource;
   notes: string | null;
   isActive: boolean;
+  // ── Recurrence fields ──────────────────────────────────────────────────
+  isRecurring: boolean;
+  dayPattern: string | null; // "12345.." OASIS-style: 1=Mon..7=Sun, .=not operating
+  recurrenceStart: string | null; // "YYYY-MM-DD" effective from
+  recurrenceEnd: string | null; // "YYYY-MM-DD" effective to
+  arrivalTimeUtc: string | null; // "HH:MM" recurring arrival time
+  departureTimeUtc: string | null; // "HH:MM" recurring departure time
+  suppressedDates: string[]; // ["YYYY-MM-DD", ...] exception dates
+  // ────────────────────────────────────────────────────────────────────────
   createdBy?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -295,7 +304,7 @@ export interface FlightEvent {
 /** Computed coverage window from a flight event's effective arrival/departure */
 export interface EventCoverageWindow {
   eventId: number;
-  aircraftReg: string;
+  aircraftReg: string | null;
   customer: string;
   windowType: "arrival" | "departure";
   startTime: string; // ISO datetime

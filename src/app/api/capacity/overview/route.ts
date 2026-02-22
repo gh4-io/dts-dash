@@ -25,6 +25,7 @@ import {
   loadFlightEvents,
   computeAllEventWindows,
   computeConcurrencyPressure,
+  expandRecurringEvent,
   aggregateConcurrencyByDay,
   aggregateConcurrencyByShift,
   applyConcurrencyPressure,
@@ -128,8 +129,41 @@ export async function GET(request: NextRequest) {
       adjustedDemand = applyAllocations(demand, contracts, shifts, customerNameMap);
     }
 
-    // Load flight events and compute coverage windows for date range
-    const flightEvents = loadFlightEvents(startDate, endDate, true);
+    // Load flight events, expand recurring templates, and compute coverage windows
+    const rawFlightEvents = loadFlightEvents(startDate, endDate, true);
+
+    // Separate recurring templates from specific (one-off) events
+    const recurringTemplates = rawFlightEvents.filter((e) => e.isRecurring);
+    const specificEvents = rawFlightEvents.filter((e) => !e.isRecurring);
+
+    // Build natural-key lookup for auto-suppress
+    // Key = aircraftReg (flight number) + customer + date
+    const specificByKey = new Set(
+      specificEvents
+        .filter((e) => e.aircraftReg)
+        .flatMap((e) => {
+          const dates = [
+            e.scheduledArrival?.slice(0, 10),
+            e.scheduledDeparture?.slice(0, 10),
+            e.actualArrival?.slice(0, 10),
+            e.actualDeparture?.slice(0, 10),
+          ].filter(Boolean) as string[];
+          return dates.map((d) => `${e.aircraftReg}|${e.customer}|${d}`);
+        }),
+    );
+
+    // Expand recurring templates, skipping auto-suppressed dates
+    const expandedFromTemplates = recurringTemplates.flatMap((template) =>
+      expandRecurringEvent(template, startDate, endDate).filter((instance) => {
+        const instanceDate =
+          instance.scheduledArrival?.slice(0, 10) ?? instance.scheduledDeparture?.slice(0, 10);
+        if (!instanceDate || !template.aircraftReg) return true;
+        const key = `${template.aircraftReg}|${template.customer}|${instanceDate}`;
+        return !specificByKey.has(key); // auto-suppress if specific event exists
+      }),
+    );
+
+    const flightEvents = [...specificEvents, ...expandedFromTemplates];
     const coverageWindows =
       flightEvents.length > 0
         ? computeAllEventWindows(flightEvents, startDate, endDate)

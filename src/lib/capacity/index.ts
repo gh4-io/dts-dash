@@ -93,6 +93,8 @@ export {
   computeCoverageRequirements,
   computeConcurrencyPressure,
   validateFlightEvent,
+  expandRecurringEvent,
+  VALID_STATUSES as VALID_FLIGHT_EVENT_STATUSES,
 } from "./flight-events-engine";
 
 // Concurrency pressure analysis (P2-4, pure functions)

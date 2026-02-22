@@ -63,21 +63,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isRecurring = !!body.isRecurring;
     const userId = Number(session.user.id);
     const event = createFlightEvent({
       workPackageId: body.workPackageId ?? null,
-      aircraftReg: body.aircraftReg.trim(),
+      aircraftReg: body.aircraftReg?.trim() || null,
       customer: body.customer.trim(),
-      scheduledArrival: body.scheduledArrival || null,
-      actualArrival: body.actualArrival || null,
-      scheduledDeparture: body.scheduledDeparture || null,
-      actualDeparture: body.actualDeparture || null,
+      scheduledArrival: isRecurring ? null : body.scheduledArrival || null,
+      actualArrival: isRecurring ? null : body.actualArrival || null,
+      scheduledDeparture: isRecurring ? null : body.scheduledDeparture || null,
+      actualDeparture: isRecurring ? null : body.actualDeparture || null,
       arrivalWindowMinutes: arrWin,
       departureWindowMinutes: depWin,
       status: body.status,
       source: body.source,
       notes: body.notes || null,
       isActive: body.isActive ?? true,
+      isRecurring,
+      dayPattern: isRecurring ? body.dayPattern : null,
+      recurrenceStart: isRecurring ? body.recurrenceStart || null : null,
+      recurrenceEnd: isRecurring ? body.recurrenceEnd || null : null,
+      arrivalTimeUtc: isRecurring ? body.arrivalTimeUtc || null : null,
+      departureTimeUtc: isRecurring ? body.departureTimeUtc || null : null,
+      suppressedDates: isRecurring ? (body.suppressedDates ?? []) : [],
       createdBy: userId,
     });
 

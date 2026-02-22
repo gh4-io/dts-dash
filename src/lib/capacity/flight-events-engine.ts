@@ -2,7 +2,8 @@
  * Flight Events Engine (P2-1)
  *
  * Pure functions for computing coverage windows, concurrency pressure,
- * and validating flight event data. Zero DB imports.
+ * validating flight event data, and expanding recurring schedules.
+ * Zero DB imports.
  */
 
 import type {
@@ -14,6 +15,13 @@ import type {
   CapacityShift,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+export const VALID_STATUSES: FlightEventStatus[] = ["planned", "scheduled", "actual", "cancelled"];
+const VALID_SOURCES: FlightEventSource[] = ["work_package", "manual", "import"];
+export const DAY_PATTERN_LENGTH = 7;
+export const DAY_PATTERN_REGEX = /^[1-7.]{7}$/;
 
 // ─── Coverage Window Computation ────────────────────────────────────────────
 
@@ -217,10 +225,89 @@ export function computeConcurrencyPressure(
   return buckets;
 }
 
-// ─── Validation ─────────────────────────────────────────────────────────────
+// ─── Recurrence Expansion ───────────────────────────────────────────────────
 
-const VALID_STATUSES: FlightEventStatus[] = ["scheduled", "actual", "cancelled"];
-const VALID_SOURCES: FlightEventSource[] = ["work_package", "manual", "import"];
+/**
+ * Expands a recurring FlightEvent template into concrete single-day instances
+ * within [queryStart, queryEnd] (ISO date strings "YYYY-MM-DD").
+ * Honors suppressedDates on the template — those dates are skipped.
+ * Auto-suppress (flight number + date matching) is handled at the call site.
+ */
+export function expandRecurringEvent(
+  event: FlightEvent,
+  queryStart: string,
+  queryEnd: string,
+): FlightEvent[] {
+  if (!event.isRecurring || !event.dayPattern || !event.recurrenceStart || !event.recurrenceEnd) {
+    return [];
+  }
+
+  const suppressed = new Set(event.suppressedDates ?? []);
+  const instances: FlightEvent[] = [];
+
+  const start = new Date(
+    Math.max(
+      new Date(event.recurrenceStart + "T00:00:00.000Z").getTime(),
+      new Date(queryStart + "T00:00:00.000Z").getTime(),
+    ),
+  );
+  const end = new Date(
+    Math.min(
+      new Date(event.recurrenceEnd + "T00:00:00.000Z").getTime(),
+      new Date(queryEnd + "T00:00:00.000Z").getTime(),
+    ),
+  );
+
+  const cursor = new Date(start);
+  cursor.setUTCHours(0, 0, 0, 0);
+
+  while (cursor <= end) {
+    const dow = cursor.getUTCDay(); // 0=Sun
+    const patternIdx = dow === 0 ? 6 : dow - 1; // map to 0=Mon...6=Sun
+    const patternChar = event.dayPattern[patternIdx];
+    const dateStr = cursor.toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+    if (patternChar !== "." && !suppressed.has(dateStr)) {
+      let scheduledArrival: string | null = null;
+      let scheduledDeparture: string | null = null;
+
+      if (event.arrivalTimeUtc) {
+        scheduledArrival = `${dateStr}T${event.arrivalTimeUtc}:00.000Z`;
+      }
+      if (event.departureTimeUtc) {
+        // Handle cross-midnight: if departure time < arrival time, departure is next day
+        let depDate = dateStr;
+        if (event.arrivalTimeUtc && event.departureTimeUtc < event.arrivalTimeUtc) {
+          const nextDay = new Date(cursor);
+          nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+          depDate = nextDay.toISOString().slice(0, 10);
+        }
+        scheduledDeparture = `${depDate}T${event.departureTimeUtc}:00.000Z`;
+      }
+
+      instances.push({
+        ...event,
+        scheduledArrival,
+        scheduledDeparture,
+        actualArrival: null,
+        actualDeparture: null,
+        isRecurring: false, // mark as expanded instance
+        dayPattern: null,
+        recurrenceStart: null,
+        recurrenceEnd: null,
+        arrivalTimeUtc: null,
+        departureTimeUtc: null,
+        suppressedDates: [],
+      });
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return instances;
+}
+
+// ─── Validation ─────────────────────────────────────────────────────────────
 
 interface ValidationResult {
   valid: boolean;
@@ -230,10 +317,7 @@ interface ValidationResult {
 export function validateFlightEvent(data: Record<string, unknown>): ValidationResult {
   const errors: string[] = [];
 
-  // Required fields
-  if (!data.aircraftReg || typeof data.aircraftReg !== "string" || !data.aircraftReg.trim()) {
-    errors.push("aircraftReg is required");
-  }
+  // Customer is always required
   if (!data.customer || typeof data.customer !== "string" || !data.customer.trim()) {
     errors.push("customer is required");
   }
@@ -262,31 +346,93 @@ export function validateFlightEvent(data: Record<string, unknown>): ValidationRe
     }
   }
 
-  // Datetime fields — check parseability
-  const dtFields = [
-    "scheduledArrival",
-    "actualArrival",
-    "scheduledDeparture",
-    "actualDeparture",
-  ] as const;
-  for (const field of dtFields) {
-    const val = data[field];
-    if (val !== undefined && val !== null && val !== "") {
-      const d = new Date(val as string);
-      if (isNaN(d.getTime())) {
-        errors.push(`${field} is not a valid datetime`);
+  const isRecurring = !!data.isRecurring;
+
+  if (isRecurring) {
+    // ── Recurring event validation ───────────────────────────────────────
+    // Recurring events must NOT have specific datetime fields
+    if (
+      data.scheduledArrival ||
+      data.actualArrival ||
+      data.scheduledDeparture ||
+      data.actualDeparture
+    ) {
+      errors.push("Recurring events must not have specific datetime fields set");
+    }
+
+    // dayPattern required and valid
+    if (!data.dayPattern || !DAY_PATTERN_REGEX.test(data.dayPattern as string)) {
+      errors.push("dayPattern must be a 7-character string (e.g. '12345..')");
+    } else if ((data.dayPattern as string).replace(/\./g, "").length === 0) {
+      errors.push("dayPattern must have at least one operating day");
+    }
+
+    // Date range required
+    if (!data.recurrenceStart) errors.push("recurrenceStart is required for recurring events");
+    if (!data.recurrenceEnd) errors.push("recurrenceEnd is required for recurring events");
+    if (
+      data.recurrenceStart &&
+      data.recurrenceEnd &&
+      (data.recurrenceEnd as string) < (data.recurrenceStart as string)
+    ) {
+      errors.push("recurrenceEnd must be on or after recurrenceStart");
+    }
+
+    // At least one time required
+    if (!data.arrivalTimeUtc && !data.departureTimeUtc) {
+      errors.push("At least one of arrivalTimeUtc or departureTimeUtc is required");
+    }
+
+    // Validate HH:MM format
+    const timeRegex = /^\d{2}:\d{2}$/;
+    if (data.arrivalTimeUtc && !timeRegex.test(data.arrivalTimeUtc as string)) {
+      errors.push("arrivalTimeUtc must be in HH:MM format");
+    }
+    if (data.departureTimeUtc && !timeRegex.test(data.departureTimeUtc as string)) {
+      errors.push("departureTimeUtc must be in HH:MM format");
+    }
+  } else {
+    // ── One-off event validation ─────────────────────────────────────────
+    // Recurrence fields must be absent
+    if (data.dayPattern || data.recurrenceStart || data.recurrenceEnd) {
+      errors.push("Non-recurring events must not have recurrence fields set");
+    }
+
+    // aircraftReg required for non-planned one-off events
+    if (data.status !== "planned") {
+      if (!data.aircraftReg || typeof data.aircraftReg !== "string" || !data.aircraftReg.trim()) {
+        errors.push(
+          "Aircraft Reg / Flight No. is required for scheduled, actual, and cancelled events",
+        );
       }
     }
-  }
 
-  // Departure must be after arrival when both effective times are present
-  const effArr = (data.actualArrival ?? data.scheduledArrival) as string | undefined | null;
-  const effDep = (data.actualDeparture ?? data.scheduledDeparture) as string | undefined | null;
-  if (effArr && effDep) {
-    const arrDate = new Date(effArr);
-    const depDate = new Date(effDep);
-    if (!isNaN(arrDate.getTime()) && !isNaN(depDate.getTime()) && depDate <= arrDate) {
-      errors.push("effective departure must be after effective arrival");
+    // Datetime fields — check parseability
+    const dtFields = [
+      "scheduledArrival",
+      "actualArrival",
+      "scheduledDeparture",
+      "actualDeparture",
+    ] as const;
+    for (const field of dtFields) {
+      const val = data[field];
+      if (val !== undefined && val !== null && val !== "") {
+        const d = new Date(val as string);
+        if (isNaN(d.getTime())) {
+          errors.push(`${field} is not a valid datetime`);
+        }
+      }
+    }
+
+    // Departure must be after arrival when both effective times are present
+    const effArr = (data.actualArrival ?? data.scheduledArrival) as string | undefined | null;
+    const effDep = (data.actualDeparture ?? data.scheduledDeparture) as string | undefined | null;
+    if (effArr && effDep) {
+      const arrDate = new Date(effArr);
+      const depDate = new Date(effDep);
+      if (!isNaN(arrDate.getTime()) && !isNaN(depDate.getTime()) && depDate <= arrDate) {
+        errors.push("effective departure must be after effective arrival");
+      }
     }
   }
 

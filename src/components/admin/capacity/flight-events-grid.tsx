@@ -38,7 +38,27 @@ function formatDatetime(dt: string | null): string {
   });
 }
 
+/** "12345.." → "Mon–Fri"  |  "1......" → "Mon"  |  ".....67" → "Sat–Sun" */
+function formatDayPattern(pattern: string | null): string {
+  if (!pattern) return "";
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const active = days.filter((_, i) => pattern[i] !== ".");
+  if (active.length === 0) return "";
+  if (active.length === 1) return active[0];
+  if (active.length === 7) return "Daily";
+  if (pattern === "12345..") return "Mon–Fri";
+  if (pattern === ".....67") return "Sat–Sun";
+  // Check if contiguous
+  const first = days.indexOf(active[0]);
+  const last = days.indexOf(active[active.length - 1]);
+  if (last - first + 1 === active.length) {
+    return active[0] + "–" + active[active.length - 1];
+  }
+  return active.join(", ");
+}
+
 const STATUS_STYLES: Record<string, string> = {
+  planned: "border-amber-500/50 text-amber-500",
   scheduled: "border-blue-500/50 text-blue-500",
   actual: "border-emerald-500/50 text-emerald-500",
   cancelled: "border-muted-foreground/50 text-muted-foreground",
@@ -108,12 +128,11 @@ export function FlightEventsGrid({ events, onCreate, onUpdate, onDelete }: Fligh
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Aircraft</TableHead>
+                <TableHead>Aircraft / Flight No.</TableHead>
+                <TableHead className="w-16">Repeat</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Sched Arr</TableHead>
-                <TableHead>Act Arr</TableHead>
                 <TableHead>Sched Dep</TableHead>
-                <TableHead>Act Dep</TableHead>
                 <TableHead>Windows</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Source</TableHead>
@@ -124,23 +143,48 @@ export function FlightEventsGrid({ events, onCreate, onUpdate, onDelete }: Fligh
               {events.map((event) => (
                 <TableRow key={event.id} className={!event.isActive ? "opacity-50" : ""}>
                   <TableCell className="font-mono text-sm font-medium">
-                    {event.aircraftReg}
+                    {event.aircraftReg ?? (
+                      <span className="text-muted-foreground italic text-xs">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {event.isRecurring && (
+                      <span
+                        title={`${event.dayPattern} · ${event.recurrenceStart} – ${event.recurrenceEnd}`}
+                        className="flex items-center gap-1"
+                      >
+                        <i className="fa-solid fa-rotate text-amber-500 text-xs" />
+                        <span className="text-xs text-muted-foreground">
+                          {formatDayPattern(event.dayPattern)}
+                        </span>
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm">{event.customer}</TableCell>
                   <TableCell className="text-sm font-mono text-xs">
-                    {formatDatetime(event.scheduledArrival)}
+                    {event.isRecurring
+                      ? event.arrivalTimeUtc
+                        ? `${event.arrivalTimeUtc} UTC`
+                        : "—"
+                      : formatDatetime(event.scheduledArrival)}
                   </TableCell>
                   <TableCell className="text-sm font-mono text-xs">
-                    {formatDatetime(event.actualArrival)}
-                  </TableCell>
-                  <TableCell className="text-sm font-mono text-xs">
-                    {formatDatetime(event.scheduledDeparture)}
-                  </TableCell>
-                  <TableCell className="text-sm font-mono text-xs">
-                    {formatDatetime(event.actualDeparture)}
+                    {event.isRecurring
+                      ? event.departureTimeUtc
+                        ? `${event.departureTimeUtc} UTC`
+                        : "—"
+                      : formatDatetime(event.scheduledDeparture)}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    +{event.arrivalWindowMinutes}m / -{event.departureWindowMinutes}m
+                    {event.isRecurring ? (
+                      <span className="text-xs">
+                        {event.recurrenceStart} → {event.recurrenceEnd}
+                      </span>
+                    ) : (
+                      <>
+                        +{event.arrivalWindowMinutes}m / -{event.departureWindowMinutes}m
+                      </>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={STATUS_STYLES[event.status] ?? ""}>
@@ -176,8 +220,9 @@ export function FlightEventsGrid({ events, onCreate, onUpdate, onDelete }: Fligh
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Flight Event</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Delete the {event.status} event for {event.aircraftReg} (
-                              {event.customer})? This cannot be undone.
+                              Delete the {event.status} event for{" "}
+                              {event.aircraftReg ?? "unassigned aircraft"} ({event.customer})? This
+                              cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

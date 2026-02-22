@@ -4,6 +4,7 @@ import {
   computeAllEventWindows,
   computeConcurrencyPressure,
   validateFlightEvent,
+  expandRecurringEvent,
 } from "@/lib/capacity/flight-events-engine";
 import type { FlightEvent } from "@/types";
 
@@ -25,10 +26,34 @@ function makeEvent(overrides: Partial<FlightEvent> = {}): FlightEvent {
     source: "manual",
     notes: null,
     isActive: true,
+    isRecurring: false,
+    dayPattern: null,
+    recurrenceStart: null,
+    recurrenceEnd: null,
+    arrivalTimeUtc: null,
+    departureTimeUtc: null,
+    suppressedDates: [],
     createdAt: "2026-02-21T00:00:00.000Z",
     updatedAt: "2026-02-21T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function makeRecurringEvent(overrides: Partial<FlightEvent> = {}): FlightEvent {
+  return makeEvent({
+    aircraftReg: "107",
+    customer: "21Air",
+    status: "planned",
+    scheduledArrival: null,
+    scheduledDeparture: null,
+    isRecurring: true,
+    dayPattern: "12345..",
+    recurrenceStart: "2026-03-02",
+    recurrenceEnd: "2026-03-13",
+    arrivalTimeUtc: "04:18",
+    departureTimeUtc: "07:08",
+    ...overrides,
+  });
 }
 
 // ─── computeEventWindows ────────────────────────────────────────────────────
@@ -359,14 +384,14 @@ describe("validateFlightEvent", () => {
     expect(result.errors).toHaveLength(0);
   });
 
-  it("requires aircraftReg", () => {
+  it("requires aircraftReg for non-planned one-off events", () => {
     const result = validateFlightEvent({
       customer: "DHL",
       status: "scheduled",
       source: "manual",
     });
     expect(result.valid).toBe(false);
-    expect(result.errors).toContain("aircraftReg is required");
+    expect(result.errors.some((e) => e.includes("Aircraft Reg"))).toBe(true);
   });
 
   it("requires customer", () => {
@@ -456,5 +481,323 @@ describe("validateFlightEvent", () => {
     const result = validateFlightEvent({});
     expect(result.valid).toBe(false);
     expect(result.errors.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ─── planned status validation ─────────────────────────────────────────────
+
+describe("planned status validation", () => {
+  it("planned + null aircraftReg → valid", () => {
+    const result = validateFlightEvent({
+      aircraftReg: null,
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("planned + flight number → valid", () => {
+    const result = validateFlightEvent({
+      aircraftReg: "507",
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("scheduled + null aircraftReg → invalid", () => {
+    const result = validateFlightEvent({
+      aircraftReg: null,
+      customer: "DHL",
+      status: "scheduled",
+      source: "manual",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("Aircraft Reg"))).toBe(true);
+  });
+
+  it("scheduled + empty string → invalid", () => {
+    const result = validateFlightEvent({
+      aircraftReg: "",
+      customer: "DHL",
+      status: "scheduled",
+      source: "manual",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("Aircraft Reg"))).toBe(true);
+  });
+});
+
+// ─── recurring event validation ─────────────────────────────────────────────
+
+describe("recurring event validation", () => {
+  it("valid recurring event passes", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "12345..",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "04:18",
+      departureTimeUtc: "07:08",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("missing dayPattern → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "04:18",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("dayPattern"))).toBe(true);
+  });
+
+  it("invalid dayPattern format → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "MTWTF..",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "04:18",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("dayPattern"))).toBe(true);
+  });
+
+  it("all-dots dayPattern → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: ".......",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "04:18",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("at least one operating day"))).toBe(true);
+  });
+
+  it("recurrenceEnd before recurrenceStart → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "12345..",
+      recurrenceStart: "2026-06-30",
+      recurrenceEnd: "2026-03-01",
+      arrivalTimeUtc: "04:18",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("recurrenceEnd must be on or after"))).toBe(true);
+  });
+
+  it("no arrival or departure time → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "12345..",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("arrivalTimeUtc or departureTimeUtc"))).toBe(true);
+  });
+
+  it("invalid time format → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "12345..",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "4:18", // missing leading zero
+      departureTimeUtc: "7pm",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("arrivalTimeUtc must be in HH:MM"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("departureTimeUtc must be in HH:MM"))).toBe(true);
+  });
+
+  it("recurring with scheduledArrival set → invalid", () => {
+    const result = validateFlightEvent({
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "12345..",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "04:18",
+      scheduledArrival: "2026-03-01T10:00:00.000Z",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("must not have specific datetime"))).toBe(true);
+  });
+
+  it("non-recurring with recurrence fields → invalid", () => {
+    const result = validateFlightEvent({
+      aircraftReg: "N12345",
+      customer: "DHL",
+      status: "scheduled",
+      source: "manual",
+      isRecurring: false,
+      dayPattern: "12345..",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("must not have recurrence fields"))).toBe(true);
+  });
+
+  it("recurring allows null aircraftReg", () => {
+    const result = validateFlightEvent({
+      aircraftReg: null,
+      customer: "21Air",
+      status: "planned",
+      source: "manual",
+      isRecurring: true,
+      dayPattern: "12345..",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-06-30",
+      arrivalTimeUtc: "04:18",
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
+// ─── expandRecurringEvent ────────────────────────────────────────────────────
+
+describe("expandRecurringEvent", () => {
+  it("Mon–Fri pattern, 2-week range → 10 instances", () => {
+    // 2026-03-02 is Monday, 2026-03-13 is Friday
+    const event = makeRecurringEvent();
+    const instances = expandRecurringEvent(event, "2026-03-01", "2026-03-14");
+
+    expect(instances).toHaveLength(10);
+    for (const inst of instances) {
+      expect(inst.isRecurring).toBe(false);
+      expect(inst.dayPattern).toBeNull();
+      expect(inst.recurrenceStart).toBeNull();
+      expect(inst.recurrenceEnd).toBeNull();
+      expect(inst.customer).toBe("21Air");
+      expect(inst.aircraftReg).toBe("107");
+    }
+  });
+
+  it("sets correct arrival and departure datetimes", () => {
+    const event = makeRecurringEvent();
+    const instances = expandRecurringEvent(event, "2026-03-02", "2026-03-02");
+
+    expect(instances).toHaveLength(1);
+    expect(instances[0].scheduledArrival).toBe("2026-03-02T04:18:00.000Z");
+    expect(instances[0].scheduledDeparture).toBe("2026-03-02T07:08:00.000Z");
+  });
+
+  it("cross-midnight departure placed on day+1", () => {
+    const event = makeRecurringEvent({
+      arrivalTimeUtc: "22:00",
+      departureTimeUtc: "05:00",
+    });
+    const instances = expandRecurringEvent(event, "2026-03-02", "2026-03-02");
+
+    expect(instances).toHaveLength(1);
+    expect(instances[0].scheduledArrival).toBe("2026-03-02T22:00:00.000Z");
+    expect(instances[0].scheduledDeparture).toBe("2026-03-03T05:00:00.000Z");
+  });
+
+  it("queryStart/End clipping works correctly", () => {
+    // Template covers Mar 2–13 (Mon–Fri), query only Mar 5–7 (Thu–Sat)
+    const event = makeRecurringEvent();
+    const instances = expandRecurringEvent(event, "2026-03-05", "2026-03-07");
+
+    // Mar 5 (Thu) ✓, Mar 6 (Fri) ✓, Mar 7 (Sat) ✗
+    expect(instances).toHaveLength(2);
+  });
+
+  it("non-recurring event → returns []", () => {
+    const event = makeEvent({ isRecurring: false });
+    const instances = expandRecurringEvent(event, "2026-03-01", "2026-03-31");
+    expect(instances).toHaveLength(0);
+  });
+
+  it("daily pattern → 7 per week", () => {
+    const event = makeRecurringEvent({
+      dayPattern: "1234567",
+      recurrenceStart: "2026-03-02",
+      recurrenceEnd: "2026-03-08",
+    });
+    const instances = expandRecurringEvent(event, "2026-03-01", "2026-03-09");
+
+    // Mar 2 (Mon) through Mar 8 (Sun) = 7 days
+    expect(instances).toHaveLength(7);
+  });
+
+  it("weekend-only pattern", () => {
+    const event = makeRecurringEvent({
+      dayPattern: ".....67",
+      recurrenceStart: "2026-03-01",
+      recurrenceEnd: "2026-03-15",
+    });
+    const instances = expandRecurringEvent(event, "2026-03-01", "2026-03-15");
+
+    // Mar 1 is Sunday (operates), Mar 7 Sat, Mar 8 Sun, Mar 14 Sat, Mar 15 Sun
+    expect(instances).toHaveLength(5);
+  });
+
+  it("suppressedDates are honored", () => {
+    const event = makeRecurringEvent({
+      suppressedDates: ["2026-03-03", "2026-03-05"], // Tue, Thu
+    });
+    const instances = expandRecurringEvent(event, "2026-03-02", "2026-03-06");
+
+    // Mon ✓, Tue ✗ (suppressed), Wed ✓, Thu ✗ (suppressed), Fri ✓
+    expect(instances).toHaveLength(3);
+  });
+
+  it("arrival-only recurring event (no departure)", () => {
+    const event = makeRecurringEvent({
+      departureTimeUtc: null,
+    });
+    const instances = expandRecurringEvent(event, "2026-03-02", "2026-03-02");
+
+    expect(instances).toHaveLength(1);
+    expect(instances[0].scheduledArrival).toBe("2026-03-02T04:18:00.000Z");
+    expect(instances[0].scheduledDeparture).toBeNull();
+  });
+
+  it("departure-only recurring event (no arrival)", () => {
+    const event = makeRecurringEvent({
+      arrivalTimeUtc: null,
+      departureTimeUtc: "15:30",
+    });
+    const instances = expandRecurringEvent(event, "2026-03-02", "2026-03-02");
+
+    expect(instances).toHaveLength(1);
+    expect(instances[0].scheduledArrival).toBeNull();
+    expect(instances[0].scheduledDeparture).toBe("2026-03-02T15:30:00.000Z");
+  });
+
+  it("empty date range → no instances", () => {
+    const event = makeRecurringEvent();
+    const instances = expandRecurringEvent(event, "2026-01-01", "2026-01-31");
+    expect(instances).toHaveLength(0);
   });
 });

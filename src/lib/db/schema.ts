@@ -426,7 +426,7 @@ export const flightEvents = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     workPackageId: integer("work_package_id"), // logical ref only — no FK
-    aircraftReg: text("aircraft_reg").notNull(),
+    aircraftReg: text("aircraft_reg"), // nullable — tail number or flight number
     customer: text("customer").notNull(),
     scheduledArrival: text("scheduled_arrival"),
     actualArrival: text("actual_arrival"),
@@ -434,10 +434,19 @@ export const flightEvents = sqliteTable(
     actualDeparture: text("actual_departure"),
     arrivalWindowMinutes: integer("arrival_window_minutes").notNull().default(30),
     departureWindowMinutes: integer("departure_window_minutes").notNull().default(60),
-    status: text("status").notNull(), // scheduled | actual | cancelled
+    status: text("status").notNull(), // planned | scheduled | actual | cancelled
     source: text("source").notNull(), // work_package | manual | import
     notes: text("notes"),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    // ── Recurrence fields ──────────────────────────────────────────────────
+    isRecurring: integer("is_recurring", { mode: "boolean" }).notNull().default(false),
+    dayPattern: text("day_pattern"), // "12345.." OASIS-style
+    recurrenceStart: text("recurrence_start"), // "YYYY-MM-DD"
+    recurrenceEnd: text("recurrence_end"), // "YYYY-MM-DD"
+    arrivalTimeUtc: text("arrival_time_utc"), // "HH:MM"
+    departureTimeUtc: text("departure_time_utc"), // "HH:MM"
+    suppressedDates: text("suppressed_dates"), // JSON array of "YYYY-MM-DD" strings
+    // ────────────────────────────────────────────────────────────────────────
     createdBy: integer("created_by").references(() => users.id),
     createdAt: text("created_at")
       .notNull()
@@ -451,6 +460,7 @@ export const flightEvents = sqliteTable(
     schedArrivalIdx: index("idx_fe_scheduled_arrival").on(table.scheduledArrival),
     schedDepartureIdx: index("idx_fe_scheduled_departure").on(table.scheduledDeparture),
     workPackageIdx: index("idx_fe_work_package_id").on(table.workPackageId),
+    isRecurringIdx: index("idx_fe_is_recurring").on(table.isRecurring),
   }),
 );
 
