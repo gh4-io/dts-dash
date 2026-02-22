@@ -131,6 +131,7 @@ export function FlightEventsGrid({ events, onCreate, onUpdate, onDelete }: Fligh
                 <TableHead>Aircraft / Flight No.</TableHead>
                 <TableHead className="w-16">Repeat</TableHead>
                 <TableHead>Customer</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Sched Arr</TableHead>
                 <TableHead>Sched Dep</TableHead>
                 <TableHead>Windows</TableHead>
@@ -161,6 +162,9 @@ export function FlightEventsGrid({ events, onCreate, onUpdate, onDelete }: Fligh
                     )}
                   </TableCell>
                   <TableCell className="text-sm">{event.customer}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground font-mono">
+                    {event.aircraftType ?? "—"}
+                  </TableCell>
                   <TableCell className="text-sm font-mono text-xs">
                     {event.isRecurring
                       ? event.arrivalTimeUtc

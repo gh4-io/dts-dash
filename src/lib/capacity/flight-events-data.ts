@@ -87,6 +87,7 @@ export function createFlightEvent(
     .values({
       workPackageId: data.workPackageId ?? null,
       aircraftReg: data.aircraftReg ?? null,
+      aircraftType: data.aircraftType ?? null,
       customer: data.customer,
       scheduledArrival: data.scheduledArrival ?? null,
       actualArrival: data.actualArrival ?? null,
@@ -125,6 +126,7 @@ export function updateFlightEvent(id: number, data: Partial<FlightEvent>): Fligh
 
   if (data.workPackageId !== undefined) updates.workPackageId = data.workPackageId;
   if (data.aircraftReg !== undefined) updates.aircraftReg = data.aircraftReg;
+  if (data.aircraftType !== undefined) updates.aircraftType = data.aircraftType;
   if (data.customer !== undefined) updates.customer = data.customer;
   if (data.scheduledArrival !== undefined) updates.scheduledArrival = data.scheduledArrival;
   if (data.actualArrival !== undefined) updates.actualArrival = data.actualArrival;
@@ -177,6 +179,7 @@ function toDTO(row: typeof flightEvents.$inferSelect): FlightEvent {
     id: row.id,
     workPackageId: row.workPackageId,
     aircraftReg: row.aircraftReg,
+    aircraftType: row.aircraftType,
     customer: row.customer,
     scheduledArrival: row.scheduledArrival,
     actualArrival: row.actualArrival,

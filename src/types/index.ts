@@ -276,6 +276,7 @@ export interface FlightEvent {
   id: number;
   workPackageId: number | null; // logical ref only — no FK
   aircraftReg: string | null; // tail number OR flight number; null for unassigned planned
+  aircraftType: string | null; // normalized aircraft type (e.g. "B767-300F")
   customer: string;
   scheduledArrival: string | null; // ISO datetime
   actualArrival: string | null;

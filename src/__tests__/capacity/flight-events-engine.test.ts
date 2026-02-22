@@ -15,6 +15,7 @@ function makeEvent(overrides: Partial<FlightEvent> = {}): FlightEvent {
     id: 1,
     workPackageId: null,
     aircraftReg: "N12345",
+    aircraftType: null,
     customer: "DHL",
     scheduledArrival: "2026-03-01T10:00:00.000Z",
     actualArrival: null,

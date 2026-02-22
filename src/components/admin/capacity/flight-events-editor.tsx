@@ -21,14 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandItem,
-} from "@/components/ui/command";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import type { FlightEvent, FlightEventStatus, FlightEventSource } from "@/types";
 
@@ -60,10 +53,11 @@ interface FlightEventEditorProps {
 export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightEventEditorProps) {
   // ── Core fields ──
   const [aircraftReg, setAircraftReg] = useState("");
+  const [aircraftType, setAircraftType] = useState("");
   const [customer, setCustomer] = useState("");
-  const [customerOpen, setCustomerOpen] = useState(false);
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([]);
-  const [status, setStatus] = useState<FlightEventStatus>("scheduled");
+  const [aircraftTypes, setAircraftTypes] = useState<{ id: number; normalizedType: string }[]>([]);
+  const [status, setStatus] = useState<FlightEventStatus>("planned");
   const [source, setSource] = useState<FlightEventSource>("manual");
 
   // ── One-off fields ──
@@ -96,7 +90,11 @@ export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightE
 
   const isAircraftRequired = !isRecurring && status !== "planned";
 
-  // ── Load customers ──
+  // ── Autocomplete options ──
+  const customerOptions = customers.map((c) => ({ value: c.name }));
+  const aircraftTypeOptions = aircraftTypes.map((t) => ({ value: t.normalizedType }));
+
+  // ── Load customers + aircraft types ──
   useEffect(() => {
     if (open && customers.length === 0) {
       fetch("/api/admin/customers")
@@ -106,13 +104,22 @@ export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightE
         })
         .catch(() => {});
     }
-  }, [open, customers.length]);
+    if (open && aircraftTypes.length === 0) {
+      fetch("/api/admin/aircraft-types")
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) setAircraftTypes(data);
+        })
+        .catch(() => {});
+    }
+  }, [open, customers.length, aircraftTypes.length]);
 
   // ── Load from event on open ──
   useEffect(() => {
     if (open) {
       if (event) {
         setAircraftReg(event.aircraftReg ?? "");
+        setAircraftType(event.aircraftType ?? "");
         setCustomer(event.customer);
         setStatus(event.status);
         setSource(event.source);
@@ -143,8 +150,9 @@ export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightE
         );
       } else {
         setAircraftReg("");
+        setAircraftType("");
         setCustomer("");
-        setStatus("scheduled");
+        setStatus("planned");
         setSource("manual");
         setScheduledArrival("");
         setActualArrival("");
@@ -224,6 +232,7 @@ export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightE
       await onSave({
         workPackageId: wpId,
         aircraftReg: aircraftReg.trim() || null,
+        aircraftType: aircraftType.trim() || null,
         customer: customer.trim(),
         status,
         source,
@@ -289,47 +298,13 @@ export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightE
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Customer *</Label>
-              <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    aria-expanded={customerOpen}
-                    className="h-7 w-full justify-between text-xs font-normal"
-                  >
-                    {customer || <span className="text-muted-foreground">Select customer…</span>}
-                    <i className="fa-solid fa-chevron-down ml-1 text-[9px] opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start">
-                  <Command>
-                    <CommandInput
-                      placeholder="Search customers…"
-                      className="h-7 text-xs"
-                      onValueChange={(val) => setCustomer(val)}
-                    />
-                    <CommandList>
-                      <CommandEmpty className="py-3 text-xs">No customers found.</CommandEmpty>
-                      {customers.map((c) => (
-                        <CommandItem
-                          key={c.id}
-                          value={c.name}
-                          onSelect={(val) => {
-                            setCustomer(val);
-                            setCustomerOpen(false);
-                          }}
-                          className="text-xs"
-                        >
-                          {c.name}
-                          {customer === c.name && (
-                            <i className="fa-solid fa-check ml-auto text-[10px] opacity-70" />
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
+              <Autocomplete
+                value={customer}
+                onChange={setCustomer}
+                options={customerOptions}
+                placeholder="Type or select customer…"
+                inputClassName="font-normal"
+              />
             </div>
           </div>
 
@@ -380,6 +355,18 @@ export function FlightEventEditor({ open, onOpenChange, event, onSave }: FlightE
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* ── Row 3: Aircraft Type ── */}
+          <div className="space-y-1">
+            <Label className="text-xs">Aircraft Type</Label>
+            <Autocomplete
+              value={aircraftType}
+              onChange={setAircraftType}
+              options={aircraftTypeOptions}
+              placeholder="e.g., B737, A320"
+              inputClassName="font-mono"
+            />
           </div>
 
           {/* ── Recurring toggle ── */}

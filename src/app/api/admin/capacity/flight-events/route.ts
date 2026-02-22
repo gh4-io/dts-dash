@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
     const event = createFlightEvent({
       workPackageId: body.workPackageId ?? null,
       aircraftReg: body.aircraftReg?.trim() || null,
+      aircraftType: body.aircraftType?.trim() || null,
       customer: body.customer.trim(),
       scheduledArrival: isRecurring ? null : body.scheduledArrival || null,
       actualArrival: isRecurring ? null : body.actualArrival || null,

@@ -427,6 +427,7 @@ export const flightEvents = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     workPackageId: integer("work_package_id"), // logical ref only — no FK
     aircraftReg: text("aircraft_reg"), // nullable — tail number or flight number
+    aircraftType: text("aircraft_type"), // normalized type (e.g. "B767-300F")
     customer: text("customer").notNull(),
     scheduledArrival: text("scheduled_arrival"),
     actualArrival: text("actual_arrival"),

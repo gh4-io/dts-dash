@@ -167,6 +167,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (body.workPackageId !== undefined) updates.workPackageId = body.workPackageId;
+    if (body.aircraftType !== undefined) updates.aircraftType = body.aircraftType?.trim() || null;
     if (body.notes !== undefined) updates.notes = body.notes;
     if (body.isActive !== undefined) updates.isActive = body.isActive;
 

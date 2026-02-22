@@ -939,6 +939,7 @@ export function runMigrations(): MigrationResult[] {
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           work_package_id INTEGER,
           aircraft_reg TEXT,
+          aircraft_type TEXT,
           customer TEXT NOT NULL,
           scheduled_arrival TEXT,
           actual_arrival TEXT,
@@ -962,7 +963,7 @@ export function runMigrations(): MigrationResult[] {
           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         INSERT INTO flight_events_new
-          SELECT id, work_package_id, aircraft_reg, customer,
+          SELECT id, work_package_id, aircraft_reg, NULL, customer,
                  scheduled_arrival, actual_arrival, scheduled_departure, actual_departure,
                  arrival_window_minutes, departure_window_minutes,
                  status, source, notes, is_active,
