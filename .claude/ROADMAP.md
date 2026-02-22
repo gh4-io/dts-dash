@@ -31,7 +31,7 @@
 - [x] WS-7: Rotation-based staffing system — 2026-02-21
 - [x] WS-8: Staffing-driven capacity mode — 2026-02-21
 
-### Capacity Phase 2 (In Progress)
+### Capacity Phase 2 (Complete)
 - [x] P2-6: Demand Allocations — 2026-02-21
 - [x] P2-1: Flight Events — 2026-02-21
 - [x] P2-5: Rate Forecast — 2026-02-21
@@ -39,6 +39,19 @@
 - [x] P2-4: Concurrency — 2026-02-21
 - [x] P2-3: Billed Hours — 2026-02-21
 - [x] P2-7: Multi-Lens UI — 2026-02-21
+
+### Demand Contracts Redesign (Complete ✅ — `feat/demand-contracts`)
+- [x] Parent/child model (demand_contracts + demand_allocation_lines) — M015 — 2026-02-21
+- [x] Sanity check projection (SHORTFALL/OK/EXCESS) — 2026-02-21
+- [x] Collapsible admin grid + inline line editing — 2026-02-21
+- [x] PER_EVENT period type (D-048) — 2026-02-21
+- [x] Capacity documentation (concepts, API reference, admin guide, getting started, lenses, examples, FAQ) — 2026-02-21
+
+### Capacity Phase 3 — Contract MH Pipeline (Planned)
+- [ ] Contract MH fallback in effectiveMH pipeline (OI-065)
+- [ ] Null WP MH support in data import
+- [ ] New MHSource "contract" in all views
+- [ ] Flight board, dashboard, statistics show contract-resolved MH
 
 ## Milestones
 

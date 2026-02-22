@@ -1175,16 +1175,71 @@
 
 ---
 
+## OI-065 | Contract MH Pipeline Integration (Phase 3)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P1 |
+| **Owner** | — |
+| **Created** | 2026-02-21 |
+| **Context** | PER_EVENT contracts currently only affect capacity engine (`allocatedDemandMH` overlay). Flight board, dashboard, and statistics still use base `effectiveMH` (`manual > WP MH > default 3.0`). To show contract MH in all views, integrate into the core transformer pipeline. |
+
+### Technical Context (for future implementation)
+
+**Current effectiveMH pipeline:**
+- `src/lib/data/transformer.ts:computeEffectiveMH()` (lines 238-257)
+- Rule: `manual override > WP MH (if include) > default 3.0`
+- Called by `transformWorkPackages()` (lines 160-232)
+- All views consume via `/api/work-packages/all` route
+
+**Proposed new rule:**
+```
+manual override > WP MH (if include + non-null) > contract PER_EVENT MH > default 3.0
+```
+
+**New MHSource value:** `"contract"` (add to `MHSource` type in `src/types/index.ts:36`)
+
+**Files to modify:**
+1. `src/types/index.ts` — add `"contract"` to MHSource union
+2. `src/lib/data/transformer.ts` — `computeEffectiveMH()` gains `contractMH?` param
+3. `src/lib/data/transformer.ts` — `transformWorkPackages()` loads active PER_EVENT contracts, builds customer→MH map
+4. `src/lib/capacity/allocation-data.ts` — add `loadPerEventContractMap()` helper (customer_id → allocatedMh)
+
+**Key function signature change:**
+```typescript
+// Current:
+function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpMHMode)
+
+// Future:
+function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpMHMode, contractMH?)
+```
+
+**Matching logic:** For each WP, match by customer name → customer_id → active PER_EVENT contracts → get allocatedMh from lines.
+
+**Null WP MH handling:** Allow `totalMH: null` in work package imports. Import schemas should accept null MH and let the pipeline resolve via contract or default.
+
+**Decision points for future implementation:**
+1. **When multiple PER_EVENT contracts match** (same customer, overlapping dates): use highest MH? Sum? First match?
+2. **Per-event MH vs per-line MH**: A contract can have multiple lines (different shifts/days). Should the fallback use the max line MH, or average?
+3. **Performance**: Loading contracts in transformer adds a DB query per transform call. Consider caching contract map alongside existing config cache.
+4. **Import validation**: Should WP import reject null MH, warn, or silently accept? Current import requires `totalMH` — needs schema update to allow null.
+
+| **Links** | D-048, ROADMAP.md (Phase 3) |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
-| P1 | 3 | 1 | 0 | 15 |
+| P1 | 4 | 1 | 0 | 15 |
 | P2 | 4 | 1 | 0 | 14 |
 | P3 | 3 | 0 | 2 | 0 |
-| **Total** | **10** | **2** | **2** | **45** |
+| **Total** | **11** | **2** | **2** | **45** |
 
-**Latest update (2026-02-20)**: OI-064 fully resolved — 17 total fixes: 6 showstopper bugs, 2 UI regressions, 8 code review items (parser, validator, mapping, exporter, history, toolbar, source downgrade), and 5 missing empty-key validations across schemas.
+**Latest update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
 
-**Previous update (2026-02-19)**: OI-060 resolved — D-037 unified base URL config under `baseUrl`/`BASE_URL`, removed `AUTH_URL` from user-facing config. OI-061, OI-062, OI-063 resolved — System user protected, self-service edits enabled, admin user edit form populates correctly.
+**Previous update (2026-02-20)**: OI-064 fully resolved — 17 total fixes: 6 showstopper bugs, 2 UI regressions, 8 code review items (parser, validator, mapping, exporter, history, toolbar, source downgrade), and 5 missing empty-key validations across schemas.

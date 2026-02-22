@@ -582,3 +582,16 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** None (UI-only, backwards-compatible — all overlay data already in API response)
 **Links**: P2-7, `src/lib/capacity/lens-config.ts`, `src/components/capacity/lens-selector.tsx`
+
+---
+
+## D-048 | 2026-02-21 | PER_EVENT Period Type + Contract MH Pipeline Plan
+
+**Decision**: Add PER_EVENT as a 5th contract period type. Contract per-event MH overrides lower WP MH via MINIMUM_FLOOR in the capacity engine. WP source data stays untouched. Future phase (Phase 3) will integrate contract MH into the core effectiveMH pipeline (`transformer.ts`) so all views benefit.
+
+**Rationale**: Line maintenance contracts are naturally expressed as MH-per-event (e.g., "Aerologic: 6 MH per event"). The existing WEEKLY/MONTHLY/ANNUAL/TOTAL types only support time-period obligations. PER_EVENT combined with MINIMUM_FLOOR achieves "contract wins when WP < contract" without modifying WP source data. Projection returns null for PER_EVENT (can't scale per-event MH without event count data).
+
+**Phase 3 plan**: Integrate contract per-event MH into `computeEffectiveMH()` in `transformer.ts` so flight board, dashboard, and statistics show contract-resolved MH. New MHSource `"contract"`. Allow null WP MH in imports with contract fallback. See OI-065 for full technical context.
+
+**Version impact:** MINOR (backwards-compatible addition — new enum value, no breaking changes)
+**Links**: OI-065, ROADMAP.md (Phase 3), `src/lib/capacity/allocation-engine.ts`
