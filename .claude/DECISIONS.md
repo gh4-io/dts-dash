@@ -598,11 +598,13 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 ---
 
-## D-049 | 2026-02-22 | Shift Timezone on capacity_shifts Table
+## D-049 | 2026-02-22 | Shift Timezone Architecture
 
-**Decision**: Add `timezone TEXT NOT NULL DEFAULT 'UTC'` column to `capacity_shifts` table (migration M016). Shift start/end hours are interpreted in this IANA timezone. Engines convert UTC timestamps to shift-local time before matching against shift boundaries. Admin UI provides UTC and America/New_York options.
+**Decision**: Add `timezone TEXT NOT NULL DEFAULT 'UTC'` column to `capacity_shifts` table (migration M016). Shift start/end hours are stored in local time and interpreted in this IANA timezone. **Timezone is a data property on shifts, never an engine function parameter.** Engines read `shifts[0].timezone` internally via `tz-helpers.ts` and convert UTC timestamps to shift-local time for matching. The one exception is `aggregateConcurrencyByDay`, which has no shift context and stays UTC-only (display layer handles conversion).
 
-**Rationale**: Shift hours (e.g., DAY 07-15) were implicitly UTC with no way to specify otherwise. CVG operations think in Eastern time. Adding timezone makes shift definitions self-describing and enables correct cross-timezone capacity calculations. Stored per-shift (not per-station) so each row is self-contained, though all shifts at CVG share the same timezone.
+**Rationale**: Shift hours (e.g., DAY 07-15) represent physical airport shift boundaries in local time. Converting to UTC integers causes a DST problem: "07 Eastern" = UTC 12 in winter, UTC 11 in summer — static integers can't express both. Local hours + timezone metadata is the correct representation. Making timezone data-driven (read from shifts internally) rather than parameter-driven keeps engine APIs clean and prevents callers from passing inconsistent timezone values.
+
+**Pattern**: Engines that receive shifts read `shifts[0]?.timezone ?? "UTC"` at the top of the function body. No `timezone` parameter in public signatures. This keeps engines functionally pure while making timezone data-driven.
 
 **Version impact:** MINOR (backwards-compatible — default UTC preserves existing behavior)
-**Links**: `src/lib/capacity/tz-helpers.ts`, `src/lib/capacity/demand-engine.ts`, `src/lib/capacity/concurrency-engine.ts`
+**Links**: `src/lib/capacity/tz-helpers.ts`, `src/lib/capacity/demand-engine.ts`, `src/lib/capacity/concurrency-engine.ts`, `src/lib/capacity/flight-events-engine.ts`

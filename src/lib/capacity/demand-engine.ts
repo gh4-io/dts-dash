@@ -66,7 +66,6 @@ export function enumerateGroundSlots(
   arrivalISO: string,
   departureISO: string,
   shifts: CapacityShift[],
-  timezone: string = "UTC",
 ): Array<{ date: string; shift: CapacityShift; isArrival: boolean; isDeparture: boolean }> {
   const activeShifts = shifts.filter((s) => s.isActive);
   if (activeShifts.length === 0) return [];
@@ -82,6 +81,9 @@ export function enumerateGroundSlots(
     isArrival: boolean;
     isDeparture: boolean;
   }> = [];
+
+  // Read timezone from shift data — engines never accept tz as a parameter (D-049)
+  const timezone = shifts[0]?.timezone ?? "UTC";
 
   // Walk hour-by-hour through the ground time in UTC,
   // converting each UTC hour to the shift timezone for matching.
@@ -247,8 +249,7 @@ export function computeDailyDemandV2(
   };
 
   for (const wp of workPackages) {
-    const tz = shifts[0]?.timezone ?? "UTC";
-    const groundSlots = enumerateGroundSlots(wp.arrival, wp.departure, shifts, tz);
+    const groundSlots = enumerateGroundSlots(wp.arrival, wp.departure, shifts);
     if (groundSlots.length === 0) continue;
 
     const allocatedMHs = applyDemandCurve(

@@ -109,9 +109,11 @@ interface CoverageRequirement {
 export function computeCoverageRequirements(
   windows: EventCoverageWindow[],
   shifts: CapacityShift[],
-  timezone: string = "UTC",
 ): CoverageRequirement[] {
   const map = new Map<string, CoverageRequirement>();
+
+  // Read timezone from shift data — engines never accept tz as a parameter (D-049)
+  const timezone = shifts[0]?.timezone ?? "UTC";
 
   for (const w of windows) {
     const start = new Date(w.startTime);

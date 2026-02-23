@@ -20,20 +20,18 @@ import { getLocalHour, getLocalDateStr } from "./tz-helpers";
 
 /**
  * Aggregate hourly concurrency buckets into per-day summaries.
- * Groups by date in the shift timezone.
- *
- * @param timezone - IANA timezone for date grouping (default: "UTC")
+ * Groups by UTC date (no shift context available). Display layer
+ * handles timezone conversion for chart labels.
  */
 export function aggregateConcurrencyByDay(
   buckets: ConcurrencyBucket[],
-  timezone: string = "UTC",
 ): Map<string, ConcurrencyDaySummary> {
   if (buckets.length === 0) return new Map();
 
-  // Group buckets by date in shift timezone
+  // Group buckets by UTC date (this function has no shift context)
   const byDate = new Map<string, ConcurrencyBucket[]>();
   for (const b of buckets) {
-    const date = getLocalDateStr(new Date(b.hour), timezone);
+    const date = b.hour.split("T")[0]; // UTC date
     const existing = byDate.get(date);
     if (existing) {
       existing.push(b);
@@ -81,9 +79,11 @@ export function aggregateConcurrencyByDay(
 export function aggregateConcurrencyByShift(
   buckets: ConcurrencyBucket[],
   shifts: CapacityShift[],
-  timezone: string = "UTC",
 ): Map<string, Map<string, ConcurrencyShiftSummary>> {
   if (buckets.length === 0 || shifts.length === 0) return new Map();
+
+  // Read timezone from shift data — engines never accept tz as a parameter (D-049)
+  const timezone = shifts[0]?.timezone ?? "UTC";
 
   // Group by (date, shiftCode) using shift timezone
   const grouped = new Map<string, Map<string, ConcurrencyBucket[]>>();

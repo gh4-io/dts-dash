@@ -75,7 +75,7 @@ The app ingests SharePoint OData work package data (local JSON), computes derive
 - **Real capacity**: headcount × 6.5 MH/person
 - **Utilization**: totalDemandMH / realCapacity × 100%
 - **Station**: always CVG (locked, D-002)
-- **Timezone:** default `UTC`. Internals support **all IANA timezones**, but the UI only enables **UTC** and **America/New_York**.
+- **Timezone:** default `UTC`. Internals support **all IANA timezones**, but the UI only enables **UTC** and **America/New_York**. **Timezone architecture (D-049):** Shift hours are stored in local time with a `timezone` IANA field. Engines read timezone from `shifts[0].timezone` internally — never as a function parameter. `tz-helpers.ts` converts UTC↔local. `aggregateConcurrencyByDay` is the sole exception (no shifts available, stays UTC-only).
 - **Aircraft Type:** provided in inbound data when available. Additionally, maintain an **admin-editable normalization + mapping dataset** in SQLite to standardize values (e.g., `B737`, `737-200`, `747-4R7`, `747F` → normalized forms). Do not rely on registration-prefix inference as primary logic.
 - **Pagination**: Default 30 rows/page, configurable per user (D-017)
 - **Theme presets**: 11 Fumadocs presets — Neutral, Ocean, Purple, Black, Vitepress, Dusk, Catppuccin, Solar, Emerald, Ruby, Aspen (D-022)

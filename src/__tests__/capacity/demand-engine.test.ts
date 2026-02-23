@@ -455,8 +455,9 @@ describe("timezone-aware enumerateGroundSlots", () => {
     const arrival = "2026-03-10T10:00:00.000Z";
     const departure = "2026-03-10T20:00:00.000Z";
 
+    // Both use shifts with timezone: "UTC" (default) — no explicit tz param needed
     const slotsDefault = enumerateGroundSlots(arrival, departure, shifts);
-    const slotsExplicit = enumerateGroundSlots(arrival, departure, shifts, "UTC");
+    const slotsExplicit = enumerateGroundSlots(arrival, departure, shifts);
 
     expect(slotsDefault).toEqual(slotsExplicit);
   });
@@ -468,7 +469,7 @@ describe("timezone-aware enumerateGroundSlots", () => {
     const arrival = "2026-01-15T12:00:00.000Z"; // 07:00 Eastern
     const departure = "2026-01-15T20:00:00.000Z"; // 15:00 Eastern
 
-    const slots = enumerateGroundSlots(arrival, departure, easternShifts, "America/New_York");
+    const slots = enumerateGroundSlots(arrival, departure, easternShifts);
 
     expect(slots.length).toBe(1);
     expect(slots[0].shift.code).toBe("DAY");
@@ -481,7 +482,7 @@ describe("timezone-aware enumerateGroundSlots", () => {
     const arrival = "2026-01-16T04:00:00.000Z"; // 23:00 Eastern Jan 15
     const departure = "2026-01-16T10:00:00.000Z"; // 05:00 Eastern Jan 16
 
-    const slots = enumerateGroundSlots(arrival, departure, easternShifts, "America/New_York");
+    const slots = enumerateGroundSlots(arrival, departure, easternShifts);
 
     // Should hit NIGHT shift on Jan 15 (23:00 Eastern start)
     expect(slots.some((s) => s.shift.code === "NIGHT")).toBe(true);
@@ -494,7 +495,7 @@ describe("timezone-aware enumerateGroundSlots", () => {
     const arrival = "2026-01-15T14:00:00.000Z"; // 09:00 Eastern
     const departure = "2026-01-16T02:00:00.000Z"; // 21:00 Eastern
 
-    const slots = enumerateGroundSlots(arrival, departure, easternShifts, "America/New_York");
+    const slots = enumerateGroundSlots(arrival, departure, easternShifts);
 
     const shiftCodes = slots.map((s) => s.shift.code);
     expect(shiftCodes).toContain("DAY");
