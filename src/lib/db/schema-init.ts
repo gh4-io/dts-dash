@@ -992,6 +992,28 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M018: Weekly MH projections (TEMPORARY — OI-067)
+  results.push(
+    applyMigration("M018_weekly_mh_projections", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS weekly_mh_projections (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer TEXT NOT NULL,
+          day_of_week INTEGER NOT NULL,
+          shift_code TEXT NOT NULL,
+          projected_mh REAL NOT NULL,
+          notes TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_wmp_customer_day_shift
+          ON weekly_mh_projections(customer, day_of_week, shift_code);
+      `);
+    }),
+  );
+
   return results;
 }
 

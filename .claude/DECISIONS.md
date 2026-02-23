@@ -595,3 +595,21 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact:** MINOR (backwards-compatible addition — new enum value, no breaking changes)
 **Links**: OI-065, ROADMAP.md (Phase 3), `src/lib/capacity/allocation-engine.ts`
+
+---
+
+## D-049 | 2026-02-22 | Weekly MH Projections — Temporary Self-Contained Feature
+
+**Decision**: Implement customer MH projections as a self-contained temporary feature with text customer names (no FK), separate API endpoint, and toggle button (not a new lens).
+
+**Rationale**:
+1. **No FK to customers** — uses plain text names. Single `DROP TABLE` removes it cleanly.
+2. **Separate API endpoint** (`/api/capacity/weekly-projections`) — keeps the capacity overview route untouched.
+3. **Toggle button, not a new lens** — avoids touching `CapacityLensId`, lens selector, or Zustand store. Local React state only.
+4. **Engine stays pure** — projections are NOT mixed into `DayOfWeekPattern`. The `forecast-pattern-engine.ts` and its tests are untouched.
+5. **Matrix-style admin grid** — matches the data's natural shape: customers as rows x 7 days as columns x 3 shift sub-rows.
+
+**Files**: 7 new (engine, data, 2 API routes, admin page, grid component, tests), 5 modified (types, schema, migration M018, chart, hub card)
+**Tracked by**: OI-067 (includes removal checklist)
+**Version impact**: MINOR (backwards-compatible addition)
+**Links**: OI-067, `src/lib/capacity/projection-engine.ts`

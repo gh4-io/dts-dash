@@ -184,3 +184,19 @@ export {
   deleteForecastRate,
   clearGeneratedRates,
 } from "./forecast-data";
+
+// Weekly MH Projections engine (TEMPORARY — OI-067, pure functions)
+export {
+  validateProjectionEntry,
+  buildProjectionOverlay,
+  hasProjectionData,
+} from "./projection-engine";
+export type { ProjectionValidation } from "./projection-engine";
+
+// Weekly MH Projections data access (TEMPORARY — OI-067)
+export {
+  loadWeeklyProjections,
+  bulkSaveProjections,
+  deleteAllProjections,
+} from "./projection-data";
+export type { ProjectionUpsertRow } from "./projection-data";

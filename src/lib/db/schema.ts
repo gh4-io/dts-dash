@@ -1248,3 +1248,32 @@ export const staffingShiftsRelations = relations(staffingShifts, ({ one }) => ({
     references: [rotationPatterns.id],
   }),
 }));
+
+// ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
+
+export const weeklyMhProjections = sqliteTable(
+  "weekly_mh_projections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customer: text("customer").notNull(),
+    dayOfWeek: integer("day_of_week").notNull(), // ISO: 1=Mon ... 7=Sun
+    shiftCode: text("shift_code").notNull(), // DAY | SWING | NIGHT
+    projectedMh: real("projected_mh").notNull(),
+    notes: text("notes"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    customerDayShift: uniqueIndex("idx_wmp_customer_day_shift").on(
+      table.customer,
+      table.dayOfWeek,
+      table.shiftCode,
+    ),
+  }),
+);

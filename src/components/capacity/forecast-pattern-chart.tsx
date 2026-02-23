@@ -12,9 +12,17 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import type { DailyCapacityV2, DailyDemandV2, CapacityShift, CapacityLensId } from "@/types";
+import type {
+  DailyCapacityV2,
+  DailyDemandV2,
+  CapacityShift,
+  CapacityLensId,
+  WeeklyProjection,
+  ProjectionDayOverlay,
+} from "@/types";
 // Direct import — NOT barrel (D-047: barrel re-exports server-only modules)
 import { computeDayOfWeekPattern } from "@/lib/capacity/forecast-pattern-engine";
+import { buildProjectionOverlay, hasProjectionData } from "@/lib/capacity/projection-engine";
 import { useCustomers } from "@/lib/hooks/use-customers";
 
 type ViewMode = "byShift" | "byCustomer" | "total";
@@ -40,6 +48,9 @@ const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: str
   allocated: { stroke: "#f59e0b", dash: "6 3", name: "Avg Allocated" },
 };
 
+const PROJECTION_COLOR = "#ec4899"; // pink-500
+const PROJECTION_DASH = "4 2";
+
 export function ForecastPatternChart({
   demand,
   capacity,
@@ -48,11 +59,33 @@ export function ForecastPatternChart({
   fillHeight = false,
 }: ForecastPatternChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("byShift");
+  const [showProjections, setShowProjections] = useState(false);
+  const [projectionOverlay, setProjectionOverlay] = useState<ProjectionDayOverlay[] | null>(null);
   const { getColor, fetch: fetchCustomers } = useCustomers();
 
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
+
+  // Fetch projection data once on mount
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/capacity/weekly-projections")
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: WeeklyProjection[]) => {
+        if (cancelled) return;
+        const overlay = buildProjectionOverlay(data);
+        if (hasProjectionData(overlay)) {
+          setProjectionOverlay(overlay);
+        }
+      })
+      .catch(() => {
+        // Silently ignore — projections are optional
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const activeShifts = useMemo(
     () => shifts.filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
@@ -81,7 +114,7 @@ export function ForecastPatternChart({
   const chartData = useMemo(() => {
     // Total mode: 7 rows (Mon–Sun), day-level
     if (viewMode === "total") {
-      return patternResult.pattern.map((p) => {
+      return patternResult.pattern.map((p, idx) => {
         const row: Record<string, unknown> = {
           label: p.label,
           dayOfWeek: p.dayOfWeek,
@@ -102,12 +135,20 @@ export function ForecastPatternChart({
           }
         }
 
+        // Projection overlay (total level)
+        if (showProjections && projectionOverlay) {
+          const pDay = projectionOverlay[idx];
+          if (pDay && pDay.projectedTotal > 0) {
+            row.projectedTotal = pDay.projectedTotal;
+          }
+        }
+
         return row;
       });
     }
 
     // byShift / byCustomer: 1 row per day-of-week, per-shift fields
-    return patternResult.pattern.map((p) => {
+    return patternResult.pattern.map((p, idx) => {
       const row: Record<string, unknown> = {
         label: p.label,
         dayOfWeek: p.dayOfWeek,
@@ -138,11 +179,31 @@ export function ForecastPatternChart({
             if (val != null) row[`lensOverlay_${shift.code}`] = val;
           }
         }
+
+        // Projection overlay per shift
+        if (showProjections && projectionOverlay) {
+          const pDay = projectionOverlay[idx];
+          if (pDay) {
+            const val = pDay.projectedByShift[shift.code];
+            if (val != null && val > 0) {
+              row[`projected_${shift.code}`] = val;
+            }
+          }
+        }
       }
 
       return row;
     });
-  }, [patternResult, activeShifts, allCustomers, viewMode, activeLens, lensLineConfig]);
+  }, [
+    patternResult,
+    activeShifts,
+    allCustomers,
+    viewMode,
+    activeLens,
+    lensLineConfig,
+    showProjections,
+    projectionOverlay,
+  ]);
 
   if (demand.length === 0) {
     return (
@@ -169,6 +230,20 @@ export function ForecastPatternChart({
             Based on {patternResult.totalWeeks} week{patternResult.totalWeeks !== 1 ? "s" : ""} of
             data
           </span>
+          {projectionOverlay && (
+            <button
+              className={`flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-md border transition-colors ${
+                showProjections
+                  ? "bg-pink-500/15 border-pink-500/40 text-pink-400"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-pink-500/30"
+              }`}
+              onClick={() => setShowProjections((v) => !v)}
+              title="Toggle customer MH projections overlay"
+            >
+              <i className="fa-solid fa-bullseye text-[9px]" />
+              Projected
+            </button>
+          )}
           <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
             {(["byShift", "byCustomer", "total"] as const).map((mode) => (
               <button
@@ -348,6 +423,44 @@ export function ForecastPatternChart({
                   strokeWidth={2}
                   strokeDasharray={lensLineConfig.dash || undefined}
                   dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
+
+            {/* === PROJECTION OVERLAY (TEMPORARY — OI-067) === */}
+
+            {/* Total mode: single projected line */}
+            {showProjections && viewMode === "total" && (
+              <Line
+                yAxisId="mh"
+                dataKey="projectedTotal"
+                name="Projected"
+                type="monotone"
+                stroke={PROJECTION_COLOR}
+                strokeWidth={2}
+                strokeDasharray={PROJECTION_DASH}
+                dot={{ r: 3, fill: PROJECTION_COLOR, strokeWidth: 0 }}
+                activeDot={{ r: 5, strokeWidth: 0 }}
+                connectNulls
+              />
+            )}
+
+            {/* Per-shift modes: 3 projected lines */}
+            {showProjections &&
+              viewMode !== "total" &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`proj_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`projected_${shift.code}`}
+                  name={i === 0 ? "Projected" : `Projected (${shift.name})`}
+                  type="monotone"
+                  stroke={PROJECTION_COLOR}
+                  strokeWidth={2}
+                  strokeDasharray={PROJECTION_DASH}
+                  dot={{ r: 3, fill: PROJECTION_COLOR, strokeWidth: 0 }}
                   activeDot={{ r: 5, strokeWidth: 0 }}
                   connectNulls
                   legendType={i === 0 ? undefined : "none"}

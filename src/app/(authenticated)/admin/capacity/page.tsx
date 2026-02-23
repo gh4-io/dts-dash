@@ -68,6 +68,15 @@ const CAPACITY_SECTIONS = [
     color: "text-emerald-400",
   },
   {
+    title: "Weekly Projections",
+    description:
+      "Assumed customer MH targets per day-of-week and shift. Pink overlay on the Typical Week Pattern chart. Temporary reference feature.",
+    href: "/admin/capacity/weekly-projections",
+    icon: "fa-solid fa-bullseye",
+    color: "text-pink-400",
+    badge: "TEMP",
+  },
+  {
     title: "Dev Overview",
     description:
       "Inspect intermediate pipeline values — assumptions, formula trace, daily numbers, WP contributions, and raw data. Admin debug tool.",

@@ -1247,6 +1247,25 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-067 | Weekly MH Projections — TEMPORARY FIXTURE
+
+| Field | Value |
+|-------|-------|
+| **Type** | Temporary feature |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-02-22 |
+| **Context** | User has assumed customer MH projections based on historical and billed hours — a 7-customer x 7-day x 3-shift matrix of man-hour targets. Displayed as pink dashed overlay on the Forecast Pattern Chart. |
+| **Implementation** | Self-contained `weekly_mh_projections` table (no FK to customers — uses text names). Separate API endpoints. Toggle button on chart (local React state only). Matrix-style admin grid at `/admin/capacity/weekly-projections`. |
+| **New files** | `projection-engine.ts`, `projection-data.ts`, `/api/capacity/weekly-projections/route.ts`, `/api/admin/capacity/weekly-projections/route.ts`, `weekly-projections/page.tsx`, `projection-grid.tsx`, `projection-engine.test.ts` |
+| **Modified files** | `types/index.ts`, `schema.ts`, `schema-init.ts` (M018), `forecast-pattern-chart.tsx`, `capacity/page.tsx` (hub card), `capacity/index.ts` (barrel) |
+| **Removal checklist** | 1. Delete 7 new files listed above. 2. Revert changes in modified files (chart toggle, hub card, types, barrel). 3. Add migration `M-next: DROP TABLE IF EXISTS weekly_mh_projections`. 4. Remove `weeklyMhProjections` from schema.ts. M018 migration stays (append-only). |
+| **Decision** | Remove when replaced by a proper forecasting pipeline or when projections are no longer needed. Text customer names (no FK) was deliberate for easy removal. Separate API keeps overview route untouched. Toggle (not lens) avoids touching Zustand store. |
+| **Links** | M018 migration, D-050+ |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
@@ -1254,10 +1273,10 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 | P0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 1 | 0 | 15 |
 | P2 | 4 | 1 | 0 | 14 |
-| P3 | 4 | 0 | 2 | 0 |
-| **Total** | **12** | **2** | **2** | **45** |
+| P3 | 5 | 0 | 2 | 0 |
+| **Total** | **13** | **2** | **2** | **45** |
 
-**Latest update (2026-02-22)**: OI-066 opened — Capacity Dev Overview (temporary debug tool). Admin-only inspection page for intermediate model values. Clear removal path planned for 4-8 weeks out.
+**Latest update (2026-02-22)**: OI-067 opened — Weekly MH Projections (temporary fixture). Customer MH targets per day/shift as pink overlay on forecast chart. Self-contained table, easy removal.
 
 **Previous update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
 

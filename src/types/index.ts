@@ -909,3 +909,29 @@ export interface MasterDataImportLog {
   warnings: string | null;
   errors: string | null;
 }
+
+// ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
+
+export type ProjectionShiftCode = "DAY" | "SWING" | "NIGHT";
+
+export interface WeeklyProjection {
+  id: number;
+  customer: string;
+  dayOfWeek: number; // ISO: 1=Mon ... 7=Sun
+  shiftCode: ProjectionShiftCode;
+  projectedMh: number;
+  notes: string | null;
+  isActive: boolean;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One day in a 7-element overlay array (Mon–Sun) */
+export interface ProjectionDayOverlay {
+  dayOfWeek: number;
+  label: string;
+  projectedTotal: number;
+  projectedByShift: Record<string, number>;
+  projectedByCustomer: Record<string, number>;
+}
