@@ -114,3 +114,6 @@ out/
 
 # Server configuration (instance-specific)
 server.config.yml
+
+
+**/.claude/settings.local.json

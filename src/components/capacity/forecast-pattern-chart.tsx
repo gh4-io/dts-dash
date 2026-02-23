@@ -48,9 +48,6 @@ const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: str
   allocated: { stroke: "#f59e0b", dash: "6 3", name: "Avg Allocated" },
 };
 
-const PROJECTION_COLOR = "#ec4899"; // pink-500
-const PROJECTION_DASH = "4 2";
-
 export function ForecastPatternChart({
   demand,
   capacity,
@@ -99,8 +96,12 @@ export function ForecastPatternChart({
 
   const lensLineConfig = LENS_LINE_CONFIG[activeLens] ?? null;
 
+  // Use projected data as the bar source when toggle is ON
+  const useProjected = showProjections && projectionOverlay != null;
+
   const allCustomers = useMemo(() => {
     const names = new Set<string>();
+    // From historical pattern
     for (const p of patternResult.pattern) {
       for (const shiftCustomers of Object.values(p.avgDemandByCustomerByShift)) {
         for (const name of Object.keys(shiftCustomers)) {
@@ -108,17 +109,27 @@ export function ForecastPatternChart({
         }
       }
     }
+    // From projection overlay (may have customers not in historical data)
+    if (projectionOverlay) {
+      for (const pDay of projectionOverlay) {
+        for (const name of Object.keys(pDay.projectedByCustomer)) {
+          names.add(name);
+        }
+      }
+    }
     return Array.from(names).sort();
-  }, [patternResult]);
+  }, [patternResult, projectionOverlay]);
 
   const chartData = useMemo(() => {
     // Total mode: 7 rows (Mon–Sun), day-level
     if (viewMode === "total") {
       return patternResult.pattern.map((p, idx) => {
+        const pDay = projectionOverlay?.[idx];
+
         const row: Record<string, unknown> = {
           label: p.label,
           dayOfWeek: p.dayOfWeek,
-          avgDemandMH: p.avgDemandMH,
+          avgDemandMH: useProjected && pDay ? pDay.projectedTotal : p.avgDemandMH,
           avgCapacityMH: p.avgCapacityMH,
           sampleCount: p.sampleCount,
         };
@@ -135,20 +146,14 @@ export function ForecastPatternChart({
           }
         }
 
-        // Projection overlay (total level)
-        if (showProjections && projectionOverlay) {
-          const pDay = projectionOverlay[idx];
-          if (pDay && pDay.projectedTotal > 0) {
-            row.projectedTotal = pDay.projectedTotal;
-          }
-        }
-
         return row;
       });
     }
 
     // byShift / byCustomer: 1 row per day-of-week, per-shift fields
     return patternResult.pattern.map((p, idx) => {
+      const pDay = projectionOverlay?.[idx];
+
       const row: Record<string, unknown> = {
         label: p.label,
         dayOfWeek: p.dayOfWeek,
@@ -156,38 +161,39 @@ export function ForecastPatternChart({
       };
 
       for (const shift of activeShifts) {
-        // Capacity per shift (for lines)
+        // Capacity per shift (for lines) — always from pattern engine
         row[`capacity_${shift.code}`] = p.avgCapacityByShift[shift.code] ?? 0;
 
-        // Demand per shift (for bars)
+        // Demand per shift (for bars) — swap source when projected is ON
         if (viewMode === "byCustomer") {
-          const custForShift = p.avgDemandByCustomerByShift[shift.code] ?? {};
-          for (const customer of allCustomers) {
-            row[`demand_${shift.code}_${customer}`] = custForShift[customer] ?? 0;
+          if (useProjected && pDay) {
+            const custForShift = pDay.projectedByCustomerByShift[shift.code] ?? {};
+            for (const customer of allCustomers) {
+              row[`demand_${shift.code}_${customer}`] = custForShift[customer] ?? 0;
+            }
+          } else {
+            const custForShift = p.avgDemandByCustomerByShift[shift.code] ?? {};
+            for (const customer of allCustomers) {
+              row[`demand_${shift.code}_${customer}`] = custForShift[customer] ?? 0;
+            }
           }
         } else {
-          row[`demand_${shift.code}`] = p.avgDemandByShift[shift.code] ?? 0;
+          // byShift
+          if (useProjected && pDay) {
+            row[`demand_${shift.code}`] = pDay.projectedByShift[shift.code] ?? 0;
+          } else {
+            row[`demand_${shift.code}`] = p.avgDemandByShift[shift.code] ?? 0;
+          }
         }
 
-        // Lens overlay per shift
-        if (lensLineConfig) {
+        // Lens overlay per shift (only when NOT using projected — avoids clutter)
+        if (!useProjected && lensLineConfig) {
           if (activeLens === "forecast") {
             const val = p.avgForecastedByShift[shift.code];
             if (val != null) row[`lensOverlay_${shift.code}`] = val;
           } else if (activeLens === "allocated") {
             const val = p.avgAllocatedByShift[shift.code];
             if (val != null) row[`lensOverlay_${shift.code}`] = val;
-          }
-        }
-
-        // Projection overlay per shift
-        if (showProjections && projectionOverlay) {
-          const pDay = projectionOverlay[idx];
-          if (pDay) {
-            const val = pDay.projectedByShift[shift.code];
-            if (val != null && val > 0) {
-              row[`projected_${shift.code}`] = val;
-            }
           }
         }
       }
@@ -201,7 +207,7 @@ export function ForecastPatternChart({
     viewMode,
     activeLens,
     lensLineConfig,
-    showProjections,
+    useProjected,
     projectionOverlay,
   ]);
 
@@ -215,6 +221,9 @@ export function ForecastPatternChart({
       </div>
     );
   }
+
+  // Bar label changes when showing projected vs historical
+  const barLabel = useProjected ? "Projected" : "Avg Demand";
 
   return (
     <div
@@ -238,7 +247,7 @@ export function ForecastPatternChart({
                   : "border-border text-muted-foreground hover:text-foreground hover:border-pink-500/30"
               }`}
               onClick={() => setShowProjections((v) => !v)}
-              title="Toggle customer MH projections overlay"
+              title="Toggle: show projected demand instead of historical averages"
             >
               <i className="fa-solid fa-bullseye text-[9px]" />
               Projected
@@ -280,7 +289,7 @@ export function ForecastPatternChart({
               tickLine={false}
               axisLine={false}
               label={{
-                value: "Avg Man-Hours",
+                value: useProjected ? "Projected MH" : "Avg Man-Hours",
                 angle: -90,
                 position: "insideLeft",
                 fill: "hsl(var(--muted-foreground))",
@@ -301,20 +310,23 @@ export function ForecastPatternChart({
                 const item = payload?.[0]?.payload;
                 if (!item) return "";
                 const samples = item.sampleCount ?? 0;
-                return `${item.label} — avg of ${samples} ${samples === 1 ? "day" : "days"}`;
+                const source = useProjected
+                  ? "projected"
+                  : `avg of ${samples} ${samples === 1 ? "day" : "days"}`;
+                return `${item.label} — ${source}`;
               }}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
 
-            {/* === DEMAND BARS === */}
+            {/* === DEMAND BARS (swap data source when projected is ON) === */}
 
             {/* Total mode: 1 bar per day-of-week */}
             {viewMode === "total" && (
               <Bar
                 yAxisId="mh"
                 dataKey="avgDemandMH"
-                name="Avg Demand"
-                fill="#3b82f6"
+                name={barLabel}
+                fill={useProjected ? "#ec4899" : "#3b82f6"}
                 fillOpacity={0.8}
                 radius={[2, 2, 0, 0]}
                 barSize={20}
@@ -328,7 +340,7 @@ export function ForecastPatternChart({
                   key={shift.code}
                   yAxisId="mh"
                   dataKey={`demand_${shift.code}`}
-                  name={`${shift.name} Demand`}
+                  name={`${shift.name} ${barLabel}`}
                   fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
                   fillOpacity={0.8}
                   radius={[2, 2, 0, 0]}
@@ -348,14 +360,13 @@ export function ForecastPatternChart({
                     name={customer}
                     fill={getColor(customer)}
                     fillOpacity={0.8}
-                    radius={[2, 2, 0, 0]}
                     barSize={14}
                     legendType={shiftIdx === 0 ? undefined : "none"}
                   />
                 )),
               )}
 
-            {/* === LINES === */}
+            {/* === CAPACITY LINES (always from pattern engine) === */}
 
             {/* Total mode: single capacity line */}
             {viewMode === "total" && (
@@ -391,10 +402,10 @@ export function ForecastPatternChart({
                 </Fragment>
               ))}
 
-            {/* === LENS OVERLAY === */}
+            {/* === LENS OVERLAY (hidden when projected is active) === */}
 
             {/* Total mode: single lens line */}
-            {viewMode === "total" && lensLineConfig && (
+            {!useProjected && viewMode === "total" && lensLineConfig && (
               <Line
                 yAxisId="mh"
                 dataKey="lensOverlayMH"
@@ -410,7 +421,8 @@ export function ForecastPatternChart({
             )}
 
             {/* Per-shift modes: 3 lens overlay lines */}
-            {viewMode !== "total" &&
+            {!useProjected &&
+              viewMode !== "total" &&
               lensLineConfig &&
               activeShifts.map((shift, i) => (
                 <Line
@@ -423,44 +435,6 @@ export function ForecastPatternChart({
                   strokeWidth={2}
                   strokeDasharray={lensLineConfig.dash || undefined}
                   dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
-                  activeDot={{ r: 5, strokeWidth: 0 }}
-                  connectNulls
-                  legendType={i === 0 ? undefined : "none"}
-                />
-              ))}
-
-            {/* === PROJECTION OVERLAY (TEMPORARY — OI-067) === */}
-
-            {/* Total mode: single projected line */}
-            {showProjections && viewMode === "total" && (
-              <Line
-                yAxisId="mh"
-                dataKey="projectedTotal"
-                name="Projected"
-                type="monotone"
-                stroke={PROJECTION_COLOR}
-                strokeWidth={2}
-                strokeDasharray={PROJECTION_DASH}
-                dot={{ r: 3, fill: PROJECTION_COLOR, strokeWidth: 0 }}
-                activeDot={{ r: 5, strokeWidth: 0 }}
-                connectNulls
-              />
-            )}
-
-            {/* Per-shift modes: 3 projected lines */}
-            {showProjections &&
-              viewMode !== "total" &&
-              activeShifts.map((shift, i) => (
-                <Line
-                  key={`proj_${shift.code}`}
-                  yAxisId="mh"
-                  dataKey={`projected_${shift.code}`}
-                  name={i === 0 ? "Projected" : `Projected (${shift.name})`}
-                  type="monotone"
-                  stroke={PROJECTION_COLOR}
-                  strokeWidth={2}
-                  strokeDasharray={PROJECTION_DASH}
-                  dot={{ r: 3, fill: PROJECTION_COLOR, strokeWidth: 0 }}
                   activeDot={{ r: 5, strokeWidth: 0 }}
                   connectNulls
                   legendType={i === 0 ? undefined : "none"}

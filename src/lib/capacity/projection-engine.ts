@@ -58,6 +58,7 @@ export function buildProjectionOverlay(projections: WeeklyProjection[]): Project
 
     const byShift: Record<string, number> = {};
     const byCustomer: Record<string, number> = {};
+    const byCustomerByShift: Record<string, Record<string, number>> = {};
     let total = 0;
 
     for (const entry of dayEntries) {
@@ -69,6 +70,19 @@ export function buildProjectionOverlay(projections: WeeklyProjection[]): Project
 
       // Aggregate by customer
       byCustomer[entry.customer] = (byCustomer[entry.customer] ?? 0) + mh;
+
+      // Aggregate by customer × shift
+      if (!byCustomerByShift[entry.shiftCode]) {
+        byCustomerByShift[entry.shiftCode] = {};
+      }
+      byCustomerByShift[entry.shiftCode][entry.customer] =
+        (byCustomerByShift[entry.shiftCode][entry.customer] ?? 0) + mh;
+    }
+
+    // Round the customer×shift values
+    const roundedByCustomerByShift: Record<string, Record<string, number>> = {};
+    for (const [shift, customers] of Object.entries(byCustomerByShift)) {
+      roundedByCustomerByShift[shift] = roundValues(customers);
     }
 
     result.push({
@@ -77,6 +91,7 @@ export function buildProjectionOverlay(projections: WeeklyProjection[]): Project
       projectedTotal: Math.round(total * 10) / 10,
       projectedByShift: roundValues(byShift),
       projectedByCustomer: roundValues(byCustomer),
+      projectedByCustomerByShift: roundedByCustomerByShift,
     });
   }
 

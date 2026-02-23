@@ -934,4 +934,6 @@ export interface ProjectionDayOverlay {
   projectedTotal: number;
   projectedByShift: Record<string, number>;
   projectedByCustomer: Record<string, number>;
+  /** shiftCode → customer → projectedMH */
+  projectedByCustomerByShift: Record<string, Record<string, number>>;
 }
