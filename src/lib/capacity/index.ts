@@ -157,6 +157,9 @@ export {
   deleteBillingEntry,
 } from "./billing-data";
 
+// Timezone helpers (pure functions)
+export { getLocalHour, getLocalDateStr, isValidTimezone } from "./tz-helpers";
+
 // Lens configuration (P2-7, pure constants)
 export { CAPACITY_LENSES, getAvailableLenses } from "./lens-config";
 export type { CapacityLensDefinition } from "./lens-config";

@@ -187,6 +187,7 @@ export interface CapacityShift {
   startHour: number;
   endHour: number;
   paidHours: number;
+  timezone: string; // IANA timezone, e.g. "UTC", "America/New_York"
   minHeadcount: number;
   sortOrder: number;
   isActive: boolean;

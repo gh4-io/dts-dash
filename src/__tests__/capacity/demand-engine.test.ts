@@ -19,6 +19,7 @@ const shifts: CapacityShift[] = [
     startHour: 7,
     endHour: 15,
     paidHours: 8.0,
+    timezone: "UTC",
     minHeadcount: 1,
     sortOrder: 0,
     isActive: true,
@@ -30,6 +31,7 @@ const shifts: CapacityShift[] = [
     startHour: 15,
     endHour: 23,
     paidHours: 8.0,
+    timezone: "UTC",
     minHeadcount: 1,
     sortOrder: 1,
     isActive: true,
@@ -41,6 +43,7 @@ const shifts: CapacityShift[] = [
     startHour: 23,
     endHour: 7,
     paidHours: 8.0,
+    timezone: "UTC",
     minHeadcount: 1,
     sortOrder: 2,
     isActive: true,
@@ -436,5 +439,65 @@ describe("computeDailyDemandV2", () => {
       const custSum = Object.values(day.byCustomer).reduce((sum, v) => sum + v, 0);
       expect(custSum).toBeCloseTo(day.totalDemandMH, 5);
     }
+  });
+});
+
+// ─── Timezone-aware enumerateGroundSlots ────────────────────────────────────
+
+describe("timezone-aware enumerateGroundSlots", () => {
+  // Eastern shifts: same hours but timezone = "America/New_York"
+  const easternShifts: CapacityShift[] = shifts.map((s) => ({
+    ...s,
+    timezone: "America/New_York",
+  }));
+
+  it("UTC timezone produces same results as default", () => {
+    const arrival = "2026-03-10T10:00:00.000Z";
+    const departure = "2026-03-10T20:00:00.000Z";
+
+    const slotsDefault = enumerateGroundSlots(arrival, departure, shifts);
+    const slotsExplicit = enumerateGroundSlots(arrival, departure, shifts, "UTC");
+
+    expect(slotsDefault).toEqual(slotsExplicit);
+  });
+
+  it("Eastern timezone shifts bucket hour correctly (UTC 12:00 = Eastern 07:00 during EST)", () => {
+    // 2026-01-15 is during EST (UTC-5)
+    // Aircraft on ground UTC 12:00 (EST 07:00) to UTC 20:00 (EST 15:00)
+    // With Eastern shifts, this spans DAY shift (07-15 Eastern)
+    const arrival = "2026-01-15T12:00:00.000Z"; // 07:00 Eastern
+    const departure = "2026-01-15T20:00:00.000Z"; // 15:00 Eastern
+
+    const slots = enumerateGroundSlots(arrival, departure, easternShifts, "America/New_York");
+
+    expect(slots.length).toBe(1);
+    expect(slots[0].shift.code).toBe("DAY");
+    expect(slots[0].date).toBe("2026-01-15");
+  });
+
+  it("late UTC time maps to previous day in Eastern", () => {
+    // UTC 04:00 on 2026-01-16 = EST 23:00 on 2026-01-15 (NIGHT shift)
+    // UTC 10:00 on 2026-01-16 = EST 05:00 on 2026-01-16 (still NIGHT shift)
+    const arrival = "2026-01-16T04:00:00.000Z"; // 23:00 Eastern Jan 15
+    const departure = "2026-01-16T10:00:00.000Z"; // 05:00 Eastern Jan 16
+
+    const slots = enumerateGroundSlots(arrival, departure, easternShifts, "America/New_York");
+
+    // Should hit NIGHT shift on Jan 15 (23:00 Eastern start)
+    expect(slots.some((s) => s.shift.code === "NIGHT")).toBe(true);
+    expect(slots.some((s) => s.date === "2026-01-15")).toBe(true);
+  });
+
+  it("ground time spanning multiple Eastern shifts", () => {
+    // 2026-01-15: UTC 14:00 (EST 09:00) to 2026-01-16T02:00 (EST 21:00)
+    // Should hit DAY (07-15), SWING (15-23) on Jan 15
+    const arrival = "2026-01-15T14:00:00.000Z"; // 09:00 Eastern
+    const departure = "2026-01-16T02:00:00.000Z"; // 21:00 Eastern
+
+    const slots = enumerateGroundSlots(arrival, departure, easternShifts, "America/New_York");
+
+    const shiftCodes = slots.map((s) => s.shift.code);
+    expect(shiftCodes).toContain("DAY");
+    expect(shiftCodes).toContain("SWING");
   });
 });

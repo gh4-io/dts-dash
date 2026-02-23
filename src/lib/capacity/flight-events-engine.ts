@@ -14,6 +14,7 @@ import type {
   CapacityShift,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
+import { getLocalHour, getLocalDateStr } from "./tz-helpers";
 
 // ─── Coverage Window Computation ────────────────────────────────────────────
 
@@ -102,10 +103,13 @@ interface CoverageRequirement {
 /**
  * Aggregate coverage minutes per (date, shift) from coverage windows.
  * Uses resolveShiftForHour to map window times to shifts.
+ *
+ * @param timezone - IANA timezone for shift hour interpretation (default: "UTC")
  */
 export function computeCoverageRequirements(
   windows: EventCoverageWindow[],
   shifts: CapacityShift[],
+  timezone: string = "UTC",
 ): CoverageRequirement[] {
   const map = new Map<string, CoverageRequirement>();
 
@@ -116,8 +120,8 @@ export function computeCoverageRequirements(
     // Walk hour-by-hour through the window
     let current = new Date(start);
     while (current < end) {
-      const hour = current.getUTCHours();
-      const dateStr = current.toISOString().split("T")[0];
+      const hour = getLocalHour(current, timezone);
+      const dateStr = getLocalDateStr(current, timezone);
       const shift = resolveShiftForHour(hour, shifts);
 
       if (shift) {

@@ -19,15 +19,29 @@ function makeBucket(
 
 function makeShifts(): CapacityShift[] {
   return [
-    { id: 1, code: "DAY", name: "Day", startHour: 7, endHour: 15, isDefault: true, sortOrder: 0 },
+    {
+      id: 1,
+      code: "DAY",
+      name: "Day",
+      startHour: 7,
+      endHour: 15,
+      paidHours: 8,
+      timezone: "UTC",
+      minHeadcount: 1,
+      sortOrder: 0,
+      isActive: true,
+    },
     {
       id: 2,
       code: "SWING",
       name: "Swing",
       startHour: 15,
       endHour: 23,
-      isDefault: true,
+      paidHours: 8,
+      timezone: "UTC",
+      minHeadcount: 1,
       sortOrder: 1,
+      isActive: true,
     },
     {
       id: 3,
@@ -35,8 +49,11 @@ function makeShifts(): CapacityShift[] {
       name: "Night",
       startHour: 23,
       endHour: 7,
-      isDefault: true,
+      paidHours: 8,
+      timezone: "UTC",
+      minHeadcount: 1,
       sortOrder: 2,
+      isActive: true,
     },
   ];
 }

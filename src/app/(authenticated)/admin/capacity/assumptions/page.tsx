@@ -2,24 +2,36 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AssumptionsForm } from "@/components/admin/capacity/assumptions-form";
+import { ShiftTimezoneSelector } from "@/components/admin/capacity/shift-timezone-selector";
 import Link from "next/link";
-import type { CapacityAssumptions } from "@/types";
+import type { CapacityAssumptions, CapacityShift } from "@/types";
 
 export default function AdminAssumptionsPage() {
   const [assumptions, setAssumptions] = useState<CapacityAssumptions | null>(null);
+  const [shifts, setShifts] = useState<CapacityShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/admin/capacity/assumptions")
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load assumptions");
-        return res.json();
-      })
-      .then(setAssumptions)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+  const loadData = useCallback(async () => {
+    try {
+      const [aRes, sRes] = await Promise.all([
+        fetch("/api/admin/capacity/assumptions"),
+        fetch("/api/admin/capacity/shifts"),
+      ]);
+      if (!aRes.ok) throw new Error("Failed to load assumptions");
+      if (!sRes.ok) throw new Error("Failed to load shifts");
+      setAssumptions(await aRes.json());
+      setShifts(await sRes.json());
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleSave = useCallback(async (updates: Partial<CapacityAssumptions>) => {
     const res = await fetch("/api/admin/capacity/assumptions", {
@@ -33,6 +45,16 @@ export default function AdminAssumptionsPage() {
     }
     const updated = await res.json();
     setAssumptions(updated);
+  }, []);
+
+  const handleTimezoneChange = useCallback(async (tz: string) => {
+    const res = await fetch("/api/admin/capacity/shifts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ timezone: tz }),
+    });
+    if (!res.ok) throw new Error("Failed to update timezone");
+    setShifts(await res.json());
   }, []);
 
   if (loading) {
@@ -65,6 +87,11 @@ export default function AdminAssumptionsPage() {
         <i className="fa-solid fa-chevron-right text-[8px]" />
         <span className="text-foreground">Model Assumptions</span>
       </div>
+
+      <ShiftTimezoneSelector
+        currentTimezone={shifts[0]?.timezone ?? "UTC"}
+        onSave={handleTimezoneChange}
+      />
 
       <AssumptionsForm initial={assumptions} onSave={handleSave} />
     </div>

@@ -112,8 +112,8 @@ function ensureDefaultCapacityData(): void {
     ];
 
     const insertShift = sqlite.prepare(
-      `INSERT INTO capacity_shifts (code, name, start_hour, end_hour, paid_hours, min_headcount, sort_order, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, 1, ?, ?)`,
+      `INSERT INTO capacity_shifts (code, name, start_hour, end_hour, paid_hours, timezone, min_headcount, sort_order, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'UTC', 1, ?, 1, ?, ?)`,
     );
 
     const insertPlan = sqlite.prepare(

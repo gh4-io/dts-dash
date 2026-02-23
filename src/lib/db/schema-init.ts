@@ -930,6 +930,15 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M016: Add timezone to capacity_shifts
+  results.push(
+    applyMigration("M016_shift_timezone", () => {
+      sqlite.exec(`
+        ALTER TABLE capacity_shifts ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC';
+      `);
+    }),
+  );
+
   return results;
 }
 

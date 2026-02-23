@@ -37,6 +37,7 @@ export function loadShifts(): CapacityShift[] {
     startHour: r.startHour,
     endHour: r.endHour,
     paidHours: r.paidHours,
+    timezone: r.timezone,
     minHeadcount: r.minHeadcount,
     sortOrder: r.sortOrder,
     isActive: r.isActive,

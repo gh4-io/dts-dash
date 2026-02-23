@@ -16,20 +16,24 @@ import type {
   DailyDemandV2,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
+import { getLocalHour, getLocalDateStr } from "./tz-helpers";
 
 /**
  * Aggregate hourly concurrency buckets into per-day summaries.
- * Groups by date (YYYY-MM-DD extracted from the ISO hour string).
+ * Groups by date in the shift timezone.
+ *
+ * @param timezone - IANA timezone for date grouping (default: "UTC")
  */
 export function aggregateConcurrencyByDay(
   buckets: ConcurrencyBucket[],
+  timezone: string = "UTC",
 ): Map<string, ConcurrencyDaySummary> {
   if (buckets.length === 0) return new Map();
 
-  // Group buckets by date
+  // Group buckets by date in shift timezone
   const byDate = new Map<string, ConcurrencyBucket[]>();
   for (const b of buckets) {
-    const date = b.hour.split("T")[0];
+    const date = getLocalDateStr(new Date(b.hour), timezone);
     const existing = byDate.get(date);
     if (existing) {
       existing.push(b);
@@ -69,25 +73,28 @@ export function aggregateConcurrencyByDay(
 
 /**
  * Aggregate hourly concurrency buckets into per-shift-per-day summaries.
- * Uses resolveShiftForHour to map each bucket's UTC hour to its shift.
+ * Uses resolveShiftForHour to map each bucket's hour to its shift in the configured timezone.
  * Buckets that don't map to any shift are silently skipped.
+ *
+ * @param timezone - IANA timezone for shift hour interpretation (default: "UTC")
  */
 export function aggregateConcurrencyByShift(
   buckets: ConcurrencyBucket[],
   shifts: CapacityShift[],
+  timezone: string = "UTC",
 ): Map<string, Map<string, ConcurrencyShiftSummary>> {
   if (buckets.length === 0 || shifts.length === 0) return new Map();
 
-  // Group by (date, shiftCode)
+  // Group by (date, shiftCode) using shift timezone
   const grouped = new Map<string, Map<string, ConcurrencyBucket[]>>();
 
   for (const b of buckets) {
     const d = new Date(b.hour);
-    const utcHour = d.getUTCHours();
-    const shift = resolveShiftForHour(utcHour, shifts);
+    const localHour = getLocalHour(d, timezone);
+    const shift = resolveShiftForHour(localHour, shifts);
     if (!shift) continue;
 
-    const date = b.hour.split("T")[0];
+    const date = getLocalDateStr(d, timezone);
     let dateMap = grouped.get(date);
     if (!dateMap) {
       dateMap = new Map();

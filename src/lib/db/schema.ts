@@ -288,6 +288,7 @@ export const capacityShifts = sqliteTable("capacity_shifts", {
   startHour: integer("start_hour").notNull(), // 0-23
   endHour: integer("end_hour").notNull(), // 0-23
   paidHours: real("paid_hours").notNull(), // e.g. 8.0
+  timezone: text("timezone").notNull().default("UTC"), // IANA timezone
   minHeadcount: integer("min_headcount").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),

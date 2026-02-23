@@ -142,8 +142,9 @@ export async function GET(request: NextRequest) {
         : undefined;
 
     if (concurrencyBuckets && concurrencyBuckets.length > 0) {
-      const dailyConcurrency = aggregateConcurrencyByDay(concurrencyBuckets);
-      const shiftConcurrency = aggregateConcurrencyByShift(concurrencyBuckets, shifts);
+      const shiftTz = shifts[0]?.timezone ?? "UTC";
+      const dailyConcurrency = aggregateConcurrencyByDay(concurrencyBuckets, shiftTz);
+      const shiftConcurrency = aggregateConcurrencyByShift(concurrencyBuckets, shifts, shiftTz);
       adjustedDemand = applyConcurrencyPressure(adjustedDemand, dailyConcurrency, shiftConcurrency);
     }
 

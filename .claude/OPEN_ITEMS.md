@@ -1240,6 +1240,8 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 | P3 | 3 | 0 | 2 | 0 |
 | **Total** | **11** | **2** | **2** | **45** |
 
-**Latest update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
+**Latest update (2026-02-22)**: Shift timezone support added (D-049). Migration M016 adds `timezone` column to `capacity_shifts`. Engines (demand, concurrency, flight-events) convert UTC to shift-local time. Admin UI on assumptions page. 459 tests passing.
+
+**Previous update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
 
 **Previous update (2026-02-20)**: OI-064 fully resolved — 17 total fixes: 6 showstopper bugs, 2 UI regressions, 8 code review items (parser, validator, mapping, exporter, history, toolbar, source downgrade), and 5 missing empty-key validations across schemas.

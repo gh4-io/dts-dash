@@ -17,6 +17,7 @@
  */
 
 import type { CapacityShift, CapacityAssumptions, DailyDemandV2, ShiftDemandV2 } from "@/types";
+import { getLocalHour, getLocalDateStr } from "./tz-helpers";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -56,13 +57,16 @@ export function resolveShiftForHour(hour: number, shifts: CapacityShift[]): Capa
 /**
  * Enumerate all (date, shift) slots an aircraft occupies during ground time.
  *
- * Uses America/New_York timezone for slot assignment (CVG local time).
+ * Shift start/end hours are interpreted in the configured timezone (from shifts).
  * Each shift that overlaps with the aircraft's ground time gets a slot.
+ *
+ * @param timezone - IANA timezone for shift hour interpretation (default: "UTC")
  */
 export function enumerateGroundSlots(
   arrivalISO: string,
   departureISO: string,
   shifts: CapacityShift[],
+  timezone: string = "UTC",
 ): Array<{ date: string; shift: CapacityShift; isArrival: boolean; isDeparture: boolean }> {
   const activeShifts = shifts.filter((s) => s.isActive);
   if (activeShifts.length === 0) return [];
@@ -79,59 +83,37 @@ export function enumerateGroundSlots(
     isDeparture: boolean;
   }> = [];
 
-  // Generate date range from arrival date to departure date
-  const arrivalDate = new Date(arrival);
-  arrivalDate.setUTCHours(0, 0, 0, 0);
-
-  const departureDate = new Date(departure);
-  departureDate.setUTCHours(0, 0, 0, 0);
-
-  const currentDate = new Date(arrivalDate);
+  // Walk hour-by-hour through the ground time in UTC,
+  // converting each UTC hour to the shift timezone for matching.
+  // This avoids complex inverse timezone conversions.
   const seenKeys = new Set<string>();
+  const arrivalLocalDate = getLocalDateStr(arrival, timezone);
+  const departureLocalDate = getLocalDateStr(departure, timezone);
+  const arrivalLocalHour = getLocalHour(arrival, timezone);
+  const departureLocalHour = getLocalHour(departure, timezone);
 
-  while (currentDate <= departureDate) {
-    const dateStr = currentDate.toISOString().split("T")[0];
+  const current = new Date(arrival);
+  current.setUTCMinutes(0, 0, 0); // snap to hour boundary
 
-    for (const shift of activeShifts) {
-      // Compute shift start/end as actual timestamps for this date
-      const shiftStart = new Date(currentDate);
-      shiftStart.setUTCHours(shift.startHour, 0, 0, 0);
+  while (current < departure) {
+    const localHour = getLocalHour(current, timezone);
+    const localDate = getLocalDateStr(current, timezone);
+    const shift = resolveShiftForHour(localHour, activeShifts);
 
-      let shiftEnd: Date;
-      if (shift.endHour > shift.startHour) {
-        shiftEnd = new Date(currentDate);
-        shiftEnd.setUTCHours(shift.endHour, 0, 0, 0);
-      } else {
-        // Overnight: ends next day
-        shiftEnd = new Date(currentDate);
-        shiftEnd.setUTCDate(shiftEnd.getUTCDate() + 1);
-        shiftEnd.setUTCHours(shift.endHour, 0, 0, 0);
-      }
+    if (shift) {
+      const key = `${localDate}:${shift.code}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
 
-      // Check if ground time overlaps with this shift window
-      if (arrival < shiftEnd && departure > shiftStart) {
-        const key = `${dateStr}:${shift.code}`;
-        if (!seenKeys.has(key)) {
-          seenKeys.add(key);
+        const isArrival = localDate === arrivalLocalDate && isHourInShift(arrivalLocalHour, shift);
+        const isDeparture =
+          localDate === departureLocalDate && isHourInShift(departureLocalHour, shift);
 
-          // Determine if this is arrival or departure shift
-          const arrivalHour = arrival.getUTCHours();
-          const departureHour = departure.getUTCHours();
-
-          const isArrival =
-            dateStr === arrivalDate.toISOString().split("T")[0] &&
-            isHourInShift(arrivalHour, shift);
-
-          const isDeparture =
-            dateStr === departureDate.toISOString().split("T")[0] &&
-            isHourInShift(departureHour, shift);
-
-          slots.push({ date: dateStr, shift, isArrival, isDeparture });
-        }
+        slots.push({ date: localDate, shift, isArrival, isDeparture });
       }
     }
 
-    currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+    current.setUTCHours(current.getUTCHours() + 1);
   }
 
   return slots;
@@ -265,7 +247,8 @@ export function computeDailyDemandV2(
   };
 
   for (const wp of workPackages) {
-    const groundSlots = enumerateGroundSlots(wp.arrival, wp.departure, shifts);
+    const tz = shifts[0]?.timezone ?? "UTC";
+    const groundSlots = enumerateGroundSlots(wp.arrival, wp.departure, shifts, tz);
     if (groundSlots.length === 0) continue;
 
     const allocatedMHs = applyDemandCurve(

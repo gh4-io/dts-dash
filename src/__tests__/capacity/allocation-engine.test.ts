@@ -22,9 +22,42 @@ import type {
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const shifts: CapacityShift[] = [
-  { id: 1, code: "DAY", name: "Day", startHour: 7, endHour: 15, sortOrder: 0, isActive: true },
-  { id: 2, code: "SWING", name: "Swing", startHour: 15, endHour: 23, sortOrder: 1, isActive: true },
-  { id: 3, code: "NIGHT", name: "Night", startHour: 23, endHour: 7, sortOrder: 2, isActive: true },
+  {
+    id: 1,
+    code: "DAY",
+    name: "Day",
+    startHour: 7,
+    endHour: 15,
+    paidHours: 8,
+    timezone: "UTC",
+    minHeadcount: 1,
+    sortOrder: 0,
+    isActive: true,
+  },
+  {
+    id: 2,
+    code: "SWING",
+    name: "Swing",
+    startHour: 15,
+    endHour: 23,
+    paidHours: 8,
+    timezone: "UTC",
+    minHeadcount: 1,
+    sortOrder: 1,
+    isActive: true,
+  },
+  {
+    id: 3,
+    code: "NIGHT",
+    name: "Night",
+    startHour: 23,
+    endHour: 7,
+    paidHours: 8,
+    timezone: "UTC",
+    minHeadcount: 1,
+    sortOrder: 2,
+    isActive: true,
+  },
 ];
 
 function makeLine(overrides: Partial<DemandAllocationLine> = {}): DemandAllocationLine {
