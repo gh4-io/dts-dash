@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { signIn, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +14,7 @@ interface ChangePasswordFormProps {
 
 export function ChangePasswordForm({ forced = false }: ChangePasswordFormProps) {
   const router = useRouter();
+  const { data: session } = useSession();
   const minLength = usePasswordMinLength();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -47,19 +49,37 @@ export function ChangePasswordForm({ forced = false }: ChangePasswordFormProps) 
       if (res.ok) {
         setMessage({
           type: "success",
-          text: forced
-            ? "Password changed successfully. Redirecting..."
-            : "Password changed. Other sessions have been signed out.",
+          text: "Password changed. Signing you back in...",
         });
-        setCurrentPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
 
-        // If forced reset, redirect to dashboard after 1.5s
-        if (forced) {
-          setTimeout(() => {
-            router.push("/dashboard");
-          }, 1500);
+        // Re-authenticate with new password to get fresh JWT
+        const login = session?.user?.email ?? "";
+        const signInResult = await signIn("credentials", {
+          login,
+          password: newPassword,
+          redirect: false,
+        });
+
+        if (signInResult?.ok) {
+          if (forced) {
+            // Full page navigation ensures the browser sends the fresh session cookie
+            // (router.push can race with cookie propagation, causing the proxy to
+            // see the stale forcePasswordChange flag and redirect back here)
+            window.location.href = "/dashboard";
+            return;
+          } else {
+            setMessage({
+              type: "success",
+              text: "Password changed. Other sessions have been signed out.",
+            });
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            router.refresh();
+          }
+        } else {
+          // Rare: re-auth failed — redirect to login
+          router.push("/login");
         }
       } else {
         const data = await res.json();

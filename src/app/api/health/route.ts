@@ -43,7 +43,7 @@ export async function GET() {
   const uptimeMs = Date.now() - startTime;
   const body = {
     status: healthy ? "healthy" : "unhealthy",
-    version: process.env.npm_package_version || "0.1.0",
+    version: process.env.npm_package_version || "0.1.1",
     uptime: `${Math.floor(uptimeMs / 1000)}s`,
     checks,
   };

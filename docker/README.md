@@ -183,8 +183,8 @@ docker build --target dev -t dtsd:dev .
 docker build \
   --build-arg GIT_SHA=$(git rev-parse HEAD) \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  --build-arg VERSION=0.1.0 \
-  -t dtsd:0.1.0 .
+  --build-arg VERSION=0.1.1 \
+  -t dtsd:0.1.1 .
 ```
 
 ---

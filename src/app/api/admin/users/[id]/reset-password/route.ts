@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { hashSync } from "bcryptjs";
 import { createChildLogger } from "@/lib/logger";
 import { parseIntParam } from "@/lib/utils/route-helpers";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
 import { SYSTEM_AUTH_ID } from "@/lib/constants";
 
 const log = createChildLogger("api/admin/users/[id]/reset-password");
@@ -41,6 +42,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     // Prevent password reset for the system user
     if (existing.authId === SYSTEM_AUTH_ID) {
       return NextResponse.json({ error: "System user password cannot be reset" }, { status: 403 });
+    }
+
+    // Prevent admin from resetting their own password (use Account → Change Password)
+    const sessionUserId = getSessionUserId(session);
+    if (numId === sessionUserId) {
+      return NextResponse.json(
+        { error: "Cannot reset your own password. Use Account → Change Password instead." },
+        { status: 400 },
+      );
     }
 
     const tempPassword = generateTempPassword();

@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> CVG Line Maintenance Dashboard v0.1.0
+> CVG Line Maintenance Dashboard v0.1.1
 
 ## Prerequisites
 
@@ -87,7 +87,7 @@ Or locally: `npm run db:seed-reference`. This is idempotent — safe to re-run.
 ```bash
 docker inspect --format='{{.State.Health.Status}}' dtsd-prod
 curl http://localhost:3000/api/health
-# Expected: {"status":"healthy","version":"0.1.0","uptime":"...","checks":{...}}
+# Expected: {"status":"healthy","version":"0.1.1","uptime":"...","checks":{...}}
 ```
 
 ### Upgrade procedure (Docker)
