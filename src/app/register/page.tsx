@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useAppTitle } from "@/components/layout/app-config-provider";
 
@@ -24,6 +25,7 @@ export default function RegisterPage() {
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/register")
@@ -72,7 +74,24 @@ export default function RegisterPage() {
         return;
       }
 
-      router.push("/login");
+      // Auto-login after successful registration
+      setSigningIn(true);
+      try {
+        const signInResult = await signIn("credentials", {
+          login: email,
+          password,
+          redirect: false,
+        });
+        if (signInResult?.ok) {
+          // Full page navigation ensures the browser sends the fresh session cookie
+          window.location.href = "/dashboard";
+          return;
+        } else {
+          router.push("/login");
+        }
+      } catch {
+        router.push("/login");
+      }
     } catch {
       setLoading(false);
       setError("Registration failed. Please try again.");
@@ -229,10 +248,15 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || signingIn}
             className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
-            {loading ? (
+            {signingIn ? (
+              <span>
+                <i className="fa-solid fa-spinner fa-spin mr-2" />
+                Signing in...
+              </span>
+            ) : loading ? (
               <span>
                 <i className="fa-solid fa-spinner fa-spin mr-2" />
                 Creating account...

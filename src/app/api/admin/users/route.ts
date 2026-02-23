@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { email, username, displayName, role, password } = body;
+    const { email, username, displayName, role, password, forcePasswordChange: forceReset } = body;
 
     // Validation
     if (!email || !displayName || !role) {
@@ -137,7 +137,8 @@ export async function POST(request: NextRequest) {
     }
 
     const tempPassword = password || generateTempPassword();
-    const forcePasswordChange = !password;
+    // Use client's checkbox value if provided, otherwise force reset when password is auto-generated
+    const forcePasswordChange = forceReset !== undefined ? !!forceReset : !password;
 
     const now = new Date().toISOString();
     const newUser = db

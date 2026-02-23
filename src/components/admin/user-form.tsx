@@ -63,7 +63,7 @@ export function UserForm({
     password: "",
     newPassword: "",
     isActive: initialData?.isActive ?? true,
-    forcePasswordChange: initialData?.forcePasswordChange ?? false,
+    forcePasswordChange: mode === "create" ? true : (initialData?.forcePasswordChange ?? false),
   });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -81,13 +81,13 @@ export function UserForm({
         password: "",
         newPassword: "",
         isActive: initialData?.isActive ?? true,
-        forcePasswordChange: initialData?.forcePasswordChange ?? false,
+        forcePasswordChange: mode === "create" ? true : (initialData?.forcePasswordChange ?? false),
       });
       setError(null);
       setTempPassword(null);
       setCopied(false);
     }
-  }, [open, initialData]);
+  }, [open, initialData, mode]);
 
   const handleOpenChange = (isOpen: boolean) => {
     onOpenChange(isOpen);
@@ -238,6 +238,26 @@ export function UserForm({
               </div>
             )}
 
+            <div className="flex items-center gap-3">
+              <input
+                id="force-reset"
+                type="checkbox"
+                checked={form.forcePasswordChange}
+                onChange={(e) => setForm({ ...form, forcePasswordChange: e.target.checked })}
+                className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
+              />
+              <div>
+                <Label htmlFor="force-reset" className="cursor-pointer font-normal">
+                  Require password reset at next login
+                </Label>
+                {mode === "create" && (
+                  <p className="text-xs text-muted-foreground">
+                    User will be required to change their password on first login
+                  </p>
+                )}
+              </div>
+            </div>
+
             {mode === "edit" && (
               <>
                 <div className="border-t border-border pt-4 space-y-4">
@@ -265,19 +285,6 @@ export function UserForm({
                         </SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <input
-                      id="force-reset"
-                      type="checkbox"
-                      checked={form.forcePasswordChange}
-                      onChange={(e) => setForm({ ...form, forcePasswordChange: e.target.checked })}
-                      className="h-4 w-4 rounded border-border accent-primary cursor-pointer"
-                    />
-                    <Label htmlFor="force-reset" className="cursor-pointer font-normal">
-                      Require password reset at next login
-                    </Label>
                   </div>
                 </div>
 

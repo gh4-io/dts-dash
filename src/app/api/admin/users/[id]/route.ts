@@ -59,6 +59,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Cannot deactivate your own account" }, { status: 400 });
     }
 
+    // Prevent self-role-change (kills session via token invalidation)
+    if (numId === sessionUserId && body.role !== undefined && body.role !== existing.role) {
+      return NextResponse.json({ error: "Cannot change your own role" }, { status: 400 });
+    }
+
+    // Prevent self-password-change via admin form (use Account → Change Password)
+    if (numId === sessionUserId && body.newPassword) {
+      return NextResponse.json(
+        { error: "Use Account → Change Password to change your own password" },
+        { status: 400 },
+      );
+    }
+
     const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
     let shouldInvalidateTokens = false;
 

@@ -40,12 +40,13 @@ async function main() {
     process.exit(1);
   }
 
-  // Update password
+  // Update password + bump tokenVersion to invalidate existing sessions
   const hash = hashSync(newPassword, 10);
   db.update(users)
     .set({
       passwordHash: hash,
       forcePasswordChange: !useRandom ? false : true,
+      tokenVersion: (admin.tokenVersion ?? 0) + 1,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(users.id, admin.id))

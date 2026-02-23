@@ -191,10 +191,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-02-23
+
+### Fixed
+
+- **Create User dialog** now shows "Require password reset at next login" checkbox (defaults to checked) in both create and edit modes
+- **Create User API** respects `forcePasswordChange` from request body instead of hardcoding based on password presence
+- **Password change** no longer breaks session — client re-authenticates via `signIn()` after successful password change, keeping JWT valid
+- **Registration** now auto-logs in after successful account creation instead of redirecting to login page
+- **Forced password reset** redirect to dashboard now works correctly after password change (same root cause as password change fix)
+- **Admin self-password-reset** blocked — admin cannot reset their own password via the Reset Password action (returns helpful error directing to Account page)
+- **Admin self-role-change** blocked — admin cannot change their own role via the Edit User form (prevents session death from token invalidation)
+- **Admin self-password-change via admin form** blocked — admin must use Account page to change their own password (prevents session death)
+- **CLI `db:reset-password`** now bumps `tokenVersion` to invalidate existing sessions after password reset
+
+---
+
 ## [0.1.0] - 2025-12-15
 
 Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
 
 [Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.2.0
+[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0
