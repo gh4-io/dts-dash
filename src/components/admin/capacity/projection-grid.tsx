@@ -1,8 +1,17 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { useCustomers } from "@/lib/hooks/use-customers";
 import type { WeeklyProjection, ProjectionShiftCode } from "@/types";
 
 const ISO_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -35,8 +44,14 @@ function cellKey(customer: string, day: number, shift: ProjectionShiftCode): Cel
 }
 
 export function ProjectionGrid({ projections, onSave, onClearAll }: ProjectionGridProps) {
-  const [newCustomer, setNewCustomer] = useState("");
+  const [comboOpen, setComboOpen] = useState(false);
+  const [comboSearch, setComboSearch] = useState("");
   const [saving, setSaving] = useState(false);
+  const { customers: knownCustomers, fetch: fetchCustomers } = useCustomers();
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
 
   // Derive the list of customers from existing projections
   const initialCustomers = useMemo(() => {
@@ -77,13 +92,25 @@ export function ProjectionGrid({ projections, onSave, onClearAll }: ProjectionGr
     setDirty(true);
   }, []);
 
-  const addCustomer = useCallback(() => {
-    const name = newCustomer.trim();
-    if (!name || customers.includes(name)) return;
-    setCustomers((prev) => [...prev, name].sort());
-    setNewCustomer("");
-    setDirty(true);
-  }, [newCustomer, customers]);
+  const addCustomer = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed || customers.includes(trimmed)) return;
+      setCustomers((prev) => [...prev, trimmed].sort());
+      setDirty(true);
+      setComboOpen(false);
+      setComboSearch("");
+    },
+    [customers],
+  );
+
+  // Customer options: known customers not yet added to the grid
+  const customerOptions = useMemo(() => {
+    return knownCustomers
+      .map((c) => c.name)
+      .filter((name) => !customers.includes(name))
+      .sort();
+  }, [knownCustomers, customers]);
 
   const removeCustomer = useCallback((name: string) => {
     if (!confirm(`Remove ${name} and all their projections?`)) return;
@@ -147,19 +174,51 @@ export function ProjectionGrid({ projections, onSave, onClearAll }: ProjectionGr
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Input
-            value={newCustomer}
-            onChange={(e) => setNewCustomer(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addCustomer()}
-            placeholder="Add customer..."
-            className="h-8 w-48 text-xs"
-          />
-          <Button size="sm" variant="outline" className="h-8 text-xs" onClick={addCustomer}>
-            <i className="fa-solid fa-plus mr-1.5" />
-            Add
-          </Button>
-        </div>
+        <Popover open={comboOpen} onOpenChange={setComboOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 text-xs w-56 justify-start">
+              <i className="fa-solid fa-plus mr-1.5 text-muted-foreground" />
+              <span className="text-muted-foreground">Add customer...</span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-0" align="start">
+            <Command>
+              <CommandInput
+                placeholder="Search or type new..."
+                value={comboSearch}
+                onValueChange={setComboSearch}
+                className="text-xs"
+              />
+              <CommandList>
+                <CommandEmpty>
+                  {comboSearch.trim() ? (
+                    <button
+                      className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors"
+                      onClick={() => addCustomer(comboSearch)}
+                    >
+                      <i className="fa-solid fa-plus mr-1.5 text-muted-foreground" />
+                      Add &quot;{comboSearch.trim()}&quot;
+                    </button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Type a customer name</span>
+                  )}
+                </CommandEmpty>
+                <CommandGroup heading="Existing customers">
+                  {customerOptions.map((name) => (
+                    <CommandItem
+                      key={name}
+                      value={name}
+                      onSelect={() => addCustomer(name)}
+                      className="text-xs"
+                    >
+                      {name}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
         <div className="flex-1" />
         <Button
           size="sm"
