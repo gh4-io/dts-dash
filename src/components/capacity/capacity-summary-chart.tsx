@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ComposedChart,
   Bar,
@@ -21,6 +21,7 @@ import type {
   CapacityShift,
   CapacityLensId,
 } from "@/types";
+import { useCustomers } from "@/lib/hooks/use-customers";
 
 interface CapacitySummaryChartProps {
   capacity: DailyCapacityV2[];
@@ -32,7 +33,7 @@ interface CapacitySummaryChartProps {
   fillHeight?: boolean;
 }
 
-type ViewMode = "stacked" | "total";
+type ViewMode = "byShift" | "byCustomer" | "total";
 
 function getUtilizationColor(percent: number | null): string {
   if (percent === null) return "#6b7280";
@@ -74,7 +75,22 @@ export function CapacitySummaryChart({
   activeLens,
   fillHeight = false,
 }: CapacitySummaryChartProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("stacked");
+  const [viewMode, setViewMode] = useState<ViewMode>("byShift");
+  const { getColor, fetch: fetchCustomers } = useCustomers();
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
+
+  const allCustomers = useMemo(() => {
+    const names = new Set<string>();
+    for (const day of demand) {
+      for (const name of Object.keys(day.byCustomer)) {
+        names.add(name);
+      }
+    }
+    return Array.from(names).sort();
+  }, [demand]);
 
   const activeShifts = useMemo(
     () => shifts.filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
@@ -124,7 +140,7 @@ export function CapacitySummaryChart({
         };
       }
 
-      // Stacked mode: per-shift demand bars
+      // Shared base row for byShift and byCustomer
       const row: Record<string, unknown> = {
         date: u.date,
         label,
@@ -135,17 +151,33 @@ export function CapacitySummaryChart({
         ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
       };
 
-      for (const shift of activeShifts) {
-        const sd = dem?.byShift.find((s) => s.shiftCode === shift.code);
-        row[`demand_${shift.code}`] = Math.round((sd?.demandMH ?? 0) * 10) / 10;
+      if (viewMode === "byCustomer") {
+        for (const customer of allCustomers) {
+          row[`demand_${customer}`] = Math.round((dem?.byCustomer[customer] ?? 0) * 10) / 10;
+        }
+      } else {
+        // byShift mode: per-shift demand bars
+        for (const shift of activeShifts) {
+          const sd = dem?.byShift.find((s) => s.shiftCode === shift.code);
+          row[`demand_${shift.code}`] = Math.round((sd?.demandMH ?? 0) * 10) / 10;
 
-        const sc = cap?.byShift.find((s) => s.shiftCode === shift.code);
-        row[`capacity_${shift.code}`] = Math.round((sc?.productiveMH ?? 0) * 10) / 10;
+          const sc = cap?.byShift.find((s) => s.shiftCode === shift.code);
+          row[`capacity_${shift.code}`] = Math.round((sc?.productiveMH ?? 0) * 10) / 10;
+        }
       }
 
       return row;
     });
-  }, [demand, capacity, utilization, activeShifts, viewMode, activeLens, lensLineConfig]);
+  }, [
+    demand,
+    capacity,
+    utilization,
+    activeShifts,
+    allCustomers,
+    viewMode,
+    activeLens,
+    lensLineConfig,
+  ]);
 
   if (chartData.length === 0) {
     return (
@@ -168,26 +200,19 @@ export function CapacitySummaryChart({
           Demand vs Capacity
         </h3>
         <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
-          <button
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-              viewMode === "stacked"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setViewMode("stacked")}
-          >
-            By Shift
-          </button>
-          <button
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-              viewMode === "total"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setViewMode("total")}
-          >
-            Total
-          </button>
+          {(["byShift", "byCustomer", "total"] as const).map((mode) => (
+            <button
+              key={mode}
+              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                viewMode === mode
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setViewMode(mode)}
+            >
+              {mode === "byShift" ? "By Shift" : mode === "byCustomer" ? "By Customer" : "Total"}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -287,6 +312,19 @@ export function CapacitySummaryChart({
                   />
                 ))}
               </Bar>
+            ) : viewMode === "byCustomer" ? (
+              allCustomers.map((customer) => (
+                <Bar
+                  key={customer}
+                  yAxisId="mh"
+                  dataKey={`demand_${customer}`}
+                  name={customer}
+                  fill={getColor(customer)}
+                  fillOpacity={0.8}
+                  radius={[2, 2, 0, 0]}
+                  barSize={Math.max(8, Math.floor(40 / allCustomers.length))}
+                />
+              ))
             ) : (
               activeShifts.map((shift) => (
                 <Bar
@@ -294,11 +332,10 @@ export function CapacitySummaryChart({
                   yAxisId="mh"
                   dataKey={`demand_${shift.code}`}
                   name={`${shift.name} Demand`}
-                  stackId="demand"
                   fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
                   fillOpacity={0.8}
-                  radius={[0, 0, 0, 0]}
-                  barSize={20}
+                  radius={[2, 2, 0, 0]}
+                  barSize={14}
                 />
               ))
             )}

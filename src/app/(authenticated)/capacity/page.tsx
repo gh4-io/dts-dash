@@ -6,6 +6,7 @@ import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { CapacityKpiStrip } from "@/components/capacity/capacity-kpi-strip";
 import { CapacityHeatmap } from "@/components/capacity/capacity-heatmap";
 import { CapacitySummaryChart } from "@/components/capacity/capacity-summary-chart";
+import { ForecastPatternChart } from "@/components/capacity/forecast-pattern-chart";
 import { CapacityPieCharts } from "@/components/capacity/capacity-pie-charts";
 import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
@@ -195,14 +196,23 @@ function CapacityPageInner() {
           <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-3">
             {/* Left: stretches to match right column height */}
             <div className="flex flex-col min-h-0">
-              <CapacitySummaryChart
-                capacity={capacity}
-                demand={demand}
-                utilization={utilization}
-                shifts={shifts}
-                activeLens={activeLens}
-                fillHeight
-              />
+              {activeLens === "forecast" ? (
+                <ForecastPatternChart
+                  demand={demand}
+                  capacity={capacity}
+                  shifts={shifts}
+                  fillHeight
+                />
+              ) : (
+                <CapacitySummaryChart
+                  capacity={capacity}
+                  demand={demand}
+                  utilization={utilization}
+                  shifts={shifts}
+                  activeLens={activeLens}
+                  fillHeight
+                />
+              )}
             </div>
 
             {/* Right column: heatmap top, 3 pies bottom */}

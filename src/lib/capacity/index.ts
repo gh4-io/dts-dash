@@ -114,6 +114,10 @@ export {
   deleteFlightEvent,
 } from "./flight-events-data";
 
+// Forecast day-of-week pattern (pure functions)
+export { computeDayOfWeekPattern } from "./forecast-pattern-engine";
+export type { DayOfWeekPattern, ForecastPatternResult } from "./forecast-pattern-engine";
+
 // Forecast engine (pure functions)
 export {
   generateForecast,
