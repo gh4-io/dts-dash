@@ -8,30 +8,52 @@ import type { DailyDemandV2, DailyCapacityV2 } from "@/types";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
+/**
+ * Create a DailyDemandV2 fixture. When byCustomer is provided, wpContributions
+ * are populated per shift proportionally so the engine can derive customer×shift.
+ */
 function makeDay(
   date: string,
   totalDemandMH: number,
   shifts?: Array<{ code: string; mh: number }>,
   forecastedMH?: number,
   byCustomer?: Record<string, number>,
+  allocatedMH?: number,
 ): DailyDemandV2 {
-  const byShift = (
-    shifts ?? [
-      { code: "DAY", mh: totalDemandMH * 0.5 },
-      { code: "SWING", mh: totalDemandMH * 0.33 },
-      { code: "NIGHT", mh: totalDemandMH * 0.17 },
-    ]
-  ).map((s) => ({
-    shiftCode: s.code,
-    demandMH: s.mh,
-    wpContributions: [],
-  }));
+  const shiftDefs = shifts ?? [
+    { code: "DAY", mh: totalDemandMH * 0.5 },
+    { code: "SWING", mh: totalDemandMH * 0.33 },
+    { code: "NIGHT", mh: totalDemandMH * 0.17 },
+  ];
+
+  const custEntries = byCustomer ?? { Acme: totalDemandMH };
+  const totalCustMH = Object.values(custEntries).reduce((a, b) => a + b, 0);
+
+  const byShift = shiftDefs.map((s) => {
+    // Distribute customer MH across shifts proportionally
+    const shiftFraction = totalCustMH > 0 ? s.mh / totalCustMH : 0;
+    const wpContributions = Object.entries(custEntries).map(([customer, mh], idx) => ({
+      wpId: idx + 1,
+      aircraftReg: `REG-${idx}`,
+      customer,
+      allocatedMH: mh * shiftFraction,
+      mhSource: "default",
+    }));
+
+    return {
+      shiftCode: s.code,
+      demandMH: s.mh,
+      wpContributions,
+      ...(forecastedMH != null ? { forecastedDemandMH: forecastedMH * shiftFraction } : {}),
+      ...(allocatedMH != null ? { allocatedDemandMH: allocatedMH * shiftFraction } : {}),
+    };
+  });
 
   return {
     date,
     totalDemandMH,
     aircraftCount: 2,
-    byCustomer: byCustomer ?? { Acme: totalDemandMH },
+    byCustomer: custEntries,
     byShift,
     ...(forecastedMH != null ? { totalForecastedDemandMH: forecastedMH } : {}),
   };
@@ -45,27 +67,39 @@ function makeCapDay(date: string, totalProductiveMH: number): DailyCapacityV2 {
     byShift: [
       {
         shiftCode: "DAY",
-        headcount: 8,
-        productiveMH: totalProductiveMH * 0.4,
+        shiftName: "Day",
+        rosterHeadcount: 8,
+        effectiveHeadcount: 8,
+        paidHoursPerPerson: 8,
         paidMH: totalProductiveMH * 0.44,
-        utilizationPercent: null,
-        hasException: false,
+        availableMH: totalProductiveMH * 0.42,
+        productiveMH: totalProductiveMH * 0.4,
+        hasExceptions: false,
+        belowMinHeadcount: false,
       },
       {
         shiftCode: "SWING",
-        headcount: 6,
-        productiveMH: totalProductiveMH * 0.35,
+        shiftName: "Swing",
+        rosterHeadcount: 6,
+        effectiveHeadcount: 6,
+        paidHoursPerPerson: 8,
         paidMH: totalProductiveMH * 0.385,
-        utilizationPercent: null,
-        hasException: false,
+        availableMH: totalProductiveMH * 0.37,
+        productiveMH: totalProductiveMH * 0.35,
+        hasExceptions: false,
+        belowMinHeadcount: false,
       },
       {
         shiftCode: "NIGHT",
-        headcount: 4,
-        productiveMH: totalProductiveMH * 0.25,
+        shiftName: "Night",
+        rosterHeadcount: 4,
+        effectiveHeadcount: 4,
+        paidHoursPerPerson: 8,
         paidMH: totalProductiveMH * 0.275,
-        utilizationPercent: null,
-        hasException: false,
+        availableMH: totalProductiveMH * 0.26,
+        productiveMH: totalProductiveMH * 0.25,
+        hasExceptions: false,
+        belowMinHeadcount: false,
       },
     ],
     hasExceptions: false,
@@ -85,6 +119,10 @@ describe("computeDayOfWeekPattern", () => {
       expect(p.avgCapacityMH).toBe(0);
       expect(p.avgForecastedMH).toBeNull();
       expect(p.sampleCount).toBe(0);
+      expect(p.avgDemandByCustomerByShift).toEqual({});
+      expect(p.avgCapacityByShift).toEqual({});
+      expect(p.avgForecastedByShift).toEqual({});
+      expect(p.avgAllocatedByShift).toEqual({});
     }
   });
 
@@ -98,56 +136,42 @@ describe("computeDayOfWeekPattern", () => {
   });
 
   it("handles a single week (Mon-Fri) — weekends have zero samples", () => {
-    // 2026-02-23 = Monday, 2026-02-27 = Friday
     const demand = [
-      makeDay("2026-02-23", 10), // Mon
-      makeDay("2026-02-24", 20), // Tue
-      makeDay("2026-02-25", 30), // Wed
-      makeDay("2026-02-26", 40), // Thu
-      makeDay("2026-02-27", 50), // Fri
+      makeDay("2026-02-23", 10),
+      makeDay("2026-02-24", 20),
+      makeDay("2026-02-25", 30),
+      makeDay("2026-02-26", 40),
+      makeDay("2026-02-27", 50),
     ];
     const capacity = demand.map((d) => makeCapDay(d.date, 60));
-
     const result = computeDayOfWeekPattern(demand, capacity);
 
-    // Mon=10, Tue=20, Wed=30, Thu=40, Fri=50
-    expect(result.pattern[0].avgDemandMH).toBe(10); // Mon
-    expect(result.pattern[1].avgDemandMH).toBe(20); // Tue
-    expect(result.pattern[2].avgDemandMH).toBe(30); // Wed
-    expect(result.pattern[3].avgDemandMH).toBe(40); // Thu
-    expect(result.pattern[4].avgDemandMH).toBe(50); // Fri
+    expect(result.pattern[0].avgDemandMH).toBe(10);
+    expect(result.pattern[1].avgDemandMH).toBe(20);
+    expect(result.pattern[2].avgDemandMH).toBe(30);
+    expect(result.pattern[3].avgDemandMH).toBe(40);
+    expect(result.pattern[4].avgDemandMH).toBe(50);
+    expect(result.pattern[5].sampleCount).toBe(0);
+    expect(result.pattern[6].sampleCount).toBe(0);
 
-    // Sat and Sun: no data
-    expect(result.pattern[5].sampleCount).toBe(0); // Sat
-    expect(result.pattern[5].avgDemandMH).toBe(0);
-    expect(result.pattern[6].sampleCount).toBe(0); // Sun
-    expect(result.pattern[6].avgDemandMH).toBe(0);
-
-    // Each weekday has 1 sample
     for (let i = 0; i < 5; i++) {
       expect(result.pattern[i].sampleCount).toBe(1);
     }
   });
 
   it("averages across two weeks correctly", () => {
-    // Week 1: Mon Feb 23 – Fri Feb 27
-    // Week 2: Mon Mar 2 – Fri Mar 6
     const demand = [
-      makeDay("2026-02-23", 10), // Mon wk1
-      makeDay("2026-02-24", 20), // Tue wk1
-      makeDay("2026-03-02", 30), // Mon wk2
-      makeDay("2026-03-03", 40), // Tue wk2
+      makeDay("2026-02-23", 10),
+      makeDay("2026-02-24", 20),
+      makeDay("2026-03-02", 30),
+      makeDay("2026-03-03", 40),
     ];
     const result = computeDayOfWeekPattern(demand, []);
 
-    // Mon average: (10+30)/2 = 20
     expect(result.pattern[0].avgDemandMH).toBe(20);
     expect(result.pattern[0].sampleCount).toBe(2);
-
-    // Tue average: (20+40)/2 = 30
     expect(result.pattern[1].avgDemandMH).toBe(30);
     expect(result.pattern[1].sampleCount).toBe(2);
-
     expect(result.totalWeeks).toBe(2);
   });
 
@@ -166,70 +190,56 @@ describe("computeDayOfWeekPattern", () => {
     ];
     const result = computeDayOfWeekPattern(demand, []);
 
-    // Both are Monday — DAY avg: (15+21)/2 = 18
     const mon = result.pattern[0];
     expect(mon.avgDemandByShift["DAY"]).toBe(18);
-    expect(mon.avgDemandByShift["SWING"]).toBe(8); // (10+6)/2
-    expect(mon.avgDemandByShift["NIGHT"]).toBe(4); // (5+3)/2
+    expect(mon.avgDemandByShift["SWING"]).toBe(8);
+    expect(mon.avgDemandByShift["NIGHT"]).toBe(4);
   });
 
   it("computes forecast average only from entries that have forecast data", () => {
     const demand = [
-      makeDay("2026-02-23", 10, undefined, 12), // Mon with forecast
-      makeDay("2026-03-02", 20, undefined, undefined), // Mon without forecast
+      makeDay("2026-02-23", 10, undefined, 12),
+      makeDay("2026-03-02", 20, undefined, undefined),
     ];
     const result = computeDayOfWeekPattern(demand, []);
-
-    // Forecast: only 1 entry has it → avgForecastedMH = 12
     expect(result.pattern[0].avgForecastedMH).toBe(12);
   });
 
   it("returns null forecast when no entries have forecast data", () => {
     const demand = [makeDay("2026-02-23", 10), makeDay("2026-02-24", 20)];
     const result = computeDayOfWeekPattern(demand, []);
-
     expect(result.pattern[0].avgForecastedMH).toBeNull();
     expect(result.pattern[1].avgForecastedMH).toBeNull();
   });
 
   it("averages forecasted MH when multiple entries have forecast data", () => {
     const demand = [
-      makeDay("2026-02-23", 10, undefined, 12), // Mon wk1 forecast=12
-      makeDay("2026-03-02", 20, undefined, 18), // Mon wk2 forecast=18
+      makeDay("2026-02-23", 10, undefined, 12),
+      makeDay("2026-03-02", 20, undefined, 18),
     ];
     const result = computeDayOfWeekPattern(demand, []);
-
-    // avg = (12+18)/2 = 15
     expect(result.pattern[0].avgForecastedMH).toBe(15);
   });
 
   it("computes capacity averages aligned with demand dates", () => {
-    const demand = [
-      makeDay("2026-02-23", 10), // Mon
-      makeDay("2026-03-02", 20), // Mon
-    ];
+    const demand = [makeDay("2026-02-23", 10), makeDay("2026-03-02", 20)];
     const capacity = [makeCapDay("2026-02-23", 50), makeCapDay("2026-03-02", 70)];
     const result = computeDayOfWeekPattern(demand, capacity);
-
-    // Mon avgCapacityMH: (50+70)/2 = 60
     expect(result.pattern[0].avgCapacityMH).toBe(60);
   });
 
   it("computes correct dateRange", () => {
     const demand = [
-      makeDay("2026-02-25", 10), // Wed
-      makeDay("2026-02-23", 20), // Mon (earlier)
-      makeDay("2026-03-02", 30), // Mon (later)
+      makeDay("2026-02-25", 10),
+      makeDay("2026-02-23", 20),
+      makeDay("2026-03-02", 30),
     ];
     const result = computeDayOfWeekPattern(demand, []);
-
     expect(result.dateRange.start).toBe("2026-02-23");
     expect(result.dateRange.end).toBe("2026-03-02");
   });
 
   it("computes correct totalWeeks for dates spanning multiple ISO weeks", () => {
-    // 2026-02-23 (Mon) = ISO week 9
-    // 2026-03-02 (Mon) = ISO week 10
     const demand = [
       makeDay("2026-02-23", 10),
       makeDay("2026-02-24", 20),
@@ -241,38 +251,92 @@ describe("computeDayOfWeekPattern", () => {
   });
 
   it("rounds averages to 1 decimal place", () => {
-    // 3 Mondays: 10, 11, 12 → avg = 11.0
-    // 3 Mondays: 10.1, 10.2, 10.3 → avg = 10.2
     const demand = [
-      makeDay("2026-02-23", 10.1), // Mon wk1
-      makeDay("2026-03-02", 10.2), // Mon wk2
-      makeDay("2026-03-09", 10.3), // Mon wk3
+      makeDay("2026-02-23", 10.1),
+      makeDay("2026-03-02", 10.2),
+      makeDay("2026-03-09", 10.3),
     ];
     const result = computeDayOfWeekPattern(demand, []);
-
-    // (10.1+10.2+10.3)/3 = 10.2
     expect(result.pattern[0].avgDemandMH).toBe(10.2);
   });
 
-  it("computes per-customer demand averages", () => {
+  it("computes per-customer-per-shift demand averages", () => {
     const demand = [
-      makeDay("2026-02-23", 30, undefined, undefined, { DHL: 20, FedEx: 10 }), // Mon wk1
-      makeDay("2026-03-02", 40, undefined, undefined, { DHL: 22, FedEx: 18 }), // Mon wk2
+      makeDay(
+        "2026-02-23",
+        30,
+        [
+          { code: "DAY", mh: 15 },
+          { code: "SWING", mh: 10 },
+          { code: "NIGHT", mh: 5 },
+        ],
+        undefined,
+        { DHL: 20, FedEx: 10 },
+      ),
+      makeDay(
+        "2026-03-02",
+        30,
+        [
+          { code: "DAY", mh: 15 },
+          { code: "SWING", mh: 10 },
+          { code: "NIGHT", mh: 5 },
+        ],
+        undefined,
+        { DHL: 22, FedEx: 8 },
+      ),
     ];
     const result = computeDayOfWeekPattern(demand, []);
-
     const mon = result.pattern[0];
-    // DHL avg: (20+22)/2 = 21
-    expect(mon.avgDemandByCustomer["DHL"]).toBe(21);
-    // FedEx avg: (10+18)/2 = 14
-    expect(mon.avgDemandByCustomer["FedEx"]).toBe(14);
+
+    // DAY fraction = 15/30 = 0.5
+    // DHL DAY wk1: 20*0.5=10, wk2: 22*0.5=11 → sum=21, avg=21/2=10.5
+    expect(mon.avgDemandByCustomerByShift["DAY"]).toBeDefined();
+    expect(mon.avgDemandByCustomerByShift["DAY"]["DHL"]).toBe(10.5);
+    // FedEx DAY wk1: 10*0.5=5, wk2: 8*0.5=4 → sum=9, avg=9/2=4.5
+    expect(mon.avgDemandByCustomerByShift["DAY"]["FedEx"]).toBe(4.5);
   });
 
-  it("returns empty avgDemandByCustomer for zero-sample days", () => {
-    const demand = [makeDay("2026-02-23", 10)]; // Mon only
+  it("returns empty avgDemandByCustomerByShift for zero-sample days", () => {
+    const demand = [makeDay("2026-02-23", 10)];
     const result = computeDayOfWeekPattern(demand, []);
+    expect(result.pattern[1].avgDemandByCustomerByShift).toEqual({});
+  });
 
-    // Tue has no data
-    expect(result.pattern[1].avgDemandByCustomer).toEqual({});
+  it("computes per-shift capacity averages", () => {
+    const demand = [makeDay("2026-02-23", 10), makeDay("2026-03-02", 20)];
+    const capacity = [makeCapDay("2026-02-23", 100), makeCapDay("2026-03-02", 60)];
+    const result = computeDayOfWeekPattern(demand, capacity);
+    const mon = result.pattern[0];
+
+    // DAY: wk1=100*0.4=40, wk2=60*0.4=24 → avg=32
+    expect(mon.avgCapacityByShift["DAY"]).toBe(32);
+    // SWING: wk1=100*0.35=35, wk2=60*0.35=21 → avg=28
+    expect(mon.avgCapacityByShift["SWING"]).toBe(28);
+    // NIGHT: wk1=100*0.25=25, wk2=60*0.25=15 → avg=20
+    expect(mon.avgCapacityByShift["NIGHT"]).toBe(20);
+  });
+
+  it("computes per-shift forecasted averages", () => {
+    const demand = [
+      makeDay("2026-02-23", 20, undefined, 24),
+      makeDay("2026-03-02", 20, undefined, 30),
+    ];
+    const result = computeDayOfWeekPattern(demand, []);
+    const mon = result.pattern[0];
+
+    // DAY fraction = 0.5 → wk1=12, wk2=15 → avg=13.5
+    expect(mon.avgForecastedByShift["DAY"]).toBe(13.5);
+  });
+
+  it("computes per-shift allocated averages", () => {
+    const demand = [
+      makeDay("2026-02-23", 20, undefined, undefined, undefined, 16),
+      makeDay("2026-03-02", 20, undefined, undefined, undefined, 20),
+    ];
+    const result = computeDayOfWeekPattern(demand, []);
+    const mon = result.pattern[0];
+
+    // DAY fraction = 0.5 → wk1=8, wk2=10 → avg=9
+    expect(mon.avgAllocatedByShift["DAY"]).toBe(9);
   });
 });

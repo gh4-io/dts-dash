@@ -201,6 +201,7 @@ function CapacityPageInner() {
                   demand={demand}
                   capacity={capacity}
                   shifts={shifts}
+                  activeLens={activeLens}
                   fillHeight
                 />
               ) : (

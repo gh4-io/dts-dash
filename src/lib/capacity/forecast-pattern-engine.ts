@@ -18,12 +18,18 @@ export interface DayOfWeekPattern {
   avgDemandMH: number;
   /** Average demand MH per shift for this weekday */
   avgDemandByShift: Record<string, number>;
-  /** Average demand MH per customer for this weekday */
-  avgDemandByCustomer: Record<string, number>;
+  /** Average demand MH per customer per shift: shiftCode → customer → avg MH */
+  avgDemandByCustomerByShift: Record<string, Record<string, number>>;
   /** Average total productive capacity MH for this weekday */
   avgCapacityMH: number;
+  /** Average productive capacity MH per shift */
+  avgCapacityByShift: Record<string, number>;
   /** Average forecasted demand MH (null if no forecast data for this day) */
   avgForecastedMH: number | null;
+  /** Average forecasted demand MH per shift */
+  avgForecastedByShift: Record<string, number>;
+  /** Average allocated demand MH per shift */
+  avgAllocatedByShift: Record<string, number>;
   /** Number of dates that contributed to this average */
   sampleCount: number;
 }
@@ -58,7 +64,14 @@ interface DayBucket {
   forecastCount: number;
   count: number;
   shiftSums: Record<string, { sum: number; count: number }>;
-  customerSums: Record<string, { sum: number; count: number }>;
+  /** shift → customer → running MH sum (divide by bucket.count for avg) */
+  customerShiftSums: Record<string, Record<string, number>>;
+  /** shift → running capacity MH sum (divide by bucket.count for avg) */
+  capacityShiftSums: Record<string, number>;
+  /** shift → { sum, count } for forecasted MH */
+  forecastShiftSums: Record<string, { sum: number; count: number }>;
+  /** shift → { sum, count } for allocated MH */
+  allocatedShiftSums: Record<string, { sum: number; count: number }>;
 }
 
 function createEmptyBucket(): DayBucket {
@@ -69,9 +82,24 @@ function createEmptyBucket(): DayBucket {
     forecastCount: 0,
     count: 0,
     shiftSums: {},
-    customerSums: {},
+    customerShiftSums: {},
+    capacityShiftSums: {},
+    forecastShiftSums: {},
+    allocatedShiftSums: {},
   };
 }
+
+const EMPTY_PATTERN: Omit<DayOfWeekPattern, "dayOfWeek" | "label"> = {
+  avgDemandMH: 0,
+  avgDemandByShift: {},
+  avgDemandByCustomerByShift: {},
+  avgCapacityMH: 0,
+  avgCapacityByShift: {},
+  avgForecastedMH: null,
+  avgForecastedByShift: {},
+  avgAllocatedByShift: {},
+  sampleCount: 0,
+};
 
 /** Convert JS getUTCDay() (0=Sun..6=Sat) to ISO 8601 (1=Mon..7=Sun) */
 function toIsoDayOfWeek(jsDay: number): number {
@@ -98,7 +126,8 @@ function round1(n: number): number {
  * Aggregates demand and capacity data by day-of-week to produce a "typical week" pattern.
  *
  * Groups each date by its weekday (Mon–Sun), computes averages for demand, capacity,
- * per-shift demand, and forecasted demand. Returns 7 entries ordered Monday-first.
+ * per-shift demand, customer×shift demand, and forecasted/allocated demand.
+ * Returns 7 entries ordered Monday-first.
  */
 export function computeDayOfWeekPattern(
   demand: DailyDemandV2[],
@@ -110,12 +139,7 @@ export function computeDayOfWeekPattern(
       pattern: [1, 2, 3, 4, 5, 6, 7].map((dow) => ({
         dayOfWeek: dow,
         label: DAY_LABELS[dow],
-        avgDemandMH: 0,
-        avgDemandByShift: {},
-        avgDemandByCustomer: {},
-        avgCapacityMH: 0,
-        avgForecastedMH: null,
-        sampleCount: 0,
+        ...EMPTY_PATTERN,
       })),
       totalWeeks: 0,
       dateRange: { start: "", end: "" },
@@ -148,31 +172,53 @@ export function computeDayOfWeekPattern(
     bucket.sumDemandMH += day.totalDemandMH;
     bucket.count += 1;
 
-    // Shift breakdown
+    // Shift breakdown + customer×shift + forecast×shift + allocated×shift
     for (const shift of day.byShift) {
       if (!bucket.shiftSums[shift.shiftCode]) {
         bucket.shiftSums[shift.shiftCode] = { sum: 0, count: 0 };
       }
       bucket.shiftSums[shift.shiftCode].sum += shift.demandMH;
       bucket.shiftSums[shift.shiftCode].count += 1;
-    }
 
-    // Customer breakdown
-    for (const [customerName, mh] of Object.entries(day.byCustomer)) {
-      if (!bucket.customerSums[customerName]) {
-        bucket.customerSums[customerName] = { sum: 0, count: 0 };
+      // Customer×shift from wpContributions
+      for (const wp of shift.wpContributions) {
+        if (!bucket.customerShiftSums[shift.shiftCode]) {
+          bucket.customerShiftSums[shift.shiftCode] = {};
+        }
+        const cs = bucket.customerShiftSums[shift.shiftCode];
+        cs[wp.customer] = (cs[wp.customer] ?? 0) + wp.allocatedMH;
       }
-      bucket.customerSums[customerName].sum += mh;
-      bucket.customerSums[customerName].count += 1;
+
+      // Forecasted per shift
+      if (shift.forecastedDemandMH != null) {
+        if (!bucket.forecastShiftSums[shift.shiftCode]) {
+          bucket.forecastShiftSums[shift.shiftCode] = { sum: 0, count: 0 };
+        }
+        bucket.forecastShiftSums[shift.shiftCode].sum += shift.forecastedDemandMH;
+        bucket.forecastShiftSums[shift.shiftCode].count += 1;
+      }
+
+      // Allocated per shift
+      if (shift.allocatedDemandMH != null) {
+        if (!bucket.allocatedShiftSums[shift.shiftCode]) {
+          bucket.allocatedShiftSums[shift.shiftCode] = { sum: 0, count: 0 };
+        }
+        bucket.allocatedShiftSums[shift.shiftCode].sum += shift.allocatedDemandMH;
+        bucket.allocatedShiftSums[shift.shiftCode].count += 1;
+      }
     }
 
-    // Capacity
+    // Capacity (total + per shift)
     const cap = capByDate.get(day.date);
     if (cap) {
       bucket.sumCapacityMH += cap.totalProductiveMH;
+      for (const sc of cap.byShift) {
+        bucket.capacityShiftSums[sc.shiftCode] =
+          (bucket.capacityShiftSums[sc.shiftCode] ?? 0) + sc.productiveMH;
+      }
     }
 
-    // Forecast overlay (only count entries that actually have the field)
+    // Forecast overlay total (only count entries that actually have the field)
     if (day.totalForecastedDemandMH != null) {
       bucket.sumForecastedMH += day.totalForecastedDemandMH;
       bucket.forecastCount += 1;
@@ -196,12 +242,7 @@ export function computeDayOfWeekPattern(
       return {
         dayOfWeek: dow,
         label: DAY_LABELS[dow],
-        avgDemandMH: 0,
-        avgDemandByShift: {},
-        avgDemandByCustomer: {},
-        avgCapacityMH: 0,
-        avgForecastedMH: null,
-        sampleCount: 0,
+        ...EMPTY_PATTERN,
       };
     }
 
@@ -210,9 +251,27 @@ export function computeDayOfWeekPattern(
       avgDemandByShift[code] = round1(acc.sum / acc.count);
     }
 
-    const avgDemandByCustomer: Record<string, number> = {};
-    for (const [name, acc] of Object.entries(bucket.customerSums)) {
-      avgDemandByCustomer[name] = round1(acc.sum / acc.count);
+    const avgDemandByCustomerByShift: Record<string, Record<string, number>> = {};
+    for (const [shiftCode, customers] of Object.entries(bucket.customerShiftSums)) {
+      avgDemandByCustomerByShift[shiftCode] = {};
+      for (const [customer, sum] of Object.entries(customers)) {
+        avgDemandByCustomerByShift[shiftCode][customer] = round1(sum / count);
+      }
+    }
+
+    const avgCapacityByShift: Record<string, number> = {};
+    for (const [code, sum] of Object.entries(bucket.capacityShiftSums)) {
+      avgCapacityByShift[code] = round1(sum / count);
+    }
+
+    const avgForecastedByShift: Record<string, number> = {};
+    for (const [code, acc] of Object.entries(bucket.forecastShiftSums)) {
+      avgForecastedByShift[code] = round1(acc.sum / acc.count);
+    }
+
+    const avgAllocatedByShift: Record<string, number> = {};
+    for (const [code, acc] of Object.entries(bucket.allocatedShiftSums)) {
+      avgAllocatedByShift[code] = round1(acc.sum / acc.count);
     }
 
     return {
@@ -220,10 +279,13 @@ export function computeDayOfWeekPattern(
       label: DAY_LABELS[dow],
       avgDemandMH: round1(bucket.sumDemandMH / count),
       avgDemandByShift,
-      avgDemandByCustomer,
+      avgDemandByCustomerByShift,
       avgCapacityMH: round1(bucket.sumCapacityMH / count),
+      avgCapacityByShift,
       avgForecastedMH:
         bucket.forecastCount > 0 ? round1(bucket.sumForecastedMH / bucket.forecastCount) : null,
+      avgForecastedByShift,
+      avgAllocatedByShift,
       sampleCount: count,
     };
   });

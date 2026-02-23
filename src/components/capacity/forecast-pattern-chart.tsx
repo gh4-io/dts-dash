@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ComposedChart,
   Bar,
@@ -12,7 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import type { DailyCapacityV2, DailyDemandV2, CapacityShift } from "@/types";
+import type { DailyCapacityV2, DailyDemandV2, CapacityShift, CapacityLensId } from "@/types";
 // Direct import — NOT barrel (D-047: barrel re-exports server-only modules)
 import { computeDayOfWeekPattern } from "@/lib/capacity/forecast-pattern-engine";
 import { useCustomers } from "@/lib/hooks/use-customers";
@@ -23,6 +23,7 @@ interface ForecastPatternChartProps {
   demand: DailyDemandV2[];
   capacity: DailyCapacityV2[];
   shifts: CapacityShift[];
+  activeLens: CapacityLensId;
   /** When true, fills parent container height instead of using a fixed 340px */
   fillHeight?: boolean;
 }
@@ -33,10 +34,17 @@ const SHIFT_BAR_COLORS: Record<string, string> = {
   NIGHT: "#6366f1",
 };
 
+// Lens overlay line config (only MH-compatible lenses)
+const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: string }> = {
+  forecast: { stroke: "#14b8a6", dash: "3 3", name: "Avg Forecast" },
+  allocated: { stroke: "#f59e0b", dash: "6 3", name: "Avg Allocated" },
+};
+
 export function ForecastPatternChart({
   demand,
   capacity,
   shifts,
+  activeLens,
   fillHeight = false,
 }: ForecastPatternChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("byShift");
@@ -56,51 +64,85 @@ export function ForecastPatternChart({
     [demand, capacity],
   );
 
-  const hasForecast = useMemo(
-    () => patternResult.pattern.some((p) => p.avgForecastedMH !== null),
-    [patternResult],
-  );
+  const lensLineConfig = LENS_LINE_CONFIG[activeLens] ?? null;
 
   const allCustomers = useMemo(() => {
     const names = new Set<string>();
     for (const p of patternResult.pattern) {
-      for (const name of Object.keys(p.avgDemandByCustomer)) {
-        names.add(name);
+      for (const shiftCustomers of Object.values(p.avgDemandByCustomerByShift)) {
+        for (const name of Object.keys(shiftCustomers)) {
+          names.add(name);
+        }
       }
     }
     return Array.from(names).sort();
   }, [patternResult]);
 
   const chartData = useMemo(() => {
+    // Total mode: 7 rows (Mon–Sun), day-level
+    if (viewMode === "total") {
+      return patternResult.pattern.map((p) => {
+        const row: Record<string, unknown> = {
+          label: p.label,
+          dayOfWeek: p.dayOfWeek,
+          avgDemandMH: p.avgDemandMH,
+          avgCapacityMH: p.avgCapacityMH,
+          sampleCount: p.sampleCount,
+        };
+
+        // Lens overlay (total level)
+        if (lensLineConfig) {
+          if (activeLens === "forecast" && p.avgForecastedMH !== null) {
+            row.lensOverlayMH = p.avgForecastedMH;
+          } else if (activeLens === "allocated") {
+            const totalAllocated = Object.values(p.avgAllocatedByShift).reduce((s, v) => s + v, 0);
+            if (totalAllocated > 0) {
+              row.lensOverlayMH = Math.round(totalAllocated * 10) / 10;
+            }
+          }
+        }
+
+        return row;
+      });
+    }
+
+    // byShift / byCustomer: 1 row per day-of-week, per-shift fields
     return patternResult.pattern.map((p) => {
       const row: Record<string, unknown> = {
         label: p.label,
         dayOfWeek: p.dayOfWeek,
-        avgCapacityMH: p.avgCapacityMH,
         sampleCount: p.sampleCount,
       };
 
-      if (viewMode === "total") {
-        row.avgDemandMH = p.avgDemandMH;
-      } else if (viewMode === "byCustomer") {
-        for (const customer of allCustomers) {
-          row[`demand_${customer}`] = p.avgDemandByCustomer[customer] ?? 0;
-        }
-      } else {
-        // byShift
-        for (const shift of activeShifts) {
+      for (const shift of activeShifts) {
+        // Capacity per shift (for lines)
+        row[`capacity_${shift.code}`] = p.avgCapacityByShift[shift.code] ?? 0;
+
+        // Demand per shift (for bars)
+        if (viewMode === "byCustomer") {
+          const custForShift = p.avgDemandByCustomerByShift[shift.code] ?? {};
+          for (const customer of allCustomers) {
+            row[`demand_${shift.code}_${customer}`] = custForShift[customer] ?? 0;
+          }
+        } else {
           row[`demand_${shift.code}`] = p.avgDemandByShift[shift.code] ?? 0;
         }
-      }
 
-      // Forecast overlay
-      if (hasForecast && p.avgForecastedMH !== null) {
-        row.avgForecastedMH = p.avgForecastedMH;
+        // Lens overlay per shift
+        if (lensLineConfig) {
+          if (activeLens === "forecast") {
+            const val = p.avgForecastedByShift[shift.code];
+            if (val != null) row[`lensOverlay_${shift.code}`] = val;
+          } else if (activeLens === "allocated") {
+            const val = p.avgAllocatedByShift[shift.code];
+            if (val != null) row[`lensOverlay_${shift.code}`] = val;
+          }
+        }
       }
 
       return row;
     });
-  }, [patternResult, activeShifts, allCustomers, viewMode, hasForecast]);
+  }, [patternResult, activeShifts, allCustomers, viewMode, activeLens, lensLineConfig]);
 
   if (demand.length === 0) {
     return (
@@ -121,24 +163,27 @@ export function ForecastPatternChart({
         <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
           <i className="fa-solid fa-chart-line" />
           Typical Week Pattern
-          <span className="text-[10px] font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-            {patternResult.totalWeeks} wk{patternResult.totalWeeks !== 1 ? "s" : ""}
-          </span>
         </h3>
-        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
-          {(["byShift", "byCustomer", "total"] as const).map((mode) => (
-            <button
-              key={mode}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-                viewMode === mode
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => setViewMode(mode)}
-            >
-              {mode === "byShift" ? "By Shift" : mode === "byCustomer" ? "By Customer" : "Total"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+            Based on {patternResult.totalWeeks} week{patternResult.totalWeeks !== 1 ? "s" : ""} of
+            data
+          </span>
+          <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+            {(["byShift", "byCustomer", "total"] as const).map((mode) => (
+              <button
+                key={mode}
+                className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                  viewMode === mode
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setViewMode(mode)}
+              >
+                {mode === "byShift" ? "By Shift" : mode === "byCustomer" ? "By Customer" : "Total"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -151,6 +196,8 @@ export function ForecastPatternChart({
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
               tickLine={false}
               axisLine={{ stroke: "hsl(var(--border))" }}
+              interval={0}
+              height={30}
             />
             <YAxis
               yAxisId="mh"
@@ -184,8 +231,10 @@ export function ForecastPatternChart({
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
 
-            {/* Demand bars: by mode */}
-            {viewMode === "total" ? (
+            {/* === DEMAND BARS === */}
+
+            {/* Total mode: 1 bar per day-of-week */}
+            {viewMode === "total" && (
               <Bar
                 yAxisId="mh"
                 dataKey="avgDemandMH"
@@ -195,20 +244,10 @@ export function ForecastPatternChart({
                 radius={[2, 2, 0, 0]}
                 barSize={20}
               />
-            ) : viewMode === "byCustomer" ? (
-              allCustomers.map((customer) => (
-                <Bar
-                  key={customer}
-                  yAxisId="mh"
-                  dataKey={`demand_${customer}`}
-                  name={customer}
-                  fill={getColor(customer)}
-                  fillOpacity={0.8}
-                  radius={[2, 2, 0, 0]}
-                  barSize={Math.max(8, Math.floor(40 / allCustomers.length))}
-                />
-              ))
-            ) : (
+            )}
+
+            {/* By Shift: 3 grouped bars (one per shift), no stackId → side-by-side */}
+            {viewMode === "byShift" &&
               activeShifts.map((shift) => (
                 <Bar
                   key={shift.code}
@@ -218,39 +257,102 @@ export function ForecastPatternChart({
                   fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
                   fillOpacity={0.8}
                   radius={[2, 2, 0, 0]}
-                  barSize={16}
+                  barSize={14}
                 />
-              ))
-            )}
+              ))}
 
-            {/* Capacity reference line */}
-            <Line
-              yAxisId="mh"
-              dataKey="avgCapacityMH"
-              name="Avg Capacity"
-              type="monotone"
-              stroke="#6366f1"
-              strokeWidth={2}
-              strokeDasharray="6 3"
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0 }}
-            />
+            {/* By Customer: N×3 bars, stackId per shift → 3 groups stacked by customer */}
+            {viewMode === "byCustomer" &&
+              activeShifts.flatMap((shift, shiftIdx) =>
+                allCustomers.map((customer) => (
+                  <Bar
+                    key={`${shift.code}_${customer}`}
+                    yAxisId="mh"
+                    dataKey={`demand_${shift.code}_${customer}`}
+                    stackId={shift.code}
+                    name={customer}
+                    fill={getColor(customer)}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                    legendType={shiftIdx === 0 ? undefined : "none"}
+                  />
+                )),
+              )}
 
-            {/* Forecast overlay line (conditional) */}
-            {hasForecast && (
+            {/* === LINES === */}
+
+            {/* Total mode: single capacity line */}
+            {viewMode === "total" && (
               <Line
                 yAxisId="mh"
-                dataKey="avgForecastedMH"
-                name="Avg Forecast"
+                dataKey="avgCapacityMH"
+                name="Avg Capacity"
                 type="monotone"
-                stroke="#14b8a6"
+                stroke="#6366f1"
                 strokeWidth={2}
-                strokeDasharray="3 3"
-                dot={{ r: 3, fill: "#14b8a6", strokeWidth: 0 }}
+                strokeDasharray="6 3"
+                dot={false}
+                activeDot={{ r: 4, strokeWidth: 0 }}
+              />
+            )}
+
+            {/* Per-shift modes: 3 capacity lines (dashed, shift-colored) */}
+            {viewMode !== "total" &&
+              activeShifts.map((shift, i) => (
+                <Fragment key={`cap_${shift.code}`}>
+                  <Line
+                    yAxisId="mh"
+                    dataKey={`capacity_${shift.code}`}
+                    name={i === 0 ? "Avg Capacity" : `Avg Capacity (${shift.name})`}
+                    type="monotone"
+                    stroke={SHIFT_BAR_COLORS[shift.code]}
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                </Fragment>
+              ))}
+
+            {/* === LENS OVERLAY === */}
+
+            {/* Total mode: single lens line */}
+            {viewMode === "total" && lensLineConfig && (
+              <Line
+                yAxisId="mh"
+                dataKey="lensOverlayMH"
+                name={lensLineConfig.name}
+                type="monotone"
+                stroke={lensLineConfig.stroke}
+                strokeWidth={2}
+                strokeDasharray={lensLineConfig.dash || undefined}
+                dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
                 activeDot={{ r: 5, strokeWidth: 0 }}
                 connectNulls
               />
             )}
+
+            {/* Per-shift modes: 3 lens overlay lines */}
+            {viewMode !== "total" &&
+              lensLineConfig &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`lens_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`lensOverlay_${shift.code}`}
+                  name={i === 0 ? lensLineConfig.name : `${lensLineConfig.name} (${shift.name})`}
+                  type="monotone"
+                  stroke={lensLineConfig.stroke}
+                  strokeWidth={2}
+                  strokeDasharray={lensLineConfig.dash || undefined}
+                  dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ComposedChart,
   Bar,
@@ -103,31 +103,30 @@ export function CapacitySummaryChart({
     const capMap = new Map(capacity.map((c) => [c.date, c]));
     const demMap = new Map(demand.map((d) => [d.date, d]));
 
-    return utilization.map((u) => {
-      const cap = capMap.get(u.date);
-      const dem = demMap.get(u.date);
-      const label = formatDate(u.date);
+    // Total mode: one row per day (unchanged)
+    if (viewMode === "total") {
+      return utilization.map((u) => {
+        const dem = demMap.get(u.date);
+        const label = formatDate(u.date);
 
-      // Compute lens overlay value
-      let lensOverlayMH: number | null = null;
-      if (lensLineConfig && dem) {
-        switch (activeLens) {
-          case "allocated":
-            lensOverlayMH = dem.totalAllocatedDemandMH ?? null;
-            break;
-          case "forecast":
-            lensOverlayMH = dem.totalForecastedDemandMH ?? null;
-            break;
-          case "worked":
-            lensOverlayMH = dem.totalWorkedMH ?? null;
-            break;
-          case "billed":
-            lensOverlayMH = dem.totalBilledMH ?? null;
-            break;
+        let lensOverlayMH: number | null = null;
+        if (lensLineConfig && dem) {
+          switch (activeLens) {
+            case "allocated":
+              lensOverlayMH = dem.totalAllocatedDemandMH ?? null;
+              break;
+            case "forecast":
+              lensOverlayMH = dem.totalForecastedDemandMH ?? null;
+              break;
+            case "worked":
+              lensOverlayMH = dem.totalWorkedMH ?? null;
+              break;
+            case "billed":
+              lensOverlayMH = dem.totalBilledMH ?? null;
+              break;
+          }
         }
-      }
 
-      if (viewMode === "total") {
         return {
           date: u.date,
           label,
@@ -138,31 +137,64 @@ export function CapacitySummaryChart({
           aircraftCount: dem?.aircraftCount ?? 0,
           ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
         };
-      }
+      });
+    }
 
-      // Shared base row for byShift and byCustomer
+    // byShift / byCustomer: 1 row per day, per-shift fields
+    return utilization.map((u) => {
+      const dem = demMap.get(u.date);
+      const cap = capMap.get(u.date);
+      const label = formatDate(u.date);
+
       const row: Record<string, unknown> = {
         date: u.date,
         label,
-        capacityMH: Math.round(u.totalProductiveMH * 10) / 10,
-        utilization:
-          u.utilizationPercent !== null ? Math.round(u.utilizationPercent * 10) / 10 : null,
         aircraftCount: dem?.aircraftCount ?? 0,
-        ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
       };
 
-      if (viewMode === "byCustomer") {
-        for (const customer of allCustomers) {
-          row[`demand_${customer}`] = Math.round((dem?.byCustomer[customer] ?? 0) * 10) / 10;
-        }
-      } else {
-        // byShift mode: per-shift demand bars
-        for (const shift of activeShifts) {
-          const sd = dem?.byShift.find((s) => s.shiftCode === shift.code);
-          row[`demand_${shift.code}`] = Math.round((sd?.demandMH ?? 0) * 10) / 10;
+      for (const shift of activeShifts) {
+        const su = u.byShift.find((s) => s.shiftCode === shift.code);
+        const sd = dem?.byShift.find((s) => s.shiftCode === shift.code);
+        const sc = cap?.byShift.find((s) => s.shiftCode === shift.code);
 
-          const sc = cap?.byShift.find((s) => s.shiftCode === shift.code);
-          row[`capacity_${shift.code}`] = Math.round((sc?.productiveMH ?? 0) * 10) / 10;
+        // Capacity + utilization per shift (for lines)
+        row[`capacity_${shift.code}`] = Math.round((sc?.productiveMH ?? 0) * 10) / 10;
+        row[`utilization_${shift.code}`] =
+          su?.utilization != null ? Math.round(su.utilization * 10) / 10 : null;
+
+        // Demand per shift (for bars)
+        if (viewMode === "byCustomer") {
+          const custMH: Record<string, number> = {};
+          for (const wp of sd?.wpContributions ?? []) {
+            custMH[wp.customer] = (custMH[wp.customer] ?? 0) + wp.allocatedMH;
+          }
+          for (const customer of allCustomers) {
+            row[`demand_${shift.code}_${customer}`] = Math.round((custMH[customer] ?? 0) * 10) / 10;
+          }
+        } else {
+          row[`demand_${shift.code}`] = Math.round((sd?.demandMH ?? 0) * 10) / 10;
+        }
+
+        // Lens overlay per shift
+        if (lensLineConfig && sd) {
+          let lensVal: number | null = null;
+          switch (activeLens) {
+            case "allocated":
+              lensVal = sd.allocatedDemandMH ?? null;
+              break;
+            case "forecast":
+              lensVal = sd.forecastedDemandMH ?? null;
+              break;
+            case "worked":
+              lensVal = sd.workedMH ?? null;
+              break;
+            case "billed":
+              lensVal = sd.billedMH ?? null;
+              break;
+          }
+          if (lensVal != null) {
+            row[`lensOverlay_${shift.code}`] = Math.round(lensVal * 10) / 10;
+          }
         }
       }
 
@@ -225,6 +257,8 @@ export function CapacitySummaryChart({
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
               tickLine={false}
               axisLine={{ stroke: "hsl(var(--border))" }}
+              interval={0}
+              height={30}
             />
             <YAxis
               yAxisId="mh"
@@ -265,7 +299,8 @@ export function CapacitySummaryChart({
                 fontSize: 12,
               }}
               formatter={(value, name) => {
-                if (name === "Utilization") return [value !== null ? `${value}%` : "N/A", name];
+                if (typeof name === "string" && name.includes("Utilization"))
+                  return [value !== null ? `${value}%` : "N/A", name];
                 return [`${value} MH`, name];
               }}
               labelFormatter={(_, payload) => {
@@ -281,12 +316,7 @@ export function CapacitySummaryChart({
               stroke="#ef4444"
               strokeDasharray="4 4"
               strokeWidth={1.5}
-              label={{
-                value: "CRITICAL",
-                position: "right",
-                fill: "#ef4444",
-                fontSize: 10,
-              }}
+              label={{ value: "CRITICAL", position: "right", fill: "#ef4444", fontSize: 10 }}
             />
             <ReferenceLine
               yAxisId="pct"
@@ -294,15 +324,13 @@ export function CapacitySummaryChart({
               stroke="#f59e0b"
               strokeDasharray="4 4"
               strokeWidth={1}
-              label={{
-                value: "100%",
-                position: "right",
-                fill: "#f59e0b",
-                fontSize: 10,
-              }}
+              label={{ value: "100%", position: "right", fill: "#f59e0b", fontSize: 10 }}
             />
 
-            {viewMode === "total" ? (
+            {/* === DEMAND BARS === */}
+
+            {/* Total mode: 1 bar per day, colored by utilization */}
+            {viewMode === "total" && (
               <Bar yAxisId="mh" dataKey="demandMH" name="Demand" radius={[2, 2, 0, 0]} barSize={20}>
                 {chartData.map((entry, idx) => (
                   <Cell
@@ -312,20 +340,10 @@ export function CapacitySummaryChart({
                   />
                 ))}
               </Bar>
-            ) : viewMode === "byCustomer" ? (
-              allCustomers.map((customer) => (
-                <Bar
-                  key={customer}
-                  yAxisId="mh"
-                  dataKey={`demand_${customer}`}
-                  name={customer}
-                  fill={getColor(customer)}
-                  fillOpacity={0.8}
-                  radius={[2, 2, 0, 0]}
-                  barSize={Math.max(8, Math.floor(40 / allCustomers.length))}
-                />
-              ))
-            ) : (
+            )}
+
+            {/* By Shift: 3 grouped bars (one per shift), no stackId → side-by-side */}
+            {viewMode === "byShift" &&
               activeShifts.map((shift) => (
                 <Bar
                   key={shift.code}
@@ -337,34 +355,92 @@ export function CapacitySummaryChart({
                   radius={[2, 2, 0, 0]}
                   barSize={14}
                 />
-              ))
+              ))}
+
+            {/* By Customer: N×3 bars, stackId per shift → 3 groups stacked by customer */}
+            {viewMode === "byCustomer" &&
+              activeShifts.flatMap((shift, shiftIdx) =>
+                allCustomers.map((customer) => (
+                  <Bar
+                    key={`${shift.code}_${customer}`}
+                    yAxisId="mh"
+                    dataKey={`demand_${shift.code}_${customer}`}
+                    stackId={shift.code}
+                    name={customer}
+                    fill={getColor(customer)}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                    legendType={shiftIdx === 0 ? undefined : "none"}
+                  />
+                )),
+              )}
+
+            {/* === LINES === */}
+
+            {/* Total mode: single capacity + utilization lines */}
+            {viewMode === "total" && (
+              <>
+                <Line
+                  yAxisId="mh"
+                  dataKey="capacityMH"
+                  name="Capacity"
+                  type="monotone"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+                <Line
+                  yAxisId="pct"
+                  dataKey="utilization"
+                  name="Utilization"
+                  type="monotone"
+                  stroke="#f97316"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                />
+              </>
             )}
 
-            <Line
-              yAxisId="mh"
-              dataKey="capacityMH"
-              name="Capacity"
-              type="monotone"
-              stroke="#6366f1"
-              strokeWidth={2}
-              strokeDasharray="6 3"
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0 }}
-            />
-            <Line
-              yAxisId="pct"
-              dataKey="utilization"
-              name="Utilization"
-              type="monotone"
-              stroke="#f97316"
-              strokeWidth={2}
-              dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
-              activeDot={{ r: 5, strokeWidth: 0 }}
-              connectNulls
-            />
+            {/* Per-shift modes: 3 capacity lines (dashed) + 3 utilization lines (solid) */}
+            {viewMode !== "total" &&
+              activeShifts.map((shift, i) => (
+                <Fragment key={`lines_${shift.code}`}>
+                  <Line
+                    yAxisId="mh"
+                    dataKey={`capacity_${shift.code}`}
+                    name={i === 0 ? "Capacity" : `Capacity (${shift.name})`}
+                    type="monotone"
+                    stroke={SHIFT_BAR_COLORS[shift.code]}
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                  <Line
+                    yAxisId="pct"
+                    dataKey={`utilization_${shift.code}`}
+                    name={i === 0 ? "Utilization" : `Utilization (${shift.name})`}
+                    type="monotone"
+                    stroke={SHIFT_BAR_COLORS[shift.code]}
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: SHIFT_BAR_COLORS[shift.code], strokeWidth: 0 }}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
+                    connectNulls
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                </Fragment>
+              ))}
 
-            {/* Lens overlay line (MH-compatible lenses only) */}
-            {lensLineConfig && (
+            {/* === LENS OVERLAY === */}
+
+            {/* Total mode: single lens line */}
+            {viewMode === "total" && lensLineConfig && (
               <Line
                 yAxisId="mh"
                 dataKey="lensOverlayMH"
@@ -378,6 +454,26 @@ export function CapacitySummaryChart({
                 connectNulls
               />
             )}
+
+            {/* Per-shift modes: 3 lens overlay lines */}
+            {viewMode !== "total" &&
+              lensLineConfig &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`lens_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`lensOverlay_${shift.code}`}
+                  name={i === 0 ? lensLineConfig.name : `${lensLineConfig.name} (${shift.name})`}
+                  type="monotone"
+                  stroke={lensLineConfig.stroke}
+                  strokeWidth={2}
+                  strokeDasharray={lensLineConfig.dash || undefined}
+                  dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
