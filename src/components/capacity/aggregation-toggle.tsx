@@ -1,13 +1,14 @@
 "use client";
 
 interface AggregationToggleProps {
-  value: "daily" | "weekly-pattern";
-  onChange: (v: "daily" | "weekly-pattern") => void;
+  value: "daily" | "weekly-pattern" | "monthly";
+  onChange: (v: "daily" | "weekly-pattern" | "monthly") => void;
 }
 
 const OPTIONS: { value: AggregationToggleProps["value"]; label: string; icon: string }[] = [
   { value: "daily", label: "Daily", icon: "fa-solid fa-calendar-day" },
   { value: "weekly-pattern", label: "Weekly Pattern", icon: "fa-solid fa-calendar-week" },
+  { value: "monthly", label: "Monthly", icon: "fa-solid fa-calendar" },
 ];
 
 export function AggregationToggle({ value, onChange }: AggregationToggleProps) {

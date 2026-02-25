@@ -195,6 +195,9 @@ export {
 // Rolling forecast engine (E-01, pure functions)
 export { computeRollingForecast } from "./rolling-forecast-engine";
 
+// Monthly rollup engine (G-09, pure functions)
+export { aggregateMonthlyRollup } from "./monthly-rollup-engine";
+
 // Scenario engine (E-02, pure functions)
 export { applyDemandScenario, DEMAND_SCENARIOS } from "./scenario-engine";
 

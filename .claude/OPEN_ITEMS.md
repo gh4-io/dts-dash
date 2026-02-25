@@ -1315,33 +1315,34 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
-## OI-071 | G-07: Cross-Lens Comparison — Session 1 Complete
+## OI-071 | ~~G-07: Cross-Lens Comparison~~ RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature |
-| **Status** | **Partial** |
-| **Priority** | P2 |
+| **Status** | **Resolved** |
+| **Priority** | ~~P2~~ |
 | **Owner** | Claude |
 | **Created** | 2026-02-24 |
-| **Updated** | 2026-02-24 |
-| **Context** | Session 1 complete: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart (total, byShift, byCustomer modes). 4 eligible lenses (allocated, forecast, worked, billed). Muted visual style (thinner stroke, longer dash, 60% opacity). Auto-clears when primary matches. Hidden in gap mode. |
-| **Remaining** | Session 2: ForecastPatternChart secondary overlay, KPI comparison delta card, detail table secondary column. |
+| **Resolved** | 2026-02-25 |
+| **Context** | Session 1: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart (total, byShift, byCustomer modes). 4 eligible lenses. Muted visual style. Auto-clears when primary matches. Hidden in gap mode. |
+| **Resolution** | Session 2 complete: ForecastPatternChart secondary overlay (total + per-shift, graceful skip for non-eligible lenses), KPI comparison delta card (avg daily MH delta), detail table secondary column + CSV export. 4 files modified. Zero API/engine changes. |
 | **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07, `plan/G07-CROSS-LENS-COMPARISON.md` |
 
 ---
 
-## OI-072 | G-09: Monthly Roll-Up Aggregation — Tier 3
+## OI-072 | G-09: Monthly Roll-Up Aggregation — Implemented
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature |
-| **Status** | Open |
-| **Priority** | P3 |
-| **Owner** | — |
+| **Status** | **Resolved** |
+| **Priority** | ~~P3~~ |
+| **Owner** | Claude |
 | **Created** | 2026-02-24 |
-| **Context** | Add a third aggregation level (Monthly) showing 1 bar per calendar month with averaged demand/capacity/utilization. Requires new engine (`monthly-aggregation-engine.ts`), new chart component or enhanced existing, and AggregationToggle update to 3 options. |
-| **Effort** | High (3-4 days). New engine + chart rendering + edge cases (partial months, multi-year ranges). |
+| **Resolved** | 2026-02-25 |
+| **Context** | Add a third aggregation level (Monthly) showing 1 bar per calendar month with total demand/capacity and avg utilization. |
+| **Resolution** | New `monthly-rollup-engine.ts` with `aggregateMonthlyRollup()` pure function — buckets daily arrays into calendar months with per-shift breakdowns, per-customer breakdowns, and lens overlay sums. New `MonthlyRollupChart` component with 4 view modes (Total/By Shift/By Customer/Gap), lens overlays, secondary comparison (G-07), scenario badge. `AggregationToggle` extended to 3 options (Daily / Weekly Pattern / Monthly). 3 new types (`MonthlyShiftBucket`, `MonthlyRollupBucket`, `MonthlyRollupResult`). 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. |
 | **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-09 |
 
 ---
@@ -1368,11 +1369,15 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 1 | 0 | 17 |
-| P2 | 4 | 2 | 0 | 15 |
-| P3 | 6 | 0 | 2 | 1 |
-| **Total** | **14** | **3** | **2** | **49** |
+| P2 | 4 | 1 | 0 | 16 |
+| P3 | 5 | 0 | 2 | 2 |
+| **Total** | **13** | **2** | **2** | **51** |
 
-**Latest update (2026-02-24)**: OI-071 partial — G-07 cross-lens comparison session 1 complete. CompareSelector component + secondary lens overlay on CapacitySummaryChart (all view modes). 4 eligible secondary lenses, muted visual style, auto-clear logic. 1 new file, 2 modified. Also: full lint cleanup (29 warnings → 0) via eslint config + unused var removal.
+**Latest update (2026-02-25)**: OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
+
+**Previous update (2026-02-25)**: OI-071 resolved — G-07 cross-lens comparison session 2 complete. ForecastPatternChart secondary overlay (total + per-shift, graceful skip for non-eligible lenses), KPI comparison delta card (avg daily MH delta), detail table secondary column + CSV export. 4 files modified. Zero API/engine changes.
+
+**Previous update (2026-02-24)**: OI-071 partial — G-07 cross-lens comparison session 1 complete. CompareSelector component + secondary lens overlay on CapacitySummaryChart (all view modes). 4 eligible secondary lenses, muted visual style, auto-clear logic. 1 new file, 2 modified. Also: full lint cleanup (29 warnings → 0) via eslint config + unused var removal.
 
 **Previous update (2026-02-24)**: OI-073 resolved — G-10 per-customer event attribution. New engine (3 pure functions), 2 new types, 17 new tests (574 total). KPI strip shows top 3 customers when Events lens active. No schema migration (customer field already existed). 2 new files, 4 modified.
 

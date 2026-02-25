@@ -528,6 +528,48 @@ export interface DailyUtilizationV2 {
   byShift: ShiftUtilizationV2[];
 }
 
+/** Per-shift monthly aggregation bucket (G-09) */
+export interface MonthlyShiftBucket {
+  shiftCode: string;
+  totalDemandMH: number;
+  totalCapacityMH: number;
+  avgUtilization: number | null;
+  totalGapMH: number;
+  totalAllocatedMH: number | null;
+  totalForecastedMH: number | null;
+  totalWorkedMH: number | null;
+  totalBilledMH: number | null;
+  byCustomer: Record<string, number>;
+}
+
+/** Monthly roll-up bucket produced by aggregateMonthlyRollup() (G-09) */
+export interface MonthlyRollupBucket {
+  /** YYYY-MM format, e.g. "2026-02" */
+  monthKey: string;
+  /** Display label, e.g. "Feb 2026" */
+  label: string;
+  /** Number of days in this bucket (may be < calendar days for partial months) */
+  dayCount: number;
+  totalDemandMH: number;
+  totalCapacityMH: number;
+  avgUtilizationPercent: number | null;
+  totalGapMH: number;
+  totalAircraftCount: number;
+  totalAllocatedMH: number | null;
+  totalForecastedMH: number | null;
+  totalWorkedMH: number | null;
+  totalBilledMH: number | null;
+  byShift: MonthlyShiftBucket[];
+  byCustomer: Record<string, number>;
+}
+
+/** Result of aggregateMonthlyRollup() (G-09) */
+export interface MonthlyRollupResult {
+  buckets: MonthlyRollupBucket[];
+  totalMonths: number;
+  dateRange: { start: string; end: string };
+}
+
 /** Summary statistics for the capacity overview response */
 export interface CapacitySummary {
   avgUtilization: number | null;

@@ -7,6 +7,7 @@ import { CapacityKpiStrip } from "@/components/capacity/capacity-kpi-strip";
 import { CapacityHeatmap } from "@/components/capacity/capacity-heatmap";
 import { CapacitySummaryChart } from "@/components/capacity/capacity-summary-chart";
 import { ForecastPatternChart } from "@/components/capacity/forecast-pattern-chart";
+import { MonthlyRollupChart } from "@/components/capacity/monthly-rollup-chart";
 import { CapacityPieCharts } from "@/components/capacity/capacity-pie-charts";
 import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
@@ -62,7 +63,9 @@ function CapacityPageInner() {
   } = useCapacityV2(modeOverride);
 
   // Aggregation state (G-01 — independent of lens)
-  const [viewAggregation, setViewAggregation] = useState<"daily" | "weekly-pattern">("daily");
+  const [viewAggregation, setViewAggregation] = useState<"daily" | "weekly-pattern" | "monthly">(
+    "daily",
+  );
 
   // Scenario state (E-02/E-04)
   const [activeScenario, setActiveScenario] = useState<DemandScenario>(
@@ -321,6 +324,17 @@ function CapacityPageInner() {
                   activeLens={activeLens}
                   secondaryLens={secondaryLens}
                   fillHeight
+                />
+              ) : viewAggregation === "monthly" ? (
+                <MonthlyRollupChart
+                  demand={effectiveDemand}
+                  capacity={capacity}
+                  utilization={effectiveUtilization}
+                  shifts={shifts}
+                  activeLens={activeLens}
+                  secondaryLens={secondaryLens}
+                  fillHeight
+                  activeScenarioLabel={activeScenario.label}
                 />
               ) : (
                 <CapacitySummaryChart

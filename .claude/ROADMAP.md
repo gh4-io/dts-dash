@@ -76,7 +76,7 @@
   - No schema migration (customer field already existed on `flight_events` + `EventCoverageWindow`)
   - 2 new files, 4 modified, 17 new tests (574 total)
 
-### Gap Fix G-07: Cross-Lens Comparison — Session 1 (Complete ✅ — `feat/capacity-layout`)
+### Gap Fix G-07: Cross-Lens Comparison (Complete ✅ — `feat/capacity-layout`)
 - [x] G-07 Session 1: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart — 2026-02-24
   - New `CompareSelector` component (dropdown + dismissible chip)
   - Secondary overlay: muted style (1.5px, "8 4" dash, 60% opacity) — distinct from primary
@@ -84,10 +84,22 @@
   - Supports total + byShift + byCustomer modes; hidden in gap mode
   - Auto-clears secondary when primary changes to match
   - 1 new file, 2 modified. Zero API/engine/Zustand changes
-- [ ] G-07 Session 2: ForecastPatternChart support, KPI comparison card, detail table column (deferred)
+- [x] G-07 Session 2: ForecastPatternChart secondary overlay, KPI comparison delta card, detail table column — 2026-02-25
+  - ForecastPatternChart: `SECONDARY_LINE_STYLE` + secondary data in chartData useMemo (total + per-shift)
+  - CapacityKpiStrip: `comparisonKpi` — avg daily MH delta between primary/secondary lenses
+  - CapacityTable: `SECONDARY_LENS_COLUMN` config map + secondary column + CSV export
+  - 4 files modified. Zero API/engine/type changes
 
-### Capacity Tier 3 Gaps (Remaining — `feat/capacity-layout`)
-- [ ] G-09: Monthly roll-up aggregation — new engine + chart (OI-072)
+### Gap Fix G-09: Monthly Roll-Up Aggregation (Complete ✅ — `feat/capacity-layout`)
+- [x] G-09: Monthly roll-up aggregation — new engine + chart — 2026-02-25
+  - New pure engine `monthly-rollup-engine.ts` — `aggregateMonthlyRollup()` buckets daily data into calendar months
+  - New `MonthlyRollupChart` component with 4 view modes (Total/By Shift/By Customer/Gap)
+  - `AggregationToggle` extended to 3 options (Daily / Weekly Pattern / Monthly)
+  - Lens-aware overlays (allocated, forecast, worked, billed) + secondary comparison (G-07)
+  - Scenario-adjusted data, utilization line, tooltip with day count
+  - 3 new files, 4 modified, 16 new tests (590 total). Zero API changes.
+
+### All Capacity Tier 3 Gaps Complete ✅
 
 ### Capacity Phase 3 — Contract MH Pipeline (Planned)
 - [ ] Contract MH fallback in effectiveMH pipeline (OI-065)
