@@ -1186,7 +1186,7 @@
 | **Created** | 2026-02-21 |
 | **Resolved** | 2026-02-25 |
 | **Context** | PER_EVENT contracts currently only affect capacity engine (`allocatedDemandMH` overlay). Flight board, dashboard, and statistics still use base `effectiveMH` (`manual > WP MH > default 3.0`). To show contract MH in all views, integrate into the core transformer pipeline. |
-| **Resolution** | Added `priority` field (M019 migration, default 100). `loadPerEventContractMap()` now resolves by lowest priority number (tiebreaker: higher MH). Admin grid shows Priority column; editor has Priority input (0–9999). Addresses decision point #1 (multiple PER_EVENT contracts → lowest priority wins). |
+| **Resolution** | Full pipeline implemented: (1) `MHSource` includes `"contract"` value, (2) `computeEffectiveMH()` has 4-level chain (manual > WP MH > contract PER_EVENT > default), (3) `loadContractMap()` cache wrapper in transformer, (4) null MH import support with warnings, (5) flight board tooltip/drawer handle contract source, (6) `priority` field added (M019, D-052) for deterministic multi-contract resolution (lowest number wins). All views consume contract-resolved MH via `/api/work-packages/all`. |
 
 ### Technical Context (for future implementation)
 
@@ -1390,7 +1390,9 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 | P3 | 5 | 0 | 2 | 2 |
 | **Total** | **14** | **2** | **2** | **51** |
 
-**Latest update (2026-02-25)**: OI-074 opened — Dashboard aircraft & turns section date does not match FilterBar selection. OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
+**Latest update (2026-02-25)**: OI-065 fully resolved — Phase 3 Contract MH Pipeline complete. Full review confirmed: `computeEffectiveMH()` 4-level chain already wired, `MHSource "contract"` in type system, `loadContractMap()` cache in transformer, null MH import support, flight board handles contract source, priority field added (M019, D-052). All 4 ROADMAP items were already implemented from prior sessions. Phase 3 marked Complete.
+
+**Previous update (2026-02-25)**: OI-074 opened — Dashboard aircraft & turns section date does not match FilterBar selection. OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
 
 **Previous update (2026-02-25)**: OI-071 resolved — G-07 cross-lens comparison session 2 complete. ForecastPatternChart secondary overlay (total + per-shift, graceful skip for non-eligible lenses), KPI comparison delta card (avg daily MH delta), detail table secondary column + CSV export. 4 files modified. Zero API/engine changes.
 

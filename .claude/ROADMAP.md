@@ -101,16 +101,18 @@
 
 ### All Capacity Tier 3 Gaps Complete ✅
 
-### Capacity Phase 3 — Contract MH Pipeline (In Progress)
-- [x] Contract priority field — M019 migration, priority-based PER_EVENT resolution (OI-065) — 2026-02-25
+### Capacity Phase 3 — Contract MH Pipeline (Complete ✅)
+- [x] Contract MH fallback in `computeEffectiveMH()` — 4-level chain: manual > WP MH > contract PER_EVENT > default
+  - `MHSource` type includes `"contract"` value (`src/types/index.ts:36`)
+  - `loadContractMap()` wrapper with module-level cache in `transformer.ts`
+  - `transformWorkPackages()` passes `contractMH` per WP to `computeEffectiveMH()`
+  - 19 tests in `transformer-mh.test.ts` covering priority chain + backwards compat
+- [x] Null WP MH support in data import — schema accepts null, warns on missing, doesn't reject
+- [x] Flight board tooltip + detail drawer handle `mhSource === "contract"` with proper labels
+- [x] Contract priority field — M019 migration, priority-based PER_EVENT resolution (D-052) — 2026-02-25
   - New `priority` column (INTEGER NOT NULL DEFAULT 100) on `demand_contracts`
   - `loadPerEventContractMap()` resolves by lowest priority number (tiebreaker: higher MH)
   - Admin grid shows Priority column; editor has Priority input (0–9999)
-  - 7 code files modified, M019 migration, 0 new tests (pure data-layer + UI change)
-- [ ] Contract MH fallback in effectiveMH pipeline
-- [ ] Null WP MH support in data import
-- [ ] New MHSource "contract" in all views
-- [ ] Flight board, dashboard, statistics show contract-resolved MH
 
 ## Milestones
 
