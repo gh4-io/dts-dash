@@ -636,3 +636,22 @@ customers.sp_id                  populated from ID field in cust.json during cus
 **Modified files**: `types/index.ts` (5 new interfaces), `capacity/index.ts` (3 barrel exports), `capacity-summary-chart.tsx` (forecast line + gap view + scenario badge), `capacity-kpi-strip.tsx` (gap KPI card), `capacity/page.tsx` (scenario state + data routing)
 **Version impact**: MINOR (backwards-compatible addition — new UI features, no API changes)
 **Links**: OI-068, `.claude/SPECS/REQ_CapacityDecisionTree.md`, `plan/CAPACITY-ENHANCEMENTS-E01-E04.md`
+
+---
+
+## D-051 | 2026-02-24 | Cross-Lens Comparison — Page-Local Secondary Lens (G-07)
+
+**Decision**: Implement cross-lens comparison as a page-local `useState<CapacityLensId | null>` secondary lens, NOT in Zustand. Secondary overlay uses the same color as its lens from `LENS_LINE_CONFIG` but with a distinct muted style: thinner stroke (1.5px vs 2), longer dash pattern ("8 4"), and 60% opacity.
+
+**Rationale**:
+1. **Page-local state** — matches the pattern for scenario (E-02) and aggregation (G-01). Secondary lens is ephemeral UI preference, not data-fetching state
+2. **Same-color, different-style** — keeps colors semantically consistent (worked=green, billed=indigo) while making primary vs secondary visually distinct through dash pattern + opacity
+3. **4 eligible secondary lenses** — only `allocated`, `forecast`, `worked`, `billed` (these have `LENS_LINE_CONFIG` entries). Excludes `planned` (no overlay), `events` (block data), `concurrent` (pressure data)
+4. **Auto-clear on conflict** — wrapped `handleLensChange` clears secondary when primary switches to match (avoids useEffect lint issue)
+5. **Hidden in gap mode** — gap view is already visually dense with diverging bars per shift
+6. **No engine changes** — data for secondary lens already exists in `DailyDemandV2` / `ShiftDemandV2` fields
+
+**New files**: `compare-selector.tsx`
+**Modified files**: `capacity-summary-chart.tsx` (props, data computation, Line rendering), `capacity/page.tsx` (state, auto-clear, prop passing)
+**Version impact**: MINOR (backwards-compatible UI addition)
+**Links**: OI-071, `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07, `plan/G07-CROSS-LENS-COMPARISON.md`

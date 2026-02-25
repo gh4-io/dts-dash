@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 
 /**
  * Initialize server.config.yml from template

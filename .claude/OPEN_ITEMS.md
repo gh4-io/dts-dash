@@ -1315,18 +1315,19 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
-## OI-071 | G-07: Cross-Lens Comparison — Tier 3
+## OI-071 | G-07: Cross-Lens Comparison — Session 1 Complete
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature |
-| **Status** | Open |
+| **Status** | **Partial** |
 | **Priority** | P2 |
-| **Owner** | — |
+| **Owner** | Claude |
 | **Created** | 2026-02-24 |
-| **Context** | Allow up to 2 lenses simultaneously (primary + secondary overlay) with different accent colors. Currently lens selector is single-choice. Would require multi-select UI, dual legend management, and chart rendering for 2 overlay lines. |
-| **Effort** | High (2-3 days). UI complexity: dual lens state, legend clarity with 6+ lines in byShift mode. |
-| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07 |
+| **Updated** | 2026-02-24 |
+| **Context** | Session 1 complete: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart (total, byShift, byCustomer modes). 4 eligible lenses (allocated, forecast, worked, billed). Muted visual style (thinner stroke, longer dash, 60% opacity). Auto-clears when primary matches. Hidden in gap mode. |
+| **Remaining** | Session 2: ForecastPatternChart secondary overlay, KPI comparison delta card, detail table secondary column. |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07, `plan/G07-CROSS-LENS-COMPARISON.md` |
 
 ---
 
@@ -1367,11 +1368,13 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 1 | 0 | 17 |
-| P2 | 5 | 1 | 0 | 15 |
+| P2 | 4 | 2 | 0 | 15 |
 | P3 | 6 | 0 | 2 | 1 |
-| **Total** | **15** | **2** | **2** | **49** |
+| **Total** | **14** | **3** | **2** | **49** |
 
-**Latest update (2026-02-24)**: OI-073 resolved — G-10 per-customer event attribution. New engine (3 pure functions), 2 new types, 17 new tests (574 total). KPI strip shows top 3 customers when Events lens active. No schema migration (customer field already existed). 2 new files, 4 modified.
+**Latest update (2026-02-24)**: OI-071 partial — G-07 cross-lens comparison session 1 complete. CompareSelector component + secondary lens overlay on CapacitySummaryChart (all view modes). 4 eligible secondary lenses, muted visual style, auto-clear logic. 1 new file, 2 modified. Also: full lint cleanup (29 warnings → 0) via eslint config + unused var removal.
+
+**Previous update (2026-02-24)**: OI-073 resolved — G-10 per-customer event attribution. New engine (3 pure functions), 2 new types, 17 new tests (574 total). KPI strip shows top 3 customers when Events lens active. No schema migration (customer field already existed). 2 new files, 4 modified.
 
 **Previous update (2026-02-24)**: Version bumped to v0.4.0. OI-071/072/073 opened for remaining Tier 3 gaps (G-07 cross-lens, G-09 monthly rollup, G-10 events per-customer). All E-01–E-06 and G-01 resolved.
 

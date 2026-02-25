@@ -695,7 +695,13 @@ function MhSourceBadge({ source }: { source: string }) {
   );
 }
 
-function OverlayValues({ demand, ut }: { demand: DailyDemandV2; ut: DailyUtilizationV2 | null }) {
+function OverlayValues({
+  demand,
+  ut: _ut,
+}: {
+  demand: DailyDemandV2;
+  ut: DailyUtilizationV2 | null;
+}) {
   const entries: { label: string; value: string | number }[] = [];
   if (demand.totalAllocatedDemandMH != null)
     entries.push({

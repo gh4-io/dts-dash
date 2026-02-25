@@ -207,8 +207,6 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
 
     return result;
   }, [
-    defaultTz,
-    timezone,
     operators,
     aircraft,
     types,
@@ -220,7 +218,6 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
     formatChips,
     customerColorMap,
     customerDisplayMap,
-    setTimezone,
     setOperators,
     setAircraft,
     setTypes,

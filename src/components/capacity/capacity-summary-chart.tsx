@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ComposedChart,
   Bar,
@@ -31,6 +31,8 @@ interface CapacitySummaryChartProps {
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
   activeLens: CapacityLensId;
+  /** Secondary lens for cross-lens comparison (G-07) */
+  secondaryLens?: CapacityLensId | null;
   /** When true, fills parent container height instead of using a fixed 340px */
   fillHeight?: boolean;
   /** Rolling 8-week forecast overlay (E-01) */
@@ -63,6 +65,14 @@ const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: str
   billed: { stroke: "#6366f1", dash: "", name: "Billed" },
 };
 
+// Muted style for secondary comparison overlay (G-07)
+const SECONDARY_LINE_STYLE = {
+  strokeWidth: 1.5,
+  strokeDasharray: "8 4",
+  opacity: 0.6,
+  dotRadius: 2,
+};
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", {
@@ -79,6 +89,7 @@ export function CapacitySummaryChart({
   utilization,
   shifts,
   activeLens,
+  secondaryLens,
   fillHeight = false,
   rollingForecast,
   activeScenarioLabel,
@@ -107,6 +118,58 @@ export function CapacitySummaryChart({
   );
 
   const lensLineConfig = activeLens !== "planned" ? LENS_LINE_CONFIG[activeLens] : null;
+
+  // Secondary lens overlay config (G-07)
+  const secondaryLineConfig =
+    secondaryLens && secondaryLens !== activeLens
+      ? (LENS_LINE_CONFIG[secondaryLens] ?? null)
+      : null;
+
+  // Helper: extract overlay MH for a given lens from a DailyDemandV2 record
+  const getLensOverlayTotal = useCallback(
+    (lens: CapacityLensId, dem: DailyDemandV2): number | null => {
+      switch (lens) {
+        case "allocated":
+          return dem.totalAllocatedDemandMH ?? null;
+        case "forecast":
+          return dem.totalForecastedDemandMH ?? null;
+        case "worked":
+          return dem.totalWorkedMH ?? null;
+        case "billed":
+          return dem.totalBilledMH ?? null;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
+
+  // Helper: extract overlay MH for a given lens from a ShiftDemandV2 record
+  const getLensOverlayShift = useCallback(
+    (
+      lens: CapacityLensId,
+      sd: {
+        allocatedDemandMH?: number;
+        forecastedDemandMH?: number;
+        workedMH?: number;
+        billedMH?: number;
+      },
+    ): number | null => {
+      switch (lens) {
+        case "allocated":
+          return sd.allocatedDemandMH ?? null;
+        case "forecast":
+          return sd.forecastedDemandMH ?? null;
+        case "worked":
+          return sd.workedMH ?? null;
+        case "billed":
+          return sd.billedMH ?? null;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
 
   // Last historical date for forecast boundary
   const lastHistoricalDate = useMemo(() => {
@@ -143,23 +206,13 @@ export function CapacitySummaryChart({
         const dem = demMap.get(u.date);
         const label = formatDate(u.date);
 
-        let lensOverlayMH: number | null = null;
-        if (lensLineConfig && dem) {
-          switch (activeLens) {
-            case "allocated":
-              lensOverlayMH = dem.totalAllocatedDemandMH ?? null;
-              break;
-            case "forecast":
-              lensOverlayMH = dem.totalForecastedDemandMH ?? null;
-              break;
-            case "worked":
-              lensOverlayMH = dem.totalWorkedMH ?? null;
-              break;
-            case "billed":
-              lensOverlayMH = dem.totalBilledMH ?? null;
-              break;
-          }
-        }
+        const lensOverlayMH = lensLineConfig && dem ? getLensOverlayTotal(activeLens, dem) : null;
+
+        // G-07: secondary lens overlay
+        const secondaryOverlayMH =
+          secondaryLineConfig && dem && secondaryLens
+            ? getLensOverlayTotal(secondaryLens, dem)
+            : null;
 
         return {
           date: u.date,
@@ -169,6 +222,7 @@ export function CapacitySummaryChart({
           utilization: u.utilizationPercent !== null ? round1(u.utilizationPercent) : null,
           aircraftCount: dem?.aircraftCount ?? 0,
           ...(lensOverlayMH != null ? { lensOverlayMH: round1(lensOverlayMH) } : {}),
+          ...(secondaryOverlayMH != null ? { secondaryOverlayMH: round1(secondaryOverlayMH) } : {}),
         };
       });
 
@@ -226,23 +280,17 @@ export function CapacitySummaryChart({
 
         // Lens overlay per shift
         if (lensLineConfig && sd) {
-          let lensVal: number | null = null;
-          switch (activeLens) {
-            case "allocated":
-              lensVal = sd.allocatedDemandMH ?? null;
-              break;
-            case "forecast":
-              lensVal = sd.forecastedDemandMH ?? null;
-              break;
-            case "worked":
-              lensVal = sd.workedMH ?? null;
-              break;
-            case "billed":
-              lensVal = sd.billedMH ?? null;
-              break;
-          }
+          const lensVal = getLensOverlayShift(activeLens, sd);
           if (lensVal != null) {
             row[`lensOverlay_${shift.code}`] = round1(lensVal);
+          }
+        }
+
+        // G-07: secondary lens overlay per shift
+        if (secondaryLineConfig && sd && secondaryLens) {
+          const secVal = getLensOverlayShift(secondaryLens, sd);
+          if (secVal != null) {
+            row[`secondaryOverlay_${shift.code}`] = round1(secVal);
           }
         }
       }
@@ -275,6 +323,10 @@ export function CapacitySummaryChart({
     viewMode,
     activeLens,
     lensLineConfig,
+    secondaryLens,
+    secondaryLineConfig,
+    getLensOverlayTotal,
+    getLensOverlayShift,
     showForecast,
     rollingForecast,
   ]);
@@ -708,6 +760,61 @@ export function CapacitySummaryChart({
                   strokeDasharray={lensLineConfig.dash || undefined}
                   dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
                   activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
+
+            {/* === SECONDARY LENS OVERLAY (G-07) === */}
+
+            {/* Total mode: single secondary comparison line */}
+            {viewMode === "total" && secondaryLineConfig && (
+              <Line
+                yAxisId="mh"
+                dataKey="secondaryOverlayMH"
+                name={`${secondaryLineConfig.name} (compare)`}
+                type="monotone"
+                stroke={secondaryLineConfig.stroke}
+                strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                dot={{
+                  r: SECONDARY_LINE_STYLE.dotRadius,
+                  fill: secondaryLineConfig.stroke,
+                  strokeWidth: 0,
+                  opacity: SECONDARY_LINE_STYLE.opacity,
+                }}
+                activeDot={{ r: 4, strokeWidth: 0 }}
+                connectNulls
+              />
+            )}
+
+            {/* Per-shift modes: 3 secondary comparison lines */}
+            {viewMode !== "total" &&
+              viewMode !== "gap" &&
+              secondaryLineConfig &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`secondary_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`secondaryOverlay_${shift.code}`}
+                  name={
+                    i === 0
+                      ? `${secondaryLineConfig.name} (compare)`
+                      : `${secondaryLineConfig.name} (${shift.name}, compare)`
+                  }
+                  type="monotone"
+                  stroke={secondaryLineConfig.stroke}
+                  strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                  strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                  strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                  dot={{
+                    r: SECONDARY_LINE_STYLE.dotRadius,
+                    fill: secondaryLineConfig.stroke,
+                    strokeWidth: 0,
+                    opacity: SECONDARY_LINE_STYLE.opacity,
+                  }}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
                   connectNulls
                   legendType={i === 0 ? undefined : "none"}
                 />

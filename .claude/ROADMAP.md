@@ -76,8 +76,17 @@
   - No schema migration (customer field already existed on `flight_events` + `EventCoverageWindow`)
   - 2 new files, 4 modified, 17 new tests (574 total)
 
-### Capacity Tier 3 Gaps (Planned — `feat/capacity-layout`)
-- [ ] G-07: Cross-lens comparison — dual lens overlay (OI-071)
+### Gap Fix G-07: Cross-Lens Comparison — Session 1 (Complete ✅ — `feat/capacity-layout`)
+- [x] G-07 Session 1: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart — 2026-02-24
+  - New `CompareSelector` component (dropdown + dismissible chip)
+  - Secondary overlay: muted style (1.5px, "8 4" dash, 60% opacity) — distinct from primary
+  - 4 eligible secondary lenses: allocated, forecast, worked, billed
+  - Supports total + byShift + byCustomer modes; hidden in gap mode
+  - Auto-clears secondary when primary changes to match
+  - 1 new file, 2 modified. Zero API/engine/Zustand changes
+- [ ] G-07 Session 2: ForecastPatternChart support, KPI comparison card, detail table column (deferred)
+
+### Capacity Tier 3 Gaps (Remaining — `feat/capacity-layout`)
 - [ ] G-09: Monthly roll-up aggregation — new engine + chart (OI-072)
 
 ### Capacity Phase 3 — Contract MH Pipeline (Planned)

@@ -14,9 +14,10 @@ import { LensSelector } from "@/components/capacity/lens-selector";
 import { ScenarioSelector } from "@/components/capacity/scenario-selector";
 import { ComputeModeBadge } from "@/components/capacity/compute-mode-badge";
 import { AggregationToggle } from "@/components/capacity/aggregation-toggle";
+import { CompareSelector } from "@/components/capacity/compare-selector";
 import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
 import { Button } from "@/components/ui/button";
-import type { DemandScenario } from "@/types";
+import type { DemandScenario, CapacityLensId } from "@/types";
 
 // Direct imports (D-047 — barrel import trap)
 import { applyDemandScenario, DEMAND_SCENARIOS } from "@/lib/capacity/scenario-engine";
@@ -61,6 +62,20 @@ function CapacityPageInner() {
   // Scenario state (E-02/E-04)
   const [activeScenario, setActiveScenario] = useState<DemandScenario>(
     DEMAND_SCENARIOS[0] as DemandScenario,
+  );
+
+  // Secondary lens for cross-lens comparison (G-07)
+  const [secondaryLens, setSecondaryLens] = useState<CapacityLensId | null>(null);
+
+  // Wrap lens change to auto-clear secondary when primary matches it
+  const handleLensChange = useCallback(
+    (lens: CapacityLensId) => {
+      setActiveLens(lens);
+      if (secondaryLens && lens === secondaryLens) {
+        setSecondaryLens(null);
+      }
+    },
+    [setActiveLens, secondaryLens],
   );
 
   // Scenario computation (E-02)
@@ -124,8 +139,8 @@ function CapacityPageInner() {
     return summarizeEventsByCustomer(flightEvents);
   }, [flightEvents]);
 
-  // Per-customer coverage map (G-10)
-  const customerCoverageMap = useMemo(() => {
+  // Per-customer coverage map (G-10) — reserved for future chart/table integration
+  const _customerCoverageMap = useMemo(() => {
     if (!coverageWindows || coverageWindows.length === 0 || shifts.length === 0) return undefined;
     const aggregates = aggregateCoverageByCustomer(coverageWindows, shifts);
     return buildCustomerCoverageMap(aggregates);
@@ -209,7 +224,13 @@ function CapacityPageInner() {
               <LensSelector
                 activeLens={activeLens}
                 availableLenses={availableLenses}
-                onLensChange={setActiveLens}
+                onLensChange={handleLensChange}
+              />
+              <CompareSelector
+                primaryLens={activeLens}
+                secondaryLens={secondaryLens}
+                availableLenses={availableLenses}
+                onSecondaryChange={setSecondaryLens}
               />
               <ComputeModeBadge
                 computeMode={computeMode}
@@ -288,6 +309,7 @@ function CapacityPageInner() {
                   utilization={effectiveUtilization}
                   shifts={shifts}
                   activeLens={activeLens}
+                  secondaryLens={secondaryLens}
                   fillHeight
                   rollingForecast={rollingForecast}
                   activeScenarioLabel={activeScenario.label}

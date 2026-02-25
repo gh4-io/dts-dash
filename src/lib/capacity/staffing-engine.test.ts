@@ -16,12 +16,7 @@ import {
   validatePattern,
   countWorkingDays,
 } from "./staffing-engine";
-import type {
-  RotationPattern,
-  StaffingShift,
-  CapacityAssumptions,
-  StaffingShiftCategory,
-} from "@/types";
+import type { RotationPattern, StaffingShift, CapacityAssumptions } from "@/types";
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────
 

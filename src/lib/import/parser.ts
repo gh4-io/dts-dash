@@ -98,7 +98,6 @@ function extractRecordsFromWrapper(obj: Record<string, unknown>): Record<string,
  * appearing in field mapping or being committed to the database.
  */
 export function stripImportTypeKey(records: Record<string, unknown>[]): Record<string, unknown>[] {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   return records.map(({ [IMPORT_TYPE_KEY]: _discarded, ...rest }) => rest);
 }
 
