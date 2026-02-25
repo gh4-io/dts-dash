@@ -62,11 +62,14 @@ interface DayBucket {
   sumCapacityMH: number;
   sumForecastedMH: number;
   forecastCount: number;
+  /** Number of demand dates contributing to this bucket */
   count: number;
+  /** Number of capacity dates contributing to this bucket (independent of demand) */
+  capacityCount: number;
   shiftSums: Record<string, { sum: number; count: number }>;
   /** shift → customer → running MH sum (divide by bucket.count for avg) */
   customerShiftSums: Record<string, Record<string, number>>;
-  /** shift → running capacity MH sum (divide by bucket.count for avg) */
+  /** shift → running capacity MH sum (divide by bucket.capacityCount for avg) */
   capacityShiftSums: Record<string, number>;
   /** shift → { sum, count } for forecasted MH */
   forecastShiftSums: Record<string, { sum: number; count: number }>;
@@ -81,6 +84,7 @@ function createEmptyBucket(): DayBucket {
     sumForecastedMH: 0,
     forecastCount: 0,
     count: 0,
+    capacityCount: 0,
     shiftSums: {},
     customerShiftSums: {},
     capacityShiftSums: {},
@@ -146,12 +150,6 @@ export function computeDayOfWeekPattern(
     };
   }
 
-  // Index capacity by date for O(1) lookup
-  const capByDate = new Map<string, DailyCapacityV2>();
-  for (const c of capacity) {
-    capByDate.set(c.date, c);
-  }
-
   // Initialize 7 buckets (1=Mon ... 7=Sun)
   const buckets: Record<number, DayBucket> = {};
   for (let i = 1; i <= 7; i++) {
@@ -208,16 +206,6 @@ export function computeDayOfWeekPattern(
       }
     }
 
-    // Capacity (total + per shift)
-    const cap = capByDate.get(day.date);
-    if (cap) {
-      bucket.sumCapacityMH += cap.totalProductiveMH;
-      for (const sc of cap.byShift) {
-        bucket.capacityShiftSums[sc.shiftCode] =
-          (bucket.capacityShiftSums[sc.shiftCode] ?? 0) + sc.productiveMH;
-      }
-    }
-
     // Forecast overlay total (only count entries that actually have the field)
     if (day.totalForecastedDemandMH != null) {
       bucket.sumForecastedMH += day.totalForecastedDemandMH;
@@ -233,12 +221,27 @@ export function computeDayOfWeekPattern(
     if (day.date > maxDate) maxDate = day.date;
   }
 
+  // Accumulate capacity independently — covers all dates regardless of demand coverage.
+  // This ensures days with no work packages still show correct capacity averages.
+  for (const cap of capacity) {
+    const d = new Date(cap.date + "T12:00:00Z");
+    const isoDow = toIsoDayOfWeek(d.getUTCDay());
+    const bucket = buckets[isoDow];
+    bucket.sumCapacityMH += cap.totalProductiveMH;
+    bucket.capacityCount += 1;
+    for (const sc of cap.byShift) {
+      bucket.capacityShiftSums[sc.shiftCode] =
+        (bucket.capacityShiftSums[sc.shiftCode] ?? 0) + sc.productiveMH;
+    }
+  }
+
   // Build result
   const pattern: DayOfWeekPattern[] = [1, 2, 3, 4, 5, 6, 7].map((dow) => {
     const bucket = buckets[dow];
     const count = bucket.count;
+    const capCount = bucket.capacityCount;
 
-    if (count === 0) {
+    if (count === 0 && capCount === 0) {
       return {
         dayOfWeek: dow,
         label: DAY_LABELS[dow],
@@ -259,9 +262,10 @@ export function computeDayOfWeekPattern(
       }
     }
 
+    // Capacity is averaged over its own date count, independent of demand coverage
     const avgCapacityByShift: Record<string, number> = {};
     for (const [code, sum] of Object.entries(bucket.capacityShiftSums)) {
-      avgCapacityByShift[code] = round1(sum / count);
+      avgCapacityByShift[code] = capCount > 0 ? round1(sum / capCount) : 0;
     }
 
     const avgForecastedByShift: Record<string, number> = {};
@@ -277,10 +281,10 @@ export function computeDayOfWeekPattern(
     return {
       dayOfWeek: dow,
       label: DAY_LABELS[dow],
-      avgDemandMH: round1(bucket.sumDemandMH / count),
+      avgDemandMH: count > 0 ? round1(bucket.sumDemandMH / count) : 0,
       avgDemandByShift,
       avgDemandByCustomerByShift,
-      avgCapacityMH: round1(bucket.sumCapacityMH / count),
+      avgCapacityMH: capCount > 0 ? round1(bucket.sumCapacityMH / capCount) : 0,
       avgCapacityByShift,
       avgForecastedMH:
         bucket.forecastCount > 0 ? round1(bucket.sumForecastedMH / bucket.forecastCount) : null,

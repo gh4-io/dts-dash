@@ -117,3 +117,5 @@ server.config.yml
 
 
 **/.claude/settings.local.json
+
+**/*.drawio

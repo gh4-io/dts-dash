@@ -927,6 +927,51 @@ export interface WeeklyProjection {
   updatedAt: string;
 }
 
+// ─── Rolling Forecast (E-01) ─────────────────────────────────────────────
+
+export interface RollingForecastDay {
+  date: string;
+  forecastedDemandMH: number;
+  forecastedByShift: Record<string, number>;
+  isForecast: true;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface RollingForecastResult {
+  forecastDays: RollingForecastDay[];
+  weeksAhead: number;
+  basedOnWeeks: number;
+  patternSource: "dayOfWeek";
+}
+
+// ─── Demand Scenarios (E-02) ─────────────────────────────────────────────
+
+export interface DemandScenario {
+  id: string;
+  label: string;
+  demandMultiplier: number;
+}
+
+export interface ScenarioResult {
+  scenarioId: string;
+  demand: DailyDemandV2[];
+  utilization: DailyUtilizationV2[];
+  summary: CapacitySummary;
+}
+
+// ─── Gap Analysis (E-03) ─────────────────────────────────────────────────
+
+export interface GapSummary {
+  avgDailyGapMH: number;
+  totalGapMH: number;
+  deficitDays: number;
+  surplusDays: number;
+  worstDayDeficit: { date: string; gapMH: number } | null;
+  worstShiftDeficit: { date: string; shiftCode: string; gapMH: number } | null;
+  avgGapByShift: Record<string, number>;
+  classification: "surplus" | "balanced" | "tight" | "deficit";
+}
+
 /** One day in a 7-element overlay array (Mon–Sun) */
 export interface ProjectionDayOverlay {
   dayOfWeek: number;

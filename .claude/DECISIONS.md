@@ -613,3 +613,26 @@ customers.sp_id                  populated from ID field in cust.json during cus
 **Tracked by**: OI-067 (includes removal checklist)
 **Version impact**: MINOR (backwards-compatible addition)
 **Links**: OI-067, `src/lib/capacity/projection-engine.ts`
+
+---
+
+## D-050 | 2026-02-24 | Capacity Enhancements E-01 through E-04 — Client-Side Forecasting, Scenarios & Gap Analysis
+
+**Decision**: Add four client-side-only enhancements to the `/capacity` page:
+1. **E-01 Rolling 8-Week Forecast** — recency-weighted DOW average projected forward as emerald dashed line
+2. **E-02 Scenario Toggle** — baseline vs +10% demand multiplier with utilization recomputation
+3. **E-03 Gap Analysis** — surplus/deficit classification + diverging bar "Gap" view mode
+4. **E-04 Scenario Controls UI** — ScenarioSelector component + page wiring with effective data routing
+
+**Rationale**:
+1. **Zero API changes** — all computation is client-side over already-fetched data
+2. **All engines are pure functions** (zero DB imports) in `*-engine.ts` files
+3. **Existing domain metric formulas are unchanged** — scenarios create parallel computation paths with transformed inputs
+4. **Lens overlay values are never scaled** — allocatedDemandMH, forecastedDemandMH, workedMH, billedMH represent independent data sources
+5. **Forecast uses original demand** — not scenario-adjusted, so forecast line is stable across scenarios
+6. **Drawer uses original demand** — WP-level detail not distorted by scenario multiplier
+
+**New files**: `rolling-forecast-engine.ts`, `scenario-engine.ts`, `gap-engine.ts`, `scenario-selector.tsx`, + 3 test files (36 tests)
+**Modified files**: `types/index.ts` (5 new interfaces), `capacity/index.ts` (3 barrel exports), `capacity-summary-chart.tsx` (forecast line + gap view + scenario badge), `capacity-kpi-strip.tsx` (gap KPI card), `capacity/page.tsx` (scenario state + data routing)
+**Version impact**: MINOR (backwards-compatible addition — new UI features, no API changes)
+**Links**: OI-068, `.claude/SPECS/REQ_CapacityDecisionTree.md`, `plan/CAPACITY-ENHANCEMENTS-E01-E04.md`

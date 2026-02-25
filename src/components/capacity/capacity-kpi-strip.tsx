@@ -7,6 +7,7 @@ import type {
   DailyDemandV2,
   FlightEvent,
   EventCoverageWindow,
+  GapSummary,
 } from "@/types";
 
 interface CapacityKpiStripProps {
@@ -16,6 +17,8 @@ interface CapacityKpiStripProps {
   demand: DailyDemandV2[];
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];
+  gapSummary?: GapSummary | null;
+  activeScenarioLabel?: string;
 }
 
 function getUtilColor(val: number | null): string {
@@ -51,6 +54,13 @@ function KpiCard({
   );
 }
 
+const GAP_CLASS_CONFIG: Record<GapSummary["classification"], { color: string; icon: string }> = {
+  surplus: { color: "text-emerald-400", icon: "fa-scale-balanced" },
+  balanced: { color: "text-blue-400", icon: "fa-scale-balanced" },
+  tight: { color: "text-amber-400", icon: "fa-scale-unbalanced" },
+  deficit: { color: "text-red-400", icon: "fa-scale-unbalanced" },
+};
+
 export function CapacityKpiStrip({
   summary,
   dayCount,
@@ -58,6 +68,8 @@ export function CapacityKpiStrip({
   demand,
   flightEvents,
   coverageWindows,
+  gapSummary,
+  activeScenarioLabel,
 }: CapacityKpiStripProps) {
   const avgUtil = summary.avgUtilization;
   const peakUtil = summary.peakUtilization;
@@ -239,6 +251,17 @@ export function CapacityKpiStrip({
           value={String(summary.noCoverageDays)}
           subValue="Shift slots with 0 heads"
           color="text-muted-foreground"
+        />
+      )}
+      {gapSummary && (
+        <KpiCard
+          icon={GAP_CLASS_CONFIG[gapSummary.classification].icon}
+          label={`Gap Status${activeScenarioLabel && activeScenarioLabel !== "Baseline" ? ` (${activeScenarioLabel})` : ""}`}
+          value={
+            gapSummary.classification.charAt(0).toUpperCase() + gapSummary.classification.slice(1)
+          }
+          subValue={`${gapSummary.deficitDays}/${dayCount} deficit days`}
+          color={GAP_CLASS_CONFIG[gapSummary.classification].color}
         />
       )}
       {lensKpis.map((kpi) => (

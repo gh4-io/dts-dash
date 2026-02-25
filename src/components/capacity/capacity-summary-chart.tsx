@@ -20,6 +20,7 @@ import type {
   DailyUtilizationV2,
   CapacityShift,
   CapacityLensId,
+  RollingForecastResult,
 } from "@/types";
 import { useCustomers } from "@/lib/hooks/use-customers";
 
@@ -31,9 +32,13 @@ interface CapacitySummaryChartProps {
   activeLens: CapacityLensId;
   /** When true, fills parent container height instead of using a fixed 340px */
   fillHeight?: boolean;
+  /** Rolling 8-week forecast overlay (E-01) */
+  rollingForecast?: RollingForecastResult | null;
+  /** Active scenario label badge (E-04) */
+  activeScenarioLabel?: string;
 }
 
-type ViewMode = "byShift" | "byCustomer" | "total";
+type ViewMode = "byShift" | "byCustomer" | "total" | "gap";
 
 function getUtilizationColor(percent: number | null): string {
   if (percent === null) return "#6b7280";
@@ -74,8 +79,11 @@ export function CapacitySummaryChart({
   shifts,
   activeLens,
   fillHeight = false,
+  rollingForecast,
+  activeScenarioLabel,
 }: CapacitySummaryChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("byShift");
+  const [showForecast, setShowForecast] = useState(false);
   const { getColor, fetch: fetchCustomers } = useCustomers();
 
   useEffect(() => {
@@ -99,13 +107,38 @@ export function CapacitySummaryChart({
 
   const lensLineConfig = activeLens !== "planned" ? LENS_LINE_CONFIG[activeLens] : null;
 
+  // Last historical date for forecast boundary
+  const lastHistoricalDate = useMemo(() => {
+    if (utilization.length === 0) return null;
+    return utilization[utilization.length - 1].date;
+  }, [utilization]);
+
   const chartData = useMemo(() => {
     const capMap = new Map(capacity.map((c) => [c.date, c]));
     const demMap = new Map(demand.map((d) => [d.date, d]));
+    const round1 = (n: number) => Math.round(n * 10) / 10;
 
-    // Total mode: one row per day (unchanged)
-    if (viewMode === "total") {
+    // Gap mode: diverging bars per shift
+    if (viewMode === "gap") {
       return utilization.map((u) => {
+        const label = formatDate(u.date);
+        const row: Record<string, unknown> = {
+          date: u.date,
+          label,
+          gapMH: round1(u.gapMH),
+          aircraftCount: demMap.get(u.date)?.aircraftCount ?? 0,
+        };
+        for (const shift of activeShifts) {
+          const su = u.byShift.find((s) => s.shiftCode === shift.code);
+          row[`gap_${shift.code}`] = round1(su?.gapMH ?? 0);
+        }
+        return row;
+      });
+    }
+
+    // Total mode: one row per day
+    if (viewMode === "total") {
+      const rows = utilization.map((u) => {
         const dem = demMap.get(u.date);
         const label = formatDate(u.date);
 
@@ -130,18 +163,34 @@ export function CapacitySummaryChart({
         return {
           date: u.date,
           label,
-          demandMH: Math.round(u.totalDemandMH * 10) / 10,
-          capacityMH: Math.round(u.totalProductiveMH * 10) / 10,
-          utilization:
-            u.utilizationPercent !== null ? Math.round(u.utilizationPercent * 10) / 10 : null,
+          demandMH: round1(u.totalDemandMH),
+          capacityMH: round1(u.totalProductiveMH),
+          utilization: u.utilizationPercent !== null ? round1(u.utilizationPercent) : null,
           aircraftCount: dem?.aircraftCount ?? 0,
-          ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
+          ...(lensOverlayMH != null ? { lensOverlayMH: round1(lensOverlayMH) } : {}),
         };
       });
+
+      // Append forecast rows when toggle is on
+      if (showForecast && rollingForecast?.forecastDays.length) {
+        for (const fd of rollingForecast.forecastDays) {
+          rows.push({
+            date: fd.date,
+            label: formatDate(fd.date),
+            demandMH: undefined as unknown as number,
+            capacityMH: undefined as unknown as number,
+            utilization: null,
+            aircraftCount: 0,
+            forecastDemandMH: fd.forecastedDemandMH,
+          } as Record<string, unknown> as (typeof rows)[number]);
+        }
+      }
+
+      return rows;
     }
 
     // byShift / byCustomer: 1 row per day, per-shift fields
-    return utilization.map((u) => {
+    const rows = utilization.map((u) => {
       const dem = demMap.get(u.date);
       const cap = capMap.get(u.date);
       const label = formatDate(u.date);
@@ -158,9 +207,8 @@ export function CapacitySummaryChart({
         const sc = cap?.byShift.find((s) => s.shiftCode === shift.code);
 
         // Capacity + utilization per shift (for lines)
-        row[`capacity_${shift.code}`] = Math.round((sc?.productiveMH ?? 0) * 10) / 10;
-        row[`utilization_${shift.code}`] =
-          su?.utilization != null ? Math.round(su.utilization * 10) / 10 : null;
+        row[`capacity_${shift.code}`] = round1(sc?.productiveMH ?? 0);
+        row[`utilization_${shift.code}`] = su?.utilization != null ? round1(su.utilization) : null;
 
         // Demand per shift (for bars)
         if (viewMode === "byCustomer") {
@@ -169,10 +217,10 @@ export function CapacitySummaryChart({
             custMH[wp.customer] = (custMH[wp.customer] ?? 0) + wp.allocatedMH;
           }
           for (const customer of allCustomers) {
-            row[`demand_${shift.code}_${customer}`] = Math.round((custMH[customer] ?? 0) * 10) / 10;
+            row[`demand_${shift.code}_${customer}`] = round1(custMH[customer] ?? 0);
           }
         } else {
-          row[`demand_${shift.code}`] = Math.round((sd?.demandMH ?? 0) * 10) / 10;
+          row[`demand_${shift.code}`] = round1(sd?.demandMH ?? 0);
         }
 
         // Lens overlay per shift
@@ -193,13 +241,30 @@ export function CapacitySummaryChart({
               break;
           }
           if (lensVal != null) {
-            row[`lensOverlay_${shift.code}`] = Math.round(lensVal * 10) / 10;
+            row[`lensOverlay_${shift.code}`] = round1(lensVal);
           }
         }
       }
 
       return row;
     });
+
+    // Append forecast rows when toggle is on (byShift mode)
+    if (showForecast && viewMode === "byShift" && rollingForecast?.forecastDays.length) {
+      for (const fd of rollingForecast.forecastDays) {
+        const row: Record<string, unknown> = {
+          date: fd.date,
+          label: formatDate(fd.date),
+          aircraftCount: 0,
+        };
+        for (const shift of activeShifts) {
+          row[`forecastDemand_${shift.code}`] = round1(fd.forecastedByShift[shift.code] ?? 0);
+        }
+        rows.push(row);
+      }
+    }
+
+    return rows;
   }, [
     demand,
     capacity,
@@ -209,6 +274,8 @@ export function CapacitySummaryChart({
     viewMode,
     activeLens,
     lensLineConfig,
+    showForecast,
+    rollingForecast,
   ]);
 
   if (chartData.length === 0) {
@@ -229,22 +296,48 @@ export function CapacitySummaryChart({
       <div className="flex items-center justify-between p-3 border-b border-border">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
           <i className="fa-solid fa-chart-bar" />
-          Demand vs Capacity
+          {viewMode === "gap" ? "Surplus / Deficit" : "Demand vs Capacity"}
+          {activeScenarioLabel && activeScenarioLabel !== "Baseline" && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-medium normal-case tracking-normal">
+              {activeScenarioLabel}
+            </span>
+          )}
         </h3>
-        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
-          {(["byShift", "byCustomer", "total"] as const).map((mode) => (
+        <div className="flex items-center gap-2">
+          {/* 8W Forecast toggle */}
+          {rollingForecast && rollingForecast.forecastDays.length > 0 && viewMode !== "gap" && (
             <button
-              key={mode}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-                viewMode === mode
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:text-foreground"
+              className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                showForecast
+                  ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+                  : "border-border text-muted-foreground hover:text-foreground"
               }`}
-              onClick={() => setViewMode(mode)}
+              onClick={() => setShowForecast(!showForecast)}
             >
-              {mode === "byShift" ? "By Shift" : mode === "byCustomer" ? "By Customer" : "Total"}
+              8W Forecast
             </button>
-          ))}
+          )}
+          <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+            {(["byShift", "byCustomer", "total", "gap"] as const).map((mode) => (
+              <button
+                key={mode}
+                className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                  viewMode === mode
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setViewMode(mode)}
+              >
+                {mode === "byShift"
+                  ? "By Shift"
+                  : mode === "byCustomer"
+                    ? "By Customer"
+                    : mode === "gap"
+                      ? "Gap"
+                      : "Total"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -266,7 +359,7 @@ export function CapacitySummaryChart({
               tickLine={false}
               axisLine={false}
               label={{
-                value: "Man-Hours",
+                value: viewMode === "gap" ? "Gap (MH)" : "Man-Hours",
                 angle: -90,
                 position: "insideLeft",
                 fill: "hsl(var(--muted-foreground))",
@@ -274,22 +367,24 @@ export function CapacitySummaryChart({
                 offset: 10,
               }}
             />
-            <YAxis
-              yAxisId="pct"
-              orientation="right"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => `${v}%`}
-              label={{
-                value: "Utilization %",
-                angle: 90,
-                position: "insideRight",
-                fill: "hsl(var(--muted-foreground))",
-                fontSize: 10,
-                offset: 10,
-              }}
-            />
+            {viewMode !== "gap" && (
+              <YAxis
+                yAxisId="pct"
+                orientation="right"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v}%`}
+                label={{
+                  value: "Utilization %",
+                  angle: 90,
+                  position: "insideRight",
+                  fill: "hsl(var(--muted-foreground))",
+                  fontSize: 10,
+                  offset: 10,
+                }}
+              />
+            )}
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--popover))",
@@ -301,33 +396,42 @@ export function CapacitySummaryChart({
               formatter={(value, name) => {
                 if (typeof name === "string" && name.includes("Utilization"))
                   return [value !== null ? `${value}%` : "N/A", name];
+                if (typeof name === "string" && name.includes("Forecast"))
+                  return [`${value} MH`, name];
+                if (viewMode === "gap") {
+                  const v = value as number;
+                  return [v >= 0 ? `+${v} MH` : `${v} MH`, name];
+                }
                 return [`${value} MH`, name];
               }}
               labelFormatter={(_, payload) => {
                 const item = payload?.[0]?.payload;
                 if (!item) return "";
-                return `${item.label} — ${item.aircraftCount} aircraft`;
+                return `${item.label}${item.aircraftCount ? ` — ${item.aircraftCount} aircraft` : ""}`;
               }}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-            <ReferenceLine
-              yAxisId="pct"
-              y={120}
-              stroke="#ef4444"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              label={{ value: "CRITICAL", position: "right", fill: "#ef4444", fontSize: 10 }}
-            />
-            <ReferenceLine
-              yAxisId="pct"
-              y={100}
-              stroke="#f59e0b"
-              strokeDasharray="4 4"
-              strokeWidth={1}
-              label={{ value: "100%", position: "right", fill: "#f59e0b", fontSize: 10 }}
-            />
 
-            {/* === DEMAND BARS === */}
+            {/* === GAP MODE === */}
+            {viewMode === "gap" && (
+              <>
+                <ReferenceLine yAxisId="mh" y={0} stroke="#666" strokeDasharray="3 3" />
+                {activeShifts.map((shift) => (
+                  <Bar
+                    key={`gap_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`gap_${shift.code}`}
+                    name={`${shift.name} Gap`}
+                    fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* === DEMAND BARS (non-gap modes) === */}
 
             {/* Total mode: 1 bar per day, colored by utilization */}
             {viewMode === "total" && (
@@ -376,7 +480,29 @@ export function CapacitySummaryChart({
                 )),
               )}
 
-            {/* === LINES === */}
+            {/* === REFERENCE LINES (non-gap modes) === */}
+            {viewMode !== "gap" && (
+              <>
+                <ReferenceLine
+                  yAxisId="pct"
+                  y={120}
+                  stroke="#ef4444"
+                  strokeDasharray="4 4"
+                  strokeWidth={1.5}
+                  label={{ value: "CRITICAL", position: "right", fill: "#ef4444", fontSize: 10 }}
+                />
+                <ReferenceLine
+                  yAxisId="pct"
+                  y={100}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 4"
+                  strokeWidth={1}
+                  label={{ value: "100%", position: "right", fill: "#f59e0b", fontSize: 10 }}
+                />
+              </>
+            )}
+
+            {/* === LINES (non-gap modes) === */}
 
             {/* Total mode: single capacity + utilization lines */}
             {viewMode === "total" && (
@@ -408,6 +534,7 @@ export function CapacitySummaryChart({
 
             {/* Per-shift modes: 3 capacity lines (dashed) + 3 utilization lines (solid) */}
             {viewMode !== "total" &&
+              viewMode !== "gap" &&
               activeShifts.map((shift, i) => (
                 <Fragment key={`lines_${shift.code}`}>
                   <Line
@@ -437,6 +564,66 @@ export function CapacitySummaryChart({
                 </Fragment>
               ))}
 
+            {/* === FORECAST LINE (E-01) === */}
+
+            {/* Total mode: single forecast line */}
+            {showForecast && viewMode === "total" && (
+              <>
+                {lastHistoricalDate && (
+                  <ReferenceLine
+                    yAxisId="mh"
+                    x={formatDate(lastHistoricalDate)}
+                    stroke="#10b981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1}
+                  />
+                )}
+                <Line
+                  yAxisId="mh"
+                  dataKey="forecastDemandMH"
+                  name="Forecast (8-wk rolling)"
+                  type="monotone"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  strokeDasharray="4 2"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0, fill: "#10b981" }}
+                  connectNulls={false}
+                />
+              </>
+            )}
+
+            {/* Per-shift mode: forecast lines per shift */}
+            {showForecast && viewMode === "byShift" && (
+              <>
+                {lastHistoricalDate && (
+                  <ReferenceLine
+                    yAxisId="mh"
+                    x={formatDate(lastHistoricalDate)}
+                    stroke="#10b981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1}
+                  />
+                )}
+                {activeShifts.map((shift, i) => (
+                  <Line
+                    key={`forecast_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`forecastDemand_${shift.code}`}
+                    name={i === 0 ? "Forecast (8-wk rolling)" : `Forecast (${shift.name})`}
+                    type="monotone"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0, fill: "#10b981" }}
+                    connectNulls={false}
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                ))}
+              </>
+            )}
+
             {/* === LENS OVERLAY === */}
 
             {/* Total mode: single lens line */}
@@ -457,6 +644,7 @@ export function CapacitySummaryChart({
 
             {/* Per-shift modes: 3 lens overlay lines */}
             {viewMode !== "total" &&
+              viewMode !== "gap" &&
               lensLineConfig &&
               activeShifts.map((shift, i) => (
                 <Line

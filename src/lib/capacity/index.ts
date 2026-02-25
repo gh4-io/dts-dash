@@ -185,6 +185,15 @@ export {
   clearGeneratedRates,
 } from "./forecast-data";
 
+// Rolling forecast engine (E-01, pure functions)
+export { computeRollingForecast } from "./rolling-forecast-engine";
+
+// Scenario engine (E-02, pure functions)
+export { applyDemandScenario, DEMAND_SCENARIOS } from "./scenario-engine";
+
+// Gap analysis engine (E-03, pure functions)
+export { computeGapSummary } from "./gap-engine";
+
 // Weekly MH Projections engine (TEMPORARY — OI-067, pure functions)
 export {
   validateProjectionEntry,

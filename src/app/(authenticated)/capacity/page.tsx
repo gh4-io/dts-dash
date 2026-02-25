@@ -11,8 +11,15 @@ import { CapacityPieCharts } from "@/components/capacity/capacity-pie-charts";
 import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-drawer";
 import { CapacityTable } from "@/components/capacity/capacity-table";
 import { LensSelector } from "@/components/capacity/lens-selector";
+import { ScenarioSelector } from "@/components/capacity/scenario-selector";
 import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
 import { Button } from "@/components/ui/button";
+import type { DemandScenario } from "@/types";
+
+// Direct imports (D-047 — barrel import trap)
+import { applyDemandScenario, DEMAND_SCENARIOS } from "@/lib/capacity/scenario-engine";
+import { computeRollingForecast } from "@/lib/capacity/rolling-forecast-engine";
+import { computeGapSummary } from "@/lib/capacity/gap-engine";
 
 function CapacityPageInner() {
   const {
@@ -38,6 +45,32 @@ function CapacityPageInner() {
     error,
     refetch,
   } = useCapacityV2();
+
+  // Scenario state (E-02/E-04)
+  const [activeScenario, setActiveScenario] = useState<DemandScenario>(
+    DEMAND_SCENARIOS[0] as DemandScenario,
+  );
+
+  // Scenario computation (E-02)
+  const scenarioResult = useMemo(() => {
+    if (demand.length === 0 || capacity.length === 0) return null;
+    return applyDemandScenario(demand, capacity, activeScenario);
+  }, [demand, capacity, activeScenario]);
+
+  const effectiveDemand = scenarioResult?.demand ?? demand;
+  const effectiveUtilization = scenarioResult?.utilization ?? utilization;
+  const effectiveSummary = scenarioResult?.summary ?? summary;
+
+  // Rolling forecast uses ORIGINAL demand (not scenario-adjusted) (E-01)
+  const rollingForecast = useMemo(() => {
+    if (demand.length === 0 || capacity.length === 0) return null;
+    return computeRollingForecast(demand);
+  }, [demand, capacity]);
+
+  // Gap summary uses scenario-adjusted utilization (E-03)
+  const gapSummary = useMemo(() => {
+    return computeGapSummary(effectiveUtilization);
+  }, [effectiveUtilization]);
 
   // Warnings dismiss state — resets when data is refreshed
   const [warningsDismissed, setWarningsDismissed] = useState(false);
@@ -144,12 +177,18 @@ function CapacityPageInner() {
         <LoadingSkeleton variant="page" />
       ) : (
         <>
-          {/* Lens selector */}
-          <LensSelector
-            activeLens={activeLens}
-            availableLenses={availableLenses}
-            onLensChange={setActiveLens}
-          />
+          {/* Lens selector + Scenario selector */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <LensSelector
+              activeLens={activeLens}
+              availableLenses={availableLenses}
+              onLensChange={setActiveLens}
+            />
+            <ScenarioSelector
+              activeScenario={activeScenario}
+              onScenarioChange={setActiveScenario}
+            />
+          </div>
 
           {/* Warnings banner */}
           {warnings.length > 0 && !warningsDismissed && (
@@ -181,14 +220,16 @@ function CapacityPageInner() {
           )}
 
           {/* KPI Strip */}
-          {summary && (
+          {effectiveSummary && (
             <CapacityKpiStrip
-              summary={summary}
-              dayCount={utilization.length}
+              summary={effectiveSummary}
+              dayCount={effectiveUtilization.length}
               activeLens={activeLens}
-              demand={demand}
+              demand={effectiveDemand}
               flightEvents={flightEvents}
               coverageWindows={coverageWindows}
+              gapSummary={gapSummary}
+              activeScenarioLabel={activeScenario.label}
             />
           )}
 
@@ -207,11 +248,13 @@ function CapacityPageInner() {
               ) : (
                 <CapacitySummaryChart
                   capacity={capacity}
-                  demand={demand}
-                  utilization={utilization}
+                  demand={effectiveDemand}
+                  utilization={effectiveUtilization}
                   shifts={shifts}
                   activeLens={activeLens}
                   fillHeight
+                  rollingForecast={rollingForecast}
+                  activeScenarioLabel={activeScenario.label}
                 />
               )}
             </div>
@@ -222,8 +265,8 @@ function CapacityPageInner() {
               <div className="overflow-x-auto">
                 <CapacityHeatmap
                   capacity={capacity}
-                  demand={demand}
-                  utilization={utilization}
+                  demand={effectiveDemand}
+                  utilization={effectiveUtilization}
                   shifts={shifts}
                   activeLens={activeLens}
                   onCellClick={handleCellClick}
@@ -232,8 +275,8 @@ function CapacityPageInner() {
 
               {/* Right bottom: 3 demand breakdown pies */}
               <CapacityPieCharts
-                demand={demand}
-                utilization={utilization}
+                demand={effectiveDemand}
+                utilization={effectiveUtilization}
                 shifts={shifts}
                 activeLens={activeLens}
               />
@@ -242,14 +285,14 @@ function CapacityPageInner() {
 
           {/* Detail Table (V2 direct) */}
           <CapacityTable
-            demand={demand}
+            demand={effectiveDemand}
             capacity={capacity}
-            utilization={utilization}
+            utilization={effectiveUtilization}
             activeLens={activeLens}
             eventCountByDate={eventCountByDate}
           />
 
-          {/* Drilldown drawer */}
+          {/* Drilldown drawer — uses ORIGINAL demand (not scenario-adjusted) */}
           <ShiftDrilldownDrawer
             open={drawerOpen}
             onClose={handleDrawerClose}

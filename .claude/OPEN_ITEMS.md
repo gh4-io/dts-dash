@@ -1266,17 +1266,35 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-068 | Capacity Enhancements E-01 through E-04 — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Management needs forward-looking trend lines, what-if scenarios, and clear surplus/deficit metrics for staffing decisions. Spec: `.claude/SPECS/REQ_CapacityDecisionTree.md`. |
+| **Implementation** | 4 enhancements (E-01 rolling forecast, E-02 scenario toggle, E-03 gap analysis, E-04 UI integration). 7 new files, 5 modified. 36 new tests (557 total). Zero API changes — all client-side. |
+| **Links** | D-050, `plan/CAPACITY-ENHANCEMENTS-E01-E04.md` |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
-| P1 | 4 | 1 | 0 | 15 |
+| P1 | 4 | 1 | 0 | 16 |
 | P2 | 4 | 1 | 0 | 14 |
 | P3 | 5 | 0 | 2 | 0 |
-| **Total** | **13** | **2** | **2** | **45** |
+| **Total** | **13** | **2** | **2** | **46** |
 
-**Latest update (2026-02-22)**: OI-067 opened — Weekly MH Projections (temporary fixture). Customer MH targets per day/shift as pink overlay on forecast chart. Self-contained table, easy removal.
+**Latest update (2026-02-24)**: OI-068 resolved — Capacity enhancements E-01 through E-04 implemented. Rolling 8-week forecast, scenario toggle, gap analysis, scenario controls UI. 36 new tests, zero API changes.
+
+**Previous update (2026-02-22)**: OI-067 opened — Weekly MH Projections (temporary fixture). Customer MH targets per day/shift as pink overlay on forecast chart. Self-contained table, easy removal.
 
 **Previous update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
 
