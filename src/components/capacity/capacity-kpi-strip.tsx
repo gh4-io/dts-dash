@@ -10,6 +10,8 @@ import type {
   GapSummary,
   CustomerEventSummary,
 } from "@/types";
+// Direct import — NOT barrel (D-047: barrel re-exports server-only modules)
+import { CAPACITY_LENSES } from "@/lib/capacity/lens-config";
 
 interface CapacityKpiStripProps {
   summary: CapacitySummary;
@@ -21,6 +23,8 @@ interface CapacityKpiStripProps {
   gapSummary?: GapSummary | null;
   activeScenarioLabel?: string;
   customerEventSummary?: CustomerEventSummary[];
+  /** Secondary lens for cross-lens comparison (G-07 session 2) */
+  secondaryLens?: CapacityLensId | null;
 }
 
 function getUtilColor(val: number | null): string {
@@ -73,6 +77,7 @@ export function CapacityKpiStrip({
   gapSummary,
   activeScenarioLabel,
   customerEventSummary,
+  secondaryLens,
 }: CapacityKpiStripProps) {
   const avgUtil = summary.avgUtilization;
   const peakUtil = summary.peakUtilization;
@@ -231,6 +236,49 @@ export function CapacityKpiStrip({
     customerEventSummary,
   ]);
 
+  // Cross-lens comparison delta (G-07 session 2)
+  const comparisonKpi = useMemo(() => {
+    if (!secondaryLens || secondaryLens === activeLens) return null;
+
+    const getLensTotalMH = (lens: CapacityLensId): number | null => {
+      switch (lens) {
+        case "allocated":
+          return demand.reduce((s, d) => s + (d.totalAllocatedDemandMH ?? 0), 0) || null;
+        case "forecast":
+          return demand.reduce((s, d) => s + (d.totalForecastedDemandMH ?? 0), 0) || null;
+        case "worked":
+          return demand.reduce((s, d) => s + (d.totalWorkedMH ?? 0), 0) || null;
+        case "billed":
+          return demand.reduce((s, d) => s + (d.totalBilledMH ?? 0), 0) || null;
+        case "planned":
+          return summary.totalDemandMH || null;
+        default:
+          return null;
+      }
+    };
+
+    const primaryTotal = getLensTotalMH(activeLens);
+    const secondaryTotal = getLensTotalMH(secondaryLens);
+
+    if (primaryTotal == null || secondaryTotal == null || dayCount === 0) return null;
+
+    const primaryAvg = primaryTotal / dayCount;
+    const secondaryAvg = secondaryTotal / dayCount;
+    const delta = primaryAvg - secondaryAvg;
+
+    const primaryLabel = CAPACITY_LENSES.find((l) => l.id === activeLens)?.label ?? activeLens;
+    const secondaryLabel =
+      CAPACITY_LENSES.find((l) => l.id === secondaryLens)?.label ?? secondaryLens;
+
+    return {
+      icon: "fa-code-compare",
+      label: `${primaryLabel} vs ${secondaryLabel}`,
+      value: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} MH/day`,
+      color: Math.abs(delta) > 5 ? "text-amber-400" : "text-muted-foreground",
+      subValue: `Avg daily: ${primaryAvg.toFixed(1)} vs ${secondaryAvg.toFixed(1)}`,
+    };
+  }, [activeLens, secondaryLens, demand, summary.totalDemandMH, dayCount]);
+
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
       <KpiCard
@@ -304,6 +352,7 @@ export function CapacityKpiStrip({
       {lensKpis.map((kpi) => (
         <KpiCard key={kpi.label} {...kpi} />
       ))}
+      {comparisonKpi && <KpiCard key="comparison" {...comparisonKpi} />}
     </div>
   );
 }

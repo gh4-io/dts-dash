@@ -287,6 +287,7 @@ function CapacityPageInner() {
               gapSummary={gapSummary}
               activeScenarioLabel={activeScenario.label}
               customerEventSummary={customerEventSummary}
+              secondaryLens={secondaryLens}
             />
           )}
 
@@ -300,6 +301,7 @@ function CapacityPageInner() {
                   capacity={capacity}
                   shifts={shifts}
                   activeLens={activeLens}
+                  secondaryLens={secondaryLens}
                   fillHeight
                 />
               ) : (
@@ -348,6 +350,7 @@ function CapacityPageInner() {
             utilization={effectiveUtilization}
             activeLens={activeLens}
             eventCountByDate={eventCountByDate}
+            secondaryLens={secondaryLens}
           />
 
           {/* Drilldown drawer — uses ORIGINAL demand (not scenario-adjusted) */}

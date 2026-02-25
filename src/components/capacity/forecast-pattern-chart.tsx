@@ -32,6 +32,8 @@ interface ForecastPatternChartProps {
   capacity: DailyCapacityV2[];
   shifts: CapacityShift[];
   activeLens: CapacityLensId;
+  /** Secondary lens for cross-lens comparison overlay (G-07 session 2) */
+  secondaryLens?: CapacityLensId | null;
   /** When true, fills parent container height instead of using a fixed 340px */
   fillHeight?: boolean;
 }
@@ -48,11 +50,20 @@ const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: str
   allocated: { stroke: "#f59e0b", dash: "6 3", name: "Avg Allocated" },
 };
 
+// Muted style for secondary comparison overlay (G-07 session 2)
+const SECONDARY_LINE_STYLE = {
+  strokeWidth: 1.5,
+  strokeDasharray: "8 4",
+  opacity: 0.6,
+  dotRadius: 2,
+};
+
 export function ForecastPatternChart({
   demand,
   capacity,
   shifts,
   activeLens,
+  secondaryLens,
   fillHeight = false,
 }: ForecastPatternChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("byShift");
@@ -95,6 +106,12 @@ export function ForecastPatternChart({
   );
 
   const lensLineConfig = LENS_LINE_CONFIG[activeLens] ?? null;
+
+  // Secondary lens overlay config (G-07 session 2) — only lenses in local LENS_LINE_CONFIG
+  const secondaryLineConfig =
+    secondaryLens && secondaryLens !== activeLens
+      ? (LENS_LINE_CONFIG[secondaryLens] ?? null)
+      : null;
 
   // Use projected data as the bar source when toggle is ON
   const useProjected = showProjections && projectionOverlay != null;
@@ -142,6 +159,18 @@ export function ForecastPatternChart({
             const totalAllocated = Object.values(p.avgAllocatedByShift).reduce((s, v) => s + v, 0);
             if (totalAllocated > 0) {
               row.lensOverlayMH = Math.round(totalAllocated * 10) / 10;
+            }
+          }
+        }
+
+        // Secondary lens overlay (total level, G-07 session 2)
+        if (!useProjected && secondaryLineConfig && secondaryLens) {
+          if (secondaryLens === "forecast" && p.avgForecastedMH !== null) {
+            row.secondaryOverlayMH = p.avgForecastedMH;
+          } else if (secondaryLens === "allocated") {
+            const totalAllocated = Object.values(p.avgAllocatedByShift).reduce((s, v) => s + v, 0);
+            if (totalAllocated > 0) {
+              row.secondaryOverlayMH = Math.round(totalAllocated * 10) / 10;
             }
           }
         }
@@ -196,6 +225,17 @@ export function ForecastPatternChart({
             if (val != null) row[`lensOverlay_${shift.code}`] = val;
           }
         }
+
+        // Secondary lens overlay per shift (G-07 session 2)
+        if (!useProjected && secondaryLineConfig && secondaryLens) {
+          if (secondaryLens === "forecast") {
+            const val = p.avgForecastedByShift[shift.code];
+            if (val != null) row[`secondaryOverlay_${shift.code}`] = val;
+          } else if (secondaryLens === "allocated") {
+            const val = p.avgAllocatedByShift[shift.code];
+            if (val != null) row[`secondaryOverlay_${shift.code}`] = val;
+          }
+        }
       }
 
       return row;
@@ -207,6 +247,8 @@ export function ForecastPatternChart({
     viewMode,
     activeLens,
     lensLineConfig,
+    secondaryLens,
+    secondaryLineConfig,
     useProjected,
     projectionOverlay,
   ]);
@@ -436,6 +478,61 @@ export function ForecastPatternChart({
                   strokeDasharray={lensLineConfig.dash || undefined}
                   dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
                   activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
+
+            {/* === SECONDARY LENS OVERLAY (G-07 session 2) === */}
+
+            {/* Total mode: single secondary line */}
+            {!useProjected && viewMode === "total" && secondaryLineConfig && (
+              <Line
+                yAxisId="mh"
+                dataKey="secondaryOverlayMH"
+                name={`${secondaryLineConfig.name} (compare)`}
+                type="monotone"
+                stroke={secondaryLineConfig.stroke}
+                strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                dot={{
+                  r: SECONDARY_LINE_STYLE.dotRadius,
+                  fill: secondaryLineConfig.stroke,
+                  strokeWidth: 0,
+                  opacity: SECONDARY_LINE_STYLE.opacity,
+                }}
+                activeDot={{ r: 4, strokeWidth: 0 }}
+                connectNulls
+              />
+            )}
+
+            {/* Per-shift modes: secondary overlay lines */}
+            {!useProjected &&
+              viewMode !== "total" &&
+              secondaryLineConfig &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`sec_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`secondaryOverlay_${shift.code}`}
+                  name={
+                    i === 0
+                      ? `${secondaryLineConfig.name} (compare)`
+                      : `${secondaryLineConfig.name} (compare, ${shift.name})`
+                  }
+                  type="monotone"
+                  stroke={secondaryLineConfig.stroke}
+                  strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                  strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                  strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                  dot={{
+                    r: SECONDARY_LINE_STYLE.dotRadius,
+                    fill: secondaryLineConfig.stroke,
+                    strokeWidth: 0,
+                    opacity: SECONDARY_LINE_STYLE.opacity,
+                  }}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
                   connectNulls
                   legendType={i === 0 ? undefined : "none"}
                 />

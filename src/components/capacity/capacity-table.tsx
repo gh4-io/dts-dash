@@ -74,6 +74,8 @@ interface CapacityTableProps {
   utilization: DailyUtilizationV2[];
   activeLens: CapacityLensId;
   eventCountByDate?: Map<string, number>;
+  /** Secondary lens for cross-lens comparison column (G-07 session 2) */
+  secondaryLens?: CapacityLensId | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -117,12 +119,30 @@ function getUtilizationBadge(percent: number, critical: boolean, overtime: boole
   );
 }
 
+// Lens column config for secondary comparison (G-07 session 2)
+const SECONDARY_LENS_COLUMN: Record<
+  string,
+  { accessorKey: keyof CapacityRow; header: string; color: string }
+> = {
+  allocated: { accessorKey: "allocatedMH", header: "Allocated MH", color: "text-amber-400/60" },
+  forecast: { accessorKey: "forecastMH", header: "Forecast MH", color: "text-teal-400/60" },
+  worked: { accessorKey: "workedMH", header: "Worked MH", color: "text-green-400/60" },
+  billed: { accessorKey: "billedMH", header: "Billed MH", color: "text-indigo-400/60" },
+  concurrent: {
+    accessorKey: "peakConcurrency",
+    header: "Peak Concurrent",
+    color: "text-purple-400/60",
+  },
+  events: { accessorKey: "eventCount", header: "Events", color: "text-sky-400/60" },
+};
+
 export function CapacityTable({
   demand,
   capacity,
   utilization,
   activeLens,
   eventCountByDate,
+  secondaryLens,
 }: CapacityTableProps) {
   const { tablePageSize } = usePreferences();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -433,8 +453,36 @@ export function CapacityTable({
         break;
     }
 
+    // Secondary lens comparison column (G-07 session 2)
+    if (secondaryLens && secondaryLens !== activeLens) {
+      const secConfig = SECONDARY_LENS_COLUMN[secondaryLens];
+      if (secConfig) {
+        base.push({
+          id: `secondary_${secondaryLens}`,
+          accessorKey: secConfig.accessorKey,
+          header: () => <span className={secConfig.color}>{secConfig.header} (compare)</span>,
+          cell: ({ row }: { row: Row<CapacityRow> }) => {
+            if (row.depth > 0) return null;
+            const val = row.original[secConfig.accessorKey] as number | undefined;
+            return val != null && val > 0 ? (
+              <span className={`tabular-nums ${secConfig.color}`}>
+                {typeof val === "number" &&
+                secConfig.accessorKey !== "peakConcurrency" &&
+                secConfig.accessorKey !== "eventCount"
+                  ? val.toFixed(1)
+                  : val}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          },
+          size: 110,
+        });
+      }
+    }
+
     return base;
-  }, [activeLens]);
+  }, [activeLens, secondaryLens]);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table is safe here
   const table = useReactTable({
@@ -495,8 +543,28 @@ export function CapacityTable({
         break;
     }
 
+    // Secondary lens column in CSV (G-07 session 2)
+    if (secondaryLens && secondaryLens !== activeLens) {
+      const secConfig = SECONDARY_LENS_COLUMN[secondaryLens];
+      if (secConfig) {
+        csvColumns.push({
+          header: `${secConfig.header} (compare)`,
+          accessor: (r) => {
+            const val = r[secConfig.accessorKey] as number | undefined;
+            if (
+              secConfig.accessorKey === "peakConcurrency" ||
+              secConfig.accessorKey === "eventCount"
+            ) {
+              return String(val ?? 0);
+            }
+            return ((val as number) ?? 0).toFixed(1);
+          },
+        });
+      }
+    }
+
     exportToCsv("capacity-report.csv", rows, csvColumns);
-  }, [rows, activeLens]);
+  }, [rows, activeLens, secondaryLens]);
 
   return (
     <div className="rounded-lg border border-border bg-card">
