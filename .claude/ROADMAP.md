@@ -101,8 +101,13 @@
 
 ### All Capacity Tier 3 Gaps Complete ✅
 
-### Capacity Phase 3 — Contract MH Pipeline (Planned)
-- [ ] Contract MH fallback in effectiveMH pipeline (OI-065)
+### Capacity Phase 3 — Contract MH Pipeline (In Progress)
+- [x] Contract priority field — M019 migration, priority-based PER_EVENT resolution (OI-065) — 2026-02-25
+  - New `priority` column (INTEGER NOT NULL DEFAULT 100) on `demand_contracts`
+  - `loadPerEventContractMap()` resolves by lowest priority number (tiebreaker: higher MH)
+  - Admin grid shows Priority column; editor has Priority input (0–9999)
+  - 7 code files modified, M019 migration, 0 new tests (pure data-layer + UI change)
+- [ ] Contract MH fallback in effectiveMH pipeline
 - [ ] Null WP MH support in data import
 - [ ] New MHSource "contract" in all views
 - [ ] Flight board, dashboard, statistics show contract-resolved MH

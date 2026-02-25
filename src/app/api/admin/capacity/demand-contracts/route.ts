@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
       contractedMh: body.contractedMh ?? null,
       periodType: body.periodType ?? null,
       reason: body.reason ?? null,
+      priority: body.priority ?? 100,
       isActive: body.isActive ?? true,
       createdBy: userId,
       lines: body.lines,

@@ -387,6 +387,7 @@ export const demandContracts = sqliteTable(
     contractedMh: real("contracted_mh"), // null = no sanity check
     periodType: text("period_type"), // WEEKLY|MONTHLY|ANNUAL|TOTAL (null if no contractedMh)
     reason: text("reason"),
+    priority: integer("priority").notNull().default(100),
     isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
     createdBy: integer("created_by").references(() => users.id),
     createdAt: text("created_at")

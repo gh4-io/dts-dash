@@ -1180,11 +1180,13 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P1 |
 | **Owner** | — |
 | **Created** | 2026-02-21 |
+| **Resolved** | 2026-02-25 |
 | **Context** | PER_EVENT contracts currently only affect capacity engine (`allocatedDemandMH` overlay). Flight board, dashboard, and statistics still use base `effectiveMH` (`manual > WP MH > default 3.0`). To show contract MH in all views, integrate into the core transformer pipeline. |
+| **Resolution** | Added `priority` field (M019 migration, default 100). `loadPerEventContractMap()` now resolves by lowest priority number (tiebreaker: higher MH). Admin grid shows Priority column; editor has Priority input (0–9999). Addresses decision point #1 (multiple PER_EVENT contracts → lowest priority wins). |
 
 ### Technical Context (for future implementation)
 

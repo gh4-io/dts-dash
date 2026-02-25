@@ -1014,6 +1014,18 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M019: Add priority column to demand_contracts
+  results.push(
+    applyMigration("M019_demand_contracts_priority", () => {
+      const cols = sqlite.pragma("table_info(demand_contracts)") as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "priority")) {
+        sqlite.exec(
+          `ALTER TABLE demand_contracts ADD COLUMN priority INTEGER NOT NULL DEFAULT 100`,
+        );
+      }
+    }),
+  );
+
   return results;
 }
 

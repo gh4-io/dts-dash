@@ -98,6 +98,7 @@ export function loadDemandContract(id: number): DemandContract | null {
     contractedMh: row.contractedMh,
     periodType: row.periodType as DemandContract["periodType"],
     reason: row.reason,
+    priority: row.priority,
     isActive: row.isActive,
     createdBy: row.createdBy ?? undefined,
     createdAt: row.createdAt,
@@ -120,6 +121,7 @@ export function createDemandContract(data: {
   contractedMh?: number | null;
   periodType?: string | null;
   reason?: string | null;
+  priority?: number;
   isActive: boolean;
   createdBy?: number | null;
   lines: {
@@ -144,6 +146,7 @@ export function createDemandContract(data: {
         contractedMh: data.contractedMh ?? null,
         periodType: data.periodType ?? null,
         reason: data.reason ?? null,
+        priority: data.priority ?? 100,
         isActive: data.isActive,
         createdBy: data.createdBy ?? null,
         createdAt: now,
@@ -185,6 +188,7 @@ export function updateDemandContract(
     contractedMh?: number | null;
     periodType?: string | null;
     reason?: string | null;
+    priority?: number;
     isActive?: boolean;
     lines?: {
       shiftId?: number | null;
@@ -208,6 +212,7 @@ export function updateDemandContract(
     if (data.contractedMh !== undefined) updates.contractedMh = data.contractedMh;
     if (data.periodType !== undefined) updates.periodType = data.periodType;
     if (data.reason !== undefined) updates.reason = data.reason;
+    if (data.priority !== undefined) updates.priority = data.priority;
     if (data.isActive !== undefined) updates.isActive = data.isActive;
 
     tx.update(demandContracts).set(updates).where(eq(demandContracts.id, id)).run();
@@ -251,12 +256,13 @@ export function loadCustomerNameMap(): Map<number, string> {
 }
 
 /**
- * Build a map: customerName (lowercase) → max allocatedMh
+ * Build a map: customerName (lowercase) → allocatedMh
  * from all active PER_EVENT demand contracts.
  *
  * Resolution rules:
  * - Only contracts with periodType = 'PER_EVENT' and isActive = true
- * - Multiple contracts per customer: take highest max-line allocatedMh
+ * - Multiple contracts per customer: lowest priority number wins
+ * - Tiebreaker (same priority): higher MH wins
  * - Multiple lines per contract: take max allocatedMh (no shift context in transformer)
  */
 export function loadPerEventContractMap(): Map<string, number> {
@@ -268,36 +274,48 @@ export function loadPerEventContractMap(): Map<string, number> {
 
   if (contractRows.length === 0) return new Map();
 
+  // Sort by priority (lowest number = highest priority)
+  contractRows.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+
   const contractIds = contractRows.map((c) => c.id);
   const allLines = db.select().from(demandAllocationLines).all();
 
   const customerRows = db.select({ id: customers.id, name: customers.name }).from(customers).all();
   const customerIdToName = new Map(customerRows.map((c) => [c.id, c.name.toLowerCase()]));
 
-  const result = new Map<string, number>();
+  const result = new Map<string, { mh: number; priority: number }>();
 
   for (const contract of contractRows) {
     const custName = customerIdToName.get(contract.customerId);
     if (!custName) continue;
 
+    let maxMh = 0;
     const lines = allLines.filter(
       (l) => contractIds.includes(l.contractId) && l.contractId === contract.id,
     );
     if (lines.length === 0) {
       // PER_EVENT with no lines: use contractedMh (matches findMatchingAllocations behavior)
       if (contract.contractedMh !== null && contract.contractedMh > 0) {
-        const existing = result.get(custName) ?? 0;
-        result.set(custName, Math.max(existing, contract.contractedMh));
+        maxMh = contract.contractedMh;
+      } else {
+        continue;
       }
-      continue;
+    } else {
+      maxMh = Math.max(...lines.map((l) => l.allocatedMh));
     }
 
-    const maxMh = Math.max(...lines.map((l) => l.allocatedMh));
-    const existing = result.get(custName) ?? 0;
-    result.set(custName, Math.max(existing, maxMh));
+    const existing = result.get(custName);
+    const contractPriority = contract.priority ?? 100;
+    if (
+      !existing ||
+      contractPriority < existing.priority ||
+      (contractPriority === existing.priority && maxMh > existing.mh)
+    ) {
+      result.set(custName, { mh: maxMh, priority: contractPriority });
+    }
   }
 
-  return result;
+  return new Map([...result.entries()].map(([k, v]) => [k, v.mh]));
 }
 
 // ─── DTO Helpers ──────────────────────────────────────────────────────────────
@@ -318,6 +336,7 @@ function toContractDTO(
     contractedMh: row.contractedMh,
     periodType: row.periodType as DemandContract["periodType"],
     reason: row.reason,
+    priority: row.priority,
     isActive: row.isActive,
     createdBy: row.createdBy ?? undefined,
     createdAt: row.createdAt,

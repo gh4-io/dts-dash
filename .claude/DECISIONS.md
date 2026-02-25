@@ -655,3 +655,20 @@ customers.sp_id                  populated from ID field in cust.json during cus
 **Modified files**: `capacity-summary-chart.tsx` (props, data computation, Line rendering), `capacity/page.tsx` (state, auto-clear, prop passing)
 **Version impact**: MINOR (backwards-compatible UI addition)
 **Links**: OI-071, `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07, `plan/G07-CROSS-LENS-COMPARISON.md`
+
+---
+
+## D-052 | 2026-02-25 | Contract Priority Field — Explicit PER_EVENT Resolution Order
+
+**Decision**: Add an explicit `priority` integer field (default 100) to `demand_contracts`. When multiple PER_EVENT contracts match the same customer, the lowest priority number wins. Tiebreaker: higher MH value.
+
+**Rationale**:
+1. **Deterministic resolution** — previous `Math.max` across all matching contracts gave no control over which contract "wins" when customers have multiple PER_EVENT contracts
+2. **Lower number = higher priority** — matches common convention (priority 1 = most important). Default 100 leaves room for insertions above and below
+3. **Admin-visible** — priority column in grid + input field in editor (0–9999 range) lets operators explicitly rank contracts
+4. **Backwards-compatible** — existing contracts get default 100 via migration; behavior unchanged for single-contract-per-customer cases
+
+**Migration**: M019 — `ALTER TABLE demand_contracts ADD COLUMN priority INTEGER NOT NULL DEFAULT 100`
+**Modified files**: 8 total (schema-init, schema, types, allocation-data, allocation-grid, allocation-editor, demand-contracts route, OPEN_ITEMS)
+**Version impact**: MINOR (backwards-compatible schema addition)
+**Links**: OI-065, D-048

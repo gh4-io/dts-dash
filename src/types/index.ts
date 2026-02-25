@@ -258,6 +258,7 @@ export interface DemandContract {
   contractedMh: number | null; // null = no sanity check
   periodType: ContractPeriodType | null; // null if no contractedMh
   reason: string | null;
+  priority: number;
   isActive: boolean;
   createdBy?: number;
   createdAt?: string;

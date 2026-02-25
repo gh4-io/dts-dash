@@ -90,6 +90,7 @@ export function AllocationEditor({
   const [contractedMh, setContractedMh] = useState("");
   const [periodType, setPeriodType] = useState("NONE");
   const [reason, setReason] = useState("");
+  const [priority, setPriority] = useState("100");
   const [isActive, setIsActive] = useState(true);
   // Lines
   const [lines, setLines] = useState<LineFormRow[]>([]);
@@ -108,6 +109,7 @@ export function AllocationEditor({
         setContractedMh(contract.contractedMh !== null ? String(contract.contractedMh) : "");
         setPeriodType(contract.periodType ?? "NONE");
         setReason(contract.reason ?? "");
+        setPriority(String(contract.priority ?? 100));
         setIsActive(contract.isActive);
         setLines(
           contract.lines.map((l) => ({
@@ -127,6 +129,7 @@ export function AllocationEditor({
         setContractedMh("");
         setPeriodType("NONE");
         setReason("");
+        setPriority("100");
         setIsActive(true);
         setLines([
           { key: nextKey(), shiftId: "null", dayOfWeek: "null", allocatedMh: "", label: "" },
@@ -238,6 +241,7 @@ export function AllocationEditor({
         contractedMh: mhVal !== null && !isNaN(mhVal) ? mhVal : null,
         periodType: ptVal,
         reason: reason || null,
+        priority: parseInt(priority, 10) || 100,
         isActive,
         lines: validLines.map((l) => ({
           shiftId: l.shiftId === "null" ? null : parseInt(l.shiftId, 10),
@@ -305,6 +309,23 @@ export function AllocationEditor({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Base Contract Q1 2026"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="priority">Priority</Label>
+            <Input
+              id="priority"
+              type="number"
+              min="0"
+              max="9999"
+              step="10"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              placeholder="100"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Lower number = higher priority (0–9999)
+            </p>
           </div>
 
           <div className="space-y-2">
