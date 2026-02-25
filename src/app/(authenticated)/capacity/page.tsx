@@ -12,6 +12,7 @@ import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-draw
 import { CapacityTable } from "@/components/capacity/capacity-table";
 import { LensSelector } from "@/components/capacity/lens-selector";
 import { ScenarioSelector } from "@/components/capacity/scenario-selector";
+import { ComputeModeBadge } from "@/components/capacity/compute-mode-badge";
 import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
 import { Button } from "@/components/ui/button";
 import type { DemandScenario } from "@/types";
@@ -41,6 +42,8 @@ function CapacityPageInner() {
     activeLens,
     availableLenses,
     setActiveLens,
+    computeMode,
+    activeStaffingConfigName,
     isLoading,
     error,
     refetch,
@@ -178,13 +181,19 @@ function CapacityPageInner() {
         <LoadingSkeleton variant="page" />
       ) : (
         <>
-          {/* Lens selector + Scenario selector */}
+          {/* Lens selector + Scenario selector + Compute mode badge */}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <LensSelector
-              activeLens={activeLens}
-              availableLenses={availableLenses}
-              onLensChange={setActiveLens}
-            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <LensSelector
+                activeLens={activeLens}
+                availableLenses={availableLenses}
+                onLensChange={setActiveLens}
+              />
+              <ComputeModeBadge
+                computeMode={computeMode}
+                activeStaffingConfigName={activeStaffingConfigName}
+              />
+            </div>
             <ScenarioSelector
               activeScenario={activeScenario}
               onScenarioChange={setActiveScenario}

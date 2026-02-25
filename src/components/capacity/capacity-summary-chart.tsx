@@ -12,6 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
   Cell,
 } from "recharts";
 import type {
@@ -278,6 +279,24 @@ export function CapacitySummaryChart({
     rollingForecast,
   ]);
 
+  // E-06: Today reference line + future shading
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const todayLabel = useMemo(() => {
+    if (chartData.length === 0) return null;
+    const dates = chartData
+      .map((r) => (r as Record<string, unknown>).date as string)
+      .filter(Boolean);
+    if (dates.length === 0) return null;
+    if (todayStr < dates[0] || todayStr > dates[dates.length - 1]) return null;
+    return formatDate(todayStr);
+  }, [chartData, todayStr]);
+
+  const lastChartLabel = useMemo(() => {
+    if (chartData.length === 0) return null;
+    return (chartData[chartData.length - 1] as Record<string, unknown>).label as string;
+  }, [chartData]);
+
   if (chartData.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-muted-foreground">
@@ -345,6 +364,37 @@ export function CapacitySummaryChart({
         <ResponsiveContainer width="100%" height={fillHeight ? "100%" : 340}>
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+
+            {/* E-06: Today line + future shading */}
+            {todayLabel && (
+              <>
+                <ReferenceLine
+                  yAxisId="mh"
+                  x={todayLabel}
+                  stroke="#888888"
+                  strokeDasharray="2 2"
+                  strokeWidth={1.5}
+                  strokeOpacity={0.4}
+                  label={{
+                    value: "Today",
+                    position: "top",
+                    fill: "#888888",
+                    fontSize: 9,
+                  }}
+                />
+                {lastChartLabel && todayLabel !== lastChartLabel && (
+                  <ReferenceArea
+                    yAxisId="mh"
+                    x1={todayLabel}
+                    x2={lastChartLabel}
+                    fill="#888888"
+                    fillOpacity={0.04}
+                    strokeOpacity={0}
+                  />
+                )}
+              </>
+            )}
+
             <XAxis
               dataKey="label"
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
