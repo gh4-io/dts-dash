@@ -13,6 +13,7 @@ import { CapacityTable } from "@/components/capacity/capacity-table";
 import { LensSelector } from "@/components/capacity/lens-selector";
 import { ScenarioSelector } from "@/components/capacity/scenario-selector";
 import { ComputeModeBadge } from "@/components/capacity/compute-mode-badge";
+import { AggregationToggle } from "@/components/capacity/aggregation-toggle";
 import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
 import { Button } from "@/components/ui/button";
 import type { DemandScenario } from "@/types";
@@ -21,6 +22,11 @@ import type { DemandScenario } from "@/types";
 import { applyDemandScenario, DEMAND_SCENARIOS } from "@/lib/capacity/scenario-engine";
 import { computeRollingForecast } from "@/lib/capacity/rolling-forecast-engine";
 import { computeGapSummary } from "@/lib/capacity/gap-engine";
+import {
+  summarizeEventsByCustomer,
+  aggregateCoverageByCustomer,
+  buildCustomerCoverageMap,
+} from "@/lib/capacity/event-attribution-engine";
 
 function CapacityPageInner() {
   const {
@@ -48,6 +54,9 @@ function CapacityPageInner() {
     error,
     refetch,
   } = useCapacityV2();
+
+  // Aggregation state (G-01 — independent of lens)
+  const [viewAggregation, setViewAggregation] = useState<"daily" | "weekly-pattern">("daily");
 
   // Scenario state (E-02/E-04)
   const [activeScenario, setActiveScenario] = useState<DemandScenario>(
@@ -108,6 +117,19 @@ function CapacityPageInner() {
     }
     return map;
   }, [flightEvents]);
+
+  // Per-customer event summary (G-10)
+  const customerEventSummary = useMemo(() => {
+    if (!flightEvents || flightEvents.length === 0) return undefined;
+    return summarizeEventsByCustomer(flightEvents);
+  }, [flightEvents]);
+
+  // Per-customer coverage map (G-10)
+  const customerCoverageMap = useMemo(() => {
+    if (!coverageWindows || coverageWindows.length === 0 || shifts.length === 0) return undefined;
+    const aggregates = aggregateCoverageByCustomer(coverageWindows, shifts);
+    return buildCustomerCoverageMap(aggregates);
+  }, [coverageWindows, shifts]);
 
   if (error) {
     return (
@@ -194,10 +216,13 @@ function CapacityPageInner() {
                 activeStaffingConfigName={activeStaffingConfigName}
               />
             </div>
-            <ScenarioSelector
-              activeScenario={activeScenario}
-              onScenarioChange={setActiveScenario}
-            />
+            <div className="flex items-center gap-3">
+              <AggregationToggle value={viewAggregation} onChange={setViewAggregation} />
+              <ScenarioSelector
+                activeScenario={activeScenario}
+                onScenarioChange={setActiveScenario}
+              />
+            </div>
           </div>
 
           {/* Warnings banner */}
@@ -240,6 +265,7 @@ function CapacityPageInner() {
               coverageWindows={coverageWindows}
               gapSummary={gapSummary}
               activeScenarioLabel={activeScenario.label}
+              customerEventSummary={customerEventSummary}
             />
           )}
 
@@ -247,9 +273,9 @@ function CapacityPageInner() {
           <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-3">
             {/* Left: stretches to match right column height */}
             <div className="flex flex-col min-h-0">
-              {activeLens === "forecast" ? (
+              {viewAggregation === "weekly-pattern" ? (
                 <ForecastPatternChart
-                  demand={demand}
+                  demand={effectiveDemand}
                   capacity={capacity}
                   shifts={shifts}
                   activeLens={activeLens}

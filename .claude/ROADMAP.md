@@ -47,6 +47,39 @@
 - [x] PER_EVENT period type (D-048) — 2026-02-21
 - [x] Capacity documentation (concepts, API reference, admin guide, getting started, lenses, examples, FAQ) — 2026-02-21
 
+### Capacity Enhancements E-05–E-06 (Complete ✅ — `feat/capacity-layout`)
+- [x] E-05: Compute mode badge (Rotation | Config Name / Headcount Plan) — 2026-02-24
+- [x] E-06: Today reference line + future-date shading on daily chart — 2026-02-24
+
+### Gap Fixes — G-01 (Complete ✅ — `feat/capacity-layout`)
+- [x] G-01: Decouple aggregation level from lens selection — 2026-02-24
+  - New `AggregationToggle` component (Daily / Weekly Pattern)
+  - Any lens works with either aggregation mode
+  - ForecastPatternChart receives scenario-adjusted demand
+  - Behavioral change: "Forecast" lens no longer auto-switches chart
+
+### Capacity Enhancements E-01–E-06 + G-01 (Complete ✅ — `feat/capacity-layout`)
+- [x] E-01: Rolling 8-week demand forecast (recency-weighted DOW pattern) — 2026-02-24
+- [x] E-02: Scenario toggle (Baseline vs +10% demand multiplier) — 2026-02-24
+- [x] E-03: Gap analysis engine + diverging bar gap view mode + gap KPI card — 2026-02-24
+- [x] E-04: Scenario UI integration (selector + KPI strip + data routing) — 2026-02-24
+- [x] E-05: Compute mode badge (Rotation | Config Name / Headcount Plan) — 2026-02-24
+- [x] E-06: Today reference line + future-date shading — 2026-02-24
+- [x] G-01: Decouple aggregation from lens (AggregationToggle) — 2026-02-24
+- [x] Bug fix: Capacity showing 0 on days without work packages — 2026-02-24
+- 9 new files, 5 modified, 36 new tests (557 total). Zero API changes.
+
+### Gap Fix G-10: Per-Customer Event Attribution (Complete ✅ — `feat/capacity-layout`)
+- [x] G-10: Event attribution engine — `aggregateCoverageByCustomer`, `summarizeEventsByCustomer`, `buildCustomerCoverageMap` — 2026-02-24
+  - 3 pure functions, 2 new types (`CustomerCoverageAggregate`, `CustomerEventSummary`)
+  - KPI strip shows top 3 customers by event count + "+N more" badge (Events lens)
+  - No schema migration (customer field already existed on `flight_events` + `EventCoverageWindow`)
+  - 2 new files, 4 modified, 17 new tests (574 total)
+
+### Capacity Tier 3 Gaps (Planned — `feat/capacity-layout`)
+- [ ] G-07: Cross-lens comparison — dual lens overlay (OI-071)
+- [ ] G-09: Monthly roll-up aggregation — new engine + chart (OI-072)
+
 ### Capacity Phase 3 — Contract MH Pipeline (Planned)
 - [ ] Contract MH fallback in effectiveMH pipeline (OI-065)
 - [ ] Null WP MH support in data import

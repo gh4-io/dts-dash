@@ -1282,17 +1282,100 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-069 | Capacity Enhancements E-05 and E-06 — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Compute mode invisible to users (G-05). No visual boundary between historical and future data (G-06). |
+| **Implementation** | E-05: ComputeModeBadge component showing Rotation/Headcount Plan + config name. E-06: Today vertical reference line + subtle future-date ReferenceArea shading. 1 new file, 2 modified. No new types, engines, or API changes. |
+| **Links** | `plan/CAPACITY-ENHANCEMENTS-E05-E06.md` |
+
+---
+
+## OI-070 | G-01: Decouple Aggregation from Lens Selection — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Aggregation level (Daily vs Weekly Pattern) was implicitly coupled to the Forecast lens — selecting "Forecast" was the only way to access the weekly pattern chart. This conflated two independent concepts: which overlay data to show (lens) and how the x-axis is organized (aggregation). Gap G-01 from `REQ_CapacityDecisionTree.md`. |
+| **Implementation** | New `AggregationToggle` component (Daily / Weekly Pattern pill toggle). Page-local `viewAggregation` useState replaces the `activeLens === "forecast"` ternary with `viewAggregation === "weekly-pattern"`. Any lens now works with either aggregation mode. ForecastPatternChart receives scenario-adjusted demand. 1 new file, 1 modified. Zero API/engine/type changes. 557 tests unchanged. |
+| **Behavioral Change** | Selecting "Forecast" lens no longer auto-switches to weekly-pattern chart. Users must use the new View toggle. |
+| **Links** | `plan/G01-DECOUPLE-AGGREGATION.md`, `.claude/SPECS/REQ_CapacityDecisionTree.md` G-01 |
+
+---
+
+## OI-071 | G-07: Cross-Lens Comparison — Tier 3
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | Open |
+| **Priority** | P2 |
+| **Owner** | — |
+| **Created** | 2026-02-24 |
+| **Context** | Allow up to 2 lenses simultaneously (primary + secondary overlay) with different accent colors. Currently lens selector is single-choice. Would require multi-select UI, dual legend management, and chart rendering for 2 overlay lines. |
+| **Effort** | High (2-3 days). UI complexity: dual lens state, legend clarity with 6+ lines in byShift mode. |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07 |
+
+---
+
+## OI-072 | G-09: Monthly Roll-Up Aggregation — Tier 3
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | Open |
+| **Priority** | P3 |
+| **Owner** | — |
+| **Created** | 2026-02-24 |
+| **Context** | Add a third aggregation level (Monthly) showing 1 bar per calendar month with averaged demand/capacity/utilization. Requires new engine (`monthly-aggregation-engine.ts`), new chart component or enhanced existing, and AggregationToggle update to 3 options. |
+| **Effort** | High (3-4 days). New engine + chart rendering + edge cases (partial months, multi-year ranges). |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-09 |
+
+---
+
+## OI-073 | G-10: Flight Events Per-Customer Attribution — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | ~~P3~~ |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Customer field already existed on `flight_events` table and `EventCoverageWindow` type. Gap was purely UI — per-customer event data was not surfaced when Events lens was active. |
+| **Resolution** | New `event-attribution-engine.ts` with 3 pure functions: `aggregateCoverageByCustomer` (same hour-walk as `computeCoverageRequirements` but keyed by date+shift+customer), `summarizeEventsByCustomer` (group active non-cancelled events), `buildCustomerCoverageMap` (date→customer→MH lookup). New types `CustomerCoverageAggregate` + `CustomerEventSummary`. KPI strip shows top 3 customers by event count + "+N more" badge when Events lens active. 17 new tests. No schema migration needed. |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-10, D-047 (barrel import trap) |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
-| P1 | 4 | 1 | 0 | 16 |
-| P2 | 4 | 1 | 0 | 14 |
-| P3 | 5 | 0 | 2 | 0 |
-| **Total** | **13** | **2** | **2** | **46** |
+| P1 | 4 | 1 | 0 | 17 |
+| P2 | 5 | 1 | 0 | 15 |
+| P3 | 6 | 0 | 2 | 1 |
+| **Total** | **15** | **2** | **2** | **49** |
 
-**Latest update (2026-02-24)**: OI-068 resolved — Capacity enhancements E-01 through E-04 implemented. Rolling 8-week forecast, scenario toggle, gap analysis, scenario controls UI. 36 new tests, zero API changes.
+**Latest update (2026-02-24)**: OI-073 resolved — G-10 per-customer event attribution. New engine (3 pure functions), 2 new types, 17 new tests (574 total). KPI strip shows top 3 customers when Events lens active. No schema migration (customer field already existed). 2 new files, 4 modified.
+
+**Previous update (2026-02-24)**: Version bumped to v0.4.0. OI-071/072/073 opened for remaining Tier 3 gaps (G-07 cross-lens, G-09 monthly rollup, G-10 events per-customer). All E-01–E-06 and G-01 resolved.
+
+**Previous update (2026-02-24)**: OI-070 resolved — G-01 decouple aggregation from lens. New AggregationToggle component, page ternary replaced. Any lens × any aggregation. 1 new file, 1 modified. Zero API changes.
 
 **Previous update (2026-02-22)**: OI-067 opened — Weekly MH Projections (temporary fixture). Customer MH targets per day/shift as pink overlay on forecast chart. Self-contained table, easy removal.
 

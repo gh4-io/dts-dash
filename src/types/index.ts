@@ -313,6 +313,22 @@ export interface EventCoverageWindow {
   durationMinutes: number;
 }
 
+export interface CustomerCoverageAggregate {
+  date: string;
+  shiftCode: string;
+  customer: string;
+  coverageMinutes: number;
+  coverageMH: number;
+  windowCount: number;
+}
+
+export interface CustomerEventSummary {
+  customer: string;
+  eventCount: number;
+  totalCoverageMH: number;
+  windowCount: number;
+}
+
 /** Per-hour aircraft-on-ground count (foundation for P2-4 Concurrency) */
 export interface ConcurrencyBucket {
   hour: string; // ISO datetime for the hour start

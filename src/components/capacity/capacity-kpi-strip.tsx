@@ -8,6 +8,7 @@ import type {
   FlightEvent,
   EventCoverageWindow,
   GapSummary,
+  CustomerEventSummary,
 } from "@/types";
 
 interface CapacityKpiStripProps {
@@ -19,6 +20,7 @@ interface CapacityKpiStripProps {
   coverageWindows?: EventCoverageWindow[];
   gapSummary?: GapSummary | null;
   activeScenarioLabel?: string;
+  customerEventSummary?: CustomerEventSummary[];
 }
 
 function getUtilColor(val: number | null): string {
@@ -70,6 +72,7 @@ export function CapacityKpiStrip({
   coverageWindows,
   gapSummary,
   activeScenarioLabel,
+  customerEventSummary,
 }: CapacityKpiStripProps) {
   const avgUtil = summary.avgUtilization;
   const peakUtil = summary.peakUtilization;
@@ -149,7 +152,13 @@ export function CapacityKpiStrip({
         return cards;
       }
       case "events": {
-        const cards: { icon: string; label: string; value: string; color?: string }[] = [
+        const cards: {
+          icon: string;
+          label: string;
+          value: string;
+          color?: string;
+          subValue?: string;
+        }[] = [
           {
             icon: "fa-plane-arrival",
             label: "Flight Events",
@@ -164,6 +173,27 @@ export function CapacityKpiStrip({
             value: String(coverageWindows.length),
             color: "text-sky-400",
           });
+        }
+        // Top 3 customers by event count (G-10)
+        if (customerEventSummary && customerEventSummary.length > 0) {
+          const sorted = [...customerEventSummary].sort((a, b) => b.eventCount - a.eventCount);
+          const top3 = sorted.slice(0, 3);
+          for (const c of top3) {
+            cards.push({
+              icon: "fa-building",
+              label: c.customer,
+              value: `${c.eventCount} events`,
+              color: "text-sky-300",
+            });
+          }
+          if (sorted.length > 3) {
+            cards.push({
+              icon: "fa-ellipsis",
+              label: "More Customers",
+              value: `+${sorted.length - 3} more`,
+              color: "text-muted-foreground",
+            });
+          }
         }
         return cards;
       }
@@ -192,7 +222,14 @@ export function CapacityKpiStrip({
       default:
         return [];
     }
-  }, [activeLens, demand, summary.totalDemandMH, flightEvents, coverageWindows]);
+  }, [
+    activeLens,
+    demand,
+    summary.totalDemandMH,
+    flightEvents,
+    coverageWindows,
+    customerEventSummary,
+  ]);
 
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">

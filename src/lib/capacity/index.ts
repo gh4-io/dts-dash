@@ -97,6 +97,13 @@ export {
   VALID_STATUSES as VALID_FLIGHT_EVENT_STATUSES,
 } from "./flight-events-engine";
 
+// Event attribution engine (G-10, pure functions)
+export {
+  aggregateCoverageByCustomer,
+  summarizeEventsByCustomer,
+  buildCustomerCoverageMap,
+} from "./event-attribution-engine";
+
 // Concurrency pressure analysis (P2-4, pure functions)
 export {
   aggregateConcurrencyByDay,
