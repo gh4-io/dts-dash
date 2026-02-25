@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Demand Contracts Redesign (from `feat/demand-contracts`)
+- **Hierarchical demand contracts model** — parent `demand_contracts` + child `demand_allocation_lines` replaces flat `demand_allocations`
+- **Period types** — WEEKLY, MONTHLY, ANNUAL, TOTAL, PER_EVENT (D-048)
+- **Sanity check projection** — SHORTFALL / OK / EXCESS
+- **Collapsible admin grid** — contracts with inline line editing
+- **Migration M015** — DROP old table, CREATE new tables with CASCADE FKs
+- **Breaking:** `demand_allocations` API endpoint removed (use `demand_contracts`)
+
+### Added - Capacity Enhancements (E-01 through E-06 + G-01, from `feat/capacity-layout`)
+
+#### Rolling 8-Week Forecast (E-01)
+- Recency-weighted DOW forecast engine with hyperbolic decay, emerald dashed line on daily chart
+- Configurable history window, confidence levels (high/medium/low), "8W Forecast" toggle
+
+#### Scenario Toggle (E-02)
+- Demand multiplier engine (Baseline 1.0x, +10% Demand 1.1x), utilization recomputed
+- Lens overlay values never scaled by scenarios
+
+#### Gap Analysis (E-03)
+- Surplus/deficit classification engine, diverging bar "Gap" view mode, gap KPI card
+
+#### UI Integration (E-04)
+- Scenario selector, KPI strip wiring, effective data routing to charts
+- Forecast uses original demand; drilldown drawer uses original demand
+
+#### Compute Mode Badge (E-05, G-05)
+- Shows active capacity model: "Rotation | Config Name" or "Headcount Plan"
+
+#### Today Line + Future Shading (E-06, G-06)
+- Dashed "Today" reference line, subtle future-date shading on daily chart
+
+#### Aggregation Toggle (G-01)
+- Daily / Weekly Pattern toggle, decoupled from lens selection
+- Any of 7 lenses works with either aggregation mode
+
+#### Per-Customer Event Attribution (G-10)
+- Event attribution engine: `aggregateCoverageByCustomer`, `summarizeEventsByCustomer`, `buildCustomerCoverageMap`
+- KPI strip shows top 3 customers by event count + "+N more" badge when Events lens active
+- New types: `CustomerCoverageAggregate`, `CustomerEventSummary`
+- No schema migration needed (customer field already existed)
+
+### Fixed
+- Capacity showing 0 on days without work packages (forecast-pattern-engine)
+- E-01–E-04 review issues (I-01, I-06, R-01, R-05)
+
+### Notes
+- 11 new files, 9 modified. 53 new tests (574 total). Zero API changes for E-01–E-06 + G-01 + G-10.
+- All engines are pure functions (zero DB imports)
+- Version bump TBD at merge/release time
+
 ---
 
 ## [0.2.0] - 2026-02-21
@@ -191,27 +241,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.1] - 2026-02-23
-
-### Fixed
-
-- **Create User dialog** now shows "Require password reset at next login" checkbox (defaults to checked) in both create and edit modes
-- **Create User API** respects `forcePasswordChange` from request body instead of hardcoding based on password presence
-- **Password change** no longer breaks session — client re-authenticates via `signIn()` after successful password change, keeping JWT valid
-- **Registration** now auto-logs in after successful account creation instead of redirecting to login page
-- **Forced password reset** redirect to dashboard now works correctly after password change (same root cause as password change fix)
-- **Admin self-password-reset** blocked — admin cannot reset their own password via the Reset Password action (returns helpful error directing to Account page)
-- **Admin self-role-change** blocked — admin cannot change their own role via the Edit User form (prevents session death from token invalidation)
-- **Admin self-password-change via admin form** blocked — admin must use Account page to change their own password (prevents session death)
-- **CLI `db:reset-password`** now bumps `tokenVersion` to invalidate existing sessions after password reset
-
----
-
 ## [0.1.0] - 2025-12-15
 
 Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
 
 [Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.1...v0.2.0
-[0.1.1]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.1.1
+[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0

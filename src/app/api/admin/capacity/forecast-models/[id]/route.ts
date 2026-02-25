@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import {
-  loadForecastModel,
-  updateForecastModel,
-  deleteForecastModel,
-  validateForecastModel,
-} from "@/lib/capacity";
+import { loadForecastModel, updateForecastModel, deleteForecastModel } from "@/lib/capacity";
 import { parseIntParam } from "@/lib/utils/route-helpers";
 import { createChildLogger } from "@/lib/logger";
 

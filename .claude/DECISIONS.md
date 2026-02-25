@@ -598,13 +598,77 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 ---
 
-## D-049 | 2026-02-22 | Shift Timezone Architecture
+## D-049 | 2026-02-22 | Weekly MH Projections — Temporary Self-Contained Feature
 
-**Decision**: Add `timezone TEXT NOT NULL DEFAULT 'UTC'` column to `capacity_shifts` table (migration M016). Shift start/end hours are stored in local time and interpreted in this IANA timezone. **Timezone is a data property on shifts, never an engine function parameter.** Engines read `shifts[0].timezone` internally via `tz-helpers.ts` and convert UTC timestamps to shift-local time for matching. The one exception is `aggregateConcurrencyByDay`, which has no shift context and stays UTC-only (display layer handles conversion).
+**Decision**: Implement customer MH projections as a self-contained temporary feature with text customer names (no FK), separate API endpoint, and toggle button (not a new lens).
 
-**Rationale**: Shift hours (e.g., DAY 07-15) represent physical airport shift boundaries in local time. Converting to UTC integers causes a DST problem: "07 Eastern" = UTC 12 in winter, UTC 11 in summer — static integers can't express both. Local hours + timezone metadata is the correct representation. Making timezone data-driven (read from shifts internally) rather than parameter-driven keeps engine APIs clean and prevents callers from passing inconsistent timezone values.
+**Rationale**:
+1. **No FK to customers** — uses plain text names. Single `DROP TABLE` removes it cleanly.
+2. **Separate API endpoint** (`/api/capacity/weekly-projections`) — keeps the capacity overview route untouched.
+3. **Toggle button, not a new lens** — avoids touching `CapacityLensId`, lens selector, or Zustand store. Local React state only.
+4. **Engine stays pure** — projections are NOT mixed into `DayOfWeekPattern`. The `forecast-pattern-engine.ts` and its tests are untouched.
+5. **Matrix-style admin grid** — matches the data's natural shape: customers as rows x 7 days as columns x 3 shift sub-rows.
 
-**Pattern**: Engines that receive shifts read `shifts[0]?.timezone ?? "UTC"` at the top of the function body. No `timezone` parameter in public signatures. This keeps engines functionally pure while making timezone data-driven.
+**Files**: 7 new (engine, data, 2 API routes, admin page, grid component, tests), 5 modified (types, schema, migration M018, chart, hub card)
+**Tracked by**: OI-067 (includes removal checklist)
+**Version impact**: MINOR (backwards-compatible addition)
+**Links**: OI-067, `src/lib/capacity/projection-engine.ts`
 
-**Version impact:** MINOR (backwards-compatible — default UTC preserves existing behavior)
-**Links**: `src/lib/capacity/tz-helpers.ts`, `src/lib/capacity/demand-engine.ts`, `src/lib/capacity/concurrency-engine.ts`, `src/lib/capacity/flight-events-engine.ts`
+---
+
+## D-050 | 2026-02-24 | Capacity Enhancements E-01 through E-04 — Client-Side Forecasting, Scenarios & Gap Analysis
+
+**Decision**: Add four client-side-only enhancements to the `/capacity` page:
+1. **E-01 Rolling 8-Week Forecast** — recency-weighted DOW average projected forward as emerald dashed line
+2. **E-02 Scenario Toggle** — baseline vs +10% demand multiplier with utilization recomputation
+3. **E-03 Gap Analysis** — surplus/deficit classification + diverging bar "Gap" view mode
+4. **E-04 Scenario Controls UI** — ScenarioSelector component + page wiring with effective data routing
+
+**Rationale**:
+1. **Zero API changes** — all computation is client-side over already-fetched data
+2. **All engines are pure functions** (zero DB imports) in `*-engine.ts` files
+3. **Existing domain metric formulas are unchanged** — scenarios create parallel computation paths with transformed inputs
+4. **Lens overlay values are never scaled** — allocatedDemandMH, forecastedDemandMH, workedMH, billedMH represent independent data sources
+5. **Forecast uses original demand** — not scenario-adjusted, so forecast line is stable across scenarios
+6. **Drawer uses original demand** — WP-level detail not distorted by scenario multiplier
+
+**New files**: `rolling-forecast-engine.ts`, `scenario-engine.ts`, `gap-engine.ts`, `scenario-selector.tsx`, + 3 test files (36 tests)
+**Modified files**: `types/index.ts` (5 new interfaces), `capacity/index.ts` (3 barrel exports), `capacity-summary-chart.tsx` (forecast line + gap view + scenario badge), `capacity-kpi-strip.tsx` (gap KPI card), `capacity/page.tsx` (scenario state + data routing)
+**Version impact**: MINOR (backwards-compatible addition — new UI features, no API changes)
+**Links**: OI-068, `.claude/SPECS/REQ_CapacityDecisionTree.md`, `plan/CAPACITY-ENHANCEMENTS-E01-E04.md`
+
+---
+
+## D-051 | 2026-02-24 | Cross-Lens Comparison — Page-Local Secondary Lens (G-07)
+
+**Decision**: Implement cross-lens comparison as a page-local `useState<CapacityLensId | null>` secondary lens, NOT in Zustand. Secondary overlay uses the same color as its lens from `LENS_LINE_CONFIG` but with a distinct muted style: thinner stroke (1.5px vs 2), longer dash pattern ("8 4"), and 60% opacity.
+
+**Rationale**:
+1. **Page-local state** — matches the pattern for scenario (E-02) and aggregation (G-01). Secondary lens is ephemeral UI preference, not data-fetching state
+2. **Same-color, different-style** — keeps colors semantically consistent (worked=green, billed=indigo) while making primary vs secondary visually distinct through dash pattern + opacity
+3. **4 eligible secondary lenses** — only `allocated`, `forecast`, `worked`, `billed` (these have `LENS_LINE_CONFIG` entries). Excludes `planned` (no overlay), `events` (block data), `concurrent` (pressure data)
+4. **Auto-clear on conflict** — wrapped `handleLensChange` clears secondary when primary switches to match (avoids useEffect lint issue)
+5. **Hidden in gap mode** — gap view is already visually dense with diverging bars per shift
+6. **No engine changes** — data for secondary lens already exists in `DailyDemandV2` / `ShiftDemandV2` fields
+
+**New files**: `compare-selector.tsx`
+**Modified files**: `capacity-summary-chart.tsx` (props, data computation, Line rendering), `capacity/page.tsx` (state, auto-clear, prop passing)
+**Version impact**: MINOR (backwards-compatible UI addition)
+**Links**: OI-071, `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07, `plan/G07-CROSS-LENS-COMPARISON.md`
+
+---
+
+## D-052 | 2026-02-25 | Contract Priority Field — Explicit PER_EVENT Resolution Order
+
+**Decision**: Add an explicit `priority` integer field (default 100) to `demand_contracts`. When multiple PER_EVENT contracts match the same customer, the lowest priority number wins. Tiebreaker: higher MH value.
+
+**Rationale**:
+1. **Deterministic resolution** — previous `Math.max` across all matching contracts gave no control over which contract "wins" when customers have multiple PER_EVENT contracts
+2. **Lower number = higher priority** — matches common convention (priority 1 = most important). Default 100 leaves room for insertions above and below
+3. **Admin-visible** — priority column in grid + input field in editor (0–9999 range) lets operators explicitly rank contracts
+4. **Backwards-compatible** — existing contracts get default 100 via migration; behavior unchanged for single-contract-per-customer cases
+
+**Migration**: M019 — `ALTER TABLE demand_contracts ADD COLUMN priority INTEGER NOT NULL DEFAULT 100`
+**Modified files**: 8 total (schema-init, schema, types, allocation-data, allocation-grid, allocation-editor, demand-contracts route, OPEN_ITEMS)
+**Version impact**: MINOR (backwards-compatible schema addition)
+**Links**: OI-065, D-048

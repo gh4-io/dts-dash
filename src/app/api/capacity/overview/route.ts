@@ -25,6 +25,7 @@ import {
   loadFlightEvents,
   computeAllEventWindows,
   computeConcurrencyPressure,
+  expandRecurringEvent,
   aggregateConcurrencyByDay,
   aggregateConcurrencyByShift,
   applyConcurrencyPressure,
@@ -37,8 +38,10 @@ import {
   loadBillingEntries,
   aggregateBilledHours,
   applyBilledHours,
+  computeEffectivePaidHours,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
+import type { ResolvedShiftInfo, CapacityComputeMode } from "@/types";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/capacity/overview");
@@ -58,6 +61,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const filterParams = parseFilterParams(searchParams);
+    const modeOverride = searchParams.get("mode") as CapacityComputeMode | null;
 
     // Load capacity configuration from DB
     const shifts = loadShifts();
@@ -79,21 +83,91 @@ export async function GET(request: NextRequest) {
     // Generate date array
     const dates = generateDateRange(startDate, endDate);
 
-    // Compute capacity: use active staffing config (rotation-based) if available,
-    // otherwise fall back to simple headcount plans.
+    // Compute capacity: detect auto mode from DB, then apply override if requested.
     const activeConfig = loadActiveStaffingConfig();
+    const autoMode: CapacityComputeMode = activeConfig ? "staffing" : "headcount";
+    const computeMode: CapacityComputeMode = modeOverride ?? autoMode;
     let capacity;
+    let resolvedShifts: ResolvedShiftInfo[];
+    let modeWarning: string | undefined;
 
-    if (activeConfig) {
-      const staffingShifts = loadStaffingShifts(activeConfig.id);
-      const patterns = loadRotationPatterns(true);
-      const patternMap = buildPatternMap(patterns);
-      const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
-      capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
+    if (computeMode === "staffing") {
+      if (activeConfig) {
+        const staffingShifts = loadStaffingShifts(activeConfig.id);
+        const patterns = loadRotationPatterns(true);
+        const patternMap = buildPatternMap(patterns);
+        const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
+        capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
+        resolvedShifts = staffingShifts
+          .filter((ss) => ss.isActive)
+          .map((ss) => ({
+            code: ss.category,
+            name: ss.name,
+            startHour: ss.startHour,
+            startMinute: ss.startMinute,
+            endHour: ss.endHour,
+            endMinute: ss.endMinute,
+            effectivePaidHours: computeEffectivePaidHours(ss),
+            breakMinutes: ss.breakMinutes,
+            lunchMinutes: ss.lunchMinutes,
+            headcount: ss.headcount,
+            mhOverride: ss.mhOverride,
+            isActive: ss.isActive,
+            source: "staffing" as const,
+          }));
+      } else {
+        // User requested staffing mode but no active config exists
+        modeWarning = "No active staffing configuration found. Rotation capacity is zero.";
+        capacity = dates.map((date) => ({
+          date,
+          totalProductiveMH: 0,
+          totalPaidMH: 0,
+          byShift: shifts
+            .filter((s) => s.isActive)
+            .map((s) => ({
+              shiftCode: s.code,
+              shiftName: s.name,
+              rosterHeadcount: 0,
+              effectiveHeadcount: 0,
+              paidHoursPerPerson: s.paidHours,
+              paidMH: 0,
+              availableMH: 0,
+              productiveMH: 0,
+              hasExceptions: false,
+              belowMinHeadcount: false,
+            })),
+          hasExceptions: false,
+        }));
+        resolvedShifts = [];
+      }
     } else {
+      // headcount mode
       const plans = loadPlans(startDate, endDate);
       const exceptions = loadExceptions(startDate, endDate);
       capacity = computeDailyCapacityV2(dates, shifts, plans, exceptions, assumptions);
+
+      // Check if headcount plans exist — if empty, warn
+      if (plans.length === 0) {
+        modeWarning = "No headcount plans found for this date range. Headcount capacity is zero.";
+      }
+
+      resolvedShifts = shifts
+        .filter((s) => s.isActive)
+        .map((s) => ({
+          code: s.code,
+          name: s.name,
+          startHour: s.startHour,
+          startMinute: 0,
+          endHour: s.endHour,
+          endMinute: 0,
+          effectivePaidHours: s.paidHours,
+          breakMinutes: 0,
+          lunchMinutes: 0,
+          headcount: 0,
+          mhOverride: null,
+          isActive: s.isActive,
+          source: "capacity" as const,
+        }));
     }
 
     // Read and transform work packages, apply filters for demand
@@ -128,8 +202,41 @@ export async function GET(request: NextRequest) {
       adjustedDemand = applyAllocations(demand, contracts, shifts, customerNameMap);
     }
 
-    // Load flight events and compute coverage windows for date range
-    const flightEvents = loadFlightEvents(startDate, endDate, true);
+    // Load flight events, expand recurring templates, and compute coverage windows
+    const rawFlightEvents = loadFlightEvents(startDate, endDate, true);
+
+    // Separate recurring templates from specific (one-off) events
+    const recurringTemplates = rawFlightEvents.filter((e) => e.isRecurring);
+    const specificEvents = rawFlightEvents.filter((e) => !e.isRecurring);
+
+    // Build natural-key lookup for auto-suppress
+    // Key = aircraftReg (flight number) + customer + date
+    const specificByKey = new Set(
+      specificEvents
+        .filter((e) => e.aircraftReg)
+        .flatMap((e) => {
+          const dates = [
+            e.scheduledArrival?.slice(0, 10),
+            e.scheduledDeparture?.slice(0, 10),
+            e.actualArrival?.slice(0, 10),
+            e.actualDeparture?.slice(0, 10),
+          ].filter(Boolean) as string[];
+          return dates.map((d) => `${e.aircraftReg}|${e.customer}|${d}`);
+        }),
+    );
+
+    // Expand recurring templates, skipping auto-suppressed dates
+    const expandedFromTemplates = recurringTemplates.flatMap((template) =>
+      expandRecurringEvent(template, startDate, endDate).filter((instance) => {
+        const instanceDate =
+          instance.scheduledArrival?.slice(0, 10) ?? instance.scheduledDeparture?.slice(0, 10);
+        if (!instanceDate || !template.aircraftReg) return true;
+        const key = `${template.aircraftReg}|${template.customer}|${instanceDate}`;
+        return !specificByKey.has(key); // auto-suppress if specific event exists
+      }),
+    );
+
+    const flightEvents = [...specificEvents, ...expandedFromTemplates];
     const coverageWindows =
       flightEvents.length > 0
         ? computeAllEventWindows(flightEvents, startDate, endDate)
@@ -200,6 +307,11 @@ export async function GET(request: NextRequest) {
       forecastModel: activeForecastModel ?? undefined,
       timeBookings: timeBookings.length > 0 ? timeBookings : undefined,
       billingEntries: billingEntries.length > 0 ? billingEntries : undefined,
+      computeMode,
+      resolvedShifts,
+      activeStaffingConfigName: activeConfig?.name ?? undefined,
+      autoMode,
+      modeWarning,
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

@@ -19,7 +19,7 @@
 
 **All base milestones (M0–M8) complete. Project is production-ready.**
 
-**Current Focus: Capacity Phase 2** — Advanced capacity lenses on `feat/capacity-mvp` branch.
+**Current Focus: Capacity Phase 2** — Advanced capacity lenses on `feat/capacity-layout` branch.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
@@ -47,11 +47,72 @@
 - [x] PER_EVENT period type (D-048) — 2026-02-21
 - [x] Capacity documentation (concepts, API reference, admin guide, getting started, lenses, examples, FAQ) — 2026-02-21
 
-### Capacity Phase 3 — Contract MH Pipeline (Planned)
-- [ ] Contract MH fallback in effectiveMH pipeline (OI-065)
-- [ ] Null WP MH support in data import
-- [ ] New MHSource "contract" in all views
-- [ ] Flight board, dashboard, statistics show contract-resolved MH
+### Capacity Enhancements E-05–E-06 (Complete ✅ — `feat/capacity-layout`)
+- [x] E-05: Compute mode badge (Rotation | Config Name / Headcount Plan) — 2026-02-24
+- [x] E-06: Today reference line + future-date shading on daily chart — 2026-02-24
+
+### Gap Fixes — G-01 (Complete ✅ — `feat/capacity-layout`)
+- [x] G-01: Decouple aggregation level from lens selection — 2026-02-24
+  - New `AggregationToggle` component (Daily / Weekly Pattern)
+  - Any lens works with either aggregation mode
+  - ForecastPatternChart receives scenario-adjusted demand
+  - Behavioral change: "Forecast" lens no longer auto-switches chart
+
+### Capacity Enhancements E-01–E-06 + G-01 (Complete ✅ — `feat/capacity-layout`)
+- [x] E-01: Rolling 8-week demand forecast (recency-weighted DOW pattern) — 2026-02-24
+- [x] E-02: Scenario toggle (Baseline vs +10% demand multiplier) — 2026-02-24
+- [x] E-03: Gap analysis engine + diverging bar gap view mode + gap KPI card — 2026-02-24
+- [x] E-04: Scenario UI integration (selector + KPI strip + data routing) — 2026-02-24
+- [x] E-05: Compute mode badge (Rotation | Config Name / Headcount Plan) — 2026-02-24
+- [x] E-06: Today reference line + future-date shading — 2026-02-24
+- [x] G-01: Decouple aggregation from lens (AggregationToggle) — 2026-02-24
+- [x] Bug fix: Capacity showing 0 on days without work packages — 2026-02-24
+- 9 new files, 5 modified, 36 new tests (557 total). Zero API changes.
+
+### Gap Fix G-10: Per-Customer Event Attribution (Complete ✅ — `feat/capacity-layout`)
+- [x] G-10: Event attribution engine — `aggregateCoverageByCustomer`, `summarizeEventsByCustomer`, `buildCustomerCoverageMap` — 2026-02-24
+  - 3 pure functions, 2 new types (`CustomerCoverageAggregate`, `CustomerEventSummary`)
+  - KPI strip shows top 3 customers by event count + "+N more" badge (Events lens)
+  - No schema migration (customer field already existed on `flight_events` + `EventCoverageWindow`)
+  - 2 new files, 4 modified, 17 new tests (574 total)
+
+### Gap Fix G-07: Cross-Lens Comparison (Complete ✅ — `feat/capacity-layout`)
+- [x] G-07 Session 1: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart — 2026-02-24
+  - New `CompareSelector` component (dropdown + dismissible chip)
+  - Secondary overlay: muted style (1.5px, "8 4" dash, 60% opacity) — distinct from primary
+  - 4 eligible secondary lenses: allocated, forecast, worked, billed
+  - Supports total + byShift + byCustomer modes; hidden in gap mode
+  - Auto-clears secondary when primary changes to match
+  - 1 new file, 2 modified. Zero API/engine/Zustand changes
+- [x] G-07 Session 2: ForecastPatternChart secondary overlay, KPI comparison delta card, detail table column — 2026-02-25
+  - ForecastPatternChart: `SECONDARY_LINE_STYLE` + secondary data in chartData useMemo (total + per-shift)
+  - CapacityKpiStrip: `comparisonKpi` — avg daily MH delta between primary/secondary lenses
+  - CapacityTable: `SECONDARY_LENS_COLUMN` config map + secondary column + CSV export
+  - 4 files modified. Zero API/engine/type changes
+
+### Gap Fix G-09: Monthly Roll-Up Aggregation (Complete ✅ — `feat/capacity-layout`)
+- [x] G-09: Monthly roll-up aggregation — new engine + chart — 2026-02-25
+  - New pure engine `monthly-rollup-engine.ts` — `aggregateMonthlyRollup()` buckets daily data into calendar months
+  - New `MonthlyRollupChart` component with 4 view modes (Total/By Shift/By Customer/Gap)
+  - `AggregationToggle` extended to 3 options (Daily / Weekly Pattern / Monthly)
+  - Lens-aware overlays (allocated, forecast, worked, billed) + secondary comparison (G-07)
+  - Scenario-adjusted data, utilization line, tooltip with day count
+  - 3 new files, 4 modified, 16 new tests (590 total). Zero API changes.
+
+### All Capacity Tier 3 Gaps Complete ✅
+
+### Capacity Phase 3 — Contract MH Pipeline (Complete ✅)
+- [x] Contract MH fallback in `computeEffectiveMH()` — 4-level chain: manual > WP MH > contract PER_EVENT > default
+  - `MHSource` type includes `"contract"` value (`src/types/index.ts:36`)
+  - `loadContractMap()` wrapper with module-level cache in `transformer.ts`
+  - `transformWorkPackages()` passes `contractMH` per WP to `computeEffectiveMH()`
+  - 19 tests in `transformer-mh.test.ts` covering priority chain + backwards compat
+- [x] Null WP MH support in data import — schema accepts null, warns on missing, doesn't reject
+- [x] Flight board tooltip + detail drawer handle `mhSource === "contract"` with proper labels
+- [x] Contract priority field — M019 migration, priority-based PER_EVENT resolution (D-052) — 2026-02-25
+  - New `priority` column (INTEGER NOT NULL DEFAULT 100) on `demand_contracts`
+  - `loadPerEventContractMap()` resolves by lowest priority number (tiebreaker: higher MH)
+  - Admin grid shows Priority column; editor has Priority input (0–9999)
 
 ## Milestones
 
@@ -377,7 +438,7 @@ See [PLAN.md](PLAN.md) M8 section.
 
 # Capacity Phase 2 — Advanced Operational Lenses
 
-> **Branch:** `feat/capacity-mvp`
+> **Branch:** `feat/capacity-layout`
 > **Started:** 2026-02-21
 > **Builds on:** Phase 1 capacity engine (WS-1 through WS-8, 175 tests)
 >

@@ -33,7 +33,7 @@ export type TimeFormat = "12h" | "24h";
 
 export type WpStatus = "New" | "Approved" | "Closed" | "Printed" | "Canceled";
 
-export type MHSource = "workpackage" | "default" | "manual";
+export type MHSource = "workpackage" | "default" | "manual" | "contract";
 
 export type ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback";
 
@@ -259,6 +259,7 @@ export interface DemandContract {
   contractedMh: number | null; // null = no sanity check
   periodType: ContractPeriodType | null; // null if no contractedMh
   reason: string | null;
+  priority: number;
   isActive: boolean;
   createdBy?: number;
   createdAt?: string;
@@ -270,13 +271,14 @@ export interface DemandContract {
 
 // ─── Flight Events (P2-1) ───────────────────────────────────────────────────
 
-export type FlightEventStatus = "scheduled" | "actual" | "cancelled";
+export type FlightEventStatus = "planned" | "scheduled" | "actual" | "cancelled";
 export type FlightEventSource = "work_package" | "manual" | "import";
 
 export interface FlightEvent {
   id: number;
   workPackageId: number | null; // logical ref only — no FK
-  aircraftReg: string;
+  aircraftReg: string | null; // tail number OR flight number; null for unassigned planned
+  aircraftType: string | null; // normalized aircraft type (e.g. "B767-300F")
   customer: string;
   scheduledArrival: string | null; // ISO datetime
   actualArrival: string | null;
@@ -284,10 +286,19 @@ export interface FlightEvent {
   actualDeparture: string | null;
   arrivalWindowMinutes: number; // default 30
   departureWindowMinutes: number; // default 60
-  status: FlightEventStatus;
+  status: FlightEventStatus; // planned | scheduled | actual | cancelled
   source: FlightEventSource;
   notes: string | null;
   isActive: boolean;
+  // ── Recurrence fields ──────────────────────────────────────────────────
+  isRecurring: boolean;
+  dayPattern: string | null; // "12345.." OASIS-style: 1=Mon..7=Sun, .=not operating
+  recurrenceStart: string | null; // "YYYY-MM-DD" effective from
+  recurrenceEnd: string | null; // "YYYY-MM-DD" effective to
+  arrivalTimeUtc: string | null; // "HH:MM" recurring arrival time
+  departureTimeUtc: string | null; // "HH:MM" recurring departure time
+  suppressedDates: string[]; // ["YYYY-MM-DD", ...] exception dates
+  // ────────────────────────────────────────────────────────────────────────
   createdBy?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -296,12 +307,28 @@ export interface FlightEvent {
 /** Computed coverage window from a flight event's effective arrival/departure */
 export interface EventCoverageWindow {
   eventId: number;
-  aircraftReg: string;
+  aircraftReg: string | null;
   customer: string;
   windowType: "arrival" | "departure";
   startTime: string; // ISO datetime
   endTime: string;
   durationMinutes: number;
+}
+
+export interface CustomerCoverageAggregate {
+  date: string;
+  shiftCode: string;
+  customer: string;
+  coverageMinutes: number;
+  coverageMH: number;
+  windowCount: number;
+}
+
+export interface CustomerEventSummary {
+  customer: string;
+  eventCount: number;
+  totalCoverageMH: number;
+  windowCount: number;
 }
 
 /** Per-hour aircraft-on-ground count (foundation for P2-4 Concurrency) */
@@ -409,12 +436,32 @@ export interface ShiftSlot {
 export interface ShiftCapacityV2 {
   shiftCode: string;
   shiftName: string;
+  rosterHeadcount: number;
   effectiveHeadcount: number;
+  paidHoursPerPerson: number;
   paidMH: number;
   availableMH: number;
   productiveMH: number;
   hasExceptions: boolean;
   belowMinHeadcount: boolean;
+}
+
+export type CapacityComputeMode = "headcount" | "staffing";
+
+export interface ResolvedShiftInfo {
+  code: string;
+  name: string;
+  startHour: number;
+  startMinute: number;
+  endHour: number;
+  endMinute: number;
+  effectivePaidHours: number;
+  breakMinutes: number;
+  lunchMinutes: number;
+  headcount: number;
+  mhOverride: number | null;
+  isActive: boolean;
+  source: "capacity" | "staffing";
 }
 
 /** Daily capacity with per-shift breakdown */
@@ -483,6 +530,48 @@ export interface DailyUtilizationV2 {
   byShift: ShiftUtilizationV2[];
 }
 
+/** Per-shift monthly aggregation bucket (G-09) */
+export interface MonthlyShiftBucket {
+  shiftCode: string;
+  totalDemandMH: number;
+  totalCapacityMH: number;
+  avgUtilization: number | null;
+  totalGapMH: number;
+  totalAllocatedMH: number | null;
+  totalForecastedMH: number | null;
+  totalWorkedMH: number | null;
+  totalBilledMH: number | null;
+  byCustomer: Record<string, number>;
+}
+
+/** Monthly roll-up bucket produced by aggregateMonthlyRollup() (G-09) */
+export interface MonthlyRollupBucket {
+  /** YYYY-MM format, e.g. "2026-02" */
+  monthKey: string;
+  /** Display label, e.g. "Feb 2026" */
+  label: string;
+  /** Number of days in this bucket (may be < calendar days for partial months) */
+  dayCount: number;
+  totalDemandMH: number;
+  totalCapacityMH: number;
+  avgUtilizationPercent: number | null;
+  totalGapMH: number;
+  totalAircraftCount: number;
+  totalAllocatedMH: number | null;
+  totalForecastedMH: number | null;
+  totalWorkedMH: number | null;
+  totalBilledMH: number | null;
+  byShift: MonthlyShiftBucket[];
+  byCustomer: Record<string, number>;
+}
+
+/** Result of aggregateMonthlyRollup() (G-09) */
+export interface MonthlyRollupResult {
+  buckets: MonthlyRollupBucket[];
+  totalMonths: number;
+  dateRange: { start: string; end: string };
+}
+
 /** Summary statistics for the capacity overview response */
 export interface CapacitySummary {
   avgUtilization: number | null;
@@ -512,6 +601,11 @@ export interface CapacityOverviewResponse {
   forecastModel?: ForecastModel;
   timeBookings?: TimeBooking[];
   billingEntries?: BillingEntry[];
+  computeMode?: CapacityComputeMode;
+  resolvedShifts?: ResolvedShiftInfo[];
+  activeStaffingConfigName?: string;
+  autoMode?: CapacityComputeMode;
+  modeWarning?: string;
 }
 
 // ─── Capacity Lens (P2-7) ───────────────────────────────────────────────────
@@ -876,4 +970,77 @@ export interface MasterDataImportLog {
   status: "success" | "partial" | "failed";
   warnings: string | null;
   errors: string | null;
+}
+
+// ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
+
+export type ProjectionShiftCode = "DAY" | "SWING" | "NIGHT";
+
+export interface WeeklyProjection {
+  id: number;
+  customer: string;
+  dayOfWeek: number; // ISO: 1=Mon ... 7=Sun
+  shiftCode: ProjectionShiftCode;
+  projectedMh: number;
+  notes: string | null;
+  isActive: boolean;
+  createdBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── Rolling Forecast (E-01) ─────────────────────────────────────────────
+
+export interface RollingForecastDay {
+  date: string;
+  forecastedDemandMH: number;
+  forecastedByShift: Record<string, number>;
+  isForecast: true;
+  confidence: "high" | "medium" | "low";
+}
+
+export interface RollingForecastResult {
+  forecastDays: RollingForecastDay[];
+  weeksAhead: number;
+  basedOnWeeks: number;
+  patternSource: "dayOfWeek";
+}
+
+// ─── Demand Scenarios (E-02) ─────────────────────────────────────────────
+
+export interface DemandScenario {
+  id: string;
+  label: string;
+  demandMultiplier: number;
+}
+
+export interface ScenarioResult {
+  scenarioId: string;
+  demand: DailyDemandV2[];
+  utilization: DailyUtilizationV2[];
+  summary: CapacitySummary;
+}
+
+// ─── Gap Analysis (E-03) ─────────────────────────────────────────────────
+
+export interface GapSummary {
+  avgDailyGapMH: number;
+  totalGapMH: number;
+  deficitDays: number;
+  surplusDays: number;
+  worstDayDeficit: { date: string; gapMH: number } | null;
+  worstShiftDeficit: { date: string; shiftCode: string; gapMH: number } | null;
+  avgGapByShift: Record<string, number>;
+  classification: "surplus" | "balanced" | "tight" | "deficit";
+}
+
+/** One day in a 7-element overlay array (Mon–Sun) */
+export interface ProjectionDayOverlay {
+  dayOfWeek: number;
+  label: string;
+  projectedTotal: number;
+  projectedByShift: Record<string, number>;
+  projectedByCustomer: Record<string, number>;
+  /** shiftCode → customer → projectedMH */
+  projectedByCustomerByShift: Record<string, Record<string, number>>;
 }

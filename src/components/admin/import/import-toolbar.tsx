@@ -25,6 +25,10 @@ interface ImportToolbarProps {
   onStartImport: () => void;
   onToggleHelp: () => void;
   helpOpen: boolean;
+  /** Whether the type grid is currently visible */
+  showTypeGrid?: boolean;
+  /** Toggle type grid on/off */
+  onToggleTypeGrid?: () => void;
 }
 
 export function ImportToolbar({
@@ -32,6 +36,8 @@ export function ImportToolbar({
   onStartImport,
   onToggleHelp,
   helpOpen,
+  showTypeGrid,
+  onToggleTypeGrid,
 }: ImportToolbarProps) {
   const [exportSchema, setExportSchema] = useState<SerializableSchema | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -69,11 +75,27 @@ export function ImportToolbar({
   return (
     <>
       <div className="flex items-center gap-2">
-        {/* Import button */}
-        <Button onClick={onStartImport}>
-          <i className="fa-solid fa-file-import mr-2" />
-          Import
-        </Button>
+        {/* Import button — toggles between type grid and data input */}
+        {onToggleTypeGrid ? (
+          <Button onClick={onToggleTypeGrid} variant={showTypeGrid ? "default" : "default"}>
+            {showTypeGrid ? (
+              <>
+                <i className="fa-solid fa-file-import mr-2" />
+                Import
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-th-large mr-2" />
+                Types
+              </>
+            )}
+          </Button>
+        ) : (
+          <Button onClick={onStartImport}>
+            <i className="fa-solid fa-file-import mr-2" />
+            Import
+          </Button>
+        )}
 
         {/* Export dropdown */}
         <DropdownMenu>

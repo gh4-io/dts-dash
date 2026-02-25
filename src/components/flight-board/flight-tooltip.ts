@@ -49,7 +49,13 @@ export function formatFlightTooltip(data: {
     ` ${tzLabel}`;
 
   const mhLabel =
-    data.mhSource === "manual" ? "override" : data.mhSource === "workpackage" ? "WP" : "default";
+    data.mhSource === "manual"
+      ? "override"
+      : data.mhSource === "workpackage"
+        ? "WP"
+        : data.mhSource === "contract"
+          ? "contract"
+          : "default";
 
   // Use CSS variables for theme-aware colors
   const dimColor = "hsl(var(--muted-foreground))";

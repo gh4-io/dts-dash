@@ -318,6 +318,27 @@ describe("findMatchingAllocations", () => {
     const result = findMatchingAllocations("2026-03-15", "DAY", 100, contracts, shifts);
     expect(result).toHaveLength(2);
   });
+
+  it("uses contractedMh for PER_EVENT contracts with no lines", () => {
+    const contracts = [makeContract({ periodType: "PER_EVENT", contractedMh: 6, lines: [] })];
+    const result = findMatchingAllocations("2026-03-15", "DAY", 100, contracts, shifts);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ mode: "MINIMUM_FLOOR", allocatedMh: 6 });
+  });
+
+  it("skips PER_EVENT contracts with no lines and null contractedMh", () => {
+    const contracts = [makeContract({ periodType: "PER_EVENT", contractedMh: null, lines: [] })];
+    const result = findMatchingAllocations("2026-03-15", "DAY", 100, contracts, shifts);
+    expect(result).toHaveLength(0);
+  });
+
+  it("uses lines when PER_EVENT contract has lines", () => {
+    const lines = [makeLine({ shiftId: 1, allocatedMh: 8 })];
+    const contracts = [makeContract({ periodType: "PER_EVENT", contractedMh: 6, lines })];
+    const result = findMatchingAllocations("2026-03-15", "DAY", 100, contracts, shifts);
+    expect(result).toHaveLength(1);
+    expect(result[0].allocatedMh).toBe(8); // Uses line MH, not contractedMh
+  });
 });
 
 // ─── computeAllocatedMH ─────────────────────────────────────────────────────

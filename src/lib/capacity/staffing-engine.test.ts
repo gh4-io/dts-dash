@@ -16,12 +16,7 @@ import {
   validatePattern,
   countWorkingDays,
 } from "./staffing-engine";
-import type {
-  RotationPattern,
-  StaffingShift,
-  CapacityAssumptions,
-  StaffingShiftCategory,
-} from "@/types";
+import type { RotationPattern, StaffingShift, CapacityAssumptions } from "@/types";
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────
 
@@ -317,9 +312,9 @@ describe("computeWeeklyMatrix", () => {
     ];
     const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
 
-    // All 7 days should have headcount 10 in DAY category
+    // All 7 days should have effective headcount = 10 * 0.89 = 8.9
     for (const day of result.days) {
-      expect(day.byCategory.DAY.headcount).toBe(10);
+      expect(day.byCategory.DAY.headcount).toBeCloseTo(10 * 0.89);
     }
   });
 
@@ -330,10 +325,10 @@ describe("computeWeeklyMatrix", () => {
     const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
 
     const dayCell = result.days[0].byCategory.DAY;
-    expect(dayCell.headcount).toBe(10);
-    expect(dayCell.paidMH).toBeCloseTo(80.0); // 10 * 8
-    expect(dayCell.availableMH).toBeCloseTo(80.0 * 0.89); // 71.2
-    expect(dayCell.productiveMH).toBeCloseTo(80.0 * 0.89 * 0.73); // 51.976
+    expect(dayCell.headcount).toBeCloseTo(10 * 0.89); // effective = roster * paidToAvailable
+    expect(dayCell.paidMH).toBeCloseTo(10 * 0.89 * 8); // effective * hours = 71.2
+    expect(dayCell.availableMH).toBeCloseTo(10 * 0.89 * 8); // availableMH = paidMH
+    expect(dayCell.productiveMH).toBeCloseTo(10 * 0.89 * 8 * 0.73); // paidMH * a2p = 51.976
   });
 
   it("applies night factor for NIGHT category", () => {
@@ -350,18 +345,18 @@ describe("computeWeeklyMatrix", () => {
     const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
 
     const nightCell = result.days[0].byCategory.NIGHT;
-    expect(nightCell.headcount).toBe(4);
-    expect(nightCell.paidMH).toBeCloseTo(32.0); // 4 * 8
-    expect(nightCell.productiveMH).toBeCloseTo(32.0 * 0.89 * 0.73 * 0.85);
+    expect(nightCell.headcount).toBeCloseTo(4 * 0.89); // effective = roster * paidToAvailable
+    expect(nightCell.paidMH).toBeCloseTo(4 * 0.89 * 8); // effective * hours = 28.48
+    expect(nightCell.productiveMH).toBeCloseTo(4 * 0.89 * 8 * 0.73 * 0.85);
   });
 
   it("computes category totals across the week", () => {
     const shifts = [makeShift({ id: 1, rotationId: 2, headcount: 10, category: "DAY" })];
     const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
 
-    // 7 days * 10 headcount = 70 total headcount
-    expect(result.categoryTotals.DAY.headcount).toBe(70);
-    expect(result.grandTotal.headcount).toBe(70);
+    // 7 days * 10 roster * 0.89 = 62.3 effective headcount
+    expect(result.categoryTotals.DAY.headcount).toBeCloseTo(70 * 0.89);
+    expect(result.grandTotal.headcount).toBeCloseTo(70 * 0.89);
   });
 
   it("tracks totalConfigHeadcount", () => {
@@ -384,8 +379,8 @@ describe("computeWeeklyMatrix", () => {
     // For the 5-2 pattern "oxxxxoxoxxxxoxoxxxxox":
     // Pos 0 (Sun): o=off, Pos 1 (Mon): x=on, ... Pos 5 (Fri): o=off, Pos 6 (Sat): x=on
     const headcounts = result.days.map((d) => d.byCategory.DAY.headcount);
-    // Sum should be less than 70 (some off days)
-    expect(headcounts.reduce((a, b) => a + b, 0)).toBeLessThan(70);
+    // Sum should be less than 70 * 0.89 = 62.3 (some off days reduce further)
+    expect(headcounts.reduce((a, b) => a + b, 0)).toBeLessThan(70 * 0.89);
   });
 });
 

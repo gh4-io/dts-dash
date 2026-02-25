@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * Step 1: Select Import Type
+ * Step: Select Import Type
  *
  * Grid of schema cards grouped by category.
  * Single-item categories share a grid row, each with its own heading above the card.
- * Multi-item categories get a full-width heading + grid.
+ * Multi-item categories get a full-width collapsible heading + grid.
  */
 
+import { useState } from "react";
 import type { SerializableSchema } from "@/lib/import/types";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface StepSelectTypeProps {
   schemas: SerializableSchema[];
@@ -51,6 +53,21 @@ function SchemaCard({
 }
 
 export function StepSelectType({ schemas, onSelect }: StepSelectTypeProps) {
+  // Track which categories are collapsed (all expanded by default)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const toggleCategory = (cat: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) {
+        next.delete(cat);
+      } else {
+        next.add(cat);
+      }
+      return next;
+    });
+  };
+
   // Group by category
   const grouped: Record<string, SerializableSchema[]> = {};
   for (const schema of schemas) {
@@ -80,7 +97,7 @@ export function StepSelectType({ schemas, onSelect }: StepSelectTypeProps) {
 
   return (
     <div className="space-y-6">
-      {/* Single-item categories — each cell has its own heading + card */}
+      {/* Single-item categories — each cell has its own heading + card (not collapsible) */}
       {singleCategories.length > 0 && (
         <div className={GRID_CLASSES}>
           {singleCategories.map((category) => (
@@ -94,18 +111,33 @@ export function StepSelectType({ schemas, onSelect }: StepSelectTypeProps) {
         </div>
       )}
 
-      {/* Multi-item categories — full-width heading + grid */}
+      {/* Multi-item categories — collapsible heading + grid */}
       {multiCategories.map((category) => (
-        <div key={category} className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            {category}
-          </h3>
-          <div className={GRID_CLASSES}>
-            {grouped[category].map((schema) => (
-              <SchemaCard key={schema.id} schema={schema} onSelect={onSelect} />
-            ))}
-          </div>
-        </div>
+        <Collapsible
+          key={category}
+          open={!collapsed.has(category)}
+          onOpenChange={() => toggleCategory(category)}
+        >
+          <CollapsibleTrigger asChild>
+            <button className="flex w-full items-center justify-between py-1 group">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">
+                {category}
+              </h3>
+              <i
+                className={`fa-solid fa-chevron-down text-xs text-muted-foreground transition-transform duration-200 ${
+                  collapsed.has(category) ? "-rotate-90" : ""
+                }`}
+              />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className={`${GRID_CLASSES} mt-3`}>
+              {grouped[category].map((schema) => (
+                <SchemaCard key={schema.id} schema={schema} onSelect={onSelect} />
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       ))}
     </div>
   );

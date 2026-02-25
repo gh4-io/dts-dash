@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Next.js Instrumentation Hook
  * Runs once when the Node.js server starts

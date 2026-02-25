@@ -83,6 +83,7 @@ export {
   updateDemandContract,
   deleteDemandContract,
   loadCustomerNameMap,
+  loadPerEventContractMap,
 } from "./allocation-data";
 
 // Flight events engine (pure functions)
@@ -92,7 +93,16 @@ export {
   computeCoverageRequirements,
   computeConcurrencyPressure,
   validateFlightEvent,
+  expandRecurringEvent,
+  VALID_STATUSES as VALID_FLIGHT_EVENT_STATUSES,
 } from "./flight-events-engine";
+
+// Event attribution engine (G-10, pure functions)
+export {
+  aggregateCoverageByCustomer,
+  summarizeEventsByCustomer,
+  buildCustomerCoverageMap,
+} from "./event-attribution-engine";
 
 // Concurrency pressure analysis (P2-4, pure functions)
 export {
@@ -110,6 +120,10 @@ export {
   updateFlightEvent,
   deleteFlightEvent,
 } from "./flight-events-data";
+
+// Forecast day-of-week pattern (pure functions)
+export { computeDayOfWeekPattern } from "./forecast-pattern-engine";
+export type { DayOfWeekPattern, ForecastPatternResult } from "./forecast-pattern-engine";
 
 // Forecast engine (pure functions)
 export {
@@ -180,3 +194,31 @@ export {
   deleteForecastRate,
   clearGeneratedRates,
 } from "./forecast-data";
+
+// Rolling forecast engine (E-01, pure functions)
+export { computeRollingForecast } from "./rolling-forecast-engine";
+
+// Monthly rollup engine (G-09, pure functions)
+export { aggregateMonthlyRollup } from "./monthly-rollup-engine";
+
+// Scenario engine (E-02, pure functions)
+export { applyDemandScenario, DEMAND_SCENARIOS } from "./scenario-engine";
+
+// Gap analysis engine (E-03, pure functions)
+export { computeGapSummary } from "./gap-engine";
+
+// Weekly MH Projections engine (TEMPORARY — OI-067, pure functions)
+export {
+  validateProjectionEntry,
+  buildProjectionOverlay,
+  hasProjectionData,
+} from "./projection-engine";
+export type { ProjectionValidation } from "./projection-engine";
+
+// Weekly MH Projections data access (TEMPORARY — OI-067)
+export {
+  loadWeeklyProjections,
+  bulkSaveProjections,
+  deleteAllProjections,
+} from "./projection-data";
+export type { ProjectionUpsertRow } from "./projection-data";

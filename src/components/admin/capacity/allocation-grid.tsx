@@ -168,6 +168,7 @@ export function AllocationGrid({
                 <TableHead className="w-8" />
                 <TableHead>Customer</TableHead>
                 <TableHead>Contract Name</TableHead>
+                <TableHead className="text-right w-16">Priority</TableHead>
                 <TableHead>Period</TableHead>
                 <TableHead className="text-right">Contracted</TableHead>
                 <TableHead className="text-right">Projected</TableHead>
@@ -246,6 +247,7 @@ function ContractRow({
           {contract.customerName ?? `Customer #${contract.customerId}`}
         </TableCell>
         <TableCell className="text-sm">{contract.name}</TableCell>
+        <TableCell className="text-right text-sm font-mono">{contract.priority}</TableCell>
         <TableCell>
           <PeriodLabel type={contract.periodType} />
         </TableCell>
@@ -314,7 +316,7 @@ function ContractRow({
 
       {isExpanded && (
         <TableRow className="bg-muted/30">
-          <TableCell colSpan={10} className="p-0">
+          <TableCell colSpan={11} className="p-0">
             <LinesSubTable
               lines={contract.lines}
               getShiftName={getShiftName}

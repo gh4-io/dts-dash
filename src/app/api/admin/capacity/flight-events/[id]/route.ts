@@ -7,7 +7,7 @@ import type { FlightEventStatus, FlightEventSource } from "@/types";
 
 const log = createChildLogger("api/admin/capacity/flight-events/[id]");
 
-const VALID_STATUSES: FlightEventStatus[] = ["scheduled", "actual", "cancelled"];
+const VALID_STATUSES: FlightEventStatus[] = ["planned", "scheduled", "actual", "cancelled"];
 const VALID_SOURCES: FlightEventSource[] = ["work_package", "manual", "import"];
 
 /**
@@ -40,6 +40,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 /**
  * PUT /api/admin/capacity/flight-events/[id]
  * Update a flight event. Admin only.
+ * Supports `addSuppressedDate` field for appending a single exception date.
  */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -58,16 +59,40 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const body = await request.json();
-    const updates: Record<string, unknown> = {};
 
-    if (body.aircraftReg !== undefined) {
-      if (typeof body.aircraftReg !== "string" || !body.aircraftReg.trim()) {
+    // Handle addSuppressedDate — quick PATCH-like action
+    if (body.addSuppressedDate) {
+      const date = String(body.addSuppressedDate);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
         return NextResponse.json(
-          { error: "aircraftReg must be a non-empty string" },
+          { error: "addSuppressedDate must be YYYY-MM-DD" },
           { status: 400 },
         );
       }
-      updates.aircraftReg = body.aircraftReg.trim();
+      const existingDates = existing.suppressedDates ?? [];
+      if (!existingDates.includes(date)) {
+        existingDates.push(date);
+        existingDates.sort();
+        updateFlightEvent(numId, { suppressedDates: existingDates });
+      }
+      const refreshed = loadFlightEvent(numId);
+      return NextResponse.json(refreshed);
+    }
+
+    const updates: Record<string, unknown> = {};
+
+    // aircraftReg — now nullable
+    if (body.aircraftReg !== undefined) {
+      if (body.aircraftReg === null || body.aircraftReg === "") {
+        updates.aircraftReg = null;
+      } else if (typeof body.aircraftReg === "string") {
+        updates.aircraftReg = body.aircraftReg.trim();
+      } else {
+        return NextResponse.json(
+          { error: "aircraftReg must be a string or null" },
+          { status: 400 },
+        );
+      }
     }
 
     if (body.customer !== undefined) {
@@ -142,8 +167,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (body.workPackageId !== undefined) updates.workPackageId = body.workPackageId;
+    if (body.aircraftType !== undefined) updates.aircraftType = body.aircraftType?.trim() || null;
     if (body.notes !== undefined) updates.notes = body.notes;
     if (body.isActive !== undefined) updates.isActive = body.isActive;
+
+    // Recurrence fields
+    if (body.isRecurring !== undefined) updates.isRecurring = body.isRecurring;
+    if (body.dayPattern !== undefined) updates.dayPattern = body.dayPattern;
+    if (body.recurrenceStart !== undefined) updates.recurrenceStart = body.recurrenceStart;
+    if (body.recurrenceEnd !== undefined) updates.recurrenceEnd = body.recurrenceEnd;
+    if (body.arrivalTimeUtc !== undefined) updates.arrivalTimeUtc = body.arrivalTimeUtc;
+    if (body.departureTimeUtc !== undefined) updates.departureTimeUtc = body.departureTimeUtc;
+    if (body.suppressedDates !== undefined) updates.suppressedDates = body.suppressedDates;
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });

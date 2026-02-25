@@ -1180,11 +1180,13 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P1 |
 | **Owner** | — |
 | **Created** | 2026-02-21 |
+| **Resolved** | 2026-02-25 |
 | **Context** | PER_EVENT contracts currently only affect capacity engine (`allocatedDemandMH` overlay). Flight board, dashboard, and statistics still use base `effectiveMH` (`manual > WP MH > default 3.0`). To show contract MH in all views, integrate into the core transformer pipeline. |
+| **Resolution** | Full pipeline implemented: (1) `MHSource` includes `"contract"` value, (2) `computeEffectiveMH()` has 4-level chain (manual > WP MH > contract PER_EVENT > default), (3) `loadContractMap()` cache wrapper in transformer, (4) null MH import support with warnings, (5) flight board tooltip/drawer handle contract source, (6) `priority` field added (M019, D-052) for deterministic multi-contract resolution (lowest number wins). All views consume contract-resolved MH via `/api/work-packages/all`. |
 
 ### Technical Context (for future implementation)
 
@@ -1230,17 +1232,179 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-066 | Capacity Dev Overview — Temporary Debug Tool
+
+| Field | Value |
+|-------|-------|
+| **Type** | Temporary debug tool |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-02-22 |
+| **Context** | Capacity model has many variables, overlays, and computation layers. Developers need a way to inspect all intermediate values in one place — headcount, productive MH formula, demand sources, which overlays are active, and per-day breakdowns with WP attribution. |
+| **Implementation** | Single-file admin-only page at `/admin/capacity/dev-overview`. Displays: (1) dev banner + date range, (2) pipeline status bar (6 stages), (3) model config (2-col: assumptions + shifts), (4) formula trace with night factor highlighting, (5) daily numbers table (dynamic shift columns, util% color coding, flag icons, row selection), (6) selected day detail panel (per-shift cards, WP contributions with mhSource badges, overlay values), (7) raw data inspector (collapsible JSON sections). Uses existing `useCapacityV2()` hook — no new API routes or DB changes. |
+| **Removal** | Delete `src/app/(authenticated)/admin/capacity/dev-overview/` folder + remove "Dev Overview" entry from `CAPACITY_SECTIONS` in `src/app/(authenticated)/admin/capacity/page.tsx`. Zero residual impact. |
+| **Decision** | Remove once capacity model is production-stable and developers no longer need real-time intermediate value inspection. ~4-8 weeks estimated, depending on Phase 3 schedule. |
+| **Links** | PLAN.md (Capacity Model Dev Overview), commit with page creation |
+
+---
+
+## OI-067 | Weekly MH Projections — TEMPORARY FIXTURE
+
+| Field | Value |
+|-------|-------|
+| **Type** | Temporary feature |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-02-22 |
+| **Context** | User has assumed customer MH projections based on historical and billed hours — a 7-customer x 7-day x 3-shift matrix of man-hour targets. Displayed as pink dashed overlay on the Forecast Pattern Chart. |
+| **Implementation** | Self-contained `weekly_mh_projections` table (no FK to customers — uses text names). Separate API endpoints. Toggle button on chart (local React state only). Matrix-style admin grid at `/admin/capacity/weekly-projections`. |
+| **New files** | `projection-engine.ts`, `projection-data.ts`, `/api/capacity/weekly-projections/route.ts`, `/api/admin/capacity/weekly-projections/route.ts`, `weekly-projections/page.tsx`, `projection-grid.tsx`, `projection-engine.test.ts` |
+| **Modified files** | `types/index.ts`, `schema.ts`, `schema-init.ts` (M018), `forecast-pattern-chart.tsx`, `capacity/page.tsx` (hub card), `capacity/index.ts` (barrel) |
+| **Removal checklist** | 1. Delete 7 new files listed above. 2. Revert changes in modified files (chart toggle, hub card, types, barrel). 3. Add migration `M-next: DROP TABLE IF EXISTS weekly_mh_projections`. 4. Remove `weeklyMhProjections` from schema.ts. M018 migration stays (append-only). |
+| **Decision** | Remove when replaced by a proper forecasting pipeline or when projections are no longer needed. Text customer names (no FK) was deliberate for easy removal. Separate API keeps overview route untouched. Toggle (not lens) avoids touching Zustand store. |
+| **Links** | M018 migration, D-050+ |
+
+---
+
+## OI-068 | Capacity Enhancements E-01 through E-04 — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Management needs forward-looking trend lines, what-if scenarios, and clear surplus/deficit metrics for staffing decisions. Spec: `.claude/SPECS/REQ_CapacityDecisionTree.md`. |
+| **Implementation** | 4 enhancements (E-01 rolling forecast, E-02 scenario toggle, E-03 gap analysis, E-04 UI integration). 7 new files, 5 modified. 36 new tests (557 total). Zero API changes — all client-side. |
+| **Links** | D-050, `plan/CAPACITY-ENHANCEMENTS-E01-E04.md` |
+
+---
+
+## OI-069 | Capacity Enhancements E-05 and E-06 — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Compute mode invisible to users (G-05). No visual boundary between historical and future data (G-06). |
+| **Implementation** | E-05: ComputeModeBadge component showing Rotation/Headcount Plan + config name. E-06: Today vertical reference line + subtle future-date ReferenceArea shading. 1 new file, 2 modified. No new types, engines, or API changes. |
+| **Links** | `plan/CAPACITY-ENHANCEMENTS-E05-E06.md` |
+
+---
+
+## OI-070 | G-01: Decouple Aggregation from Lens Selection — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Aggregation level (Daily vs Weekly Pattern) was implicitly coupled to the Forecast lens — selecting "Forecast" was the only way to access the weekly pattern chart. This conflated two independent concepts: which overlay data to show (lens) and how the x-axis is organized (aggregation). Gap G-01 from `REQ_CapacityDecisionTree.md`. |
+| **Implementation** | New `AggregationToggle` component (Daily / Weekly Pattern pill toggle). Page-local `viewAggregation` useState replaces the `activeLens === "forecast"` ternary with `viewAggregation === "weekly-pattern"`. Any lens now works with either aggregation mode. ForecastPatternChart receives scenario-adjusted demand. 1 new file, 1 modified. Zero API/engine/type changes. 557 tests unchanged. |
+| **Behavioral Change** | Selecting "Forecast" lens no longer auto-switches to weekly-pattern chart. Users must use the new View toggle. |
+| **Links** | `plan/G01-DECOUPLE-AGGREGATION.md`, `.claude/SPECS/REQ_CapacityDecisionTree.md` G-01 |
+
+---
+
+## OI-071 | ~~G-07: Cross-Lens Comparison~~ RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | ~~P2~~ |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-25 |
+| **Context** | Session 1: CompareSelector dropdown + secondary lens overlay on CapacitySummaryChart (total, byShift, byCustomer modes). 4 eligible lenses. Muted visual style. Auto-clears when primary matches. Hidden in gap mode. |
+| **Resolution** | Session 2 complete: ForecastPatternChart secondary overlay (total + per-shift, graceful skip for non-eligible lenses), KPI comparison delta card (avg daily MH delta), detail table secondary column + CSV export. 4 files modified. Zero API/engine changes. |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-07, `plan/G07-CROSS-LENS-COMPARISON.md` |
+
+---
+
+## OI-072 | G-09: Monthly Roll-Up Aggregation — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | ~~P3~~ |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-25 |
+| **Context** | Add a third aggregation level (Monthly) showing 1 bar per calendar month with total demand/capacity and avg utilization. |
+| **Resolution** | New `monthly-rollup-engine.ts` with `aggregateMonthlyRollup()` pure function — buckets daily arrays into calendar months with per-shift breakdowns, per-customer breakdowns, and lens overlay sums. New `MonthlyRollupChart` component with 4 view modes (Total/By Shift/By Customer/Gap), lens overlays, secondary comparison (G-07), scenario badge. `AggregationToggle` extended to 3 options (Daily / Weekly Pattern / Monthly). 3 new types (`MonthlyShiftBucket`, `MonthlyRollupBucket`, `MonthlyRollupResult`). 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-09 |
+
+---
+
+## OI-073 | G-10: Flight Events Per-Customer Attribution — Implemented
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Resolved** |
+| **Priority** | ~~P3~~ |
+| **Owner** | Claude |
+| **Created** | 2026-02-24 |
+| **Resolved** | 2026-02-24 |
+| **Context** | Customer field already existed on `flight_events` table and `EventCoverageWindow` type. Gap was purely UI — per-customer event data was not surfaced when Events lens was active. |
+| **Resolution** | New `event-attribution-engine.ts` with 3 pure functions: `aggregateCoverageByCustomer` (same hour-walk as `computeCoverageRequirements` but keyed by date+shift+customer), `summarizeEventsByCustomer` (group active non-cancelled events), `buildCustomerCoverageMap` (date→customer→MH lookup). New types `CustomerCoverageAggregate` + `CustomerEventSummary`. KPI strip shows top 3 customers by event count + "+N more" badge when Events lens active. 17 new tests. No schema migration needed. |
+| **Links** | `.claude/SPECS/REQ_CapacityDecisionTree.md` G-10, D-047 (barrel import trap) |
+
+---
+
+## OI-074 | Dashboard Aircraft & Turns Section Date Mismatch
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | — |
+| **Created** | 2026-02-25 |
+| **Context** | Aircraft & Turns section on `/dashboard` does not reflect date selection from global FilterBar. Chart/table shows incorrect dates when filter is changed. |
+| **Resolution** | TBD — Investigate filter state sync to dashboard components. Check if FilterBar date selection is properly propagated to aircraft & turns data fetching. |
+| **Links** | `.claude/SPECS/REQ_Dashboard_UI.md`, `/dashboard` |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
-| P1 | 4 | 1 | 0 | 15 |
-| P2 | 4 | 1 | 0 | 14 |
-| P3 | 3 | 0 | 2 | 0 |
-| **Total** | **11** | **2** | **2** | **45** |
+| P1 | 4 | 1 | 0 | 17 |
+| P2 | 5 | 1 | 0 | 16 |
+| P3 | 5 | 0 | 2 | 2 |
+| **Total** | **14** | **2** | **2** | **51** |
 
-**Latest update (2026-02-22)**: Shift timezone support added (D-049). Migration M016 adds `timezone` column to `capacity_shifts`. Engines (demand, concurrency, flight-events) convert UTC to shift-local time. Admin UI on assumptions page. 459 tests passing.
+**Latest update (2026-02-25)**: OI-065 fully resolved — Phase 3 Contract MH Pipeline complete. Full review confirmed: `computeEffectiveMH()` 4-level chain already wired, `MHSource "contract"` in type system, `loadContractMap()` cache in transformer, null MH import support, flight board handles contract source, priority field added (M019, D-052). All 4 ROADMAP items were already implemented from prior sessions. Phase 3 marked Complete.
+
+**Previous update (2026-02-25)**: OI-074 opened — Dashboard aircraft & turns section date does not match FilterBar selection. OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
+
+**Previous update (2026-02-25)**: OI-071 resolved — G-07 cross-lens comparison session 2 complete. ForecastPatternChart secondary overlay (total + per-shift, graceful skip for non-eligible lenses), KPI comparison delta card (avg daily MH delta), detail table secondary column + CSV export. 4 files modified. Zero API/engine changes.
+
+**Previous update (2026-02-24)**: OI-071 partial — G-07 cross-lens comparison session 1 complete. CompareSelector component + secondary lens overlay on CapacitySummaryChart (all view modes). 4 eligible secondary lenses, muted visual style, auto-clear logic. 1 new file, 2 modified. Also: full lint cleanup (29 warnings → 0) via eslint config + unused var removal.
+
+**Previous update (2026-02-24)**: OI-073 resolved — G-10 per-customer event attribution. New engine (3 pure functions), 2 new types, 17 new tests (574 total). KPI strip shows top 3 customers when Events lens active. No schema migration (customer field already existed). 2 new files, 4 modified.
+
+**Previous update (2026-02-24)**: Version bumped to v0.4.0. OI-071/072/073 opened for remaining Tier 3 gaps (G-07 cross-lens, G-09 monthly rollup, G-10 events per-customer). All E-01–E-06 and G-01 resolved.
+
+**Previous update (2026-02-24)**: OI-070 resolved — G-01 decouple aggregation from lens. New AggregationToggle component, page ternary replaced. Any lens × any aggregation. 1 new file, 1 modified. Zero API changes.
+
+**Previous update (2026-02-22)**: OI-067 opened — Weekly MH Projections (temporary fixture). Customer MH targets per day/shift as pink overlay on forecast chart. Self-contained table, easy removal.
 
 **Previous update (2026-02-21)**: OI-065 opened — Contract MH pipeline integration (Phase 3). PER_EVENT period type added (D-048), full pipeline integration planned for next phase.
 

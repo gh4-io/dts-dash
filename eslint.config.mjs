@@ -11,6 +11,11 @@ const eslintConfig = defineConfig([
     rules: {
       // Self-hosted Font Awesome loaded via <link> in <head> — intentional
       "@next/next/no-css-tags": "off",
+      // Allow _-prefixed unused vars (standard destructure-to-omit convention)
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+      ],
       // Catch common mistakes
       "no-console": ["warn", { allow: ["warn", "error"] }],
       "no-debugger": "error",

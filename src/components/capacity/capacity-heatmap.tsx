@@ -218,12 +218,12 @@ export function CapacityHeatmap({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[340px]">
         <TooltipProvider delayDuration={200}>
           <Table>
-            <TableHeader>
+            <TableHeader className="sticky top-0 z-20 bg-card">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="text-xs w-[120px] sticky left-0 bg-card z-10">Date</TableHead>
+                <TableHead className="text-xs w-[120px] sticky left-0 bg-card z-30">Date</TableHead>
                 {activeShifts.map((shift) => (
                   <TableHead key={shift.code} className="text-xs text-center min-w-[100px]">
                     <span className="flex items-center justify-center gap-1.5">

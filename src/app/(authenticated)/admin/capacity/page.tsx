@@ -67,6 +67,24 @@ const CAPACITY_SECTIONS = [
     icon: "fa-solid fa-sliders",
     color: "text-emerald-400",
   },
+  {
+    title: "Weekly Projections",
+    description:
+      "Assumed customer MH targets per day-of-week and shift. Pink overlay on the Typical Week Pattern chart. Temporary reference feature.",
+    href: "/admin/capacity/weekly-projections",
+    icon: "fa-solid fa-bullseye",
+    color: "text-pink-400",
+    badge: "TEMP",
+  },
+  {
+    title: "Dev Overview",
+    description:
+      "Inspect intermediate pipeline values — assumptions, formula trace, daily numbers, WP contributions, and raw data. Admin debug tool.",
+    href: "/admin/capacity/dev-overview",
+    icon: "fa-solid fa-bug",
+    color: "text-amber-400",
+    badge: "DEV",
+  },
 ];
 
 export default function AdminCapacityPage() {
@@ -95,6 +113,11 @@ export default function AdminCapacityPage() {
               <div className="space-y-1 min-w-0">
                 <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">
                   {section.title}
+                  {"badge" in section && section.badge && (
+                    <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-1.5 py-0.5 text-[9px] font-bold text-amber-400 ml-1.5 align-middle">
+                      {section.badge}
+                    </span>
+                  )}
                   <i className="fa-solid fa-arrow-right text-[10px] ml-1.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">

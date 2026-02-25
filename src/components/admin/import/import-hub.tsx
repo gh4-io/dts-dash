@@ -3,7 +3,9 @@
 /**
  * Import Hub — Main orchestrator
  *
- * State machine for the 6-step import wizard.
+ * State machine for the import wizard.
+ * Data-first mode: shows file upload/paste as the landing view.
+ * Auto-detects schema via `_importType` key, defaults to work-packages.
  * Toolbar + stepper + steps + help panel + history.
  */
 
@@ -45,6 +47,12 @@ interface WizardState {
   validation: ValidationPreview | null;
   commitResult: CommitResult | null;
   source: "file" | "paste";
+  /** Data-first mode: data-load is the landing view instead of type grid */
+  dataFirstMode: boolean;
+  /** Toggle to show the type selection grid in data-first mode */
+  showTypeGrid: boolean;
+  /** Schema ID detected from _importType key (null if explicit or not attempted) */
+  autoDetectedSchemaId: string | null;
 }
 
 const INITIAL_STATE: WizardState = {
@@ -60,6 +68,9 @@ const INITIAL_STATE: WizardState = {
   validation: null,
   commitResult: null,
   source: "file",
+  dataFirstMode: true,
+  showTypeGrid: false,
+  autoDetectedSchemaId: null,
 };
 
 const STEPS = [
@@ -96,7 +107,7 @@ export function ImportHub() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load schemas"));
   }, []);
 
-  // Handle ?type= query param to pre-select a schema
+  // Handle ?type= query param to pre-select a schema (stays on data-load in data-first mode)
   useEffect(() => {
     if (initialTypeHandled.current || schemas.length === 0) return;
     const typeParam = searchParams.get("type");
@@ -105,9 +116,10 @@ export function ImportHub() {
       if (schema) {
         setState((prev) => ({
           ...prev,
-          step: 2,
+          step: 1,
           schemaId: schema.id,
           schema,
+          dataFirstMode: true,
         }));
         initialTypeHandled.current = true;
       }
@@ -129,7 +141,7 @@ export function ImportHub() {
     });
   }, []);
 
-  // Reset wizard to step 1
+  // Reset wizard to data-first landing
   const resetWizard = useCallback(() => {
     setState(INITIAL_STATE);
     setError(null);
@@ -139,24 +151,7 @@ export function ImportHub() {
   const clearError = useCallback(() => setError(null), []);
 
   // -----------------------------------------------------------------------
-  // Step 1: Select Type
-  // -----------------------------------------------------------------------
-  const handleSelectType = useCallback(
-    (schemaId: string) => {
-      const schema = schemas.find((s) => s.id === schemaId) || null;
-      setState((prev) => ({
-        ...prev,
-        step: 2,
-        schemaId,
-        schema,
-      }));
-      setError(null);
-    },
-    [schemas],
-  );
-
-  // -----------------------------------------------------------------------
-  // Step 2: Load Data → Parse
+  // Step 1 (data-first): Load Data → Parse (with optional/auto schema)
   // -----------------------------------------------------------------------
   const handleContentChange = useCallback((content: string, fileName?: string) => {
     setState((prev) => ({
@@ -167,6 +162,120 @@ export function ImportHub() {
     }));
   }, []);
 
+  /**
+   * Parse in data-first mode: schemaId may be null → API auto-detects.
+   * Always resolves to a schema (explicit _importType or work-packages default).
+   */
+  const handleDataFirstParse = useCallback(async () => {
+    if (!state.content.trim()) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/import/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schemaId: state.schemaId, // may be null → triggers auto-detection
+          content: state.content,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `Parse failed (${res.status})`);
+      }
+
+      const data = await res.json();
+      const resolvedSchemaId = data.schemaId;
+      const schema = schemas.find((s) => s.id === resolvedSchemaId) || null;
+
+      setState((prev) => ({
+        ...prev,
+        step: 3,
+        schemaId: resolvedSchemaId,
+        schema,
+        format: data.detectedFormat,
+        sourceFields: data.sourceFields,
+        mapping: data.suggestedMapping,
+        previewRows: [],
+        autoDetectedSchemaId: data.detectedSchemaId,
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to parse data");
+    } finally {
+      setLoading(false);
+    }
+  }, [state.schemaId, state.content, schemas]);
+
+  // -----------------------------------------------------------------------
+  // Type Selection (data-first toggle or traditional step 1)
+  // -----------------------------------------------------------------------
+  // Toggle type grid on/off (for toolbar Import button)
+  const handleToggleTypeGrid = useCallback(() => {
+    setState((prev) => ({ ...prev, showTypeGrid: !prev.showTypeGrid }));
+    setError(null);
+  }, []);
+
+  const handleSelectType = useCallback(
+    async (schemaId: string) => {
+      const schema = schemas.find((s) => s.id === schemaId) || null;
+
+      if (state.content.trim() && state.dataFirstMode) {
+        // Data already loaded — select type and parse immediately
+        setState((prev) => ({
+          ...prev,
+          schemaId,
+          schema,
+          showTypeGrid: false,
+        }));
+
+        setLoading(true);
+        setError(null);
+        try {
+          const res = await fetch("/api/admin/import/parse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ schemaId, content: state.content }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error((err as { error?: string }).error || `Parse failed (${res.status})`);
+          }
+          const data = await res.json();
+          setState((prev) => ({
+            ...prev,
+            step: 3,
+            format: data.detectedFormat,
+            sourceFields: data.sourceFields,
+            mapping: data.suggestedMapping,
+            previewRows: [],
+            autoDetectedSchemaId: null,
+          }));
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Failed to parse data");
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // No data loaded — go to data-load view with schema pre-selected
+        setState((prev) => ({
+          ...prev,
+          step: 1,
+          schemaId,
+          schema,
+          showTypeGrid: false,
+          dataFirstMode: true,
+        }));
+        setError(null);
+      }
+    },
+    [schemas, state.content, state.dataFirstMode],
+  );
+
+  // -----------------------------------------------------------------------
+  // Step 2: Load Data → Parse (traditional flow, schema already selected)
+  // -----------------------------------------------------------------------
   const handleParse = useCallback(async () => {
     if (!state.schemaId || !state.content.trim()) return;
 
@@ -320,10 +429,31 @@ export function ImportHub() {
   }, [state.schemaId, state.content, state.format, state.mapping, state.source, state.fileName]);
 
   // -----------------------------------------------------------------------
+  // Navigation: Back from step 3 goes to data-load (step 1 in data-first)
+  // -----------------------------------------------------------------------
+  const handleBackFromMapping = useCallback(() => {
+    if (state.dataFirstMode) {
+      setState((prev) => ({
+        ...prev,
+        step: 1,
+        showTypeGrid: false,
+        sourceFields: [],
+        mapping: [],
+      }));
+    } else {
+      setState((prev) => ({ ...prev, step: 2 }));
+    }
+  }, [state.dataFirstMode]);
+
+  // -----------------------------------------------------------------------
   // Render
   // -----------------------------------------------------------------------
 
   const currentSchema = state.schema;
+
+  // In data-first mode: show stepper from step 3+ (steps 1-2 are merged into landing)
+  // In traditional mode: show stepper from step 2+
+  const showStepper = state.dataFirstMode ? state.step >= 3 : state.step > 1;
 
   return (
     <div className="space-y-6">
@@ -333,6 +463,10 @@ export function ImportHub() {
         onStartImport={resetWizard}
         onToggleHelp={toggleHelp}
         helpOpen={helpOpen}
+        showTypeGrid={state.showTypeGrid}
+        onToggleTypeGrid={
+          state.step === 1 && state.dataFirstMode ? handleToggleTypeGrid : undefined
+        }
       />
 
       {/* Error banner */}
@@ -349,16 +483,48 @@ export function ImportHub() {
         </div>
       )}
 
+      {/* Auto-detected schema info badge */}
+      {state.autoDetectedSchemaId && state.step >= 3 && currentSchema && (
+        <div className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-600 dark:text-emerald-400">
+          <i className="fa-solid fa-wand-magic-sparkles" />
+          <span>
+            Auto-detected: <strong>{currentSchema.display.name}</strong>
+          </span>
+        </div>
+      )}
+
       {/* Main content area */}
       <div className="flex gap-6">
         {/* Wizard area */}
         <div className="min-w-0 flex-1 space-y-6">
-          {/* Stepper (visible on steps 2-6) */}
-          {state.step > 1 && <ImportStepper currentStep={state.step} steps={STEPS} />}
+          {/* Stepper */}
+          {showStepper && <ImportStepper currentStep={state.step} steps={STEPS} />}
 
-          {/* Step content */}
-          {state.step === 1 && <StepSelectType schemas={schemas} onSelect={handleSelectType} />}
+          {/* Step 1: Data-first mode → show data-load or type grid */}
+          {state.step === 1 && state.dataFirstMode && !state.showTypeGrid && (
+            <StepLoadData
+              schema={currentSchema}
+              content={state.content}
+              onContentChange={handleContentChange}
+              onNext={handleDataFirstParse}
+              onBack={resetWizard}
+              loading={loading}
+              dataFirstMode
+              schemas={schemas}
+            />
+          )}
 
+          {/* Type grid (toggled via Import/Types button in toolbar) */}
+          {state.step === 1 && state.showTypeGrid && (
+            <StepSelectType schemas={schemas} onSelect={handleSelectType} />
+          )}
+
+          {/* Step 1: Traditional mode (fallback, shouldn't normally reach) */}
+          {state.step === 1 && !state.dataFirstMode && !state.showTypeGrid && (
+            <StepSelectType schemas={schemas} onSelect={handleSelectType} />
+          )}
+
+          {/* Step 2: Traditional Load Data (schema already selected) */}
           {state.step === 2 && currentSchema && (
             <StepLoadData
               schema={currentSchema}
@@ -379,7 +545,7 @@ export function ImportHub() {
               onMappingChange={(mapping) => setState((prev) => ({ ...prev, mapping }))}
               onAutoMap={handleAutoMap}
               onNext={handleValidate}
-              onBack={() => setState((prev) => ({ ...prev, step: 2 }))}
+              onBack={handleBackFromMapping}
               loading={loading}
             />
           )}

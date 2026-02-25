@@ -7,7 +7,11 @@ import type {
   DailyDemandV2,
   FlightEvent,
   EventCoverageWindow,
+  GapSummary,
+  CustomerEventSummary,
 } from "@/types";
+// Direct import — NOT barrel (D-047: barrel re-exports server-only modules)
+import { CAPACITY_LENSES } from "@/lib/capacity/lens-config";
 
 interface CapacityKpiStripProps {
   summary: CapacitySummary;
@@ -16,6 +20,11 @@ interface CapacityKpiStripProps {
   demand: DailyDemandV2[];
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];
+  gapSummary?: GapSummary | null;
+  activeScenarioLabel?: string;
+  customerEventSummary?: CustomerEventSummary[];
+  /** Secondary lens for cross-lens comparison (G-07 session 2) */
+  secondaryLens?: CapacityLensId | null;
 }
 
 function getUtilColor(val: number | null): string {
@@ -51,6 +60,13 @@ function KpiCard({
   );
 }
 
+const GAP_CLASS_CONFIG: Record<GapSummary["classification"], { color: string; icon: string }> = {
+  surplus: { color: "text-emerald-400", icon: "fa-scale-balanced" },
+  balanced: { color: "text-blue-400", icon: "fa-scale-balanced" },
+  tight: { color: "text-amber-400", icon: "fa-scale-unbalanced" },
+  deficit: { color: "text-red-400", icon: "fa-scale-unbalanced" },
+};
+
 export function CapacityKpiStrip({
   summary,
   dayCount,
@@ -58,6 +74,10 @@ export function CapacityKpiStrip({
   demand,
   flightEvents,
   coverageWindows,
+  gapSummary,
+  activeScenarioLabel,
+  customerEventSummary,
+  secondaryLens,
 }: CapacityKpiStripProps) {
   const avgUtil = summary.avgUtilization;
   const peakUtil = summary.peakUtilization;
@@ -137,7 +157,13 @@ export function CapacityKpiStrip({
         return cards;
       }
       case "events": {
-        const cards: { icon: string; label: string; value: string; color?: string }[] = [
+        const cards: {
+          icon: string;
+          label: string;
+          value: string;
+          color?: string;
+          subValue?: string;
+        }[] = [
           {
             icon: "fa-plane-arrival",
             label: "Flight Events",
@@ -152,6 +178,27 @@ export function CapacityKpiStrip({
             value: String(coverageWindows.length),
             color: "text-sky-400",
           });
+        }
+        // Top 3 customers by event count (G-10)
+        if (customerEventSummary && customerEventSummary.length > 0) {
+          const sorted = [...customerEventSummary].sort((a, b) => b.eventCount - a.eventCount);
+          const top3 = sorted.slice(0, 3);
+          for (const c of top3) {
+            cards.push({
+              icon: "fa-building",
+              label: c.customer,
+              value: `${c.eventCount} events`,
+              color: "text-sky-300",
+            });
+          }
+          if (sorted.length > 3) {
+            cards.push({
+              icon: "fa-ellipsis",
+              label: "More Customers",
+              value: `+${sorted.length - 3} more`,
+              color: "text-muted-foreground",
+            });
+          }
         }
         return cards;
       }
@@ -180,7 +227,57 @@ export function CapacityKpiStrip({
       default:
         return [];
     }
-  }, [activeLens, demand, summary.totalDemandMH, flightEvents, coverageWindows]);
+  }, [
+    activeLens,
+    demand,
+    summary.totalDemandMH,
+    flightEvents,
+    coverageWindows,
+    customerEventSummary,
+  ]);
+
+  // Cross-lens comparison delta (G-07 session 2)
+  const comparisonKpi = useMemo(() => {
+    if (!secondaryLens || secondaryLens === activeLens) return null;
+
+    const getLensTotalMH = (lens: CapacityLensId): number | null => {
+      switch (lens) {
+        case "allocated":
+          return demand.reduce((s, d) => s + (d.totalAllocatedDemandMH ?? 0), 0) || null;
+        case "forecast":
+          return demand.reduce((s, d) => s + (d.totalForecastedDemandMH ?? 0), 0) || null;
+        case "worked":
+          return demand.reduce((s, d) => s + (d.totalWorkedMH ?? 0), 0) || null;
+        case "billed":
+          return demand.reduce((s, d) => s + (d.totalBilledMH ?? 0), 0) || null;
+        case "planned":
+          return summary.totalDemandMH || null;
+        default:
+          return null;
+      }
+    };
+
+    const primaryTotal = getLensTotalMH(activeLens);
+    const secondaryTotal = getLensTotalMH(secondaryLens);
+
+    if (primaryTotal == null || secondaryTotal == null || dayCount === 0) return null;
+
+    const primaryAvg = primaryTotal / dayCount;
+    const secondaryAvg = secondaryTotal / dayCount;
+    const delta = primaryAvg - secondaryAvg;
+
+    const primaryLabel = CAPACITY_LENSES.find((l) => l.id === activeLens)?.label ?? activeLens;
+    const secondaryLabel =
+      CAPACITY_LENSES.find((l) => l.id === secondaryLens)?.label ?? secondaryLens;
+
+    return {
+      icon: "fa-code-compare",
+      label: `${primaryLabel} vs ${secondaryLabel}`,
+      value: `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} MH/day`,
+      color: Math.abs(delta) > 5 ? "text-amber-400" : "text-muted-foreground",
+      subValue: `Avg daily: ${primaryAvg.toFixed(1)} vs ${secondaryAvg.toFixed(1)}`,
+    };
+  }, [activeLens, secondaryLens, demand, summary.totalDemandMH, dayCount]);
 
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
@@ -241,9 +338,21 @@ export function CapacityKpiStrip({
           color="text-muted-foreground"
         />
       )}
+      {gapSummary && (
+        <KpiCard
+          icon={GAP_CLASS_CONFIG[gapSummary.classification].icon}
+          label={`Gap Status${activeScenarioLabel && activeScenarioLabel !== "Baseline" ? ` (${activeScenarioLabel})` : ""}`}
+          value={
+            gapSummary.classification.charAt(0).toUpperCase() + gapSummary.classification.slice(1)
+          }
+          subValue={`${gapSummary.deficitDays}/${dayCount} deficit days`}
+          color={GAP_CLASS_CONFIG[gapSummary.classification].color}
+        />
+      )}
       {lensKpis.map((kpi) => (
         <KpiCard key={kpi.label} {...kpi} />
       ))}
+      {comparisonKpi && <KpiCard key="comparison" {...comparisonKpi} />}
     </div>
   );
 }

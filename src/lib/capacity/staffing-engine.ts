@@ -190,12 +190,13 @@ export function computeWeeklyMatrix(
       const isNight = cat === "NIGHT";
       const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
 
-      const paidMH = shiftResult.headcount * shiftResult.effectivePaidHours;
-      const availableMH = paidMH * assumptions.paidToAvailable;
-      const productiveMH = availableMH * assumptions.availableToProductive * nightFactor;
+      const effectiveHC = shiftResult.headcount * assumptions.paidToAvailable;
+      const paidMH = effectiveHC * shiftResult.effectivePaidHours;
+      const availableMH = paidMH;
+      const productiveMH = paidMH * assumptions.availableToProductive * nightFactor;
 
       const cell: WeeklyMatrixCell = {
-        headcount: shiftResult.headcount,
+        headcount: effectiveHC,
         paidMH,
         availableMH,
         productiveMH,

@@ -2,6 +2,9 @@
  * Universal Import Hub — Public API
  */
 
+// Constants
+export { IMPORT_TYPE_KEY, DEFAULT_SCHEMA_ID } from "./types";
+
 // Types
 export type {
   FieldType,
@@ -34,7 +37,13 @@ export {
 export { autoMap, applyMapping, extractSourceFields } from "./mapping";
 
 // Parser
-export { parseContent, detectFormat, checkContentSize } from "./parser";
+export {
+  parseContent,
+  detectFormat,
+  checkContentSize,
+  detectImportType,
+  stripImportTypeKey,
+} from "./parser";
 
 // Validator
 export { validateRecords } from "./validator";

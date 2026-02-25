@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console */
 /**
  * sync-version.mjs
  * Runs automatically via npm "version" lifecycle hook (npm run ver:patch/minor/major/rc).

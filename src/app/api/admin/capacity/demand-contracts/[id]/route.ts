@@ -5,6 +5,7 @@ import { customers } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { loadDemandContract, updateDemandContract, deleteDemandContract } from "@/lib/capacity";
 import { validateContract } from "@/lib/capacity/allocation-engine";
+import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { parseIntParam } from "@/lib/utils/route-helpers";
 import { createChildLogger } from "@/lib/logger";
 
@@ -85,6 +86,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const updated = updateDemandContract(numId, body);
+    invalidateTransformerCache();
     return NextResponse.json(updated);
   } catch (error) {
     log.error({ err: error }, "PUT error");
@@ -115,6 +117,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Demand contract not found" }, { status: 404 });
     }
 
+    invalidateTransformerCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     log.error({ err: error }, "DELETE error");

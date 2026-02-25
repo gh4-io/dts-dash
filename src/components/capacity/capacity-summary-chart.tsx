@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ComposedChart,
   Bar,
@@ -12,6 +12,7 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceArea,
   Cell,
 } from "recharts";
 import type {
@@ -20,7 +21,9 @@ import type {
   DailyUtilizationV2,
   CapacityShift,
   CapacityLensId,
+  RollingForecastResult,
 } from "@/types";
+import { useCustomers } from "@/lib/hooks/use-customers";
 
 interface CapacitySummaryChartProps {
   capacity: DailyCapacityV2[];
@@ -28,9 +31,17 @@ interface CapacitySummaryChartProps {
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
   activeLens: CapacityLensId;
+  /** Secondary lens for cross-lens comparison (G-07) */
+  secondaryLens?: CapacityLensId | null;
+  /** When true, fills parent container height instead of using a fixed 340px */
+  fillHeight?: boolean;
+  /** Rolling 8-week forecast overlay (E-01) */
+  rollingForecast?: RollingForecastResult | null;
+  /** Active scenario label badge (E-04) */
+  activeScenarioLabel?: string;
 }
 
-type ViewMode = "stacked" | "total";
+type ViewMode = "byShift" | "byCustomer" | "total" | "gap";
 
 function getUtilizationColor(percent: number | null): string {
   if (percent === null) return "#6b7280";
@@ -54,6 +65,14 @@ const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: str
   billed: { stroke: "#6366f1", dash: "", name: "Billed" },
 };
 
+// Muted style for secondary comparison overlay (G-07)
+const SECONDARY_LINE_STYLE = {
+  strokeWidth: 1.5,
+  strokeDasharray: "8 4",
+  opacity: 0.6,
+  dotRadius: 2,
+};
+
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", {
@@ -70,8 +89,28 @@ export function CapacitySummaryChart({
   utilization,
   shifts,
   activeLens,
+  secondaryLens,
+  fillHeight = false,
+  rollingForecast,
+  activeScenarioLabel,
 }: CapacitySummaryChartProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>("stacked");
+  const [viewMode, setViewMode] = useState<ViewMode>("byShift");
+  const [showForecast, setShowForecast] = useState(false);
+  const { getColor, fetch: fetchCustomers } = useCustomers();
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
+
+  const allCustomers = useMemo(() => {
+    const names = new Set<string>();
+    for (const day of demand) {
+      for (const name of Object.keys(day.byCustomer)) {
+        names.add(name);
+      }
+    }
+    return Array.from(names).sort();
+  }, [demand]);
 
   const activeShifts = useMemo(
     () => shifts.filter((s) => s.isActive).sort((a, b) => a.sortOrder - b.sortOrder),
@@ -80,69 +119,235 @@ export function CapacitySummaryChart({
 
   const lensLineConfig = activeLens !== "planned" ? LENS_LINE_CONFIG[activeLens] : null;
 
+  // Secondary lens overlay config (G-07)
+  const secondaryLineConfig =
+    secondaryLens && secondaryLens !== activeLens
+      ? (LENS_LINE_CONFIG[secondaryLens] ?? null)
+      : null;
+
+  // Helper: extract overlay MH for a given lens from a DailyDemandV2 record
+  const getLensOverlayTotal = useCallback(
+    (lens: CapacityLensId, dem: DailyDemandV2): number | null => {
+      switch (lens) {
+        case "allocated":
+          return dem.totalAllocatedDemandMH ?? null;
+        case "forecast":
+          return dem.totalForecastedDemandMH ?? null;
+        case "worked":
+          return dem.totalWorkedMH ?? null;
+        case "billed":
+          return dem.totalBilledMH ?? null;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
+
+  // Helper: extract overlay MH for a given lens from a ShiftDemandV2 record
+  const getLensOverlayShift = useCallback(
+    (
+      lens: CapacityLensId,
+      sd: {
+        allocatedDemandMH?: number;
+        forecastedDemandMH?: number;
+        workedMH?: number;
+        billedMH?: number;
+      },
+    ): number | null => {
+      switch (lens) {
+        case "allocated":
+          return sd.allocatedDemandMH ?? null;
+        case "forecast":
+          return sd.forecastedDemandMH ?? null;
+        case "worked":
+          return sd.workedMH ?? null;
+        case "billed":
+          return sd.billedMH ?? null;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
+
+  // Last historical date for forecast boundary
+  const lastHistoricalDate = useMemo(() => {
+    if (utilization.length === 0) return null;
+    return utilization[utilization.length - 1].date;
+  }, [utilization]);
+
   const chartData = useMemo(() => {
     const capMap = new Map(capacity.map((c) => [c.date, c]));
     const demMap = new Map(demand.map((d) => [d.date, d]));
+    const round1 = (n: number) => Math.round(n * 10) / 10;
 
-    return utilization.map((u) => {
-      const cap = capMap.get(u.date);
-      const dem = demMap.get(u.date);
-      const label = formatDate(u.date);
-
-      // Compute lens overlay value
-      let lensOverlayMH: number | null = null;
-      if (lensLineConfig && dem) {
-        switch (activeLens) {
-          case "allocated":
-            lensOverlayMH = dem.totalAllocatedDemandMH ?? null;
-            break;
-          case "forecast":
-            lensOverlayMH = dem.totalForecastedDemandMH ?? null;
-            break;
-          case "worked":
-            lensOverlayMH = dem.totalWorkedMH ?? null;
-            break;
-          case "billed":
-            lensOverlayMH = dem.totalBilledMH ?? null;
-            break;
+    // Gap mode: diverging bars per shift
+    if (viewMode === "gap") {
+      return utilization.map((u) => {
+        const label = formatDate(u.date);
+        const row: Record<string, unknown> = {
+          date: u.date,
+          label,
+          gapMH: round1(u.gapMH),
+          aircraftCount: demMap.get(u.date)?.aircraftCount ?? 0,
+        };
+        for (const shift of activeShifts) {
+          const su = u.byShift.find((s) => s.shiftCode === shift.code);
+          row[`gap_${shift.code}`] = round1(su?.gapMH ?? 0);
         }
-      }
+        return row;
+      });
+    }
 
-      if (viewMode === "total") {
+    // Total mode: one row per day
+    if (viewMode === "total") {
+      const rows = utilization.map((u) => {
+        const dem = demMap.get(u.date);
+        const label = formatDate(u.date);
+
+        const lensOverlayMH = lensLineConfig && dem ? getLensOverlayTotal(activeLens, dem) : null;
+
+        // G-07: secondary lens overlay
+        const secondaryOverlayMH =
+          secondaryLineConfig && dem && secondaryLens
+            ? getLensOverlayTotal(secondaryLens, dem)
+            : null;
+
         return {
           date: u.date,
           label,
-          demandMH: Math.round(u.totalDemandMH * 10) / 10,
-          capacityMH: Math.round(u.totalProductiveMH * 10) / 10,
-          utilization:
-            u.utilizationPercent !== null ? Math.round(u.utilizationPercent * 10) / 10 : null,
+          demandMH: round1(u.totalDemandMH),
+          capacityMH: round1(u.totalProductiveMH),
+          utilization: u.utilizationPercent !== null ? round1(u.utilizationPercent) : null,
           aircraftCount: dem?.aircraftCount ?? 0,
-          ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
+          ...(lensOverlayMH != null ? { lensOverlayMH: round1(lensOverlayMH) } : {}),
+          ...(secondaryOverlayMH != null ? { secondaryOverlayMH: round1(secondaryOverlayMH) } : {}),
         };
+      });
+
+      // Append forecast rows when toggle is on
+      if (showForecast && rollingForecast?.forecastDays.length) {
+        for (const fd of rollingForecast.forecastDays) {
+          rows.push({
+            date: fd.date,
+            label: formatDate(fd.date),
+            demandMH: undefined as unknown as number,
+            capacityMH: undefined as unknown as number,
+            utilization: null,
+            aircraftCount: 0,
+            forecastDemandMH: fd.forecastedDemandMH,
+          } as Record<string, unknown> as (typeof rows)[number]);
+        }
       }
 
-      // Stacked mode: per-shift demand bars
+      return rows;
+    }
+
+    // byShift / byCustomer: 1 row per day, per-shift fields
+    const rows = utilization.map((u) => {
+      const dem = demMap.get(u.date);
+      const cap = capMap.get(u.date);
+      const label = formatDate(u.date);
+
       const row: Record<string, unknown> = {
         date: u.date,
         label,
-        capacityMH: Math.round(u.totalProductiveMH * 10) / 10,
-        utilization:
-          u.utilizationPercent !== null ? Math.round(u.utilizationPercent * 10) / 10 : null,
         aircraftCount: dem?.aircraftCount ?? 0,
-        ...(lensOverlayMH != null ? { lensOverlayMH: Math.round(lensOverlayMH * 10) / 10 } : {}),
       };
 
       for (const shift of activeShifts) {
+        const su = u.byShift.find((s) => s.shiftCode === shift.code);
         const sd = dem?.byShift.find((s) => s.shiftCode === shift.code);
-        row[`demand_${shift.code}`] = Math.round((sd?.demandMH ?? 0) * 10) / 10;
-
         const sc = cap?.byShift.find((s) => s.shiftCode === shift.code);
-        row[`capacity_${shift.code}`] = Math.round((sc?.productiveMH ?? 0) * 10) / 10;
+
+        // Capacity + utilization per shift (for lines)
+        row[`capacity_${shift.code}`] = round1(sc?.productiveMH ?? 0);
+        row[`utilization_${shift.code}`] = su?.utilization != null ? round1(su.utilization) : null;
+
+        // Demand per shift (for bars)
+        if (viewMode === "byCustomer") {
+          const custMH: Record<string, number> = {};
+          for (const wp of sd?.wpContributions ?? []) {
+            custMH[wp.customer] = (custMH[wp.customer] ?? 0) + wp.allocatedMH;
+          }
+          for (const customer of allCustomers) {
+            row[`demand_${shift.code}_${customer}`] = round1(custMH[customer] ?? 0);
+          }
+        } else {
+          row[`demand_${shift.code}`] = round1(sd?.demandMH ?? 0);
+        }
+
+        // Lens overlay per shift
+        if (lensLineConfig && sd) {
+          const lensVal = getLensOverlayShift(activeLens, sd);
+          if (lensVal != null) {
+            row[`lensOverlay_${shift.code}`] = round1(lensVal);
+          }
+        }
+
+        // G-07: secondary lens overlay per shift
+        if (secondaryLineConfig && sd && secondaryLens) {
+          const secVal = getLensOverlayShift(secondaryLens, sd);
+          if (secVal != null) {
+            row[`secondaryOverlay_${shift.code}`] = round1(secVal);
+          }
+        }
       }
 
       return row;
     });
-  }, [demand, capacity, utilization, activeShifts, viewMode, activeLens, lensLineConfig]);
+
+    // Append forecast rows when toggle is on (byShift mode)
+    if (showForecast && viewMode === "byShift" && rollingForecast?.forecastDays.length) {
+      for (const fd of rollingForecast.forecastDays) {
+        const row: Record<string, unknown> = {
+          date: fd.date,
+          label: formatDate(fd.date),
+          aircraftCount: 0,
+        };
+        for (const shift of activeShifts) {
+          row[`forecastDemand_${shift.code}`] = round1(fd.forecastedByShift[shift.code] ?? 0);
+        }
+        rows.push(row);
+      }
+    }
+
+    return rows;
+  }, [
+    demand,
+    capacity,
+    utilization,
+    activeShifts,
+    allCustomers,
+    viewMode,
+    activeLens,
+    lensLineConfig,
+    secondaryLens,
+    secondaryLineConfig,
+    getLensOverlayTotal,
+    getLensOverlayShift,
+    showForecast,
+    rollingForecast,
+  ]);
+
+  // E-06: Today reference line + future shading
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const todayLabel = useMemo(() => {
+    if (chartData.length === 0) return null;
+    const dates = chartData
+      .map((r) => (r as Record<string, unknown>).date as string)
+      .filter(Boolean);
+    if (dates.length === 0) return null;
+    if (todayStr < dates[0] || todayStr > dates[dates.length - 1]) return null;
+    return formatDate(todayStr);
+  }, [chartData, todayStr]);
+
+  const lastChartLabel = useMemo(() => {
+    if (chartData.length === 0) return null;
+    return (chartData[chartData.length - 1] as Record<string, unknown>).label as string;
+  }, [chartData]);
 
   if (chartData.length === 0) {
     return (
@@ -156,45 +361,99 @@ export function CapacitySummaryChart({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div
+      className={`rounded-lg border border-border bg-card${fillHeight ? " flex flex-col h-full" : ""}`}
+    >
       <div className="flex items-center justify-between p-3 border-b border-border">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
           <i className="fa-solid fa-chart-bar" />
-          Demand vs Capacity
+          {viewMode === "gap" ? "Surplus / Deficit" : "Demand vs Capacity"}
+          {activeScenarioLabel && activeScenarioLabel !== "Baseline" && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-medium normal-case tracking-normal">
+              {activeScenarioLabel}
+            </span>
+          )}
         </h3>
-        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
-          <button
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-              viewMode === "stacked"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setViewMode("stacked")}
-          >
-            By Shift
-          </button>
-          <button
-            className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-              viewMode === "total"
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setViewMode("total")}
-          >
-            Total
-          </button>
+        <div className="flex items-center gap-2">
+          {/* 8W Forecast toggle */}
+          {rollingForecast && rollingForecast.forecastDays.length > 0 && viewMode !== "gap" && (
+            <button
+              className={`px-2 py-0.5 text-[10px] rounded border transition-colors ${
+                showForecast
+                  ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => setShowForecast(!showForecast)}
+            >
+              8W Forecast
+            </button>
+          )}
+          <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+            {(["byShift", "byCustomer", "total", "gap"] as const).map((mode) => (
+              <button
+                key={mode}
+                className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                  viewMode === mode
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                onClick={() => setViewMode(mode)}
+              >
+                {mode === "byShift"
+                  ? "By Shift"
+                  : mode === "byCustomer"
+                    ? "By Customer"
+                    : mode === "gap"
+                      ? "Gap"
+                      : "Total"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="p-3">
-        <ResponsiveContainer width="100%" height={340}>
+      <div className={`p-3${fillHeight ? " flex-1 min-h-0" : ""}`}>
+        <ResponsiveContainer width="100%" height={fillHeight ? "100%" : 340}>
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+
+            {/* E-06: Today line + future shading */}
+            {todayLabel && (
+              <>
+                <ReferenceLine
+                  yAxisId="mh"
+                  x={todayLabel}
+                  stroke="#888888"
+                  strokeDasharray="2 2"
+                  strokeWidth={1.5}
+                  strokeOpacity={0.4}
+                  label={{
+                    value: "Today",
+                    position: "top",
+                    fill: "#888888",
+                    fontSize: 9,
+                  }}
+                />
+                {lastChartLabel && todayLabel !== lastChartLabel && (
+                  <ReferenceArea
+                    yAxisId="mh"
+                    x1={todayLabel}
+                    x2={lastChartLabel}
+                    fill="#888888"
+                    fillOpacity={0.04}
+                    strokeOpacity={0}
+                  />
+                )}
+              </>
+            )}
+
             <XAxis
               dataKey="label"
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
               tickLine={false}
               axisLine={{ stroke: "hsl(var(--border))" }}
+              interval={chartData.length > 30 ? "preserveEnd" : 0}
+              height={30}
             />
             <YAxis
               yAxisId="mh"
@@ -202,7 +461,7 @@ export function CapacitySummaryChart({
               tickLine={false}
               axisLine={false}
               label={{
-                value: "Man-Hours",
+                value: viewMode === "gap" ? "Gap (MH)" : "Man-Hours",
                 angle: -90,
                 position: "insideLeft",
                 fill: "hsl(var(--muted-foreground))",
@@ -210,22 +469,24 @@ export function CapacitySummaryChart({
                 offset: 10,
               }}
             />
-            <YAxis
-              yAxisId="pct"
-              orientation="right"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => `${v}%`}
-              label={{
-                value: "Utilization %",
-                angle: 90,
-                position: "insideRight",
-                fill: "hsl(var(--muted-foreground))",
-                fontSize: 10,
-                offset: 10,
-              }}
-            />
+            {viewMode !== "gap" && (
+              <YAxis
+                yAxisId="pct"
+                orientation="right"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v}%`}
+                label={{
+                  value: "Utilization %",
+                  angle: 90,
+                  position: "insideRight",
+                  fill: "hsl(var(--muted-foreground))",
+                  fontSize: 10,
+                  offset: 10,
+                }}
+              />
+            )}
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--popover))",
@@ -235,44 +496,47 @@ export function CapacitySummaryChart({
                 fontSize: 12,
               }}
               formatter={(value, name) => {
-                if (name === "Utilization") return [value !== null ? `${value}%` : "N/A", name];
+                if (typeof name === "string" && name.includes("Utilization"))
+                  return [value !== null ? `${value}%` : "N/A", name];
+                if (typeof name === "string" && name.includes("Forecast"))
+                  return [`${value} MH`, name];
+                if (viewMode === "gap") {
+                  const v = value as number;
+                  return [v >= 0 ? `+${v} MH` : `${v} MH`, name];
+                }
                 return [`${value} MH`, name];
               }}
               labelFormatter={(_, payload) => {
                 const item = payload?.[0]?.payload;
                 if (!item) return "";
-                return `${item.label} — ${item.aircraftCount} aircraft`;
+                return `${item.label}${item.aircraftCount ? ` — ${item.aircraftCount} aircraft` : ""}`;
               }}
             />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-            <ReferenceLine
-              yAxisId="pct"
-              y={120}
-              stroke="#ef4444"
-              strokeDasharray="4 4"
-              strokeWidth={1.5}
-              label={{
-                value: "CRITICAL",
-                position: "right",
-                fill: "#ef4444",
-                fontSize: 10,
-              }}
-            />
-            <ReferenceLine
-              yAxisId="pct"
-              y={100}
-              stroke="#f59e0b"
-              strokeDasharray="4 4"
-              strokeWidth={1}
-              label={{
-                value: "100%",
-                position: "right",
-                fill: "#f59e0b",
-                fontSize: 10,
-              }}
-            />
 
-            {viewMode === "total" ? (
+            {/* === GAP MODE === */}
+            {viewMode === "gap" && (
+              <>
+                <ReferenceLine yAxisId="mh" y={0} stroke="#666" strokeDasharray="3 3" />
+                {activeShifts.map((shift) => (
+                  <Bar
+                    key={`gap_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`gap_${shift.code}`}
+                    name={`${shift.name} Gap`}
+                    fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* === DEMAND BARS (non-gap modes) === */}
+
+            {/* Total mode: 1 bar per day, colored by utilization */}
+            {viewMode === "total" && (
               <Bar yAxisId="mh" dataKey="demandMH" name="Demand" radius={[2, 2, 0, 0]} barSize={20}>
                 {chartData.map((entry, idx) => (
                   <Cell
@@ -282,47 +546,190 @@ export function CapacitySummaryChart({
                   />
                 ))}
               </Bar>
-            ) : (
+            )}
+
+            {/* By Shift: 3 grouped bars (one per shift), no stackId → side-by-side */}
+            {viewMode === "byShift" &&
               activeShifts.map((shift) => (
                 <Bar
                   key={shift.code}
                   yAxisId="mh"
                   dataKey={`demand_${shift.code}`}
                   name={`${shift.name} Demand`}
-                  stackId="demand"
                   fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
                   fillOpacity={0.8}
-                  radius={[0, 0, 0, 0]}
-                  barSize={20}
+                  radius={[2, 2, 0, 0]}
+                  barSize={14}
                 />
-              ))
+              ))}
+
+            {/* By Customer: N×3 bars, stackId per shift → 3 groups stacked by customer */}
+            {viewMode === "byCustomer" &&
+              activeShifts.flatMap((shift, shiftIdx) =>
+                allCustomers.map((customer) => (
+                  <Bar
+                    key={`${shift.code}_${customer}`}
+                    yAxisId="mh"
+                    dataKey={`demand_${shift.code}_${customer}`}
+                    stackId={shift.code}
+                    name={customer}
+                    fill={getColor(customer)}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                    legendType={shiftIdx === 0 ? undefined : "none"}
+                  />
+                )),
+              )}
+
+            {/* === REFERENCE LINES (non-gap modes) === */}
+            {viewMode !== "gap" && (
+              <>
+                <ReferenceLine
+                  yAxisId="pct"
+                  y={120}
+                  stroke="#ef4444"
+                  strokeDasharray="4 4"
+                  strokeWidth={1.5}
+                  label={{ value: "CRITICAL", position: "right", fill: "#ef4444", fontSize: 10 }}
+                />
+                <ReferenceLine
+                  yAxisId="pct"
+                  y={100}
+                  stroke="#f59e0b"
+                  strokeDasharray="4 4"
+                  strokeWidth={1}
+                  label={{ value: "100%", position: "right", fill: "#f59e0b", fontSize: 10 }}
+                />
+              </>
             )}
 
-            <Line
-              yAxisId="mh"
-              dataKey="capacityMH"
-              name="Capacity"
-              type="monotone"
-              stroke="#6366f1"
-              strokeWidth={2}
-              strokeDasharray="6 3"
-              dot={false}
-              activeDot={{ r: 4, strokeWidth: 0 }}
-            />
-            <Line
-              yAxisId="pct"
-              dataKey="utilization"
-              name="Utilization"
-              type="monotone"
-              stroke="#f97316"
-              strokeWidth={2}
-              dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
-              activeDot={{ r: 5, strokeWidth: 0 }}
-              connectNulls
-            />
+            {/* === LINES (non-gap modes) === */}
 
-            {/* Lens overlay line (MH-compatible lenses only) */}
-            {lensLineConfig && (
+            {/* Total mode: single capacity + utilization lines */}
+            {viewMode === "total" && (
+              <>
+                <Line
+                  yAxisId="mh"
+                  dataKey="capacityMH"
+                  name="Capacity"
+                  type="monotone"
+                  stroke="#6366f1"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+                <Line
+                  yAxisId="pct"
+                  dataKey="utilization"
+                  name="Utilization"
+                  type="monotone"
+                  stroke="#f97316"
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: "#f97316", strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                />
+              </>
+            )}
+
+            {/* Per-shift modes: 3 capacity lines (dashed) + 3 utilization lines (solid) */}
+            {viewMode !== "total" &&
+              viewMode !== "gap" &&
+              activeShifts.map((shift, i) => (
+                <Fragment key={`lines_${shift.code}`}>
+                  <Line
+                    yAxisId="mh"
+                    dataKey={`capacity_${shift.code}`}
+                    name={i === 0 ? "Capacity" : `Capacity (${shift.name})`}
+                    type="monotone"
+                    stroke={SHIFT_BAR_COLORS[shift.code]}
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                  <Line
+                    yAxisId="pct"
+                    dataKey={`utilization_${shift.code}`}
+                    name={i === 0 ? "Utilization" : `Utilization (${shift.name})`}
+                    type="monotone"
+                    stroke={SHIFT_BAR_COLORS[shift.code]}
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: SHIFT_BAR_COLORS[shift.code], strokeWidth: 0 }}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
+                    connectNulls
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                </Fragment>
+              ))}
+
+            {/* === FORECAST LINE (E-01) === */}
+
+            {/* Total mode: single forecast line */}
+            {showForecast && viewMode === "total" && (
+              <>
+                {lastHistoricalDate && (
+                  <ReferenceLine
+                    yAxisId="mh"
+                    x={formatDate(lastHistoricalDate)}
+                    stroke="#10b981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1}
+                  />
+                )}
+                <Line
+                  yAxisId="mh"
+                  dataKey="forecastDemandMH"
+                  name="Forecast (8-wk rolling)"
+                  type="monotone"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  strokeDasharray="4 2"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0, fill: "#10b981" }}
+                  connectNulls={false}
+                />
+              </>
+            )}
+
+            {/* Per-shift mode: forecast lines per shift */}
+            {showForecast && viewMode === "byShift" && (
+              <>
+                {lastHistoricalDate && (
+                  <ReferenceLine
+                    yAxisId="mh"
+                    x={formatDate(lastHistoricalDate)}
+                    stroke="#10b981"
+                    strokeDasharray="4 4"
+                    strokeWidth={1}
+                  />
+                )}
+                {activeShifts.map((shift, i) => (
+                  <Line
+                    key={`forecast_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`forecastDemand_${shift.code}`}
+                    name={i === 0 ? "Forecast (8-wk rolling)" : `Forecast (${shift.name})`}
+                    type="monotone"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    strokeDasharray="4 2"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0, fill: "#10b981" }}
+                    connectNulls={false}
+                    legendType={i === 0 ? undefined : "none"}
+                  />
+                ))}
+              </>
+            )}
+
+            {/* === LENS OVERLAY === */}
+
+            {/* Total mode: single lens line */}
+            {viewMode === "total" && lensLineConfig && (
               <Line
                 yAxisId="mh"
                 dataKey="lensOverlayMH"
@@ -336,6 +743,82 @@ export function CapacitySummaryChart({
                 connectNulls
               />
             )}
+
+            {/* Per-shift modes: 3 lens overlay lines */}
+            {viewMode !== "total" &&
+              viewMode !== "gap" &&
+              lensLineConfig &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`lens_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`lensOverlay_${shift.code}`}
+                  name={i === 0 ? lensLineConfig.name : `${lensLineConfig.name} (${shift.name})`}
+                  type="monotone"
+                  stroke={lensLineConfig.stroke}
+                  strokeWidth={2}
+                  strokeDasharray={lensLineConfig.dash || undefined}
+                  dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                  activeDot={{ r: 5, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
+
+            {/* === SECONDARY LENS OVERLAY (G-07) === */}
+
+            {/* Total mode: single secondary comparison line */}
+            {viewMode === "total" && secondaryLineConfig && (
+              <Line
+                yAxisId="mh"
+                dataKey="secondaryOverlayMH"
+                name={`${secondaryLineConfig.name} (compare)`}
+                type="monotone"
+                stroke={secondaryLineConfig.stroke}
+                strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                dot={{
+                  r: SECONDARY_LINE_STYLE.dotRadius,
+                  fill: secondaryLineConfig.stroke,
+                  strokeWidth: 0,
+                  opacity: SECONDARY_LINE_STYLE.opacity,
+                }}
+                activeDot={{ r: 4, strokeWidth: 0 }}
+                connectNulls
+              />
+            )}
+
+            {/* Per-shift modes: 3 secondary comparison lines */}
+            {viewMode !== "total" &&
+              viewMode !== "gap" &&
+              secondaryLineConfig &&
+              activeShifts.map((shift, i) => (
+                <Line
+                  key={`secondary_${shift.code}`}
+                  yAxisId="mh"
+                  dataKey={`secondaryOverlay_${shift.code}`}
+                  name={
+                    i === 0
+                      ? `${secondaryLineConfig.name} (compare)`
+                      : `${secondaryLineConfig.name} (${shift.name}, compare)`
+                  }
+                  type="monotone"
+                  stroke={secondaryLineConfig.stroke}
+                  strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                  strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                  strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                  dot={{
+                    r: SECONDARY_LINE_STYLE.dotRadius,
+                    fill: secondaryLineConfig.stroke,
+                    strokeWidth: 0,
+                    opacity: SECONDARY_LINE_STYLE.opacity,
+                  }}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                  connectNulls
+                  legendType={i === 0 ? undefined : "none"}
+                />
+              ))}
           </ComposedChart>
         </ResponsiveContainer>
       </div>

@@ -939,6 +939,101 @@ export function runMigrations(): MigrationResult[] {
     }),
   );
 
+  // M016b: Nullable aircraft_reg + recurrence fields for flight_events
+  // SQLite cannot ALTER COLUMN — full table rebuild required.
+  results.push(
+    applyMigration("M016_flight_events_recurrence", () => {
+      sqlite.exec(`
+        CREATE TABLE flight_events_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          work_package_id INTEGER,
+          aircraft_reg TEXT,
+          aircraft_type TEXT,
+          customer TEXT NOT NULL,
+          scheduled_arrival TEXT,
+          actual_arrival TEXT,
+          scheduled_departure TEXT,
+          actual_departure TEXT,
+          arrival_window_minutes INTEGER NOT NULL DEFAULT 30,
+          departure_window_minutes INTEGER NOT NULL DEFAULT 60,
+          status TEXT NOT NULL,
+          source TEXT NOT NULL,
+          notes TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          is_recurring INTEGER NOT NULL DEFAULT 0,
+          day_pattern TEXT,
+          recurrence_start TEXT,
+          recurrence_end TEXT,
+          arrival_time_utc TEXT,
+          departure_time_utc TEXT,
+          suppressed_dates TEXT,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO flight_events_new
+          SELECT id, work_package_id, aircraft_reg, NULL, customer,
+                 scheduled_arrival, actual_arrival, scheduled_departure, actual_departure,
+                 arrival_window_minutes, departure_window_minutes,
+                 status, source, notes, is_active,
+                 0, NULL, NULL, NULL, NULL, NULL, '[]',
+                 created_by, created_at, updated_at
+          FROM flight_events;
+        DROP TABLE flight_events;
+        ALTER TABLE flight_events_new RENAME TO flight_events;
+        CREATE INDEX idx_fe_aircraft_reg ON flight_events(aircraft_reg);
+        CREATE INDEX idx_fe_scheduled_arrival ON flight_events(scheduled_arrival);
+        CREATE INDEX idx_fe_scheduled_departure ON flight_events(scheduled_departure);
+        CREATE INDEX idx_fe_work_package_id ON flight_events(work_package_id);
+        CREATE INDEX idx_fe_is_recurring ON flight_events(is_recurring);
+      `);
+    }),
+  );
+
+  // M017: Add aircraft_type column to flight_events
+  // M016 was applied before aircraft_type was added to it.
+  results.push(
+    applyMigration("M017_flight_events_aircraft_type", () => {
+      const cols = sqlite.pragma("table_info(flight_events)") as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "aircraft_type")) {
+        sqlite.exec(`ALTER TABLE flight_events ADD COLUMN aircraft_type TEXT`);
+      }
+    }),
+  );
+
+  // M018: Weekly MH projections (TEMPORARY — OI-067)
+  results.push(
+    applyMigration("M018_weekly_mh_projections", () => {
+      sqlite.exec(`
+        CREATE TABLE IF NOT EXISTS weekly_mh_projections (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer TEXT NOT NULL,
+          day_of_week INTEGER NOT NULL,
+          shift_code TEXT NOT NULL,
+          projected_mh REAL NOT NULL,
+          notes TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by INTEGER REFERENCES users(id),
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_wmp_customer_day_shift
+          ON weekly_mh_projections(customer, day_of_week, shift_code);
+      `);
+    }),
+  );
+
+  // M019: Add priority column to demand_contracts
+  results.push(
+    applyMigration("M019_demand_contracts_priority", () => {
+      const cols = sqlite.pragma("table_info(demand_contracts)") as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "priority")) {
+        sqlite.exec(
+          `ALTER TABLE demand_contracts ADD COLUMN priority INTEGER NOT NULL DEFAULT 100`,
+        );
+      }
+    }),
+  );
   return results;
 }
 

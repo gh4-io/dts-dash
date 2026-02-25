@@ -45,7 +45,9 @@ export function FlightDetailDrawer({ wp, open, onClose }: FlightDetailDrawerProp
       ? "Override"
       : wp.mhSource === "workpackage"
         ? "WP MH"
-        : `Default (TotalMH ${wp.totalMH === null ? "null" : wp.totalMH})`;
+        : wp.mhSource === "contract"
+          ? "Contract"
+          : `Default (TotalMH ${wp.totalMH === null ? "null" : wp.totalMH})`;
 
   const color = getColor(wp.customer);
 
