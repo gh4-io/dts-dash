@@ -35,6 +35,8 @@ interface CapacityV2State {
   assumptions: CapacityAssumptions | null;
   // Compute metadata
   computeMode: CapacityComputeMode;
+  autoMode: CapacityComputeMode;
+  modeWarning: string | null;
   resolvedShifts: ResolvedShiftInfo[];
   activeStaffingConfigName: string | null;
   // Phase 2 overlay collections
@@ -66,6 +68,8 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   assumptions: null,
   // Compute metadata
   computeMode: "headcount" as CapacityComputeMode,
+  autoMode: "headcount" as CapacityComputeMode,
+  modeWarning: null,
   resolvedShifts: [],
   activeStaffingConfigName: null,
   // Phase 2 overlay collections
@@ -105,6 +109,8 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         shifts: json.shifts,
         assumptions: json.assumptions,
         computeMode: json.computeMode ?? "headcount",
+        autoMode: json.autoMode ?? "headcount",
+        modeWarning: json.modeWarning ?? null,
         resolvedShifts: json.resolvedShifts ?? [],
         activeStaffingConfigName: json.activeStaffingConfigName ?? null,
         contracts: json.contracts ?? [],
@@ -130,7 +136,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
  * Hook that auto-fetches V2 capacity overview when filters change.
  * Uses the new /api/capacity/overview endpoint with per-shift drilldown data.
  */
-export function useCapacityV2() {
+export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
   const { start, end, operators, aircraft, types } = useFilters();
   const store = useCapacityV2Store();
 
@@ -141,10 +147,11 @@ export function useCapacityV2() {
     if (operators.length > 0) filters.operators = operators.join(",");
     if (aircraft.length > 0) filters.aircraft = aircraft.join(",");
     if (types.length > 0) filters.types = types.join(",");
+    if (modeOverride) filters.mode = modeOverride;
 
     store.fetchOverview(filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, operators, aircraft, types]);
+  }, [start, end, operators, aircraft, types, modeOverride]);
 
   return {
     demand: store.demand,
@@ -155,6 +162,8 @@ export function useCapacityV2() {
     shifts: store.shifts,
     assumptions: store.assumptions,
     computeMode: store.computeMode,
+    autoMode: store.autoMode,
+    modeWarning: store.modeWarning,
     resolvedShifts: store.resolvedShifts,
     activeStaffingConfigName: store.activeStaffingConfigName,
     contracts: store.contracts,
@@ -177,6 +186,7 @@ export function useCapacityV2() {
       if (operators.length > 0) filters.operators = operators.join(",");
       if (aircraft.length > 0) filters.aircraft = aircraft.join(",");
       if (types.length > 0) filters.types = types.join(",");
+      if (modeOverride) filters.mode = modeOverride;
       store.fetchOverview(filters);
     },
   };

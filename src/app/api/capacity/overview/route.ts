@@ -61,6 +61,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const filterParams = parseFilterParams(searchParams);
+    const modeOverride = searchParams.get("mode") as CapacityComputeMode | null;
 
     // Load capacity configuration from DB
     const shifts = loadShifts();
@@ -82,42 +83,74 @@ export async function GET(request: NextRequest) {
     // Generate date array
     const dates = generateDateRange(startDate, endDate);
 
-    // Compute capacity: use active staffing config (rotation-based) if available,
-    // otherwise fall back to simple headcount plans.
+    // Compute capacity: detect auto mode from DB, then apply override if requested.
     const activeConfig = loadActiveStaffingConfig();
+    const autoMode: CapacityComputeMode = activeConfig ? "staffing" : "headcount";
+    const computeMode: CapacityComputeMode = modeOverride ?? autoMode;
     let capacity;
-    let computeMode: CapacityComputeMode;
     let resolvedShifts: ResolvedShiftInfo[];
+    let modeWarning: string | undefined;
 
-    if (activeConfig) {
-      const staffingShifts = loadStaffingShifts(activeConfig.id);
-      const patterns = loadRotationPatterns(true);
-      const patternMap = buildPatternMap(patterns);
-      const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
-      capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
-      computeMode = "staffing";
-      resolvedShifts = staffingShifts
-        .filter((ss) => ss.isActive)
-        .map((ss) => ({
-          code: ss.category,
-          name: ss.name,
-          startHour: ss.startHour,
-          startMinute: ss.startMinute,
-          endHour: ss.endHour,
-          endMinute: ss.endMinute,
-          effectivePaidHours: computeEffectivePaidHours(ss),
-          breakMinutes: ss.breakMinutes,
-          lunchMinutes: ss.lunchMinutes,
-          headcount: ss.headcount,
-          mhOverride: ss.mhOverride,
-          isActive: ss.isActive,
-          source: "staffing" as const,
+    if (computeMode === "staffing") {
+      if (activeConfig) {
+        const staffingShifts = loadStaffingShifts(activeConfig.id);
+        const patterns = loadRotationPatterns(true);
+        const patternMap = buildPatternMap(patterns);
+        const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
+        capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
+        resolvedShifts = staffingShifts
+          .filter((ss) => ss.isActive)
+          .map((ss) => ({
+            code: ss.category,
+            name: ss.name,
+            startHour: ss.startHour,
+            startMinute: ss.startMinute,
+            endHour: ss.endHour,
+            endMinute: ss.endMinute,
+            effectivePaidHours: computeEffectivePaidHours(ss),
+            breakMinutes: ss.breakMinutes,
+            lunchMinutes: ss.lunchMinutes,
+            headcount: ss.headcount,
+            mhOverride: ss.mhOverride,
+            isActive: ss.isActive,
+            source: "staffing" as const,
+          }));
+      } else {
+        // User requested staffing mode but no active config exists
+        modeWarning = "No active staffing configuration found. Rotation capacity is zero.";
+        capacity = dates.map((date) => ({
+          date,
+          totalProductiveMH: 0,
+          totalPaidMH: 0,
+          byShift: shifts
+            .filter((s) => s.isActive)
+            .map((s) => ({
+              shiftCode: s.code,
+              shiftName: s.name,
+              rosterHeadcount: 0,
+              effectiveHeadcount: 0,
+              paidHoursPerPerson: s.paidHours,
+              paidMH: 0,
+              availableMH: 0,
+              productiveMH: 0,
+              hasExceptions: false,
+              belowMinHeadcount: false,
+            })),
+          hasExceptions: false,
         }));
+        resolvedShifts = [];
+      }
     } else {
+      // headcount mode
       const plans = loadPlans(startDate, endDate);
       const exceptions = loadExceptions(startDate, endDate);
       capacity = computeDailyCapacityV2(dates, shifts, plans, exceptions, assumptions);
-      computeMode = "headcount";
+
+      // Check if headcount plans exist — if empty, warn
+      if (plans.length === 0) {
+        modeWarning = "No headcount plans found for this date range. Headcount capacity is zero.";
+      }
+
       resolvedShifts = shifts
         .filter((s) => s.isActive)
         .map((s) => ({
@@ -277,6 +310,8 @@ export async function GET(request: NextRequest) {
       computeMode,
       resolvedShifts,
       activeStaffingConfigName: activeConfig?.name ?? undefined,
+      autoMode,
+      modeWarning,
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

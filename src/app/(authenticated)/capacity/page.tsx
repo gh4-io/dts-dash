@@ -12,12 +12,12 @@ import { ShiftDrilldownDrawer } from "@/components/capacity/shift-drilldown-draw
 import { CapacityTable } from "@/components/capacity/capacity-table";
 import { LensSelector } from "@/components/capacity/lens-selector";
 import { ScenarioSelector } from "@/components/capacity/scenario-selector";
-import { ComputeModeBadge } from "@/components/capacity/compute-mode-badge";
+import { ComputeModeToggle } from "@/components/capacity/compute-mode-toggle";
 import { AggregationToggle } from "@/components/capacity/aggregation-toggle";
 import { CompareSelector } from "@/components/capacity/compare-selector";
 import { useCapacityV2 } from "@/lib/hooks/use-capacity-v2";
 import { Button } from "@/components/ui/button";
-import type { DemandScenario, CapacityLensId } from "@/types";
+import type { DemandScenario, CapacityLensId, CapacityComputeMode } from "@/types";
 
 // Direct imports (D-047 — barrel import trap)
 import { applyDemandScenario, DEMAND_SCENARIOS } from "@/lib/capacity/scenario-engine";
@@ -30,6 +30,9 @@ import {
 } from "@/lib/capacity/event-attribution-engine";
 
 function CapacityPageInner() {
+  // Mode override state (G-05 — null = use server auto-detect)
+  const [modeOverride, setModeOverride] = useState<CapacityComputeMode | null>(null);
+
   const {
     demand,
     capacity,
@@ -50,11 +53,13 @@ function CapacityPageInner() {
     availableLenses,
     setActiveLens,
     computeMode,
+    autoMode,
+    modeWarning,
     activeStaffingConfigName,
     isLoading,
     error,
     refetch,
-  } = useCapacityV2();
+  } = useCapacityV2(modeOverride);
 
   // Aggregation state (G-01 — independent of lens)
   const [viewAggregation, setViewAggregation] = useState<"daily" | "weekly-pattern">("daily");
@@ -232,9 +237,12 @@ function CapacityPageInner() {
                 availableLenses={availableLenses}
                 onSecondaryChange={setSecondaryLens}
               />
-              <ComputeModeBadge
+              <ComputeModeToggle
                 computeMode={computeMode}
+                autoMode={autoMode}
+                modeOverride={modeOverride}
                 activeStaffingConfigName={activeStaffingConfigName}
+                onModeChange={setModeOverride}
               />
             </div>
             <div className="flex items-center gap-3">
@@ -271,6 +279,16 @@ function CapacityPageInner() {
                 >
                   <i className="fa-solid fa-xmark text-sm" />
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Mode warning banner (G-05) */}
+          {modeWarning && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-circle-info text-amber-400 shrink-0" />
+                <p className="text-xs text-amber-400">{modeWarning}</p>
               </div>
             </div>
           )}

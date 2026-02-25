@@ -560,6 +560,8 @@ export interface CapacityOverviewResponse {
   computeMode?: CapacityComputeMode;
   resolvedShifts?: ResolvedShiftInfo[];
   activeStaffingConfigName?: string;
+  autoMode?: CapacityComputeMode;
+  modeWarning?: string;
 }
 
 // ─── Capacity Lens (P2-7) ───────────────────────────────────────────────────
