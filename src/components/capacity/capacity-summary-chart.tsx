@@ -350,7 +350,7 @@ export function CapacitySummaryChart({
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
               tickLine={false}
               axisLine={{ stroke: "hsl(var(--border))" }}
-              interval={0}
+              interval={chartData.length > 30 ? "preserveEnd" : 0}
               height={30}
             />
             <YAxis

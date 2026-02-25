@@ -134,7 +134,10 @@ export function computeRollingForecast(
       forecastedByShift[shiftCode] = wTotal > 0 ? round1(wSum / wTotal) : 0;
     }
 
-    // Confidence based on sample count for this DOW
+    // I-06: Confidence is based on per-DOW historical sample count, not horizon
+    // distance. Day 1 and Day 56 of forecast share the same confidence for a
+    // given weekday. This is acceptable because forecast accuracy depends more
+    // on pattern stability (sample depth) than projection distance at 8 weeks.
     let confidence: "high" | "medium" | "low";
     if (bucket.sampleCount >= 8) {
       confidence = "high";

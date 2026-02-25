@@ -62,10 +62,11 @@ function CapacityPageInner() {
   const effectiveSummary = scenarioResult?.summary ?? summary;
 
   // Rolling forecast uses ORIGINAL demand (not scenario-adjusted) (E-01)
+  // I-01: capacity removed from signature and deps — forecast is demand-only
   const rollingForecast = useMemo(() => {
-    if (demand.length === 0 || capacity.length === 0) return null;
+    if (demand.length === 0) return null;
     return computeRollingForecast(demand);
-  }, [demand, capacity]);
+  }, [demand]);
 
   // Gap summary uses scenario-adjusted utilization (E-03)
   const gapSummary = useMemo(() => {

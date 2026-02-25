@@ -62,11 +62,15 @@ export function applyDemandScenario(
       byShift: d.byShift.map((s) => ({
         ...s,
         demandMH: round1(s.demandMH * demandMultiplier),
+        // R-05: wpContributions.allocatedMH IS scaled — it's WP-level demand
+        // (how many MH this work package contributes to shift demand). This is
+        // distinct from allocatedDemandMH below, which is a lens overlay value
+        // from demand contracts and must NOT be scaled.
         wpContributions: s.wpContributions.map((wp) => ({
           ...wp,
           allocatedMH: round1(wp.allocatedMH * demandMultiplier),
         })),
-        // DO NOT scale lens overlays
+        // DO NOT scale lens overlays — these are independent data sources
         allocatedDemandMH: s.allocatedDemandMH,
         forecastedDemandMH: s.forecastedDemandMH,
         workedMH: s.workedMH,
