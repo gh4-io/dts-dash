@@ -19,7 +19,7 @@
 
 **All base milestones (M0–M8) complete. Project is production-ready.**
 
-**Current Focus: Capacity Phase 2** — Advanced capacity lenses on `feat/capacity-mvp` branch.
+**Current Focus: Capacity Phase 2** — Advanced capacity lenses on `feat/capacity-layout` branch.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
@@ -431,7 +431,7 @@ See [PLAN.md](PLAN.md) M8 section.
 
 # Capacity Phase 2 — Advanced Operational Lenses
 
-> **Branch:** `feat/capacity-mvp`
+> **Branch:** `feat/capacity-layout`
 > **Started:** 2026-02-21
 > **Builds on:** Phase 1 capacity engine (WS-1 through WS-8, 175 tests)
 >

@@ -138,6 +138,7 @@ export function computeRollingForecast(
     // distance. Day 1 and Day 56 of forecast share the same confidence for a
     // given weekday. This is acceptable because forecast accuracy depends more
     // on pattern stability (sample depth) than projection distance at 8 weeks.
+    // Thresholds: high = 8+ samples, medium = 4–7 samples, low = 1–3 samples.
     let confidence: "high" | "medium" | "low";
     if (bucket.sampleCount >= 8) {
       confidence = "high";

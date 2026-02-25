@@ -15,7 +15,7 @@ Every view on the `/capacity` page is the intersection of three independent deci
 |------|---------|-----------------|--------|
 | **Axis 1: Date Range** | Day · Week · Multi-week · Month+ | Filter bar (Start/End) | No gap — user-controlled |
 | **Axis 2: Aggregation Level** | Daily (per-tick) · Weekly pattern (Mon–Sun avg) · Monthly roll-up | **Independent toggle** (Daily / Weekly Pattern / Monthly) | **RESOLVED (G-01 + G-09)** — all 3 aggregation levels implemented. |
-| **Axis 3: Capacity Model** | Rotation-based · Headcount-plan-based | ComputeModeBadge shows active mode | **PARTIAL (E-05)** — badge shows mode, no toggle/comparison |
+| **Axis 3: Capacity Model** | Rotation-based · Headcount-plan-based | `ComputeModeToggle` — interactive mode switch via API `mode` query param | **RESOLVED (G-05)** — toggle switches active capacity model; badge upgraded to interactive control |
 
 ---
 
@@ -39,7 +39,7 @@ Every view on the `/capacity` page is the intersection of three independent deci
 | **Headcount-plan-based** | `computeDailyCapacityV2()` with `resolveHeadcount()` | `headcount_plans`, `headcount_exceptions` | Implemented but **inactive** (headcount_plans is empty) |
 | **Zero capacity** | Fallback when neither path has data | *(none)* | Triggers when both tables empty |
 
-> **PARTIAL (E-05):** A `ComputeModeBadge` now shows the active capacity model (e.g. "Rotation | Default Configuration" or "Headcount Plan") in the page header. Users can see *which* mode is active, but there is no toggle to switch between modes or compare them side-by-side.
+> **RESOLVED (G-05):** A `ComputeModeToggle` component in the page header allows users to both see and switch the active capacity model. Mode switching is backed by the API `mode` query param (e.g. `?mode=rotation` or `?mode=headcount`). The earlier read-only `ComputeModeBadge` (E-05) was superseded by this interactive control.
 
 ---
 
@@ -79,7 +79,7 @@ ENTRY: User opens /capacity page
 ├── AXIS 3: Which capacity model is active?
 │   ├── Rotation-based (active) ─────────── capacity from staffing_shifts + rotation_patterns
 │   ├── Headcount-plan-based (inactive) ─── capacity from headcount_plans + exceptions
-│   └── [PARTIAL E-05] ComputeModeBadge shows which is active; no toggle to compare both
+│   └── [RESOLVED G-05] ComputeModeToggle — interactive switch via API mode query param
 │
 └── LENS: What insight layer do I want?
     │
@@ -180,25 +180,23 @@ For each Lens × Aggregation × Time Position combination, what can currently be
 
 ### G-03: Weekly pattern averages are scope-limited — RESOLVED (by E-01)
 **Status:** The rolling 8-week forecast engine uses a configurable history window (default 8 weeks) independent of the filter date range. Confidence levels (high/medium/low) are sample-count-based, not horizon-distance-based.
-**Divergence from spec (I-06):** Confidence is based on sample count per DOW (high: 4+, medium: 2-3, low: 1), not on forecast horizon distance.
+**Divergence from spec (I-06):** Confidence is based on sample count per DOW (high: 8+ samples, medium: 4–7 samples, low: 1–3 samples), not on forecast horizon distance.
 
 ### G-04: Projected toggle not accessible from daily timeline — RESOLVED
 **Status:** Weekly MH projections are now accessible from the daily timeline with a per-customer-per-shift breakdown overlay. Projections toggle is available regardless of active lens or aggregation mode.
 
-### G-05: No model mode visibility or toggle — RESOLVED (by E-05)
-**Status:** `ComputeModeBadge` component displays the active capacity model in the page header (e.g. "Rotation | Default Configuration" or "Headcount Plan"). Uses `computeMode` and `activeStaffingConfigName` from the Zustand store.
-**Scope note:** Badge shows which mode is active. A toggle to *switch* between modes or compare them side-by-side was not implemented (low demand).
+### G-05: No model mode visibility or toggle — RESOLVED (G-05)
+**Status:** `ComputeModeToggle` component in the page header allows users to see the active capacity model and switch between modes via the API `mode` query param. The initial read-only `ComputeModeBadge` (E-05) was upgraded to this interactive toggle. Uses `computeMode` and `activeStaffingConfigName` from the Zustand store.
+**Upgrade note:** E-05 delivered a read-only badge; G-05 upgraded it to a full interactive toggle that switches the capacity model on the backend via `?mode=rotation` / `?mode=headcount`.
 
 ### G-06: Worked/Billed have no future-date behavior — RESOLVED (by E-06)
 **Status:** A dashed "Today" reference line and subtle future-date shading are now rendered on the daily chart. Lines for Worked/Billed naturally end at today's date, and the visual context makes clear that future data is unavailable for past-only lenses.
 
-### G-07: No cross-lens comparison
-**Current:** Only one lens can be active at a time.
-**Impact:** Cannot compare Worked vs Allocated vs Planned in a single view.
-**Resolution option:** Allow up to 2 lenses simultaneously (primary + secondary overlay), shown as two accent lines with different colors.
+### G-07: No cross-lens comparison — RESOLVED (OI-071)
+**Status:** Cross-lens comparison implemented. `CompareSelector` dropdown allows selecting a secondary lens; its data is rendered as a muted overlay (1.5px stroke, dashed, 60% opacity) on all 3 chart types (daily `CapacitySummaryChart`, weekly-pattern `ForecastPatternChart`, monthly `MonthlyRollupChart`). A KPI delta card (`fa-code-compare`) appears in the KPI strip showing the average daily MH difference. The detail table gains a secondary column with "(compare)" header and CSV export includes the comparison data. 4 eligible secondary lenses: allocated, forecast, worked, billed. Secondary lens state is page-local (`useState<CapacityLensId | null>`, D-051). Hidden in gap mode. Auto-clears when primary matches secondary.
 
 ### G-08: No gap analysis view — RESOLVED (by E-03)
-**Status:** Gap analysis engine (`computeGapMetrics()`) + diverging bar "Gap" view mode + gap KPI card are implemented. Surplus bars extend upward (green), deficit bars extend downward (red). Gap classification uses frequency-based approach (deficit-day ratio across the range).
+**Status:** Gap analysis engine (`computeGapSummary()`) + diverging bar "Gap" view mode + gap KPI card are implemented. Surplus bars extend upward (green), deficit bars extend downward (red). Gap classification uses frequency-based approach (deficit-day ratio across the range).
 **Divergence from spec:** Gap classification is frequency-based (what fraction of days are in deficit), not magnitude-based (spec proposed percentage thresholds per individual day). This better answers "how often am I short?" vs "how short am I on any given day?"
 
 ### G-09: Monthly roll-up aggregation — RESOLVED ✅
@@ -224,7 +222,7 @@ For each Lens × Aggregation × Time Position combination, what can currently be
 | Gap | Status |
 |-----|--------|
 | G-04: Projections on daily timeline | **RESOLVED** — per-customer-per-shift breakdown |
-| G-05: Model mode visibility | **RESOLVED** (E-05) — ComputeModeBadge |
+| G-05: Model mode visibility + toggle | **RESOLVED** (G-05) — ComputeModeToggle (interactive, API mode param) |
 | G-08: Gap analysis view mode | **RESOLVED** (E-03) — gap engine + diverging bars |
 
 ### Tier 3 — Larger scope changes — 1 of 3 resolved, 1 open, 1 deferred
@@ -276,7 +274,7 @@ The aggregation toggle is now independent of the lens selector, exactly as propo
   1. Compute day-of-week averages from historical demand using configurable history window (default 8 weeks)
   2. **Divergence I-05:** Uses **hyperbolic decay** `1/(1 + weeksAgo * 0.15)` instead of spec's exponential decay `0.85^weeksAgo`. Hyperbolic provides gentler drop-off for sparse data.
   3. Generate one `ForecastPoint` per calendar day for the next `forecastWeeks × 7` days
-  4. **Divergence I-06:** Confidence is **sample-count-based** (high: 4+ samples, medium: 2-3, low: 1), not horizon-distance-based as spec proposed.
+  4. **Divergence I-06:** Confidence is **sample-count-based** (high: 8+ samples, medium: 4–7 samples, low: 1–3 samples), not horizon-distance-based as spec proposed.
 - Output: `RollingForecastResult { points: ForecastPoint[], horizonStart: string, horizonEnd: string, basedOnWeeks: number }`
 
 **Chart integration (as implemented):**
@@ -306,7 +304,7 @@ The aggregation toggle is now independent of the lens selector, exactly as propo
 **What:** Gap analysis engine + diverging bar "Gap" view mode + gap KPI card. Resolves G-08.
 
 **Implementation notes:**
-- `computeGapMetrics()` pure function in gap engine
+- `computeGapSummary()` pure function in gap engine
 - Diverging bar chart: surplus (green upward) / deficit (red downward)
 - Gap KPI card in the KPI strip
 - **Divergence:** Gap classification uses **frequency-based** approach (deficit-day ratio across the range), not the magnitude-based per-day thresholds (surplus >20%, balanced ±20%, etc.) proposed in the spec. This better answers "how often am I short?" as a management question.
@@ -335,7 +333,7 @@ The aggregation toggle is now independent of the lens selector, exactly as propo
 | E-02: Scenario Toggle | *(new)* | **IMPLEMENTED** | I-01 (no capacityMultiplier) |
 | E-03: Gap Metrics | G-08 | **IMPLEMENTED** | I-03 (single-scenario gap view), frequency-based classification |
 | E-04: Scenario Controls | *(new)* | **IMPLEMENTED** | I-04 (page-local useState, not Zustand) |
-| E-05: Compute Mode Badge | G-05 | **IMPLEMENTED** | — |
+| E-05: Compute Mode Badge | G-05 (partial) | **SUPERSEDED** | Upgraded to ComputeModeToggle (G-05) |
 | E-06: Today Line + Shading | G-06 | **IMPLEMENTED** | — |
 
 ### Intentional Divergences from Spec (documented in REVIEW-E01-E04.md)
@@ -359,7 +357,7 @@ The aggregation toggle is now independent of the lens selector, exactly as propo
 | G-02 | Rolling 8W forecast (E-01) | Resolved |
 | G-03 | Configurable history window (E-01) | Resolved |
 | G-04 | Projections on daily timeline | Resolved |
-| G-05 | ComputeModeBadge (E-05) | Resolved |
+| G-05 | ComputeModeToggle (G-05) — interactive, API mode param; supersedes E-05 badge | Resolved |
 | G-06 | Today line + shading (E-06) | Resolved |
 | G-08 | Gap analysis engine (E-03) | Resolved |
 | G-10 | Per-customer event attribution | Resolved |

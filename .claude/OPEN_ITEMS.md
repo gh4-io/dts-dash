@@ -1363,17 +1363,32 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-074 | Dashboard Aircraft & Turns Section Date Mismatch
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | — |
+| **Created** | 2026-02-25 |
+| **Context** | Aircraft & Turns section on `/dashboard` does not reflect date selection from global FilterBar. Chart/table shows incorrect dates when filter is changed. |
+| **Resolution** | TBD — Investigate filter state sync to dashboard components. Check if FilterBar date selection is properly propagated to aircraft & turns data fetching. |
+| **Links** | `.claude/SPECS/REQ_Dashboard_UI.md`, `/dashboard` |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 1 | 0 | 17 |
-| P2 | 4 | 1 | 0 | 16 |
+| P2 | 5 | 1 | 0 | 16 |
 | P3 | 5 | 0 | 2 | 2 |
-| **Total** | **13** | **2** | **2** | **51** |
+| **Total** | **14** | **2** | **2** | **51** |
 
-**Latest update (2026-02-25)**: OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
+**Latest update (2026-02-25)**: OI-074 opened — Dashboard aircraft & turns section date does not match FilterBar selection. OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
 
 **Previous update (2026-02-25)**: OI-071 resolved — G-07 cross-lens comparison session 2 complete. ForecastPatternChart secondary overlay (total + per-shift, graceful skip for non-eligible lenses), KPI comparison delta card (avg daily MH delta), detail table secondary column + CSV export. 4 files modified. Zero API/engine changes.
 
