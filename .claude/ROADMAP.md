@@ -820,3 +820,59 @@ Concurrency pressure index computed from P2-1 flight events. No new tables — p
 ### Tests
 - 15 new tests (lens-config.test.ts)
 - **412 total** (all passing)
+
+---
+
+## Phase 4 — Mobile-First UX
+
+> **Status**: Planning ✏️ | **Branch**: TBD (branch off `dev`) | **Started**: 2026-02-25
+> **Plan file**: `/home/guru/.claude/plans/purrfect-herding-pond.md`
+> **Key decisions**: D-053 (nav breakpoints), D-054 (list view design), D-055 (PWA scope), D-056 (UI state persistence)
+
+### Workstream Tracker
+
+| ID | Workstream | Status | OI | Notes |
+|----|-----------|--------|----|-------|
+| P4-1 | Collapsible Sidebar + Bottom Tab Bar | Pending | OI-075 | New `use-sidebar.ts` + `bottom-tab-bar.tsx`; 4-tier breakpoint matrix (D-053) |
+| P4-2 | Mobile Header Touch Targets | Pending | OI-076 | Touch targets 44px on mobile; header height unchanged |
+| P4-3 | Flight Board List View | Pending | OI-077 | Cards (< md) + TanStack Table (≥ md); resolves flight board mobile usability |
+| P4-4 | PWA Manifest | Pending | OI-053 | manifest.json + apple meta tags; no service worker (D-055) |
+| P4-5 | Mobile Polish Pass | Pending | OI-078 | overflow-x-auto audit, touch targets, responsive charts |
+
+### Implementation Order
+```
+P4-4 (PWA)    → P4-2 (Header) → P4-1 (Sidebar) → P4-5 (Polish) → P4-3 (List View)
+```
+
+### Breakpoint Matrix (D-053)
+| Viewport | Navigation |
+|----------|-----------|
+| `< sm (< 640px)` | Fixed bottom tab bar (new) |
+| `sm–md (640–767px)` | Hamburger → sheet (existing, unchanged) |
+| `md–lg (768–1023px)` | Collapsible sidebar: expanded / icons-only / hidden |
+| `≥ lg (≥ 1024px)` | Always-expanded sidebar (no toggle) |
+
+### New Files to Create
+| File | Workstream |
+|------|-----------|
+| `src/lib/hooks/use-sidebar.ts` | P4-1 |
+| `src/components/layout/bottom-tab-bar.tsx` | P4-1 |
+| `src/components/flight-board/flight-board-list-cards.tsx` | P4-3 |
+| `src/components/flight-board/flight-board-list-table.tsx` | P4-3 |
+| `public/manifest.json` | P4-4 |
+| `public/icons/icon-192.png`, `icon-512.png`, `apple-touch-icon.png` | P4-4 |
+
+### Key Files to Modify
+| File | Workstream |
+|------|-----------|
+| `src/components/layout/sidebar.tsx` | P4-1 |
+| `src/components/layout/header.tsx` | P4-1, P4-2 |
+| `src/app/(authenticated)/layout.tsx` | P4-1 |
+| `src/app/(authenticated)/flight-board/page.tsx` | P4-3 |
+| `src/app/layout.tsx` | P4-4 |
+
+### Design Notes
+- Use `/frontend-design` skill during P4-3 card component implementation
+- ECharts + Recharts both use ResizeObserver — auto-resize when sidebar collapses (no manual trigger)
+- No new API routes required for any P4 workstream
+- No schema migrations required (D-056: localStorage-backed state only)

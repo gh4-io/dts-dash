@@ -915,14 +915,14 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **In Progress** (Phase 4 — P4-4) |
 | **Priority** | P3 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-18 |
 | **Context** | User wants the app to be installable as a home screen shortcut on Apple devices (iPhone/iPad). Users can tap "Share" → "Add to Home Screen" to create a web clip. Currently app likely lacks proper PWA metadata (`manifest.json` icons, theme colors, display mode). Goal: app appears as an installable app icon, opens in full-screen mode (no browser chrome). |
-| **Proposed Solution** | (1) Ensure `public/manifest.json` exists with icons (192x192, 512x512), app name, theme colors, display mode `fullscreen` or `standalone`. (2) Add `<meta name="apple-mobile-web-app-capable">`, `<meta name="apple-mobile-web-app-status-bar-style">`, `<link rel="apple-touch-icon">` to layout root. (3) Test on iPad: Settings → Home Screen → Add to Home Screen → verify icon and full-screen launch. (4) Ensure all routes work in PWA mode (no redirect loops). |
+| **Proposed Solution** | (1) Ensure `public/manifest.json` exists with icons (192x192, 512x512), app name, theme colors, display mode `fullscreen` or `standalone`. (2) Add `<meta name="apple-mobile-web-app-capable">`, `<meta name="apple-mobile-web-app-status-bar-style">`, `<link rel="apple-touch-icon">` to layout root. (3) Test on iPad: Settings → Home Screen → Add to Home Screen → verify icon and full-screen launch. (4) Ensure all routes work in PWA mode (no redirect loops). No service worker (D-055). |
 | **Files** | `public/manifest.json`, `src/app/layout.tsx`, iOS viewport meta tags |
-| **Links** | [MDN: Web app manifests](https://developer.mozilla.org/en-US/docs/Web/Manifest), [Apple PWA Guide](https://developer.apple.com/library/archive/referencelibrary/General/Conceptual/QueryingtheWebforScottish/) |
+| **Links** | D-055, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md) |
 
 ---
 
@@ -1380,17 +1380,83 @@ function computeEffectiveMH(manualOverride, wpMH, hasWorkpackage, defaultMH, wpM
 
 ---
 
+## OI-075 | Phase 4 P4-1: Collapsible Sidebar + Bottom Tab Bar
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-25 |
+| **Context** | Implement a four-tier responsive navigation model (D-053): fixed bottom tab bar on mobile (< sm), hamburger+sheet on sm–md (unchanged), collapsible sidebar on md–lg (expanded / icons-only / collapsed), always-expanded on lg+. Sidebar collapse state persists in localStorage (D-056). |
+| **Acceptance Criteria** | (1) Bottom tab bar visible on < 640px, hidden on wider screens. (2) Sidebar toggle cycles expanded → icons-only → collapsed on md–lg viewports. (3) Icons-only mode shows Radix Tooltip labels on hover. (4) `sidebar-mode` persists in localStorage across reloads. (5) SSR renders expanded (no hydration mismatch). (6) All authenticated pages render correctly in all modes. |
+| **Files** | `src/lib/hooks/use-sidebar.ts` (new), `src/components/layout/bottom-tab-bar.tsx` (new), `sidebar.tsx`, `header.tsx`, `layout.tsx` |
+| **Links** | D-053, D-056, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md) |
+
+---
+
+## OI-076 | Phase 4 P4-2: Mobile Header Touch Targets
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-25 |
+| **Context** | Theme toggle and user menu button are `h-9 w-9` (36px), below the WCAG 2.5.8 44×44px minimum touch target size for mobile users. Update to 44px on mobile while keeping 36px on desktop. Header height remains `h-14` (matches sidebar logo height). |
+| **Acceptance Criteria** | (1) Theme toggle: `h-11 w-11 md:h-9 md:w-9`. (2) User menu button: `h-11 md:h-9`. (3) Header height unchanged at `h-14`. |
+| **Files** | `src/components/layout/header.tsx` |
+| **Links** | [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md) |
+
+---
+
+## OI-077 | Phase 4 P4-3: Flight Board List View
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-25 |
+| **Context** | The ECharts Gantt chart is the only way to view flight board data. On mobile and tablet, the canvas Gantt is difficult to use. Add a "List" view mode toggle in the flight board toolbar. Mobile (< md) shows a card stack per work package; desktop/tablet (≥ md) shows a TanStack sortable table. View mode persists in localStorage (D-056). Uses `/frontend-design` skill for card visual design. |
+| **Acceptance Criteria** | (1) Gantt | List toggle in toolbar. (2) Gantt-specific controls hidden in list mode. (3) `< md`: card stack, tap opens detail drawer. (4) `≥ md`: TanStack Table, sortable, paginated by `tablePageSize` pref. (5) Customer color dots match Gantt legend. (6) MH source labels match drawer (Override / WP MH / Contract / Default). (7) Empty state shown when no WPs. |
+| **Files** | `src/components/flight-board/flight-board-list-cards.tsx` (new), `src/components/flight-board/flight-board-list-table.tsx` (new), `src/app/(authenticated)/flight-board/page.tsx` |
+| **Links** | D-054, D-056, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md) |
+
+---
+
+## OI-078 | Phase 4 P4-5: Mobile Polish Pass
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-25 |
+| **Context** | Systematic mobile usability pass after P4-1 through P4-4 are stable. Add `overflow-x-auto` to admin tables and capacity charts to prevent horizontal overflow on narrow screens. Verify Recharts `ResponsiveContainer` width settings. Check filter bar and ActionsMenu touch targets. |
+| **Acceptance Criteria** | (1) Capacity page: no horizontal overflow at 375px. (2) Admin tables: horizontal scroll present on narrow screens. (3) Capacity charts: responsive width, no overflow. (4) Filter bar mobile behavior verified. (5) `npm run build` + `npm run lint` clean. |
+| **Files** | `capacity-table.tsx`, `capacity-heatmap.tsx`, `capacity-pie-charts.tsx`, `user-table.tsx`, admin capacity grid components, `top-menu-bar.tsx` |
+| **Links** | [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md) |
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | Acknowledged | Resolved |
 |----------|------|---------|-------------|----------|
 | P0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 1 | 0 | 17 |
-| P2 | 5 | 1 | 0 | 16 |
-| P3 | 5 | 0 | 2 | 2 |
-| **Total** | **14** | **2** | **2** | **51** |
+| P2 | 7 | 1 | 0 | 16 |
+| P3 | 7 | 0 | 2 | 2 |
+| **Total** | **18** | **2** | **2** | **51** |
 
-**Latest update (2026-02-25)**: OI-065 fully resolved — Phase 3 Contract MH Pipeline complete. Full review confirmed: `computeEffectiveMH()` 4-level chain already wired, `MHSource "contract"` in type system, `loadContractMap()` cache in transformer, null MH import support, flight board handles contract source, priority field added (M019, D-052). All 4 ROADMAP items were already implemented from prior sessions. Phase 3 marked Complete.
+**Latest update (2026-02-25)**: Phase 4 Mobile-First UX planning complete. OI-075–078 opened (collapsible sidebar, header touch targets, flight board list view, mobile polish). OI-053 (PWA) moved to In Progress (P4-4). Decisions D-053–D-056 logged. Roadmap updated with Phase 4 workstream tracker. Plan file: `/home/guru/.claude/plans/purrfect-herding-pond.md`.
+
+**Previous latest update (2026-02-25)**: OI-065 fully resolved — Phase 3 Contract MH Pipeline complete. Full review confirmed: `computeEffectiveMH()` 4-level chain already wired, `MHSource "contract"` in type system, `loadContractMap()` cache in transformer, null MH import support, flight board handles contract source, priority field added (M019, D-052). All 4 ROADMAP items were already implemented from prior sessions. Phase 3 marked Complete.
 
 **Previous update (2026-02-25)**: OI-074 opened — Dashboard aircraft & turns section date does not match FilterBar selection. OI-072 resolved — G-09 monthly roll-up aggregation. New `monthly-rollup-engine.ts` pure engine + `MonthlyRollupChart` component (4 view modes, lens overlays, secondary comparison, scenario support). AggregationToggle extended to 3 options. 3 new types, 16 new tests (590 total). 3 new files, 4 modified. Zero API changes. All capacity Tier 3 gaps now complete.
 

@@ -672,3 +672,75 @@ customers.sp_id                  populated from ID field in cust.json during cus
 **Modified files**: 8 total (schema-init, schema, types, allocation-data, allocation-grid, allocation-editor, demand-contracts route, OPEN_ITEMS)
 **Version impact**: MINOR (backwards-compatible schema addition)
 **Links**: OI-065, D-048
+
+---
+
+## D-053 | 2026-02-25 | Mobile Navigation Breakpoint Matrix (Phase 4)
+
+**Decision**: Four-tier responsive navigation model:
+- `< sm (< 640px)`: Fixed bottom tab bar (4 nav icons + labels, `sm:hidden`)
+- `sm–md (640–767px)`: Hamburger → slide-out sheet (existing `MobileNav`, unchanged)
+- `md–lg (768–1023px)`: Collapsible sidebar — `expanded (w-60)` | `icons-only (w-14)` | `collapsed (w-0)`. Toggle button visible only in this range.
+- `≥ lg (≥ 1024px)`: Sidebar always fully expanded (`w-60`), toggle button hidden.
+
+**Rationale**:
+1. **Bottom tab bar on mobile** — idiomatic iOS/Android pattern; avoids consuming precious horizontal space on < 640px screens with an icon rail
+2. **Hamburger sheet kept for sm–md** — MobileNav already implemented and working; 640–768px is a narrow range where a bottom bar might compete with content
+3. **Collapsible on tablet (md–lg)** — tablet users benefit most from reclaiming sidebar width in landscape mode; this is where collapsible has highest value
+4. **Always expanded on desktop** — large screens have the space; no collapse needed; reduces cognitive load
+
+**New files**: `src/lib/hooks/use-sidebar.ts`, `src/components/layout/bottom-tab-bar.tsx`
+**Modified files**: `sidebar.tsx`, `header.tsx`, `layout.tsx`
+**Version impact**: MINOR (backwards-compatible layout enhancement)
+**Links**: OI-075, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md)
+
+---
+
+## D-054 | 2026-02-25 | Flight Board List View — Responsive Design (Phase 4)
+
+**Decision**: Add a list view mode to the flight board toolbar (toggle: Gantt | List). The list view is responsive:
+- `< md (< 768px)`: Card stack — each work package rendered as a tappable card with customer dot, registration, schedule, MH source, status badge
+- `≥ md (≥ 768px)`: TanStack Table — 8 sortable columns, pagination from `tablePageSize` preference, row click opens detail drawer
+
+**Rationale**:
+1. **Cards on mobile** — ECharts canvas Gantt is unusable on 375px screens; cards provide a natural, scrollable touch-first alternative with full WP information
+2. **TanStack Table on tablet+** — already in bundle (capacity-table.tsx), sortable, paginated, consistent with rest of project
+3. **Single localStorage toggle** — persists `"flightBoardViewMode"` device-locally (matches `flightBoardExpanded` pattern); no DB migration needed
+4. **Gantt-specific controls hidden in list mode** — zoom presets, zoom+/-, expand, condensed, center-now, fit-all, hand-tool are Gantt-only; hiding reduces confusion
+
+**New files**: `flight-board-list-cards.tsx`, `flight-board-list-table.tsx`
+**Modified files**: `flight-board/page.tsx` (viewMode state + conditional render)
+**Version impact**: MINOR (backwards-compatible; Gantt unchanged)
+**Links**: OI-077, `src/components/capacity/capacity-table.tsx` (reference impl)
+
+---
+
+## D-055 | 2026-02-25 | PWA Scope — Manifest Only, No Service Worker (Phase 4)
+
+**Decision**: Implement PWA "Add to Home Screen" support via `manifest.json` + apple meta tags only. No service worker.
+
+**Rationale**:
+1. **No service worker** — no offline caching strategy has been defined for this data-intensive app; stale data would be worse than no data for operations staff
+2. **Manifest alone is sufficient** for home screen installation, standalone display mode, and branded icon on iOS/Android
+3. **Low risk** — `manifest.json` is a static file; metadata additions to `generateMetadata()` are non-breaking
+4. **Deferred**: Full service worker + offline strategy is a `v0.5.0`+ concern once data update patterns are understood
+
+**New files**: `public/manifest.json`, `public/icons/icon-192.png`, `public/icons/icon-512.png`, `public/icons/apple-touch-icon.png`
+**Modified files**: `src/app/layout.tsx` (extend `generateMetadata()`)
+**Version impact**: MINOR
+**Links**: OI-053
+
+---
+
+## D-056 | 2026-02-25 | UI State Persistence — localStorage-Backed, Device-Local (Phase 4)
+
+**Decision**: Sidebar collapse mode (`sidebar-mode`) and flight board view mode (`flightBoardViewMode`) are persisted to `localStorage` only — not synced to the user preferences DB table.
+
+**Rationale**:
+1. **Device-specific** — a user may want expanded sidebar on their desk monitor and collapsed on a laptop. Syncing to DB would override the other device's preference.
+2. **No migration** — avoids requiring a schema migration (M020+) and API changes for a cosmetic preference
+3. **Precedent** — `flightBoardExpanded` already uses localStorage in `flight-board/page.tsx`; this decision formalizes the pattern
+4. **Zustand `skipHydration: true`** — SSR always renders the default (expanded) state; client hydrates from localStorage in `useEffect`; prevents hydration mismatch
+
+**Version impact**: PATCH (implementation detail)
+**Links**: D-053, D-054, OI-075, OI-077
