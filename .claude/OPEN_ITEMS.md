@@ -27,6 +27,27 @@ When Power Automate initiates a chunked upload, the server returns a `Location` 
 
 ---
 
+### OI-083 | Flight Board ECharts Chart Does Not Update on Theme Switch
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-26 |
+
+Switching between light and dark mode does not cause the ECharts Gantt chart to re-render or refresh its color palette. The chart retains stale theme colors until the page is manually reloaded. All other Recharts-based charts (Dashboard, Capacity) update correctly because they are React-rendered and respond to CSS variable changes automatically. ECharts uses a canvas renderer that must be explicitly told to re-initialize its theme.
+
+**Root cause**: The `flight-board-chart.tsx` likely does not observe the `next-themes` resolved theme value, so the ECharts instance never receives a `setOption` call or `dispose`+`reinit` cycle when the theme changes.
+
+**Proposed fix**: Consume the `resolvedTheme` value from `useTheme()` (next-themes) in `flight-board-chart.tsx` and add it as a dependency to the ECharts initialization `useEffect`. When theme changes, dispose and reinitialize the chart instance with updated colors.
+
+**Files**: `src/components/flight-board/flight-board-chart.tsx`
+**Links**: [REQ_Themes.md](SPECS/REQ_Themes.md), OI-047
+
+---
+
 ### OI-047 | Flight Board Chart Color Reset on Rapid Clicks
 
 | Field | Value |
@@ -475,12 +496,14 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 | Priority | Open | Partial | In Progress | Acknowledged | Resolved |
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
-| P1 | 4 | 2 | 0 | 0 | 19 |
-| P2 | 11 | 2 | 0 | 0 | 18 |
+| P1 | 4 | 2 | 0 | 0 | 20 |
+| P2 | 12 | 2 | 0 | 0 | 18 |
 | P3 | 7 | 0 | 1 | 2 | 2 |
-| **Total** | **22** | **4** | **1** | **2** | **55** |
+| **Total** | **23** | **4** | **1** | **2** | **56** |
 
-**Latest update (2026-02-26)**: File restructured — open items at top, resolved items archived. OI-041, OI-052, OI-054 archived (superseded by Phase 4). OI-079–081 opened (staffing overflow, shift end date, duplicate grace period).
+**Latest update (2026-02-26)**: OI-083 opened — flight board ECharts chart does not update on theme switch (light/dark).
+
+**Previous update (2026-02-26)**: OI-082 resolved — staffing-derived shift routing replaces `operatingDays` (M021). 632 tests passing.
 
 ---
 
@@ -556,5 +579,6 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 | OI-071 | G-07: Cross-Lens Comparison | `CompareSelector` + secondary overlays + KPI delta card + CSV column | 2026-02-25 |
 | OI-072 | G-09: Monthly Roll-Up Aggregation | `monthly-rollup-engine.ts`, `MonthlyRollupChart` (4 view modes), 16 tests | 2026-02-25 |
 | OI-073 | G-10: Per-Customer Event Attribution | `event-attribution-engine.ts`, top-3 customer KPI strip, 17 tests | 2026-02-24 |
+| OI-082 | Staffing-Derived Shift Routing | Replaced static `operatingDays` with `deriveNonOperatingFromStaffing()` — staffing map drives shift existence. M021 drops column. 17 new tests. | 2026-02-26 |
 
 *\* Superseded — planned work reorganized into Phase 4 items.*
