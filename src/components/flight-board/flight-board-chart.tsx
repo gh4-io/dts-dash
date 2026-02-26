@@ -895,7 +895,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                 y: centerY,
                 fill: "#fff",
                 fontSize: fLg,
-                fontWeight: "bold",
                 align: "center",
                 verticalAlign: "middle",
               },
@@ -924,7 +923,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                 y: centerY,
                 fill: "#fff",
                 fontSize: fLg,
-                fontWeight: "bold",
                 align: "center",
                 verticalAlign: "middle",
               },
@@ -952,7 +950,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               y: centerY,
               fill: "#fff",
               fontSize: fLg,
-              fontWeight: "bold",
               align: "center",
               verticalAlign: "middle",
             },
@@ -1197,7 +1194,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           axisLabel: {
             color: cc.fg,
             fontSize: condensed ? 10 : 11,
-            fontWeight: "bold" as const,
+            fontWeight: 500,
             formatter: (value: string) => {
               if (value.startsWith(BREAK_PREFIX)) return "";
               if (value.startsWith(EMPTY_ROW_PREFIX)) return "";
