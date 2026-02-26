@@ -208,39 +208,51 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const { getColor } = useCustomers();
     const { timeFormat } = usePreferences();
     const { resolvedTheme } = useTheme();
-    const echartsTheme = resolvedTheme === "dark" ? "dark" : undefined;
+    // Do NOT pass the ECharts built-in "dark" theme — all colors are explicitly set
+    // via CSS variable resolution (cc). Passing a theme prop causes echarts-for-react
+    // to dispose+reinit the instance on theme switch, which is heavier than needed
+    // and races with the async CSS variable resolution. By keeping theme={undefined},
+    // theme switches are handled purely through option updates via setOption/notMerge.
 
     // Resolve CSS variables to concrete colors for ECharts canvas (canvas can't parse var())
-    const cc = useMemo(() => {
-      if (typeof document === "undefined") {
-        // SSR fallback — dark defaults
-        return {
-          fg: "#e5e5e5",
-          mutedFg: "#a1a1aa",
-          border: "#27272a",
-          popover: "#18181b",
-          popoverFg: "#fafafa",
-          primary15: "rgba(59,130,246,0.15)",
-          rowHover: "rgba(255,255,255,0.1)",
+    // Uses useEffect (not useMemo) so getComputedStyle reads values AFTER the browser has
+    // flushed style recalculation from the next-themes class change on <html>.
+    const ssrFallback = useMemo(
+      () => ({
+        fg: "#e5e5e5",
+        mutedFg: "#a1a1aa",
+        border: "#27272a",
+        popover: "#18181b",
+        popoverFg: "#fafafa",
+        primary15: "rgba(59,130,246,0.15)",
+        rowHover: "rgba(255,255,255,0.1)",
+      }),
+      [],
+    );
+    const [cc, setCc] = useState(ssrFallback);
+
+    useEffect(() => {
+      // Read CSS variables after paint so the browser has applied the new theme class
+      const raf = requestAnimationFrame(() => {
+        const s = getComputedStyle(document.documentElement);
+        const v = (name: string) => {
+          const raw = s.getPropertyValue(name).trim();
+          return raw ? `hsl(${raw})` : "#888";
         };
-      }
-      const s = getComputedStyle(document.documentElement);
-      const v = (name: string) => {
-        const raw = s.getPropertyValue(name).trim();
-        return raw ? `hsl(${raw})` : "#888";
-      };
-      return {
-        fg: v("--foreground"),
-        mutedFg: v("--muted-foreground"),
-        border: v("--border"),
-        popover: v("--popover"),
-        popoverFg: v("--popover-foreground"),
-        primary15: (() => {
-          const raw = s.getPropertyValue("--primary").trim();
-          return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
-        })(),
-        rowHover: resolvedTheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-      };
+        setCc({
+          fg: v("--foreground"),
+          mutedFg: v("--muted-foreground"),
+          border: v("--border"),
+          popover: v("--popover"),
+          popoverFg: v("--popover-foreground"),
+          primary15: (() => {
+            const raw = s.getPropertyValue("--primary").trim();
+            return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
+          })(),
+          rowHover: resolvedTheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+        });
+      });
+      return () => cancelAnimationFrame(raf);
     }, [resolvedTheme]);
 
     // Expose zoom read/write for parent toolbar handlers
@@ -1658,7 +1670,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         // Suppress setOption errors during chart transitions
         console.warn("[FlightBoardChart] setOption error (likely chart transition):", err);
       }
-    }, [nowTimestamp, timeGrid, midnightTimestamps, timezone, workPackages.length]);
+    }, [nowTimestamp, timeGrid, midnightTimestamps, timezone, workPackages.length, cc]);
 
     // ─── Empty state ───
     if (workPackages.length === 0) {
@@ -1682,7 +1694,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             echarts={echarts}
             option={headerOption}
             style={{ height: 95, width: "100%" }}
-            theme={echartsTheme}
             notMerge
             onEvents={{ datazoom: handleHeaderDataZoom }}
           />
@@ -1698,7 +1709,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             echarts={echarts}
             option={bodyOption}
             style={{ height: bodyHeight, width: "100%" }}
-            theme={echartsTheme}
             notMerge
             onEvents={{ click: handleClick, datazoom: handleBodyDataZoom }}
           />

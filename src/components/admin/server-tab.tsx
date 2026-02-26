@@ -88,8 +88,6 @@ export function ServerTab() {
 
   // Per-action states
   const [actions, setActions] = useState<Record<string, ActionState>>({});
-  const [graceHours, setGraceHours] = useState(DEFAULT_CLEANUP_GRACE_HOURS);
-
   // Flight display settings (system-wide)
   const [flightSettings, setFlightSettings] = useState<{
     hideCanceled: boolean;
@@ -147,13 +145,6 @@ export function ServerTab() {
   useEffect(() => {
     fetchFlightSettings();
   }, [fetchFlightSettings]);
-
-  // Sync manual cleanup grace period input with system setting
-  useEffect(() => {
-    if (flightSettings) {
-      setGraceHours(flightSettings.cleanupGraceHours);
-    }
-  }, [flightSettings]);
 
   // Save flight settings
   const saveFlightSettings = async () => {
@@ -451,28 +442,19 @@ export function ServerTab() {
             <h3 className="font-semibold">Cleanup Canceled WPs</h3>
           </div>
           <p className="mb-3 text-sm text-muted-foreground">
-            Permanently delete canceled work packages older than the grace period.
+            Permanently delete canceled work packages older than the grace period (
+            {flightSettings?.cleanupGraceHours ?? DEFAULT_CLEANUP_GRACE_HOURS}h, configured above in
+            Flight Display).
           </p>
-          <div className="mb-3 flex items-center gap-2">
-            <label htmlFor="grace-hours" className="text-sm text-muted-foreground">
-              Grace period (hours):
-            </label>
-            <input
-              id="grace-hours"
-              type="number"
-              min={0}
-              value={graceHours}
-              onChange={(e) => setGraceHours(Math.max(0, Number(e.target.value)))}
-              className="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm"
-            />
-          </div>
           <Button
             size="sm"
             variant="outline"
             disabled={getAction("cleanup").loading}
             onClick={() =>
               performAction("cleanup", "/api/admin/server/cleanup", {
-                body: { graceHours },
+                body: {
+                  graceHours: flightSettings?.cleanupGraceHours ?? DEFAULT_CLEANUP_GRACE_HOURS,
+                },
               })
             }
           >

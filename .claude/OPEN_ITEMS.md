@@ -27,21 +27,20 @@ When Power Automate initiates a chunked upload, the server returns a `Location` 
 
 ---
 
-### OI-083 | Flight Board ECharts Chart Does Not Update on Theme Switch
+### OI-083 | Flight Board ECharts Chart Does Not Update on Theme Switch — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | -- |
 | **Created** | 2026-02-26 |
+| **Resolved** | 2026-02-26 |
 
-Switching between light and dark mode does not cause the ECharts Gantt chart to re-render or refresh its color palette. The chart retains stale theme colors until the page is manually reloaded. All other Recharts-based charts (Dashboard, Capacity) update correctly because they are React-rendered and respond to CSS variable changes automatically. ECharts uses a canvas renderer that must be explicitly told to re-initialize its theme.
+**Root cause**: Two issues combined: (1) CSS variable resolution via `getComputedStyle` ran synchronously in `useMemo` during render, racing with the browser's style recalculation after `next-themes` changed the `class` attribute on `<html>`. (2) Passing the ECharts built-in `"dark"` theme caused `echarts-for-react` to `dispose()`+`reinit()` the canvas instance on theme switch, which raced with the async CSS variable update and discarded post-init effects (NOW line, midnight markers).
 
-**Root cause**: The `flight-board-chart.tsx` likely does not observe the `next-themes` resolved theme value, so the ECharts instance never receives a `setOption` call or `dispose`+`reinit` cycle when the theme changes.
-
-**Proposed fix**: Consume the `resolvedTheme` value from `useTheme()` (next-themes) in `flight-board-chart.tsx` and add it as a dependency to the ECharts initialization `useEffect`. When theme changes, dispose and reinitialize the chart instance with updated colors.
+**Fix**: (1) Moved CSS variable resolution from `useMemo` to `useEffect` + `requestAnimationFrame`, guaranteeing `getComputedStyle` reads values after browser paint. (2) Removed the ECharts built-in theme prop entirely -- all chart colors are explicitly set via resolved CSS variables (`cc`), so the heavy dispose+reinit cycle is unnecessary. Theme switches now flow through `setOption`/`notMerge` option updates. (3) Added `cc` to the NOW line + midnight markers effect dependency array so those overlays are re-applied after theme-triggered option changes.
 
 **Files**: `src/components/flight-board/flight-board-chart.tsx`
 **Links**: [REQ_Themes.md](SPECS/REQ_Themes.md), OI-047
@@ -71,12 +70,13 @@ Customer colors on the flight board Gantt occasionally revert to defaults after 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
 | **Owner** | Unassigned |
 | **Created** | 2026-02-25 |
+| **Resolved** | 2026-02-26 |
 
-Aircraft & Turns section on `/dashboard` does not reflect date selection from the global FilterBar. Investigate filter state propagation to dashboard data fetching.
+Aircraft & Turns section on `/dashboard` does not reflect date selection from the global FilterBar. The card was computing its displayed date range from the min/max of WP arrival/departure times, which could extend beyond the filter window due to the overlap query. Fixed by passing the FilterBar's `start`, `end`, and `timezone` to the card so the subtitle always reflects the user's selected date range.
 
 **Files**: `src/app/(authenticated)/dashboard/page.tsx`, `src/components/dashboard/total-aircraft-card.tsx`
 **Links**: [REQ_Dashboard_UI.md](SPECS/REQ_Dashboard_UI.md)
@@ -88,14 +88,17 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-26 |
+| **Resolved** | 2026-02-26 |
 
 "Peak Day" values on `/admin/capacity/staffing` display unrounded decimals that overflow cells. Round to 2 decimal places.
 
-**Files**: `src/components/admin/capacity/staffing-grid.tsx` (or relevant staffing display component)
+**Fix**: Applied `fmtNum(value, 2)` to both Peak Day and Min Day headcount displays in `weekly-matrix-panel.tsx`.
+
+**Files**: `src/components/admin/capacity/weekly-matrix-panel.tsx`
 
 ---
 
@@ -104,14 +107,15 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P3 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-26 |
+| **Resolved** | 2026-02-26 |
 
-"Cleanup Grace Period" setting appears twice on the Admin Settings page. Remove the duplicate entry.
+"Cleanup Grace Period" setting appeared twice on the Admin Settings page — once in the "Flight Display" section (system setting) and once as a standalone input in the "Cleanup Canceled WPs" action card. Removed the duplicate input from the cleanup card. The cleanup action now reads the grace period from the Flight Display system setting (`flightSettings.cleanupGraceHours`), with a fallback to `DEFAULT_CLEANUP_GRACE_HOURS`. The cleanup card description now shows the current grace period value for context.
 
-**Files**: `src/app/(authenticated)/admin/settings/page.tsx` or `src/components/admin/server-tab.tsx`
+**Files**: `src/components/admin/server-tab.tsx`
 
 ---
 
@@ -306,6 +310,31 @@ Shift definitions have no end date — impossible to sunset or replace over time
 
 ---
 
+### OI-084 | iPad Sidebar Collapse — No Way to Expand
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-02-26 |
+
+When sidebar is fully collapsed on iPad (lg breakpoint), the toggle button is hidden because it's inside the sidebar itself (`width: 0`). User has no way to expand it back without refreshing the page. The hamburger button in the header handles tablet (md-lg), but iPad specifically needs a sidebar toggle button that's always visible.
+
+**Solution**: Add a sidebar toggle button in the header that's visible only on lg (iPad) and hidden on xl (desktop where sidebar is always expanded). Button should:
+- Be visible with `hidden lg:block xl:hidden`
+- Call `cycleMode()` from `useSidebar()` hook
+- Show chevron icon (left when expanded/icons, right when collapsed)
+- Have tooltip explaining current action
+
+This matches the existing sidebar collapse pattern and gives iPad users a persistent control outside the sidebar.
+
+**Files**: `src/components/layout/header.tsx`, `src/lib/hooks/use-sidebar.ts`
+**Links**: OI-075 (Phase 4 P4-1), [REQ_UI_Interactions.md](SPECS/REQ_UI_Interactions.md)
+
+---
+
 ## Backlog
 
 ### OI-046 | Customer SP ID in Work Packages
@@ -400,9 +429,9 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 2 | 0 | 0 | 20 |
-| P2 | 10 | 2 | 0 | 0 | 20 |
+| P2 | 10 | 2 | 0 | 0 | 21 |
 | P3 | 4 | 0 | 0 | 2 | 5 |
-| **Total** | **18** | **4** | **0** | **2** | **61** |
+| **Total** | **18** | **4** | **0** | **2** | **62** |
 
 **Latest update (2026-02-26)**: Phase 4 Mobile-First UX complete — 5 workstreams (P4-1 through P4-5). PWA manifest, collapsible sidebar, bottom tab bar, flight board list view, mobile polish pass. 646 tests passing.
 

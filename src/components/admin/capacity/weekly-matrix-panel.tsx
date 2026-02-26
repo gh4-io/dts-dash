@@ -335,14 +335,14 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
                 <div className="rounded border border-border bg-card p-2">
                   <div className="text-[10px] text-muted-foreground">Peak Day</div>
                   <div className="text-sm font-bold tabular-nums">
-                    {peakDay ? `${DAY_NAMES[peakDay.day]} (${peakDay.headcount})` : "—"}
+                    {peakDay ? `${DAY_NAMES[peakDay.day]} (${fmtNum(peakDay.headcount, 2)})` : "—"}
                   </div>
                 </div>
                 <div className="rounded border border-border bg-card p-2">
                   <div className="text-[10px] text-muted-foreground">Min Day</div>
                   <div className="text-sm font-bold tabular-nums">
                     {minDay && minDay.headcount < Infinity
-                      ? `${DAY_NAMES[minDay.day]} (${minDay.headcount})`
+                      ? `${DAY_NAMES[minDay.day]} (${fmtNum(minDay.headcount, 2)})`
                       : "—"}
                   </div>
                 </div>

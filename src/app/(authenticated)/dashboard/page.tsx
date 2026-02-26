@@ -22,7 +22,7 @@ function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
   const { snapshots, isLoading: snapshotsLoading } = useHourlySnapshots();
   const { fetch: fetchCustomers } = useCustomers();
-  const { timezone } = useFilters();
+  const { start, end, timezone } = useFilters();
   const { timeFormat } = usePreferences();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<ChartTimeRange | null>(null);
@@ -124,7 +124,12 @@ function DashboardPageInner() {
               className="flex-[2]"
             />
             <div className="shrink-0">
-              <TotalAircraftCard workPackages={displayWps} />
+              <TotalAircraftCard
+                workPackages={displayWps}
+                filterStart={start}
+                filterEnd={end}
+                timezone={timezone}
+              />
             </div>
             <AircraftByTypeCard workPackages={displayWps} className="flex-[3]" />
           </div>

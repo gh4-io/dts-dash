@@ -6,27 +6,45 @@ import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 
 interface TotalAircraftCardProps {
   workPackages: SerializedWorkPackage[];
+  filterStart?: string;
+  filterEnd?: string;
+  timezone?: string;
   className?: string;
 }
 
-export function TotalAircraftCard({ workPackages, className }: TotalAircraftCardProps) {
+export function TotalAircraftCard({
+  workPackages,
+  filterStart,
+  filterEnd,
+  timezone = "UTC",
+  className,
+}: TotalAircraftCardProps) {
   const { totalAircraft, totalVisits, dateRange } = useMemo(() => {
     const uniqueRegs = new Set(workPackages.map((wp) => wp.aircraftReg));
     const totalVisits = workPackages.length;
 
+    // Use the filter date range (from the FilterBar) so the subtitle
+    // always reflects the user's selected window, not the min/max of
+    // WP arrival/departure which can extend beyond the filter range
+    // due to the overlap query.
     let range = "";
-    if (workPackages.length > 0) {
+    if (filterStart && filterEnd) {
+      const fmt = (d: Date) =>
+        d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: timezone });
+      range = `${fmt(new Date(filterStart))} – ${fmt(new Date(filterEnd))}`;
+    } else if (workPackages.length > 0) {
+      // Fallback: derive from WP data when filter dates are not provided
       const arrivals = workPackages.map((wp) => new Date(wp.arrival).getTime());
       const departures = workPackages.map((wp) => new Date(wp.departure).getTime());
       const minDate = new Date(Math.min(...arrivals));
       const maxDate = new Date(Math.max(...departures));
       const fmt = (d: Date) =>
-        d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+        d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: timezone });
       range = `${fmt(minDate)} – ${fmt(maxDate)}`;
     }
 
     return { totalAircraft: uniqueRegs.size, totalVisits, dateRange: range };
-  }, [workPackages]);
+  }, [workPackages, filterStart, filterEnd, timezone]);
 
   return (
     <KpiCard title="Aircraft & Turns" icon="fa-solid fa-plane" className={className}>
