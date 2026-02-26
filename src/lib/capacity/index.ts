@@ -8,6 +8,7 @@
 export {
   resolveHeadcount,
   computeProductiveHoursPerPerson,
+  isShiftNonOperatingOnDate,
   computeDailyCapacityV2,
   computeDailyCapacityFromStaffing,
   computeUtilizationV2,

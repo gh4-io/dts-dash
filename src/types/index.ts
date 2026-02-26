@@ -444,6 +444,7 @@ export interface ShiftCapacityV2 {
   productiveMH: number;
   hasExceptions: boolean;
   belowMinHeadcount: boolean;
+  isNonOperating?: boolean;
 }
 
 export type CapacityComputeMode = "headcount" | "staffing";

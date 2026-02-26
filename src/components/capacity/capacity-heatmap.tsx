@@ -522,7 +522,8 @@ export function CapacityHeatmap({
 
                       const utilPct = shiftUtil?.utilization ?? null;
                       const noCoverage = shiftUtil?.noCoverage ?? false;
-                      const belowMin = shiftCap?.belowMinHeadcount ?? false;
+                      const belowMin =
+                        (shiftCap?.belowMinHeadcount ?? false) && !shiftCap?.isNonOperating;
                       const cellKey = `${date}:${shift.code}`;
                       const isHovered = hoveredCell === cellKey;
 

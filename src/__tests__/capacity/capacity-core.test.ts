@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   resolveHeadcount,
   computeProductiveHoursPerPerson,
+  isShiftNonOperatingOnDate,
   computeDailyCapacityV2,
+  computeDailyCapacityFromStaffing,
   computeUtilizationV2,
   validateHeadcountCoverage,
   computeCapacitySummary,
@@ -595,5 +597,216 @@ describe("computeCapacitySummary", () => {
     expect(summary.avgUtilization).toBeNull();
     expect(summary.totalDemandMH).toBe(0);
     expect(summary.worstDeficit).toBeNull();
+  });
+});
+
+// ─── isShiftNonOperatingOnDate ──────────────────────────────────────────────
+
+describe("isShiftNonOperatingOnDate", () => {
+  it("returns true when shift is in nonOperatingShifts map", () => {
+    const nonOp = new Map([["2025-03-10", new Set(["SWING"])]]);
+    expect(isShiftNonOperatingOnDate("2025-03-10", "SWING", 0, nonOp)).toBe(true);
+  });
+
+  it("returns false when shift is NOT in the map for that date", () => {
+    const nonOp = new Map([["2025-03-10", new Set(["SWING"])]]);
+    expect(isShiftNonOperatingOnDate("2025-03-10", "DAY", 5, nonOp)).toBe(false);
+  });
+
+  it("returns false when date not in map at all", () => {
+    const nonOp = new Map([["2025-03-10", new Set(["SWING"])]]);
+    expect(isShiftNonOperatingOnDate("2025-03-11", "SWING", 0, nonOp)).toBe(false);
+  });
+
+  it("falls back to headcount === 0 when map undefined", () => {
+    expect(isShiftNonOperatingOnDate("2025-03-10", "SWING", 0, undefined)).toBe(true);
+  });
+
+  it("returns false when headcount > 0 and map undefined", () => {
+    expect(isShiftNonOperatingOnDate("2025-03-10", "DAY", 5, undefined)).toBe(false);
+  });
+
+  it("returns false when map is empty (size 0) and headcount > 0", () => {
+    const emptyMap = new Map<string, Set<string>>();
+    expect(isShiftNonOperatingOnDate("2025-03-10", "DAY", 5, emptyMap)).toBe(false);
+  });
+});
+
+// ─── computeDailyCapacityFromStaffing — non-operating ───────────────────────
+
+describe("computeDailyCapacityFromStaffing — non-operating shifts", () => {
+  it("marks non-operating shift with isNonOperating: true, belowMinHeadcount: false", () => {
+    // Staffing map only has DAY and NIGHT — SWING is non-operating
+    const staffingMap = new Map([
+      [
+        "2025-03-10",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 8.0 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 8.0 }],
+        ]),
+      ],
+    ]);
+    const nonOp = new Map([["2025-03-10", new Set(["SWING"])]]);
+
+    const result = computeDailyCapacityFromStaffing(
+      ["2025-03-10"],
+      shifts,
+      staffingMap,
+      defaultAssumptions,
+      nonOp,
+    );
+
+    const swing = result[0].byShift.find((s) => s.shiftCode === "SWING")!;
+    expect(swing.isNonOperating).toBe(true);
+    expect(swing.belowMinHeadcount).toBe(false);
+    expect(swing.rosterHeadcount).toBe(0);
+  });
+
+  it("marks operating shift below min with belowMinHeadcount: true, isNonOperating: false", () => {
+    // DAY has headcount 1, min is 2 → below minimum but operating
+    const staffingMap = new Map([
+      [
+        "2025-03-10",
+        new Map([
+          ["DAY", { headcount: 1, effectivePaidHours: 8.0 }],
+          ["SWING", { headcount: 6, effectivePaidHours: 8.0 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 8.0 }],
+        ]),
+      ],
+    ]);
+
+    const result = computeDailyCapacityFromStaffing(
+      ["2025-03-10"],
+      shifts,
+      staffingMap,
+      defaultAssumptions,
+    );
+
+    const day = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+    expect(day.isNonOperating).toBe(false);
+    expect(day.belowMinHeadcount).toBe(true);
+    expect(day.rosterHeadcount).toBe(1);
+  });
+
+  it("backwards compat: without 5th param, headcount 0 treated as non-operating", () => {
+    // No staffing for SWING → headcount 0, no nonOperatingShifts map
+    const staffingMap = new Map([
+      [
+        "2025-03-10",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 8.0 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 8.0 }],
+        ]),
+      ],
+    ]);
+
+    const result = computeDailyCapacityFromStaffing(
+      ["2025-03-10"],
+      shifts,
+      staffingMap,
+      defaultAssumptions,
+      // no 5th param
+    );
+
+    const swing = result[0].byShift.find((s) => s.shiftCode === "SWING")!;
+    // Without the map, falls back to headcount === 0 → non-operating
+    expect(swing.isNonOperating).toBe(true);
+    expect(swing.belowMinHeadcount).toBe(false);
+  });
+});
+
+// ─── computeDailyCapacityV2 — non-operating ────────────────────────────────
+
+describe("computeDailyCapacityV2 — non-operating shifts", () => {
+  it("marks zero headcount (no plans) as isNonOperating: true, belowMinHeadcount: false", () => {
+    // No plans for any shift → all headcount = 0
+    const result = computeDailyCapacityV2(["2025-03-10"], shifts, [], [], defaultAssumptions);
+
+    for (const shiftCap of result[0].byShift) {
+      expect(shiftCap.isNonOperating).toBe(true);
+      expect(shiftCap.belowMinHeadcount).toBe(false);
+      expect(shiftCap.rosterHeadcount).toBe(0);
+    }
+  });
+
+  it("does not mark shifts with headcount > 0 as non-operating", () => {
+    const result = computeDailyCapacityV2(
+      ["2025-03-10"],
+      shifts,
+      basePlans,
+      [],
+      defaultAssumptions,
+    );
+
+    for (const shiftCap of result[0].byShift) {
+      expect(shiftCap.isNonOperating).toBe(false);
+    }
+  });
+
+  it("still flags belowMinHeadcount when headcount > 0 but < min", () => {
+    const exceptions: HeadcountException[] = [
+      {
+        id: 1,
+        station: "CVG",
+        shiftId: 1,
+        exceptionDate: "2025-03-10",
+        headcountDelta: -7,
+        reason: "Holiday",
+      },
+    ];
+    const result = computeDailyCapacityV2(
+      ["2025-03-10"],
+      shifts,
+      basePlans,
+      exceptions,
+      defaultAssumptions,
+    );
+
+    const day = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+    expect(day.rosterHeadcount).toBe(1);
+    expect(day.belowMinHeadcount).toBe(true);
+    expect(day.isNonOperating).toBe(false);
+  });
+});
+
+// ─── validateHeadcountCoverage — non-operating ─────────────────────────────
+
+describe("validateHeadcountCoverage — non-operating shifts", () => {
+  it("does not warn for non-operating shifts", () => {
+    // All shifts non-operating (headcount 0, no plans)
+    const capacity = computeDailyCapacityV2(["2025-03-10"], shifts, [], [], defaultAssumptions);
+
+    // Verify they are actually marked non-operating
+    for (const s of capacity[0].byShift) {
+      expect(s.isNonOperating).toBe(true);
+    }
+
+    const warnings = validateHeadcountCoverage(capacity, shifts);
+    expect(warnings).toHaveLength(0);
+  });
+
+  it("still warns for operating shifts under minimum", () => {
+    const exceptions: HeadcountException[] = [
+      {
+        id: 1,
+        station: "CVG",
+        shiftId: 1,
+        exceptionDate: "2025-03-10",
+        headcountDelta: -7,
+        reason: null,
+      },
+    ];
+    const capacity = computeDailyCapacityV2(
+      ["2025-03-10"],
+      shifts,
+      basePlans,
+      exceptions,
+      defaultAssumptions,
+    );
+
+    const warnings = validateHeadcountCoverage(capacity, shifts);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Day");
+    expect(warnings[0]).toContain("below minimum");
   });
 });

@@ -99,6 +99,26 @@ export function computeProductiveHoursPerPerson(
  * Compute capacity for a range of dates with per-shift breakdown.
  * Returns DailyCapacityV2[] — one entry per date.
  */
+/**
+ * Determine if a shift is non-operating on a given date.
+ * Used for schedule-aware validation — non-operating shifts should not
+ * generate "below minimum" warnings.
+ *
+ * - Staffing mode: checks nonOperatingShifts map (rotation-derived)
+ * - Headcount/none mode: headcount === 0 → effectively non-operating
+ */
+export function isShiftNonOperatingOnDate(
+  date: string,
+  shiftCode: string,
+  resolvedHeadcount: number,
+  nonOperatingShifts?: Map<string, Set<string>>,
+): boolean {
+  if (nonOperatingShifts && nonOperatingShifts.size > 0) {
+    return nonOperatingShifts.get(date)?.has(shiftCode) ?? false;
+  }
+  return resolvedHeadcount === 0;
+}
+
 export function computeDailyCapacityV2(
   dates: string[],
   shifts: CapacityShift[],
@@ -118,6 +138,8 @@ export function computeDailyCapacityV2(
       const availableMH = paidMH;
       const productiveMH = effectiveHeadcount * productiveMHPerPerson;
 
+      const isNonOp = headcount === 0;
+
       return {
         shiftCode: shift.code,
         shiftName: shift.name,
@@ -128,7 +150,8 @@ export function computeDailyCapacityV2(
         availableMH,
         productiveMH,
         hasExceptions,
-        belowMinHeadcount: headcount < shift.minHeadcount,
+        belowMinHeadcount: !isNonOp && headcount < shift.minHeadcount,
+        isNonOperating: isNonOp,
       };
     });
 
@@ -156,6 +179,7 @@ export function computeDailyCapacityFromStaffing(
   shifts: CapacityShift[],
   staffingMap: Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>,
   assumptions: CapacityAssumptions,
+  nonOperatingShifts?: Map<string, Set<string>>,
 ): DailyCapacityV2[] {
   const activeShifts = shifts.filter((s) => s.isActive);
 
@@ -177,6 +201,8 @@ export function computeDailyCapacityFromStaffing(
       const availableMH = paidMH;
       const productiveMH = effectiveHeadcount * productiveMHPerPerson;
 
+      const isNonOp = isShiftNonOperatingOnDate(date, shift.code, headcount, nonOperatingShifts);
+
       return {
         shiftCode: shift.code,
         shiftName: shift.name,
@@ -187,7 +213,8 @@ export function computeDailyCapacityFromStaffing(
         availableMH,
         productiveMH,
         hasExceptions: false,
-        belowMinHeadcount: headcount < shift.minHeadcount,
+        belowMinHeadcount: !isNonOp && headcount < shift.minHeadcount,
+        isNonOperating: isNonOp,
       };
     });
 
@@ -299,7 +326,7 @@ export function validateHeadcountCoverage(
   for (const day of capacity) {
     for (const shiftCap of day.byShift) {
       const shift = shiftMap.get(shiftCap.shiftCode);
-      if (shift && shiftCap.belowMinHeadcount) {
+      if (shift && shiftCap.belowMinHeadcount && !shiftCap.isNonOperating) {
         warnings.push(
           `${day.date} ${shiftCap.shiftName}: roster headcount ${shiftCap.rosterHeadcount} below minimum ${shift.minHeadcount}`,
         );

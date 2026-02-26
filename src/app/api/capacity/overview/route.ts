@@ -94,6 +94,8 @@ export async function GET(request: NextRequest) {
     let staffingMap:
       | Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>
       | undefined;
+    let nonOperatingShifts = new Map<string, Set<string>>();
+    let scheduleSource: "staffing" | "headcount" | "none" = "none";
 
     if (computeMode === "staffing") {
       if (activeConfig) {
@@ -101,7 +103,21 @@ export async function GET(request: NextRequest) {
         const patterns = loadRotationPatterns(true);
         const patternMap = buildPatternMap(patterns);
         staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
-        capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
+
+        // Derive non-operating shifts BEFORE capacity computation
+        nonOperatingShifts = deriveNonOperatingFromStaffing(
+          staffingMap,
+          shifts.filter((s) => s.isActive).map((s) => s.code),
+        );
+        scheduleSource = "staffing";
+
+        capacity = computeDailyCapacityFromStaffing(
+          dates,
+          shifts,
+          staffingMap,
+          assumptions,
+          nonOperatingShifts,
+        );
         resolvedShifts = staffingShifts
           .filter((ss) => ss.isActive)
           .map((ss) => ({
@@ -139,6 +155,7 @@ export async function GET(request: NextRequest) {
               productiveMH: 0,
               hasExceptions: false,
               belowMinHeadcount: false,
+              isNonOperating: false,
             })),
           hasExceptions: false,
         }));
@@ -174,17 +191,8 @@ export async function GET(request: NextRequest) {
         }));
     }
 
-    // Derive non-operating shifts (staffing mode only — rotation provides schedule truth)
-    let nonOperatingShifts = new Map<string, Set<string>>();
-    let scheduleSource: "staffing" | "headcount" | "none" = "none";
-
-    if (computeMode === "staffing" && staffingMap) {
-      nonOperatingShifts = deriveNonOperatingFromStaffing(
-        staffingMap,
-        shifts.filter((s) => s.isActive).map((s) => s.code),
-      );
-      scheduleSource = "staffing";
-    } else if (computeMode === "headcount") {
+    // Set schedule source for headcount mode (staffing mode already set above)
+    if (computeMode === "headcount") {
       scheduleSource = "headcount";
     }
 

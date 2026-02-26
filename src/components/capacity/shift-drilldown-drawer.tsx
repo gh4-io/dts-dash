@@ -120,12 +120,17 @@ function CapacityChain({
         </span>
         <span className="font-medium tabular-nums">
           {shiftCap.rosterHeadcount}
-          {shiftCap.belowMinHeadcount && (
+          {shiftCap.isNonOperating ? (
+            <span className="ml-1.5 text-muted-foreground text-xs">
+              <i className="fa-solid fa-calendar-xmark text-[9px] mr-0.5" />
+              not scheduled
+            </span>
+          ) : shiftCap.belowMinHeadcount ? (
             <span className="ml-1.5 text-amber-400 text-xs">
               <i className="fa-solid fa-triangle-exclamation text-[9px] mr-0.5" />
               below min ({shift.minHeadcount})
             </span>
-          )}
+          ) : null}
           {shiftCap.hasExceptions && (
             <span className="ml-1.5 text-xs text-muted-foreground">
               <i className="fa-solid fa-asterisk text-[8px]" /> adj.
@@ -680,7 +685,7 @@ export function ShiftDrilldownDrawer({
                             title={`Roster: ${s.rosterHeadcount}`}
                           >
                             {s.effectiveHeadcount.toFixed(1)}
-                            {s.belowMinHeadcount && (
+                            {!s.isNonOperating && s.belowMinHeadcount && (
                               <i className="fa-solid fa-triangle-exclamation text-amber-400 text-[8px] ml-1" />
                             )}
                           </span>
@@ -698,12 +703,17 @@ export function ShiftDrilldownDrawer({
                           </span>
                         </div>
                       </div>
-                      {shiftDef && s.belowMinHeadcount && (
+                      {s.isNonOperating ? (
+                        <div className="text-[10px] text-muted-foreground">
+                          <i className="fa-solid fa-calendar-xmark mr-1" />
+                          Not scheduled
+                        </div>
+                      ) : shiftDef && s.belowMinHeadcount ? (
                         <div className="text-[10px] text-amber-400">
                           <i className="fa-solid fa-triangle-exclamation mr-1" />
                           Below minimum headcount ({shiftDef.minHeadcount})
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   );
                 })}
