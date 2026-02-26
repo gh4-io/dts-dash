@@ -18,6 +18,7 @@ import {
   DataZoomComponent,
   LegendComponent,
   MarkLineComponent,
+  MarkAreaComponent,
   GraphicComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
@@ -43,6 +44,7 @@ echarts.use([
   DataZoomComponent,
   LegendComponent,
   MarkLineComponent,
+  MarkAreaComponent,
   GraphicComponent,
   CanvasRenderer,
 ]);
@@ -128,6 +130,92 @@ function findFilterMidnights(
   }
 
   return { first: firstMidnight, last: lastMidnight, all };
+}
+
+/** Standard shift definitions: Day 07-15, Swing 15-23, Night 23-07 */
+const SHIFT_BOUNDARIES = [
+  { hour: 7, label: "Day" },
+  { hour: 15, label: "Swing" },
+  { hour: 23, label: "Night" },
+] as const;
+
+/** Shift background colors — very subtle tints for light and dark themes */
+const SHIFT_COLORS = {
+  light: {
+    Day: "rgba(255, 200, 50, 0.04)",
+    Swing: "rgba(100, 150, 255, 0.04)",
+    Night: "rgba(100, 100, 150, 0.04)",
+  },
+  dark: {
+    Day: "rgba(255, 200, 50, 0.06)",
+    Swing: "rgba(100, 150, 255, 0.06)",
+    Night: "rgba(100, 100, 150, 0.08)",
+  },
+} as const;
+
+/** Shift boundary line colors — subtle dashed separators */
+const SHIFT_LINE_COLORS = {
+  light: "rgba(120, 120, 140, 0.25)",
+  dark: "rgba(160, 160, 180, 0.2)",
+} as const;
+
+/**
+ * Compute shift boundary timestamps for each day in the filter range.
+ * Returns timestamps for each 07:00, 15:00, 23:00 boundary within [axisMin, axisMax].
+ * Also returns shift area intervals for background shading.
+ */
+function computeShiftBoundaries(
+  midnights: number[],
+  axisMin: number,
+  axisMax: number,
+  tz: string,
+): {
+  lines: { ts: number; label: string }[];
+  areas: [number, number, "Day" | "Swing" | "Night"][];
+} {
+  if (midnights.length === 0) return { lines: [], areas: [] };
+
+  const hourFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    hourCycle: "h23",
+  });
+
+  const lines: { ts: number; label: string }[] = [];
+  const areas: [number, number, "Day" | "Swing" | "Night"][] = [];
+
+  for (const midnight of midnights) {
+    for (const boundary of SHIFT_BOUNDARIES) {
+      const ts = midnight + boundary.hour * 3600000;
+      const actualHour = parseInt(hourFmt.format(new Date(ts)));
+      if (actualHour === boundary.hour && ts >= axisMin && ts <= axisMax) {
+        lines.push({ ts, label: boundary.label });
+      }
+    }
+
+    // Day area: 07:00 → 15:00
+    const dayStart = midnight + 7 * 3600000;
+    const dayEnd = midnight + 15 * 3600000;
+    if (dayEnd > axisMin && dayStart < axisMax) {
+      areas.push([Math.max(dayStart, axisMin), Math.min(dayEnd, axisMax), "Day"]);
+    }
+
+    // Swing area: 15:00 → 23:00
+    const swingStart = midnight + 15 * 3600000;
+    const swingEnd = midnight + 23 * 3600000;
+    if (swingEnd > axisMin && swingStart < axisMax) {
+      areas.push([Math.max(swingStart, axisMin), Math.min(swingEnd, axisMax), "Swing"]);
+    }
+
+    // Night area: 23:00 → next day 07:00
+    const nightStart = midnight + 23 * 3600000;
+    const nightEnd = midnight + 31 * 3600000;
+    if (nightEnd > axisMin && nightStart < axisMax) {
+      areas.push([Math.max(nightStart, axisMin), Math.min(nightEnd, axisMax), "Night"]);
+    }
+  }
+
+  return { lines, areas };
 }
 
 export interface FlightBoardChartHandle {
@@ -451,6 +539,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       };
     }, [workPackages.length, filterStart, filterEnd, timezone, zoomLevel, chartWidth]);
 
+    // ─── Shift boundary data (TZ-aware, recomputed when filter/timezone changes) ───
+    const shiftData = useMemo(() => {
+      if (midnightTimestamps.length === 0 || !timeGrid.axisMin || !timeGrid.axisMax) {
+        return { lines: [], areas: [] };
+      }
+      return computeShiftBoundaries(
+        midnightTimestamps,
+        timeGrid.axisMin,
+        timeGrid.axisMax,
+        timezone,
+      );
+    }, [midnightTimestamps, timeGrid.axisMin, timeGrid.axisMax, timezone]);
+
     // ─── Update NOW timestamp every 60s ───
     useEffect(() => {
       const tid = setTimeout(() => setNowTimestamp(Date.now()), 0);
@@ -514,7 +615,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       // Top axis interval: coarser than time ticks (minimum 3h) for day labels
       const topIntervalMs = Math.max(intervalMs, 3 * 3600000);
 
-      // Update header chart — 2 axes (bottom hidden for sync + top day names)
+      // Update header chart — bottom axis (time labels, sticky) + top axis (day names)
+      const wideView = intervalMs >= 12 * 3600000;
       const headerInstance = headerChartRef.current?.getEchartsInstance();
       if (headerInstance) {
         try {
@@ -522,16 +624,44 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             {
               xAxis: [
                 {
-                  // Bottom axis (hidden, for dataZoom sync) — update interval
+                  // Bottom axis — time labels (sticky: always visible above slider)
                   type: "value",
                   position: "bottom",
                   min: timeGrid.axisMin,
                   max: timeGrid.axisMax,
                   interval: intervalMs,
-                  axisLabel: { show: false },
+                  axisLabel: {
+                    interval: 0,
+                    color: cc.fg,
+                    fontSize: 12,
+                    formatter: (value: number) => {
+                      if (midnightSet.has(value)) {
+                        if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
+                        const dateStr = dateFmt.format(new Date(value));
+                        const timeStr = hourFormatter.format(new Date(value));
+                        return `{date|${dateStr}}\n{time|${timeStr}}`;
+                      }
+                      if (wideView) return "";
+                      return `{time|${hourFormatter.format(new Date(value))}}`;
+                    },
+                    rich: {
+                      date: {
+                        fontWeight: "bold" as const,
+                        fontSize: 12,
+                        lineHeight: 16,
+                        color: cc.fg,
+                      },
+                      time: { fontSize: 12, lineHeight: 16 },
+                    },
+                  },
+                  axisLine: { show: true, lineStyle: { color: cc.border } },
+                  axisTick: {
+                    show: true,
+                    alignWithLabel: true,
+                    length: 6,
+                    lineStyle: { color: cc.mutedFg },
+                  },
                   splitLine: { show: false },
-                  axisLine: { show: false },
-                  axisTick: { show: false },
                 },
                 {
                   // Top axis (day labels) — coarser interval, formatter filters to day boundaries
@@ -571,8 +701,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         }
       }
 
-      // Update body chart — single axis (top, time labels)
-      const wideView = intervalMs >= 12 * 3600000;
+      // Update body chart — single axis (top, no labels — time labels are in sticky header)
       const bodyInstance = bodyChartRef.current?.getEchartsInstance();
       if (bodyInstance) {
         try {
@@ -584,30 +713,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                 min: timeGrid.axisMin,
                 max: timeGrid.axisMax,
                 interval: intervalMs,
-                axisLabel: {
-                  interval: 0,
-                  color: cc.fg,
-                  fontSize: 12,
-                  formatter: (value: number) => {
-                    if (midnightSet.has(value)) {
-                      if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
-                      const dateStr = dateFmt.format(new Date(value));
-                      const timeStr = hourFormatter.format(new Date(value));
-                      return `{date|${dateStr}}\n{time|${timeStr}}`;
-                    }
-                    if (wideView) return "";
-                    return `{time|${hourFormatter.format(new Date(value))}}`;
-                  },
-                  rich: {
-                    date: {
-                      fontWeight: "bold" as const,
-                      fontSize: 12,
-                      lineHeight: 16,
-                      color: cc.fg,
-                    },
-                    time: { fontSize: 12, lineHeight: 16 },
-                  },
-                },
+                axisLabel: { show: false },
                 axisLine: { show: true, lineStyle: { color: cc.border } },
                 axisTick: {
                   show: true,
@@ -728,7 +834,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       if (containerHeight <= 0) return registrations;
 
       const rowH = condensed ? 20 : 36;
-      const gridVerticalPadding = 34 + 2; // grid.top + grid.bottom
+      const gridVerticalPadding = 4 + 2; // grid.top + grid.bottom
       const availableForRows = containerHeight - gridVerticalPadding;
       const totalRowsNeeded = Math.max(registrations.length, Math.floor(availableForRows / rowH));
 
@@ -744,7 +850,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     // ─── Compute body chart height (used by rendering + hover effect) ───
     const computedBodyHeight = useMemo(() => {
       const rowH = condensed ? 20 : 36;
-      const contentMin = registrations.length * rowH + 38;
+      const contentMin = registrations.length * rowH + 8; // grid.top(4) + grid.bottom(2) + slack
       if (isExpanded) return Math.max(300, contentMin);
       if (containerHeight > 0) return Math.max(300, contentMin, containerHeight);
       return Math.max(300, contentMin);
@@ -1031,20 +1137,44 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           left: 100,
           right: 20,
           top: 62,
-          bottom: 8,
+          bottom: 46,
         },
         xAxis: [
-          // Bottom axis — hidden labels, kept for dataZoom sync
+          // Bottom axis — time labels (sticky: always visible above slider)
           {
             type: "value" as const,
             position: "bottom" as const,
             min: timeGrid.axisMin,
             max: timeGrid.axisMax,
             interval: timeGrid.intervalMs,
-            axisLabel: { show: false },
+            axisLabel: {
+              interval: 0,
+              color: cc.fg,
+              fontSize: 12,
+              formatter: (value: number) => {
+                const wideViewInit = timeGrid.intervalMs >= 12 * 3600000;
+                if (midnightSet.has(value)) {
+                  if (wideViewInit) return `{date|${dateFmt.format(new Date(value))}}`;
+                  const dateStr = dateFmt.format(new Date(value));
+                  const timeStr = hourFormatter.format(new Date(value));
+                  return `{date|${dateStr}}\n{time|${timeStr}}`;
+                }
+                if (wideViewInit) return "";
+                return `{time|${hourFormatter.format(new Date(value))}}`;
+              },
+              rich: {
+                date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
+                time: { fontSize: 12, lineHeight: 16 },
+              },
+            },
+            axisLine: { show: true, lineStyle: { color: cc.border } },
+            axisTick: {
+              show: true,
+              alignWithLabel: true,
+              length: 6,
+              lineStyle: { color: cc.mutedFg },
+            },
             splitLine: { show: false },
-            axisLine: { show: false },
-            axisTick: { show: false },
           },
           // Top axis — day name labels (shown at first tick of each day in viewport)
           {
@@ -1111,9 +1241,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       filterStart,
       filterEnd,
       timezone,
+      dateFmt,
+      hourFormatter,
     ]);
 
-    // ─── BODY OPTION (bars + y-axis, time labels at top) ───
+    // ─── BODY OPTION (bars + y-axis, grid lines — time labels live in header) ───
     const bodyOption = useMemo(() => {
       return {
         backgroundColor: "transparent",
@@ -1152,7 +1284,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         grid: {
           left: 100,
           right: 20,
-          top: 34,
+          top: 4,
           bottom: 2,
         },
         xAxis: {
@@ -1161,28 +1293,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
           interval: timeGrid.intervalMs,
-          axisLabel: {
-            interval: 0,
-            color: cc.fg,
-            fontSize: 12,
-            formatter: (value: number) => {
-              const wideView = timeGrid.intervalMs >= 12 * 3600000;
-              if (midnightSet.has(value)) {
-                if (wideView) {
-                  return `{date|${dateFmt.format(new Date(value))}}`;
-                }
-                const dateStr = dateFmt.format(new Date(value));
-                const timeStr = hourFormatter.format(new Date(value));
-                return `{date|${dateStr}}\n{time|${timeStr}}`;
-              }
-              if (wideView) return "";
-              return `{time|${hourFormatter.format(new Date(value))}}`;
-            },
-            rich: {
-              date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
-              time: { fontSize: 12, lineHeight: 16 },
-            },
-          },
+          axisLabel: { show: false },
           axisLine: { show: true, lineStyle: { color: cc.border } },
           axisTick: {
             show: true,
@@ -1253,6 +1364,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               z: 0,
               data: [],
             },
+            markArea: {
+              silent: true,
+              animation: false,
+              z: -1,
+              data: [],
+            },
           },
           // Bar series — rendered ON TOP (higher z)
           {
@@ -1275,9 +1392,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       timeFormat,
       zoomRange,
       cc,
-      hourFormatter,
-      dateFmt,
-      midnightSet,
       condensed,
     ]);
 
@@ -1597,7 +1711,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       [allWps, onBarClick, panMode],
     );
 
-    // ─── Live NOW line + time grid lines — merge-update on body chart ───
+    // ─── Live NOW line + shift boundaries + time grid lines — merge-update on body chart ───
     useEffect(() => {
       if (nowTimestamp === 0 || workPackages.length === 0) return;
       const instance = bodyChartRef.current?.getEchartsInstance();
@@ -1616,6 +1730,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         return;
       }
 
+      const isDark = resolvedTheme === "dark";
+      const themeKey = isDark ? "dark" : "light";
+
       // Midnight boundary markers — dark gray, visible but not dominant (skip axis edges)
       const midnightLines = midnightTimestamps
         .filter((ts) => ts >= timeGrid.axisMin && ts <= timeGrid.axisMax)
@@ -1626,6 +1743,33 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             label: { show: false },
           };
         });
+
+      // Shift boundary lines at 07:00, 15:00, 23:00 — subtle dashed separators
+      const shiftBoundaryLines = shiftData.lines.map(({ ts, label }) => ({
+        xAxis: ts,
+        lineStyle: {
+          type: "dashed" as const,
+          color: SHIFT_LINE_COLORS[themeKey],
+          width: 1,
+        },
+        label: {
+          show: true,
+          formatter: label,
+          position: "start" as const,
+          color: isDark ? "rgba(180,180,200,0.5)" : "rgba(80,80,100,0.5)",
+          fontSize: 9,
+          fontWeight: "normal" as const,
+        },
+      }));
+
+      // Shift area shading — subtle background tints for Day/Swing/Night
+      const shiftAreas = shiftData.areas.map(([start, end, shiftName]) => [
+        {
+          xAxis: start,
+          itemStyle: { color: SHIFT_COLORS[themeKey][shiftName] },
+        },
+        { xAxis: end },
+      ]);
 
       // NOW line
       const nowInRange = nowTimestamp >= timeGrid.axisMin && nowTimestamp <= timeGrid.axisMax;
@@ -1650,14 +1794,20 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         instance.setOption({
           series: [
             {
-              // Update marker series (index 0) with midnight + now lines
+              // Update marker series (index 0) with midnight + shift + now lines + shift areas
               type: "custom",
               markLine: {
                 silent: true,
                 symbol: ["none", "none"],
                 animation: false,
                 z: 0,
-                data: [...midnightLines, ...nowLine],
+                data: [...midnightLines, ...shiftBoundaryLines, ...nowLine],
+              },
+              markArea: {
+                silent: true,
+                animation: false,
+                z: -1,
+                data: shiftAreas,
               },
             },
             {
@@ -1670,7 +1820,16 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         // Suppress setOption errors during chart transitions
         console.warn("[FlightBoardChart] setOption error (likely chart transition):", err);
       }
-    }, [nowTimestamp, timeGrid, midnightTimestamps, timezone, workPackages.length, cc]);
+    }, [
+      nowTimestamp,
+      timeGrid,
+      midnightTimestamps,
+      timezone,
+      workPackages.length,
+      cc,
+      shiftData,
+      resolvedTheme,
+    ]);
 
     // ─── Empty state ───
     if (workPackages.length === 0) {
@@ -1687,19 +1846,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
     return (
       <div className={cn("flex flex-col", !isExpanded && "h-full min-h-0")}>
-        {/* Time axis header — always visible (yellow zone) */}
+        {/* Sticky header — day labels, time labels, dataZoom slider (always visible) */}
         <div className="flex-shrink-0">
           <ReactEChartsCore
             ref={headerChartRef}
             echarts={echarts}
             option={headerOption}
-            style={{ height: 95, width: "100%" }}
+            style={{ height: 135, width: "100%" }}
             notMerge
             onEvents={{ datazoom: handleHeaderDataZoom }}
           />
         </div>
 
-        {/* Chart body — scrollable in contained mode (purple zone) */}
+        {/* Chart body — scrollable Gantt bars (no time labels — they live in sticky header) */}
         <div
           ref={bodyWrapperRef}
           className={cn("flex-1 min-h-0", !isExpanded && "overflow-y-auto")}

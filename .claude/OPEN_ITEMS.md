@@ -161,12 +161,11 @@ Built-in `cleanup-canceled` cron job with configurable `graceHours` works. **Rem
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P1 |
-| **Owner** | Unassigned |
-| **Created** | 2026-02-18 |
+| **Resolved** | 2026-02-26 |
 
-Time header scrolls out of view during horizontal pan on the Gantt. Keep time axis visible during scroll. **Challenge**: ECharts uses canvas — CSS `position: sticky` won't work. Likely requires custom container wrapper or ECharts gridIndex positioning.
+Moved time labels from body chart xAxis to header chart bottom xAxis. Header already uses `flex-shrink-0` so labels never scroll. Header height 95→135px, grid.bottom 8→46 for label room. Body chart grid.top 34→4 (no labels needed). Adaptive tick effect updated accordingly.
 
 **Files**: `src/components/flight-board/flight-board-chart.tsx`
 
@@ -177,14 +176,13 @@ Time header scrolls out of view during horizontal pan on the Gantt. Keep time ax
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P1 |
-| **Owner** | Unassigned |
-| **Created** | 2026-02-18 |
+| **Resolved** | 2026-02-26 |
 
-Render subtle background sections for Day (07–15) / Swing (15–23) / Night (23–07) shifts on the Gantt. ECharts `markArea` for background fill + `markLine` for boundaries. Optional shift name labels. Shift times from `server.config.yml`.
+Added shift boundary markLines (dashed at 07/15/23, labeled Day/Swing/Night) and markArea background shading (subtle tints per shift). Theme-aware colors, DST-safe computation, multi-day support. `MarkAreaComponent` registered, `computeShiftBoundaries()` pure function, `shiftData` useMemo.
 
-**Files**: `src/components/flight-board/flight-board-chart.tsx`, `src/lib/config/loader.ts`
+**Files**: `src/components/flight-board/flight-board-chart.tsx`
 
 ---
 
@@ -428,10 +426,10 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 | Priority | Open | Partial | In Progress | Acknowledged | Resolved |
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
-| P1 | 4 | 2 | 0 | 0 | 20 |
-| P2 | 10 | 2 | 0 | 0 | 21 |
+| P1 | 2 | 2 | 0 | 0 | 22 |
+| P2 | 9 | 2 | 0 | 0 | 21 |
 | P3 | 4 | 0 | 0 | 2 | 5 |
-| **Total** | **18** | **4** | **0** | **2** | **62** |
+| **Total** | **15** | **4** | **0** | **2** | **64** |
 
 **Latest update (2026-02-26)**: Phase 4 Mobile-First UX complete — 5 workstreams (P4-1 through P4-5). PWA manifest, collapsible sidebar, bottom tab bar, flight board list view, mobile polish pass. 646 tests passing.
 
