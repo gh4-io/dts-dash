@@ -139,20 +139,6 @@ const SHIFT_BOUNDARIES = [
   { hour: 23, label: "Night" },
 ] as const;
 
-/** Shift background colors — very subtle tints for light and dark themes */
-const SHIFT_COLORS = {
-  light: {
-    Day: "rgba(255, 200, 50, 0.04)",
-    Swing: "rgba(100, 150, 255, 0.04)",
-    Night: "rgba(100, 100, 150, 0.04)",
-  },
-  dark: {
-    Day: "rgba(255, 200, 50, 0.06)",
-    Swing: "rgba(100, 150, 255, 0.06)",
-    Night: "rgba(100, 100, 150, 0.08)",
-  },
-} as const;
-
 /** Shift boundary line colors — subtle dashed separators */
 const SHIFT_LINE_COLORS = {
   light: "rgba(120, 120, 140, 0.25)",
@@ -243,6 +229,8 @@ interface FlightBoardChartProps {
   condensed?: boolean;
   /** Called when user drags slider or scrolls to zoom (resets preset selection) */
   onZoomChange?: () => void;
+  /** Active shift highlight rules — controls background shading */
+  shiftHighlights?: { shift: string; color: string }[];
 }
 
 // Data array format: [regIndex, arrivalTs, departureTs, customer, registration, flightId, wpIndex]
@@ -272,6 +260,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       panMode,
       condensed,
       onZoomChange,
+      shiftHighlights,
     },
     ref,
   ) {
@@ -1762,14 +1751,23 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         },
       }));
 
-      // Shift area shading — subtle background tints for Day/Swing/Night
-      const shiftAreas = shiftData.areas.map(([start, end, shiftName]) => [
-        {
-          xAxis: start,
-          itemStyle: { color: SHIFT_COLORS[themeKey][shiftName] },
-        },
-        { xAxis: end },
-      ]);
+      // Shift area shading — only when shift highlight rules are active
+      const shiftColorMap = new Map((shiftHighlights ?? []).map((h) => [h.shift, h.color]));
+      const shiftAreas =
+        shiftColorMap.size > 0
+          ? shiftData.areas
+              .filter(([, , shiftName]) => shiftColorMap.has(shiftName))
+              .map(([start, end, shiftName]) => {
+                const hex = shiftColorMap.get(shiftName)!;
+                const alpha = isDark ? 0.08 : 0.06;
+                const n = parseInt(hex.replace("#", ""), 16);
+                const rgb = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+                return [
+                  { xAxis: start, itemStyle: { color: `rgba(${rgb},${alpha})` } },
+                  { xAxis: end },
+                ];
+              })
+          : [];
 
       // NOW line
       const nowInRange = nowTimestamp >= timeGrid.axisMin && nowTimestamp <= timeGrid.axisMax;
@@ -1828,6 +1826,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       workPackages.length,
       cc,
       shiftData,
+      shiftHighlights,
       resolvedTheme,
     ]);
 

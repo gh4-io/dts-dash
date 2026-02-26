@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useActions } from "./use-actions";
+import { useFilters } from "./use-filters";
 import type { SerializedWorkPackage } from "./use-work-packages";
 import {
   applyColumnFilters,
@@ -26,24 +27,24 @@ export interface TransformedData {
     groupedRegistrations: string[];
     wpToGroupIndex: Map<number, number>;
   } | null;
+  /** Active shift highlight rules for chart background shading */
+  shiftHighlights: { shift: string; color: string }[];
 }
 
 /**
  * Hook that applies all action transforms to incoming work packages.
  * Pipeline: columnFilters → sort → registrations → controlBreaks → groupBy → highlights
  */
-export function useTransformedData(
-  workPackages: SerializedWorkPackage[]
-): TransformedData {
-  const { sorts, controlBreaks, highlights, groupBy, columnFilters } =
-    useActions();
+export function useTransformedData(workPackages: SerializedWorkPackage[]): TransformedData {
+  const { sorts, controlBreaks, highlights, groupBy, columnFilters } = useActions();
+  const { timezone } = useFilters();
 
   return useMemo(() => {
     // 1. Column filters (client-side)
-    const filtered = applyColumnFilters(workPackages, columnFilters);
+    const filtered = applyColumnFilters(workPackages, columnFilters, timezone);
 
     // 2. Sort
-    const sorted = applySorts(filtered, sorts);
+    const sorted = applySorts(filtered, sorts, timezone);
 
     // 3. Build registrations from sorted data
     const regSet = new Set<string>();
@@ -54,15 +55,21 @@ export function useTransformedData(
     const { registrations: breakRegs, breakLabels } = applyControlBreaks(
       regs,
       sorted,
-      controlBreaks
+      controlBreaks,
+      timezone,
     );
     regs = breakRegs;
 
     // 5. Group by
-    const groups = applyGroupBy(regs, sorted, groupBy);
+    const groups = applyGroupBy(regs, sorted, groupBy, timezone);
 
-    // 6. Highlights
-    const highlightMap = applyHighlights(sorted, highlights);
+    // 6. Highlights (shift rules are skipped here — they control chart backgrounds)
+    const highlightMap = applyHighlights(sorted, highlights, timezone);
+
+    // 7. Extract active shift highlight rules for chart background shading
+    const shiftHighlights = highlights
+      .filter((r) => r.enabled && r.column === "shift" && r.operator === "=" && r.value)
+      .map((r) => ({ shift: r.value, color: r.color }));
 
     return {
       data: sorted,
@@ -70,8 +77,9 @@ export function useTransformedData(
       breakLabels,
       highlightMap,
       groups,
+      shiftHighlights,
     };
-  }, [workPackages, sorts, controlBreaks, highlights, groupBy, columnFilters]);
+  }, [workPackages, sorts, controlBreaks, highlights, groupBy, columnFilters, timezone]);
 }
 
 export { BREAK_PREFIX };

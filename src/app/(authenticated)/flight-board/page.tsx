@@ -77,6 +77,7 @@ function FlightBoardPageInner() {
     registrations,
     highlightMap,
     groups,
+    shiftHighlights,
   } = useTransformedData(workPackages);
 
   const handleBarClick = useCallback((wp: SerializedWorkPackage) => {
@@ -391,6 +392,7 @@ function FlightBoardPageInner() {
             transformedRegistrations={registrations}
             highlightMap={highlightMap}
             groups={groups}
+            shiftHighlights={shiftHighlights}
             panMode={panMode}
           />
         </div>

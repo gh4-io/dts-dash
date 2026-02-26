@@ -21,6 +21,7 @@ import { useActions, ACTION_COLUMNS } from "@/lib/hooks/use-actions";
 import { useWorkPackagesStore } from "@/lib/hooks/use-work-packages";
 import type { HighlightRule } from "@/lib/hooks/use-actions";
 import type { Facets } from "@/lib/utils/filter-helpers";
+import { SHIFT_NAMES } from "@/lib/utils/shift-helpers";
 
 const OPERATORS = ["=", "!=", ">", "<", ">=", "<="] as const;
 
@@ -112,7 +113,9 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
             const colType = colDef?.type ?? "string";
             const isString = colType === "string";
             const uniqueVals = isString
-              ? (facets[FACET_KEYS[rule.column] as keyof Facets] ?? [])
+              ? rule.column === "shift"
+                ? [...SHIFT_NAMES]
+                : (facets[FACET_KEYS[rule.column] as keyof Facets] ?? [])
               : [];
 
             return (

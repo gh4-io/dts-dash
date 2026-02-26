@@ -28,6 +28,7 @@ import {
 import { useWorkPackagesStore } from "@/lib/hooks/use-work-packages";
 import type { AircraftType } from "@/types";
 import type { Facets } from "@/lib/utils/filter-helpers";
+import { SHIFT_NAMES } from "@/lib/utils/shift-helpers";
 
 // ─── Operator sets by column type ───
 
@@ -138,7 +139,7 @@ export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogP
   };
 
   const getValues = (col: ActionColumnKey): string[] =>
-    facets[FACET_KEYS[col] as keyof Facets] ?? [];
+    col === "shift" ? [...SHIFT_NAMES] : (facets[FACET_KEYS[col] as keyof Facets] ?? []);
 
   const addRule = () => {
     setDraft([...draft, makeBlankRule()]);
