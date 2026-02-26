@@ -56,9 +56,9 @@ export function Header() {
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
-      {/* Mobile menu button — visible on sm–md only (bottom tab bar handles < sm) */}
+      {/* Mobile menu button — visible on md–lg only (bottom tab bar handles < md) */}
       <button
-        className="hidden sm:block md:hidden p-2 text-muted-foreground hover:text-foreground"
+        className="hidden md:block lg:hidden p-2 text-muted-foreground hover:text-foreground"
         onClick={() => setMobileNavOpen(true)}
       >
         <i className="fa-solid fa-bars" />

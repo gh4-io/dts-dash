@@ -12,7 +12,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <Header />
-          <main className="flex-1 overflow-y-auto p-4 pb-20 sm:pb-4 md:p-6">{children}</main>
+          <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6">{children}</main>
         </div>
       </div>
       <BottomTabBar />
