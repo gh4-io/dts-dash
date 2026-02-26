@@ -41,7 +41,6 @@ export function loadShifts(): CapacityShift[] {
     minHeadcount: r.minHeadcount,
     sortOrder: r.sortOrder,
     isActive: r.isActive,
-    operatingDays: r.operatingDays ? (JSON.parse(r.operatingDays) as number[]) : null,
   }));
 }
 

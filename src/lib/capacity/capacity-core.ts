@@ -109,26 +109,7 @@ export function computeDailyCapacityV2(
   const activeShifts = shifts.filter((s) => s.isActive);
 
   return dates.map((date) => {
-    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
-    const isoDow = jsDay === 0 ? 7 : jsDay; // ISO: 1=Mon..7=Sun
-
     const byShift: ShiftCapacityV2[] = activeShifts.map((shift) => {
-      // Skip non-operating days — return zero capacity
-      if (shift.operatingDays && !shift.operatingDays.includes(isoDow)) {
-        return {
-          shiftCode: shift.code,
-          shiftName: shift.name,
-          rosterHeadcount: 0,
-          effectiveHeadcount: 0,
-          paidHoursPerPerson: shift.paidHours,
-          paidMH: 0,
-          availableMH: 0,
-          productiveMH: 0,
-          hasExceptions: false,
-          belowMinHeadcount: false,
-        };
-      }
-
       const { headcount, hasExceptions } = resolveHeadcount(date, shift.id, plans, exceptions);
       const effectiveHeadcount = headcount * assumptions.paidToAvailable;
 
@@ -180,26 +161,8 @@ export function computeDailyCapacityFromStaffing(
 
   return dates.map((date) => {
     const dayStaffing = staffingMap.get(date);
-    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
-    const isoDow = jsDay === 0 ? 7 : jsDay;
 
     const byShift: ShiftCapacityV2[] = activeShifts.map((shift) => {
-      // Skip non-operating days — return zero capacity
-      if (shift.operatingDays && !shift.operatingDays.includes(isoDow)) {
-        return {
-          shiftCode: shift.code,
-          shiftName: shift.name,
-          rosterHeadcount: 0,
-          effectiveHeadcount: 0,
-          paidHoursPerPerson: shift.paidHours,
-          paidMH: 0,
-          availableMH: 0,
-          productiveMH: 0,
-          hasExceptions: false,
-          belowMinHeadcount: false,
-        };
-      }
-
       const staffing = dayStaffing?.get(shift.code);
       const headcount = staffing?.headcount ?? 0;
       const paidHoursPerPerson = staffing?.effectivePaidHours ?? shift.paidHours;
@@ -401,4 +364,36 @@ export function computeCapacitySummary(utilization: DailyUtilizationV2[]): Capac
     worstDeficit,
     noCoverageDays,
   };
+}
+
+/**
+ * Derive which shifts are non-operating per date from the staffing aggregation map.
+ * A shift is non-operating on a date if it has NO entry in the staffing map
+ * (meaning the rotation schedule assigns zero people to that shift category).
+ *
+ * ONLY valid in staffing mode — headcount mode has no schedule authority.
+ * Returns empty map when called with undefined/null staffingMap.
+ */
+export function deriveNonOperatingFromStaffing(
+  staffingMap:
+    | Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>
+    | undefined,
+  allShiftCodes: string[],
+): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>();
+  if (!staffingMap) return result;
+
+  for (const [date, shiftMap] of staffingMap) {
+    const nonOp = new Set<string>();
+    for (const code of allShiftCodes) {
+      if (!shiftMap.has(code)) {
+        nonOp.add(code);
+      }
+    }
+    // Only add if at least one shift operates (prevent degenerate all-excluded case)
+    if (nonOp.size > 0 && nonOp.size < allShiftCodes.length) {
+      result.set(date, nonOp);
+    }
+  }
+  return result;
 }

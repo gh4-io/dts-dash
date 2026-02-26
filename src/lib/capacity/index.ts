@@ -13,6 +13,7 @@ export {
   computeUtilizationV2,
   validateHeadcountCoverage,
   computeCapacitySummary,
+  deriveNonOperatingFromStaffing,
 } from "./capacity-core";
 
 // Demand engine (pure functions)

@@ -15,7 +15,6 @@ import type {
   CustomerEventSummary,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
-import { toIsoDayOfWeek } from "./tz-helpers";
 
 /**
  * Aggregate coverage minutes per (date, shift, customer) from coverage windows.
@@ -24,6 +23,7 @@ import { toIsoDayOfWeek } from "./tz-helpers";
 export function aggregateCoverageByCustomer(
   windows: EventCoverageWindow[],
   shifts: CapacityShift[],
+  nonOperatingShifts?: Map<string, Set<string>>,
 ): CustomerCoverageAggregate[] {
   const map = new Map<string, CustomerCoverageAggregate>();
 
@@ -36,9 +36,12 @@ export function aggregateCoverageByCustomer(
     while (current < end) {
       const hour = current.getUTCHours();
       const dateStr = current.toISOString().split("T")[0];
-      const jsDay = new Date(dateStr + "T12:00:00Z").getUTCDay();
-      const isoDow = toIsoDayOfWeek(jsDay);
-      const shift = resolveShiftForHour(hour, shifts, isoDow);
+
+      // Filter out non-operating shifts for this date
+      const nonOp = nonOperatingShifts?.get(dateStr);
+      const availableShifts = nonOp ? shifts.filter((s) => !nonOp.has(s.code)) : shifts;
+
+      const shift = resolveShiftForHour(hour, availableShifts);
 
       if (shift) {
         const key = `${dateStr}|${shift.code}|${w.customer}`;

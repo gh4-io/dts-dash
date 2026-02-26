@@ -16,7 +16,7 @@ import type {
   DailyDemandV2,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
-import { getLocalHour, getLocalDateStr, toIsoDayOfWeek } from "./tz-helpers";
+import { getLocalHour, getLocalDateStr } from "./tz-helpers";
 
 /**
  * Aggregate hourly concurrency buckets into per-day summaries.
@@ -79,6 +79,7 @@ export function aggregateConcurrencyByDay(
 export function aggregateConcurrencyByShift(
   buckets: ConcurrencyBucket[],
   shifts: CapacityShift[],
+  nonOperatingShifts?: Map<string, Set<string>>,
 ): Map<string, Map<string, ConcurrencyShiftSummary>> {
   if (buckets.length === 0 || shifts.length === 0) return new Map();
 
@@ -92,9 +93,12 @@ export function aggregateConcurrencyByShift(
     const d = new Date(b.hour);
     const localHour = getLocalHour(d, timezone);
     const date = getLocalDateStr(d, timezone);
-    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
-    const isoDow = toIsoDayOfWeek(jsDay);
-    const shift = resolveShiftForHour(localHour, shifts, isoDow);
+
+    // Filter out non-operating shifts for this date
+    const nonOp = nonOperatingShifts?.get(date);
+    const availableShifts = nonOp ? shifts.filter((s) => !nonOp.has(s.code)) : shifts;
+
+    const shift = resolveShiftForHour(localHour, availableShifts);
     if (!shift) continue;
     let dateMap = grouped.get(date);
     if (!dateMap) {

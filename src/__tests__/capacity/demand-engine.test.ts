@@ -503,110 +503,210 @@ describe("timezone-aware enumerateGroundSlots", () => {
   });
 });
 
-// ─── resolveShiftForHour with operatingDays (isoDow) ──────────────────────
+// ─── deriveNonOperatingFromStaffing ───────────────────────────────────────
 
-describe("resolveShiftForHour — operatingDays aware", () => {
-  const shiftsWithOpDays: CapacityShift[] = [
-    { ...shifts[0] }, // DAY 07-15 — every day
-    { ...shifts[1], operatingDays: [1, 2, 3, 4] }, // SWING 15-23 — Mon-Thu
-    { ...shifts[2] }, // NIGHT 23-07 — every day
-  ];
+import { deriveNonOperatingFromStaffing } from "@/lib/capacity/capacity-core";
 
-  it("returns SWING on Wednesday (ISO 3) for hour 18", () => {
-    const result = resolveShiftForHour(18, shiftsWithOpDays, 3);
-    expect(result?.code).toBe("SWING");
+describe("deriveNonOperatingFromStaffing", () => {
+  const allShiftCodes = ["DAY", "SWING", "NIGHT"];
+
+  it("returns empty map when staffingMap is undefined", () => {
+    const result = deriveNonOperatingFromStaffing(undefined, allShiftCodes);
+    expect(result.size).toBe(0);
   });
 
-  it("redirects hour 16 to DAY on Friday (ISO 5) — nearest shift", () => {
-    // Hour 16 is 1 hour past DAY end (15), 7 hours before NIGHT start (23)
-    const result = resolveShiftForHour(16, shiftsWithOpDays, 5);
-    expect(result?.code).toBe("DAY");
+  it("returns empty map when all shifts present in staffing map", () => {
+    const staffingMap = new Map([
+      [
+        "2026-01-14",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 6.5 }],
+          ["SWING", { headcount: 6, effectivePaidHours: 6.5 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 6.5 }],
+        ]),
+      ],
+    ]);
+    const result = deriveNonOperatingFromStaffing(staffingMap, allShiftCodes);
+    expect(result.size).toBe(0);
   });
 
-  it("redirects hour 21 to NIGHT on Saturday (ISO 6) — nearest shift", () => {
-    // Hour 21 is 6 hours past DAY end, 2 hours before NIGHT start (23)
-    const result = resolveShiftForHour(21, shiftsWithOpDays, 6);
-    expect(result?.code).toBe("NIGHT");
+  it("identifies shifts absent from staffing map as non-operating", () => {
+    const staffingMap = new Map([
+      [
+        "2026-01-17",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 6.5 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 6.5 }],
+          // No SWING — rotation says nobody works SWING on this date
+        ]),
+      ],
+    ]);
+    const result = deriveNonOperatingFromStaffing(staffingMap, allShiftCodes);
+    expect(result.size).toBe(1);
+    expect(result.get("2026-01-17")?.has("SWING")).toBe(true);
+    expect(result.get("2026-01-17")?.size).toBe(1);
   });
 
-  it("returns DAY for hour 10 on Sunday (ISO 7) — exact match unaffected", () => {
-    const result = resolveShiftForHour(10, shiftsWithOpDays, 7);
-    expect(result?.code).toBe("DAY");
+  it("handles multiple dates with different non-operating sets", () => {
+    const staffingMap = new Map([
+      [
+        "2026-01-17",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 6.5 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 6.5 }],
+        ]),
+      ],
+      [
+        "2026-01-18",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 6.5 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 6.5 }],
+        ]),
+      ],
+      [
+        "2026-01-14",
+        new Map([
+          ["DAY", { headcount: 8, effectivePaidHours: 6.5 }],
+          ["SWING", { headcount: 6, effectivePaidHours: 6.5 }],
+          ["NIGHT", { headcount: 4, effectivePaidHours: 6.5 }],
+        ]),
+      ],
+    ]);
+    const result = deriveNonOperatingFromStaffing(staffingMap, allShiftCodes);
+    // Sat and Sun have SWING excluded, Wed has all shifts
+    expect(result.size).toBe(2);
+    expect(result.get("2026-01-17")?.has("SWING")).toBe(true);
+    expect(result.get("2026-01-18")?.has("SWING")).toBe(true);
+    expect(result.has("2026-01-14")).toBe(false); // all shifts present
+  });
+
+  it("does NOT exclude all shifts (degenerate guard)", () => {
+    // If all shifts would be excluded for a date, exclude none
+    const staffingMap = new Map([
+      ["2026-01-20", new Map()], // No shifts have staff — degenerate case
+    ]);
+    const result = deriveNonOperatingFromStaffing(staffingMap, allShiftCodes);
+    // Should NOT have this date in the map (all would be excluded → exclude none)
+    expect(result.has("2026-01-20")).toBe(false);
   });
 });
 
-// ─── operatingDays DOW redistribution ─────────────────────────────────────
+// ─── enumerateGroundSlots with nonOperatingShifts ────────────────────────
 
-describe("enumerateGroundSlots — operatingDays redistribution", () => {
-  // SWING Mon-Thu only (ISO 1-4)
-  const shiftsWithOpDays: CapacityShift[] = [
-    { ...shifts[0] }, // DAY 07-15 — every day
-    { ...shifts[1], operatingDays: [1, 2, 3, 4] }, // SWING 15-23 — Mon-Thu
-    { ...shifts[2] }, // NIGHT 23-07 — every day
-  ];
+describe("enumerateGroundSlots — nonOperatingShifts", () => {
+  it("excludes SWING on dates in the nonOperatingShifts map", () => {
+    // 2026-01-17 is a Saturday — SWING excluded
+    const nonOpMap = new Map([["2026-01-17", new Set(["SWING"])]]);
+    const arrival = "2026-01-17T15:00:00.000Z"; // SWING hours
+    const departure = "2026-01-17T22:00:00.000Z";
 
-  it("redistributes SWING hours to DAY/NIGHT on Friday (ISO 5)", () => {
-    // 2026-01-16 is a Friday, ground time spans DAY + SWING + near-NIGHT window
-    const arrival = "2026-01-16T10:00:00.000Z";
-    const departure = "2026-01-16T22:00:00.000Z"; // extends into NIGHT-nearest zone
-    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+    const slots = enumerateGroundSlots(arrival, departure, shifts, nonOpMap);
     const codes = slots.map((s) => s.shift.code);
     expect(codes).not.toContain("SWING");
+    // Hours redistribute to DAY and NIGHT via nearest-shift fallback
     expect(codes).toContain("DAY");
-    // Hours 15-19 → DAY (nearest); hours 20-21 → NIGHT (nearest to 23:00 start)
     expect(codes).toContain("NIGHT");
   });
 
-  it("includes SWING on Wednesday (ISO 3)", () => {
-    // 2026-01-14 is a Wednesday
-    const arrival = "2026-01-14T10:00:00.000Z";
+  it("includes SWING on dates NOT in the nonOperatingShifts map", () => {
+    // Only Saturday is excluded, Wednesday is not
+    const nonOpMap = new Map([["2026-01-17", new Set(["SWING"])]]);
+    const arrival = "2026-01-14T10:00:00.000Z"; // Wednesday
     const departure = "2026-01-14T20:00:00.000Z";
-    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+
+    const slots = enumerateGroundSlots(arrival, departure, shifts, nonOpMap);
     const codes = slots.map((s) => s.shift.code);
     expect(codes).toContain("DAY");
     expect(codes).toContain("SWING");
   });
 
-  it("redistributes SWING hours on Saturday (ISO 6)", () => {
-    // 2026-01-17 is a Saturday, ground time is fully in SWING window
+  it("passes through all shifts when nonOperatingShifts is undefined (backwards compat)", () => {
     const arrival = "2026-01-17T15:00:00.000Z";
     const departure = "2026-01-17T22:00:00.000Z";
-    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+
+    const slots = enumerateGroundSlots(arrival, departure, shifts);
     const codes = slots.map((s) => s.shift.code);
-    expect(codes).not.toContain("SWING");
-    // Hours 15-19 → DAY (nearest), hours 20-21 → NIGHT (nearest)
-    expect(codes).toContain("DAY");
-    expect(codes).toContain("NIGHT");
+    expect(codes).toContain("SWING");
   });
 
-  it("redistributes SWING hours on Sunday (ISO 7)", () => {
-    // 2026-01-18 is a Sunday
-    const arrival = "2026-01-18T15:00:00.000Z";
-    const departure = "2026-01-18T22:00:00.000Z";
-    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
-    const codes = slots.map((s) => s.shift.code);
-    expect(codes).not.toContain("SWING");
-    expect(codes).toContain("DAY");
-    expect(codes).toContain("NIGHT");
+  it("demand total MH conservation — sum unchanged after redistribution", () => {
+    const wp: DemandWorkPackage = {
+      id: 1,
+      aircraftReg: "N123",
+      customer: "DHL",
+      arrival: "2026-01-17T10:00:00.000Z",
+      departure: "2026-01-17T22:00:00.000Z",
+      effectiveMH: 12.0,
+      mhSource: "wp",
+    };
+
+    // Without nonOp — SWING gets demand
+    const demandAll = computeDailyDemandV2([wp], shifts, evenAssumptions);
+    const totalAll = demandAll.reduce((sum, d) => sum + d.totalDemandMH, 0);
+
+    // With nonOp — SWING excluded, hours redistribute
+    const nonOpMap = new Map([["2026-01-17", new Set(["SWING"])]]);
+    const demandFiltered = computeDailyDemandV2([wp], shifts, evenAssumptions, nonOpMap);
+    const totalFiltered = demandFiltered.reduce((sum, d) => sum + d.totalDemandMH, 0);
+
+    // Total MH must be preserved (conservation law)
+    expect(totalFiltered).toBeCloseTo(totalAll);
+    expect(totalFiltered).toBeCloseTo(12.0);
+  });
+});
+
+// ─── Redistribution scenario tests ───────────────────────────────────────
+
+describe("resolveShiftForHour — redistribution scenarios", () => {
+  it("missing SWING: hour 16 → DAY (closest to DAY end at 15)", () => {
+    const dayNight = shifts.filter((s) => s.code !== "SWING");
+    const result = resolveShiftForHour(16, dayNight);
+    expect(result?.code).toBe("DAY");
   });
 
-  it("preserves total slot count when window spans the redistribution boundary", () => {
-    // Wednesday 10:00-22:00: DAY + SWING = 2 slots
-    const wedSlots = enumerateGroundSlots(
-      "2026-01-14T10:00:00.000Z",
-      "2026-01-14T22:00:00.000Z",
-      shiftsWithOpDays,
-    );
-    expect(wedSlots.length).toBe(2);
-    expect(wedSlots.map((s) => s.shift.code)).toEqual(["DAY", "SWING"]);
+  it("missing SWING: hour 21 → NIGHT (closest to NIGHT start at 23)", () => {
+    const dayNight = shifts.filter((s) => s.code !== "SWING");
+    const result = resolveShiftForHour(21, dayNight);
+    expect(result?.code).toBe("NIGHT");
+  });
 
-    // Friday 10:00-22:00: DAY + NIGHT = 2 slots (SWING hours redistributed)
-    const friSlots = enumerateGroundSlots(
-      "2026-01-16T10:00:00.000Z",
-      "2026-01-16T22:00:00.000Z",
-      shiftsWithOpDays,
-    );
-    expect(friSlots.length).toBe(2);
-    expect(friSlots.map((s) => s.shift.code)).toEqual(["DAY", "NIGHT"]);
+  it("missing DAY: hour 8 → NIGHT (closest to NIGHT end at 7)", () => {
+    const swingNight = shifts.filter((s) => s.code !== "DAY");
+    const result = resolveShiftForHour(8, swingNight);
+    expect(result?.code).toBe("NIGHT");
+  });
+
+  it("missing DAY: hour 13 → SWING (closest to SWING start at 15)", () => {
+    const swingNight = shifts.filter((s) => s.code !== "DAY");
+    const result = resolveShiftForHour(13, swingNight);
+    expect(result?.code).toBe("SWING");
+  });
+
+  it("missing NIGHT: hour 0 → SWING (closest to SWING end at 23)", () => {
+    const daySwing = shifts.filter((s) => s.code !== "NIGHT");
+    const result = resolveShiftForHour(0, daySwing);
+    expect(result?.code).toBe("SWING");
+  });
+
+  it("missing NIGHT: hour 5 → DAY (closest to DAY start at 7)", () => {
+    const daySwing = shifts.filter((s) => s.code !== "NIGHT");
+    const result = resolveShiftForHour(5, daySwing);
+    expect(result?.code).toBe("DAY");
+  });
+
+  it("only one shift: all hours route to that shift", () => {
+    const dayOnly = [shifts[0]]; // DAY 07-15
+    expect(resolveShiftForHour(3, dayOnly)?.code).toBe("DAY");
+    expect(resolveShiftForHour(10, dayOnly)?.code).toBe("DAY");
+    expect(resolveShiftForHour(20, dayOnly)?.code).toBe("DAY");
+  });
+
+  it("tie-breaking at boundary: hour 19 with DAY+NIGHT → NIGHT (later start)", () => {
+    // DAY 07-15, NIGHT 23-07
+    // hour 19: dist to DAY end (15) = 4, dist to NIGHT start (23) = 4 → tie
+    // Tie-break: prefer later startHour (NIGHT start=23 > DAY start=7)
+    const dayNight = shifts.filter((s) => s.code !== "SWING");
+    const result = resolveShiftForHour(19, dayNight);
+    expect(result?.code).toBe("NIGHT");
   });
 });

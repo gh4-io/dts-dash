@@ -1048,6 +1048,17 @@ export function runMigrations(): MigrationResult[] {
       );
     }),
   );
+
+  // M021: Drop operating_days column — shift run state now derived from staffing rotation
+  results.push(
+    applyMigration("M021_drop_operating_days", () => {
+      const cols = sqlite.pragma("table_info(capacity_shifts)") as Array<{ name: string }>;
+      if (cols.some((c) => c.name === "operating_days")) {
+        sqlite.exec(`ALTER TABLE capacity_shifts DROP COLUMN operating_days`);
+      }
+    }),
+  );
+
   return results;
 }
 

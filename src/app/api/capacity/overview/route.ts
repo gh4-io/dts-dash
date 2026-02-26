@@ -39,6 +39,7 @@ import {
   aggregateBilledHours,
   applyBilledHours,
   computeEffectivePaidHours,
+  deriveNonOperatingFromStaffing,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import type { ResolvedShiftInfo, CapacityComputeMode } from "@/types";
@@ -90,13 +91,16 @@ export async function GET(request: NextRequest) {
     let capacity;
     let resolvedShifts: ResolvedShiftInfo[];
     let modeWarning: string | undefined;
+    let staffingMap:
+      | Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>
+      | undefined;
 
     if (computeMode === "staffing") {
       if (activeConfig) {
         const staffingShifts = loadStaffingShifts(activeConfig.id);
         const patterns = loadRotationPatterns(true);
         const patternMap = buildPatternMap(patterns);
-        const staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
+        staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
         capacity = computeDailyCapacityFromStaffing(dates, shifts, staffingMap, assumptions);
         resolvedShifts = staffingShifts
           .filter((ss) => ss.isActive)
@@ -170,6 +174,20 @@ export async function GET(request: NextRequest) {
         }));
     }
 
+    // Derive non-operating shifts (staffing mode only — rotation provides schedule truth)
+    let nonOperatingShifts = new Map<string, Set<string>>();
+    let scheduleSource: "staffing" | "headcount" | "none" = "none";
+
+    if (computeMode === "staffing" && staffingMap) {
+      nonOperatingShifts = deriveNonOperatingFromStaffing(
+        staffingMap,
+        shifts.filter((s) => s.isActive).map((s) => s.code),
+      );
+      scheduleSource = "staffing";
+    } else if (computeMode === "headcount") {
+      scheduleSource = "headcount";
+    }
+
     // Read and transform work packages, apply filters for demand
     const rawData = readWorkPackages();
     const workPackages = await transformWorkPackages(rawData);
@@ -190,8 +208,8 @@ export async function GET(request: NextRequest) {
     // WPs that overlap the filter can extend ground-time beyond [startDate, endDate];
     // without clamping, extra dates leak into the heatmap with no capacity data.
     const dateSet = new Set(dates);
-    const demand = computeDailyDemandV2(demandWPs, shifts, assumptions).filter((d) =>
-      dateSet.has(d.date),
+    const demand = computeDailyDemandV2(demandWPs, shifts, assumptions, nonOperatingShifts).filter(
+      (d) => dateSet.has(d.date),
     );
 
     // Load active contracts for date range and apply allocations to demand
@@ -199,7 +217,13 @@ export async function GET(request: NextRequest) {
     let adjustedDemand = demand;
     if (contracts.length > 0) {
       const customerNameMap = loadCustomerNameMap();
-      adjustedDemand = applyAllocations(demand, contracts, shifts, customerNameMap);
+      adjustedDemand = applyAllocations(
+        demand,
+        contracts,
+        shifts,
+        customerNameMap,
+        nonOperatingShifts,
+      );
     }
 
     // Load flight events, expand recurring templates, and compute coverage windows
@@ -250,7 +274,11 @@ export async function GET(request: NextRequest) {
 
     if (concurrencyBuckets && concurrencyBuckets.length > 0) {
       const dailyConcurrency = aggregateConcurrencyByDay(concurrencyBuckets);
-      const shiftConcurrency = aggregateConcurrencyByShift(concurrencyBuckets, shifts);
+      const shiftConcurrency = aggregateConcurrencyByShift(
+        concurrencyBuckets,
+        shifts,
+        nonOperatingShifts,
+      );
       adjustedDemand = applyConcurrencyPressure(adjustedDemand, dailyConcurrency, shiftConcurrency);
     }
 
@@ -312,6 +340,13 @@ export async function GET(request: NextRequest) {
       activeStaffingConfigName: activeConfig?.name ?? undefined,
       autoMode,
       modeWarning,
+      shiftRouting: {
+        scheduleSource,
+        nonOperatingShifts: Object.fromEntries(
+          Array.from(nonOperatingShifts.entries()).map(([d, s]) => [d, Array.from(s)]),
+        ),
+        modeWarning: modeWarning ?? null,
+      },
     });
   } catch (error) {
     log.error({ err: error }, "Error computing capacity overview");

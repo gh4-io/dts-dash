@@ -191,7 +191,6 @@ export interface CapacityShift {
   minHeadcount: number;
   sortOrder: number;
   isActive: boolean;
-  operatingDays?: number[] | null; // ISO DOW: 1=Mon..7=Sun; null = every day
 }
 
 export interface CapacityAssumptions {

@@ -17,7 +17,7 @@
  */
 
 import type { CapacityShift, CapacityAssumptions, DailyDemandV2, ShiftDemandV2 } from "@/types";
-import { getLocalHour, getLocalDateStr, toIsoDayOfWeek } from "./tz-helpers";
+import { getLocalHour, getLocalDateStr } from "./tz-helpers";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -39,19 +39,9 @@ export interface DemandWorkPackage {
  * Handles overnight shifts (e.g., Night 23-07).
  * Returns the shift or null if no shift covers that hour.
  */
-export function resolveShiftForHour(
-  hour: number,
-  shifts: CapacityShift[],
-  isoDow?: number,
-): CapacityShift | null {
-  // Filter to shifts operating on this day of week (when isoDow provided)
-  const operating =
-    isoDow != null
-      ? shifts.filter((s) => !s.operatingDays || s.operatingDays.includes(isoDow))
-      : shifts;
-
-  // Try exact hour match among operating shifts
-  for (const shift of operating) {
+export function resolveShiftForHour(hour: number, shifts: CapacityShift[]): CapacityShift | null {
+  // Try exact hour match
+  for (const shift of shifts) {
     if (shift.startHour < shift.endHour) {
       // Normal shift: e.g., Day 07-15
       if (hour >= shift.startHour && hour < shift.endHour) return shift;
@@ -61,18 +51,19 @@ export function resolveShiftForHour(
     }
   }
 
-  // No exact match — find the closest operating shift (covers gaps
-  // left by non-operating shifts, e.g. SWING hours → DAY or NIGHT)
-  if (operating.length > 0) {
+  // No exact match — find the closest shift by circular distance to boundary.
+  // Tie-breaking: when distances equal, prefer shift with later start hour
+  // (i.e., the shift the hour is approaching).
+  if (shifts.length > 0) {
     let closest: CapacityShift | null = null;
     let minDist = Infinity;
-    for (const shift of operating) {
+    for (const shift of shifts) {
       const dStart = Math.abs(hour - shift.startHour);
       const distToStart = Math.min(dStart, 24 - dStart);
       const dEnd = Math.abs(hour - shift.endHour);
       const distToEnd = Math.min(dEnd, 24 - dEnd);
       const dist = Math.min(distToStart, distToEnd);
-      if (dist < minDist) {
+      if (dist < minDist || (dist === minDist && closest && shift.startHour > closest.startHour)) {
         minDist = dist;
         closest = shift;
       }
@@ -97,6 +88,7 @@ export function enumerateGroundSlots(
   arrivalISO: string,
   departureISO: string,
   shifts: CapacityShift[],
+  nonOperatingShifts?: Map<string, Set<string>>,
 ): Array<{ date: string; shift: CapacityShift; isArrival: boolean; isDeparture: boolean }> {
   const activeShifts = shifts.filter((s) => s.isActive);
   if (activeShifts.length === 0) return [];
@@ -132,12 +124,11 @@ export function enumerateGroundSlots(
     const localHour = getLocalHour(current, timezone);
     const localDate = getLocalDateStr(current, timezone);
 
-    // Compute ISO day-of-week so resolveShiftForHour can skip non-operating shifts
-    // and dynamically redistribute hours to the nearest operating shift
-    const jsDay = new Date(localDate + "T12:00:00Z").getUTCDay();
-    const isoDow = toIsoDayOfWeek(jsDay);
+    // Filter out non-operating shifts for this date
+    const nonOp = nonOperatingShifts?.get(localDate);
+    const availableShifts = nonOp ? activeShifts.filter((s) => !nonOp.has(s.code)) : activeShifts;
 
-    const shift = resolveShiftForHour(localHour, activeShifts, isoDow);
+    const shift = resolveShiftForHour(localHour, availableShifts);
 
     if (shift) {
       const key = `${localDate}:${shift.code}`;
@@ -246,6 +237,7 @@ export function computeDailyDemandV2(
   workPackages: DemandWorkPackage[],
   shifts: CapacityShift[],
   assumptions: CapacityAssumptions,
+  nonOperatingShifts?: Map<string, Set<string>>,
 ): DailyDemandV2[] {
   if (workPackages.length === 0) return [];
 
@@ -286,7 +278,7 @@ export function computeDailyDemandV2(
   };
 
   for (const wp of workPackages) {
-    const groundSlots = enumerateGroundSlots(wp.arrival, wp.departure, shifts);
+    const groundSlots = enumerateGroundSlots(wp.arrival, wp.departure, shifts, nonOperatingShifts);
     if (groundSlots.length === 0) continue;
 
     const allocatedMHs = applyDemandCurve(
