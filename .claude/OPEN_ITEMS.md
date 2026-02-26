@@ -115,103 +115,6 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 
 ---
 
-## Phase 4 — Mobile-First UX
-
-### OI-053 | iOS Home Screen Installation (PWA — P4-4)
-
-| Field | Value |
-|-------|-------|
-| **Type** | Enhancement |
-| **Status** | **In Progress** (Phase 4) |
-| **Priority** | P3 |
-| **Owner** | Claude |
-| **Created** | 2026-02-18 |
-
-Add `public/manifest.json`, `apple-mobile-web-app-capable` meta tags, and touch icon to enable "Add to Home Screen" on iOS. App opens in full-screen standalone mode. No service worker (D-055).
-
-**Files**: `public/manifest.json`, `src/app/layout.tsx`
-**Links**: D-055, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md)
-
----
-
-### OI-075 | Phase 4 P4-1: Collapsible Sidebar + Bottom Tab Bar
-
-| Field | Value |
-|-------|-------|
-| **Type** | Enhancement |
-| **Status** | **Open** |
-| **Priority** | P2 |
-| **Owner** | Unassigned |
-| **Created** | 2026-02-25 |
-
-Four-tier responsive navigation (D-053): fixed bottom tab bar (< sm), hamburger+sheet (sm–md, unchanged), collapsible sidebar (md–lg), always-expanded (lg+). Collapse state persists in localStorage (D-056).
-
-**Acceptance Criteria**: (1) Bottom tab bar visible < 640px, hidden wider. (2) Sidebar cycles expanded → icons-only → collapsed on md–lg. (3) Icons-only shows Radix Tooltip labels on hover. (4) `sidebar-mode` persists in localStorage. (5) SSR renders expanded (no hydration mismatch). (6) All pages correct in all modes.
-
-**Files**: `src/lib/hooks/use-sidebar.ts` (new), `src/components/layout/bottom-tab-bar.tsx` (new), `sidebar.tsx`, `header.tsx`, `layout.tsx`
-**Links**: D-053, D-056, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md)
-**Supersedes**: OI-041, OI-054 (archived)
-
----
-
-### OI-076 | Phase 4 P4-2: Mobile Header Touch Targets
-
-| Field | Value |
-|-------|-------|
-| **Type** | Enhancement |
-| **Status** | **Open** |
-| **Priority** | P3 |
-| **Owner** | Unassigned |
-| **Created** | 2026-02-25 |
-
-Theme toggle and user menu button are 36px — below WCAG 2.5.8 44px minimum. Update to `h-11 w-11` on mobile, keep `h-9 w-9` on desktop. Header height stays `h-14`.
-
-**Acceptance Criteria**: (1) Theme toggle: `h-11 w-11 md:h-9 md:w-9`. (2) User menu: `h-11 md:h-9`. (3) Header height unchanged.
-
-**Files**: `src/components/layout/header.tsx`
-**Links**: [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md)
-
----
-
-### OI-077 | Phase 4 P4-3: Flight Board List View
-
-| Field | Value |
-|-------|-------|
-| **Type** | Feature |
-| **Status** | **Open** |
-| **Priority** | P2 |
-| **Owner** | Unassigned |
-| **Created** | 2026-02-25 |
-
-Add Gantt | List toggle in flight board toolbar. Mobile (< md): card stack, tap → detail drawer. Desktop (≥ md): TanStack sortable table, paginated by `tablePageSize` pref. View mode persists in localStorage (D-056).
-
-**Acceptance Criteria**: (1) Toggle in toolbar. (2) Gantt controls hidden in list mode. (3) Card stack on mobile. (4) TanStack table on desktop. (5) Customer color dots match Gantt legend. (6) MH source labels (Override / WP MH / Contract / Default). (7) Empty state shown.
-
-**Files**: `flight-board-list-cards.tsx` (new), `flight-board-list-table.tsx` (new), `src/app/(authenticated)/flight-board/page.tsx`
-**Links**: D-054, D-056, [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md)
-**Supersedes**: OI-052 (archived)
-
----
-
-### OI-078 | Phase 4 P4-5: Mobile Polish Pass
-
-| Field | Value |
-|-------|-------|
-| **Type** | Enhancement |
-| **Status** | **Open** |
-| **Priority** | P3 |
-| **Owner** | Unassigned |
-| **Created** | 2026-02-25 |
-
-Systematic mobile pass after P4-1–P4-4 are stable. `overflow-x-auto` on admin tables and capacity charts; verify Recharts `ResponsiveContainer` widths; check filter bar and ActionsMenu touch targets.
-
-**Acceptance Criteria**: (1) Capacity page: no overflow at 375px. (2) Admin tables: horizontal scroll on narrow screens. (3) Capacity charts: responsive. (4) Filter bar mobile verified. (5) Build + lint clean.
-
-**Files**: `capacity-table.tsx`, `capacity-heatmap.tsx`, `capacity-pie-charts.tsx`, `user-table.tsx`, admin capacity grids, `top-menu-bar.tsx`
-**Links**: [plan/purrfect-herding-pond.md](../../../home/guru/.claude/plans/purrfect-herding-pond.md)
-
----
-
 ## Open Enhancements
 
 ### OI-042 | Dashboard Chart Issues — PARTIALLY RESOLVED
@@ -497,13 +400,11 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 4 | 2 | 0 | 0 | 20 |
-| P2 | 12 | 2 | 0 | 0 | 18 |
-| P3 | 7 | 0 | 1 | 2 | 2 |
-| **Total** | **23** | **4** | **1** | **2** | **56** |
+| P2 | 10 | 2 | 0 | 0 | 20 |
+| P3 | 4 | 0 | 0 | 2 | 5 |
+| **Total** | **18** | **4** | **0** | **2** | **61** |
 
-**Latest update (2026-02-26)**: OI-083 opened — flight board ECharts chart does not update on theme switch (light/dark).
-
-**Previous update (2026-02-26)**: OI-082 resolved — staffing-derived shift routing replaces `operatingDays` (M021). 632 tests passing.
+**Latest update (2026-02-26)**: Phase 4 Mobile-First UX complete — 5 workstreams (P4-1 through P4-5). PWA manifest, collapsible sidebar, bottom tab bar, flight board list view, mobile polish pass. 646 tests passing.
 
 ---
 
@@ -580,5 +481,15 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 | OI-072 | G-09: Monthly Roll-Up Aggregation | `monthly-rollup-engine.ts`, `MonthlyRollupChart` (4 view modes), 16 tests | 2026-02-25 |
 | OI-073 | G-10: Per-Customer Event Attribution | `event-attribution-engine.ts`, top-3 customer KPI strip, 17 tests | 2026-02-24 |
 | OI-082 | Staffing-Derived Shift Routing | Replaced static `operatingDays` with `deriveNonOperatingFromStaffing()` — staffing map drives shift existence. M021 drops column. 17 new tests. | 2026-02-26 |
+
+### Phase 4 — Mobile-First UX (2026-02-26)
+
+| OI | Title | Resolution | Date |
+|----|-------|------------|------|
+| OI-053 | PWA Manifest (P4-4) | `site.webmanifest`, 5 icon sizes (192/512 + maskable + apple-touch), `viewport-fit: cover`, theme-color media queries, iOS meta tags | 2026-02-26 |
+| OI-075 | Collapsible Sidebar + Bottom Tab Bar (P4-1) | 4-tier nav (D-053): bottom tab `< sm`, hamburger `sm–md`, collapsible sidebar `md–lg`, expanded `lg+`. Zustand + localStorage. `use-sidebar.ts`, `bottom-tab-bar.tsx`, `sidebar-hydrator.tsx` | 2026-02-26 |
+| OI-076 | Mobile Touch Targets (P4-2) | Theme toggle `h-11 w-11 md:h-9 md:w-9`, user menu `h-11 md:h-9`. Hamburger `hidden sm:block md:hidden` | 2026-02-26 |
+| OI-077 | Flight Board List View (P4-3) | Gantt/List toggle, `flight-board-list-cards.tsx` (mobile), `flight-board-list-table.tsx` (TanStack, desktop). localStorage persistence. D-054, D-056 | 2026-02-26 |
+| OI-078 | Mobile Polish Pass (P4-5) | `overflow-x-auto` on 5 admin grids + 1 user table. Pie charts responsive `grid-cols-1 md:grid-cols-3`. Heatmap legend `hidden md:flex`. `h-dvh` layout | 2026-02-26 |
 
 *\* Superseded — planned work reorganized into Phase 4 items.*

@@ -19,7 +19,7 @@
 
 **All base milestones (M0–M8) complete. Project is production-ready.**
 
-**Current Focus: Capacity Phase 2** — Advanced capacity lenses on `feat/capacity-layout` branch.
+**Current Focus: Phase 4 Complete** — Mobile-First UX implemented on `dev` branch.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
@@ -823,9 +823,9 @@ Concurrency pressure index computed from P2-1 flight events. No new tables — p
 
 ---
 
-## Phase 4 — Mobile-First UX
+## Phase 4 — Mobile-First UX (Complete ✅)
 
-> **Status**: Planning ✏️ | **Branch**: TBD (branch off `dev`) | **Started**: 2026-02-25
+> **Status**: Complete ✅ | **Branch**: `dev` | **Completed**: 2026-02-26
 > **Plan file**: `/home/guru/.claude/plans/purrfect-herding-pond.md`
 > **Key decisions**: D-053 (nav breakpoints), D-054 (list view design), D-055 (PWA scope), D-056 (UI state persistence)
 
@@ -833,11 +833,11 @@ Concurrency pressure index computed from P2-1 flight events. No new tables — p
 
 | ID | Workstream | Status | OI | Notes |
 |----|-----------|--------|----|-------|
-| P4-1 | Collapsible Sidebar + Bottom Tab Bar | Pending | OI-075 | New `use-sidebar.ts` + `bottom-tab-bar.tsx`; 4-tier breakpoint matrix (D-053) |
-| P4-2 | Mobile Header Touch Targets | Pending | OI-076 | Touch targets 44px on mobile; header height unchanged |
-| P4-3 | Flight Board List View | Pending | OI-077 | Cards (< md) + TanStack Table (≥ md); resolves flight board mobile usability |
-| P4-4 | PWA Manifest | Pending | OI-053 | manifest.json + apple meta tags; no service worker (D-055) |
-| P4-5 | Mobile Polish Pass | Pending | OI-078 | overflow-x-auto audit, touch targets, responsive charts |
+| P4-1 | Collapsible Sidebar + Bottom Tab Bar | Done ✅ | OI-075 | 4-tier nav, `use-sidebar.ts`, `bottom-tab-bar.tsx`, `sidebar-hydrator.tsx` |
+| P4-2 | Mobile Header Touch Targets | Done ✅ | OI-076 | `h-11 w-11 md:h-9 md:w-9` on toggle, `h-11 md:h-9` on user menu |
+| P4-3 | Flight Board List View | Done ✅ | OI-077 | Gantt/List toggle, cards < md, TanStack Table ≥ md, localStorage persist |
+| P4-4 | PWA Manifest | Done ✅ | OI-053 | `site.webmanifest`, 5 icons, iOS meta tags, theme-color, viewport-fit |
+| P4-5 | Mobile Polish Pass | Done ✅ | OI-078 | `overflow-x-auto` × 6 grids, responsive pie charts, heatmap legend |
 
 ### Implementation Order
 ```

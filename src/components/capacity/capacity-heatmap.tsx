@@ -431,7 +431,7 @@ export function CapacityHeatmap({
           <i className="fa-solid fa-table-cells" />
           Shift Utilization Heatmap
         </h3>
-        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+        <div className="hidden md:flex items-center gap-3 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1">
             <span className="inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500/30" />
             &lt;80%

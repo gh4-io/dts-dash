@@ -106,7 +106,7 @@ export function TimeBookingsGrid({
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-border">
+        <div className="rounded-lg border border-border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

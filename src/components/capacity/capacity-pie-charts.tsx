@@ -393,7 +393,7 @@ export function CapacityPieCharts({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-3 divide-x divide-border">
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
           {/* Donut — Customer */}
           <div className="flex flex-col">
             <p className="text-[10px] font-medium text-muted-foreground text-center pt-2 px-2">

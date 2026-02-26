@@ -11,6 +11,8 @@ import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { CustomerBadge } from "@/components/shared/customer-badge";
+import { FlightBoardListCards } from "@/components/flight-board/flight-board-list-cards";
+import { FlightBoardListTable } from "@/components/flight-board/flight-board-list-table";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { FlightBoardChartHandle } from "@/components/flight-board/flight-board-chart";
@@ -28,6 +30,9 @@ function FlightBoardPageInner() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [viewMode, setViewMode] = useState<"gantt" | "list">("gantt");
+  const [viewOpen, setViewOpen] = useState(false);
+  const [panMode, setPanMode] = useState(false);
   const {
     loaded: prefsLoaded,
     compactMode: condensed,
@@ -35,25 +40,25 @@ function FlightBoardPageInner() {
     update: updatePreferences,
   } = usePreferences();
   const zoomInitializedRef = useRef(false);
+  const chartRef = useRef<FlightBoardChartHandle>(null);
 
   // Sync from localStorage after hydration to avoid mismatch
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from localStorage to avoid SSR mismatch
     setHydrated(true);
     const stored = localStorage.getItem("flightBoardExpanded");
     if (stored === "true") setIsExpanded(true);
+    const storedView = localStorage.getItem("flightBoardViewMode");
+    if (storedView === "list") setViewMode("list");
   }, []);
 
   // Initialize zoom from user preference / system config once prefs have loaded
   useEffect(() => {
     if (!prefsLoaded || zoomInitializedRef.current) return;
     zoomInitializedRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from user preferences
     if (defaultZoom) setZoomLevel(defaultZoom);
   }, [prefsLoaded, defaultZoom]);
-  const [viewOpen, setViewOpen] = useState(false);
-  const [panMode, setPanMode] = useState(false);
-  const chartRef = useRef<FlightBoardChartHandle>(null);
 
   const { workPackages, isLoading, error } = useWorkPackages();
   const { customers } = useCustomers();
@@ -186,11 +191,41 @@ function FlightBoardPageInner() {
         formatChips={formatChips}
         actions={
           <div className="flex items-center gap-1">
-            {/* Inline items — slide out to the left when viewOpen */}
+            {/* View mode toggle: Gantt / List */}
+            <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
+              <Button
+                variant={viewMode === "gantt" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setViewMode("gantt");
+                  localStorage.setItem("flightBoardViewMode", "gantt");
+                }}
+                title="Gantt chart"
+              >
+                <i className="fa-solid fa-chart-gantt" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  setViewMode("list");
+                  localStorage.setItem("flightBoardViewMode", "list");
+                }}
+                title="List view"
+              >
+                <i className="fa-solid fa-list" />
+              </Button>
+            </div>
+
+            {/* Gantt-only controls — hidden in list mode */}
             <div
               className={cn(
                 "flex items-center gap-1 overflow-hidden transition-all duration-200",
-                viewOpen ? "max-w-[600px] opacity-100" : "max-w-0 opacity-0",
+                viewMode === "gantt" && viewOpen
+                  ? "max-w-[600px] opacity-100"
+                  : "max-w-0 opacity-0",
               )}
             >
               {/* Zoom presets */}
@@ -300,16 +335,18 @@ function FlightBoardPageInner() {
               </Button>
             </div>
 
-            {/* View toggle button */}
-            <Button
-              variant={viewOpen ? "default" : "outline"}
-              size="sm"
-              className="h-9 text-xs gap-1.5 shrink-0"
-              onClick={() => setViewOpen((v) => !v)}
-            >
-              <i className="fa-solid fa-sliders" />
-              View
-            </Button>
+            {/* View toggle button — Gantt controls panel (hidden in list mode) */}
+            {viewMode === "gantt" && (
+              <Button
+                variant={viewOpen ? "default" : "outline"}
+                size="sm"
+                className="h-9 text-xs gap-1.5 shrink-0"
+                onClick={() => setViewOpen((v) => !v)}
+              >
+                <i className="fa-solid fa-sliders" />
+                View
+              </Button>
+            )}
 
             {/* Refresh */}
             <Button
@@ -325,7 +362,7 @@ function FlightBoardPageInner() {
         }
       />
 
-      {/* Gantt Chart */}
+      {/* Chart / List */}
       {error ? (
         <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
           <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
@@ -333,7 +370,7 @@ function FlightBoardPageInner() {
         </div>
       ) : isLoading ? (
         <LoadingSkeleton variant="chart" />
-      ) : (
+      ) : viewMode === "gantt" ? (
         <div
           className={cn(
             "rounded-lg border border-border bg-card overflow-hidden",
@@ -357,12 +394,23 @@ function FlightBoardPageInner() {
             panMode={panMode}
           />
         </div>
+      ) : (
+        <>
+          <div className="md:hidden">
+            <FlightBoardListCards workPackages={transformedWps} onCardClick={handleBarClick} />
+          </div>
+          <div className="hidden md:block">
+            <FlightBoardListTable workPackages={transformedWps} onRowClick={handleBarClick} />
+          </div>
+        </>
       )}
 
-      {/* Interaction hints */}
-      <p className="text-[11px] text-muted-foreground flex-shrink-0">
-        Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
-      </p>
+      {/* Interaction hints — Gantt only */}
+      {viewMode === "gantt" && (
+        <p className="text-[11px] text-muted-foreground flex-shrink-0">
+          Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
+        </p>
+      )}
 
       {/* Legend */}
       {customers.length > 0 && (

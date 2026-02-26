@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthProvider } from "@/components/layout/session-provider";
@@ -19,11 +19,27 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  viewportFit: "cover",
+};
+
 export async function generateMetadata(): Promise<Metadata> {
   const appTitle = getAppTitle();
   return {
     title: appTitle,
     description: `${appTitle} — Operations Dashboard`,
+    manifest: "/site.webmanifest",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: appTitle,
+    },
+    icons: {
+      apple: "/icons/apple-touch-icon.png",
+    },
+    other: {
+      "mobile-web-app-capable": "yes",
+    },
   };
 }
 
@@ -40,6 +56,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           systemColorMode={appearance.defaultColorMode}
         />
         <TimelineScript />
+        <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>

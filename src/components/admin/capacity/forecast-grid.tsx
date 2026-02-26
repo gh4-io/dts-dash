@@ -139,7 +139,7 @@ export function ForecastGrid({
             <p className="text-xs">Create a model to start projecting future demand.</p>
           </div>
         ) : (
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>

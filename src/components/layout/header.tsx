@@ -56,9 +56,9 @@ export function Header() {
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
-      {/* Mobile menu button */}
+      {/* Mobile menu button — visible on sm–md only (bottom tab bar handles < sm) */}
       <button
-        className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+        className="hidden sm:block md:hidden p-2 text-muted-foreground hover:text-foreground"
         onClick={() => setMobileNavOpen(true)}
       >
         <i className="fa-solid fa-bars" />
@@ -75,7 +75,7 @@ export function Header() {
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           title={`Theme: ${themeLabel}`}
         >
           <i className={themeIcon} />
@@ -85,7 +85,7 @@ export function Header() {
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex h-11 md:h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <i className="fa-solid fa-user-circle" />
             <span className="hidden sm:inline">{session?.user?.name || "User"}</span>

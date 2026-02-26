@@ -85,7 +85,7 @@ export function BillingGrid({ entries, onCreate, onUpdate, onDelete }: BillingGr
           </p>
         </div>
       ) : (
-        <div className="rounded-lg border border-border">
+        <div className="rounded-lg border border-border overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
