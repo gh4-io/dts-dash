@@ -412,6 +412,24 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 
 ---
 
+### OI-085 | Shift Action Column Uses Hardcoded Boundaries
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Created** | 2026-02-26 |
+
+The Shift action column (highlight, sort, filter, control-break, group-by) uses hardcoded shift boundaries (Day 07–15, Swing 15–23, Night 23–07) in `shift-helpers.ts` and `flight-board-chart.tsx`. These should potentially be sourced from the actual shift matrix in the database (`staffing_shifts` table via `/api/admin/capacity/staffing-shifts`) so that if shifts are reconfigured in Admin > Capacity > Staffing, the flight board reflects the real schedule.
+
+**Considerations**: Shift names, hours, and count may differ from the hardcoded 3. Would need an API call or server-side hydration to provide shift definitions to the client. The chart boundary lines (`SHIFT_BOUNDARIES`) and the action column helpers (`SHIFTS` in `shift-helpers.ts`) would both need to read from the same dynamic source.
+
+**Files**: `src/lib/utils/shift-helpers.ts`, `src/components/flight-board/flight-board-chart.tsx`
+**Links**: OI-080 (Shift Matrix Definition Missing Effective End Date)
+
+---
+
 ## Acknowledged / Informational
 
 | OI | Title | Notes |
@@ -428,8 +446,8 @@ Customer MH target matrix (7 customers × 7 days × 3 shifts) as pink overlay on
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 2 | 2 | 0 | 0 | 22 |
 | P2 | 9 | 2 | 0 | 0 | 21 |
-| P3 | 4 | 0 | 0 | 2 | 5 |
-| **Total** | **15** | **4** | **0** | **2** | **64** |
+| P3 | 5 | 0 | 0 | 2 | 5 |
+| **Total** | **16** | **4** | **0** | **2** | **64** |
 
 **Latest update (2026-02-26)**: Phase 4 Mobile-First UX complete — 5 workstreams (P4-1 through P4-5). PWA manifest, collapsible sidebar, bottom tab bar, flight board list view, mobile polish pass. 646 tests passing.
 
