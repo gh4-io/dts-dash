@@ -60,6 +60,36 @@ export function CombinedChart({
     }));
   }, [snapshots]);
 
+  // ─── NOW indicator — find the chart data point matching the current hour ───
+  const [nowTimestamp, setNowTimestamp] = useState(Date.now);
+  useEffect(() => {
+    const id = setInterval(() => setNowTimestamp(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const nowHourKey = useMemo(() => {
+    if (chartData.length === 0) return null;
+    // Floor current time to the start of this hour in the chart's timezone
+    const hourFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hourCycle: "h23",
+    });
+    const now = new Date(nowTimestamp);
+    const nowHour = parseInt(hourFmt.format(now));
+    // Build a Date at the start of the current hour by zeroing minutes/seconds
+    const floored = new Date(now);
+    floored.setMinutes(0, 0, 0);
+    // Adjust if timezone conversion shifted the hour
+    const actualHour = parseInt(hourFmt.format(floored));
+    if (actualHour !== nowHour) {
+      floored.setTime(floored.getTime() + (nowHour - actualHour) * 3600000);
+    }
+    const key = floored.toISOString();
+    // Only show if this hour exists in the chart data
+    return chartData.some((d) => d.hour === key) ? key : null;
+  }, [chartData, timezone, nowTimestamp]);
+
   // Find midnight ISO strings for day separator reference lines
   const midnightHours = useMemo(() => {
     if (chartData.length === 0) return [];
@@ -365,6 +395,23 @@ export function CombinedChart({
               }}
             />
           ))}
+
+          {/* NOW indicator */}
+          {nowHourKey && (
+            <ReferenceLine
+              x={nowHourKey}
+              stroke="#ef4444"
+              strokeWidth={2}
+              label={{
+                value: "NOW",
+                position: "insideTopLeft",
+                fill: "#ef4444",
+                fontSize: 10,
+                fontWeight: 700,
+                offset: 4,
+              }}
+            />
+          )}
 
           {/* Selection highlight overlay */}
           {activeSelectionBounds && (
