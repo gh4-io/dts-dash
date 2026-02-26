@@ -15,7 +15,7 @@ import type {
   CapacityShift,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
-import { getLocalHour, getLocalDateStr } from "./tz-helpers";
+import { getLocalHour, getLocalDateStr, toIsoDayOfWeek } from "./tz-helpers";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -132,7 +132,9 @@ export function computeCoverageRequirements(
     while (current < end) {
       const hour = getLocalHour(current, timezone);
       const dateStr = getLocalDateStr(current, timezone);
-      const shift = resolveShiftForHour(hour, shifts);
+      const jsDay = new Date(dateStr + "T12:00:00Z").getUTCDay();
+      const isoDow = toIsoDayOfWeek(jsDay);
+      const shift = resolveShiftForHour(hour, shifts, isoDow);
 
       if (shift) {
         const key = `${dateStr}|${shift.code}`;

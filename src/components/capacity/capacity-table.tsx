@@ -24,7 +24,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { exportToCsv } from "@/lib/utils/csv-export";
 import { usePreferences } from "@/lib/hooks/use-preferences";
-import type { DailyDemandV2, DailyCapacityV2, DailyUtilizationV2, CapacityLensId } from "@/types";
+import type {
+  DailyDemandV2,
+  DailyCapacityV2,
+  DailyUtilizationV2,
+  CapacityLensId,
+  MonthlyRollupResult,
+} from "@/types";
+import type { ForecastPatternResult } from "@/lib/capacity/forecast-pattern-engine";
 
 interface CapacityRow {
   date: string;
@@ -76,6 +83,9 @@ interface CapacityTableProps {
   eventCountByDate?: Map<string, number>;
   /** Secondary lens for cross-lens comparison column (G-07 session 2) */
   secondaryLens?: CapacityLensId | null;
+  viewAggregation?: "daily" | "weekly-pattern" | "monthly";
+  patternResult?: ForecastPatternResult | null;
+  monthlyRollup?: MonthlyRollupResult | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -136,6 +146,184 @@ const SECONDARY_LENS_COLUMN: Record<
   events: { accessorKey: "eventCount", header: "Events", color: "text-sky-400/60" },
 };
 
+function GapValue({ value }: { value: number }) {
+  const color = value >= 0 ? "text-emerald-400" : "text-red-400";
+  return (
+    <span className={`tabular-nums ${color}`}>
+      {value >= 0 ? "+" : ""}
+      {value.toFixed(1)}
+    </span>
+  );
+}
+
+function UtilValue({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-muted-foreground">—</span>;
+  const color =
+    value > 120
+      ? "text-red-400"
+      : value > 100
+        ? "text-amber-400"
+        : value > 80
+          ? "text-blue-400"
+          : "text-emerald-400";
+  return <span className={`tabular-nums font-medium ${color}`}>{value.toFixed(1)}%</span>;
+}
+
+// ─── Weekly Pattern Table (extracted — no hooks) ──────────────────────
+function WeeklyPatternTable({ result }: { result: ForecastPatternResult }) {
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between p-3 border-b border-border">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
+          <i className="fa-solid fa-table-list" />
+          Weekly Pattern Summary
+        </h3>
+        <span className="text-[10px] text-muted-foreground">
+          {result.totalWeeks} weeks averaged
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-xs font-medium text-muted-foreground text-left px-3 py-2">Day</th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Samples
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Avg Demand MH
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Avg Capacity MH
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Avg Util %
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Avg Gap MH
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.pattern.map((p) => {
+              const isWeekend = p.dayOfWeek >= 6;
+              const util = p.avgCapacityMH > 0 ? (p.avgDemandMH / p.avgCapacityMH) * 100 : null;
+              const gap = p.avgCapacityMH - p.avgDemandMH;
+
+              return (
+                <tr
+                  key={p.dayOfWeek}
+                  className={`border-b border-border/50 ${isWeekend ? "bg-muted/20" : ""}`}
+                >
+                  <td className="px-3 py-2 font-medium">
+                    <span className={isWeekend ? "text-amber-400" : ""}>{p.label}</span>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                    {p.sampleCount}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{p.avgDemandMH.toFixed(1)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {p.avgCapacityMH.toFixed(1)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <UtilValue value={util} />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <GapValue value={gap} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── Monthly Roll-Up Table (extracted — no hooks) ─────────────────────
+function MonthlyRollupTable({ rollup }: { rollup: MonthlyRollupResult }) {
+  const handleMonthlyExport = () => {
+    const csvCols: { header: string; accessor: (r: (typeof rollup.buckets)[0]) => string }[] = [
+      { header: "Month", accessor: (r) => r.label },
+      { header: "Days", accessor: (r) => String(r.dayCount) },
+      { header: "Demand MH", accessor: (r) => r.totalDemandMH.toFixed(1) },
+      { header: "Capacity MH", accessor: (r) => r.totalCapacityMH.toFixed(1) },
+      { header: "Util %", accessor: (r) => r.avgUtilizationPercent?.toFixed(1) ?? "" },
+      { header: "Gap MH", accessor: (r) => r.totalGapMH.toFixed(1) },
+      { header: "Aircraft", accessor: (r) => String(r.totalAircraftCount) },
+    ];
+    exportToCsv("capacity-monthly.csv", rollup.buckets, csvCols);
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between p-3 border-b border-border">
+        <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
+          <i className="fa-solid fa-table-list" />
+          Monthly Roll-Up
+        </h3>
+        <Button variant="outline" size="sm" onClick={handleMonthlyExport}>
+          <i className="fa-solid fa-file-csv mr-1.5" />
+          Export CSV
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-xs font-medium text-muted-foreground text-left px-3 py-2">
+                Month
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Days
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Demand MH
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Capacity MH
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Util %
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Gap MH
+              </th>
+              <th className="text-xs font-medium text-muted-foreground text-right px-3 py-2">
+                Aircraft
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rollup.buckets.map((bucket) => (
+              <tr key={bucket.monthKey} className="border-b border-border/50">
+                <td className="px-3 py-2 font-medium">{bucket.label}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  {bucket.dayCount}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {bucket.totalDemandMH.toFixed(1)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {bucket.totalCapacityMH.toFixed(1)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <UtilValue value={bucket.avgUtilizationPercent} />
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <GapValue value={bucket.totalGapMH} />
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{bucket.totalAircraftCount}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function CapacityTable({
   demand,
   capacity,
@@ -143,6 +331,9 @@ export function CapacityTable({
   activeLens,
   eventCountByDate,
   secondaryLens,
+  viewAggregation = "daily",
+  patternResult,
+  monthlyRollup,
 }: CapacityTableProps) {
   const { tablePageSize } = usePreferences();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -565,6 +756,14 @@ export function CapacityTable({
 
     exportToCsv("capacity-report.csv", rows, csvColumns);
   }, [rows, activeLens, secondaryLens]);
+
+  // ─── Non-daily modes: render extracted components ───────────────────
+  if (viewAggregation === "weekly-pattern" && patternResult) {
+    return <WeeklyPatternTable result={patternResult} />;
+  }
+  if (viewAggregation === "monthly" && monthlyRollup) {
+    return <MonthlyRollupTable rollup={monthlyRollup} />;
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card">

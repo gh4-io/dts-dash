@@ -292,6 +292,7 @@ export const capacityShifts = sqliteTable("capacity_shifts", {
   minHeadcount: integer("min_headcount").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  operatingDays: text("operating_days"), // JSON array of ISO DOW [1..7]; null = every day
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

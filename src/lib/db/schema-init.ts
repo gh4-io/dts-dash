@@ -1034,6 +1034,20 @@ export function runMigrations(): MigrationResult[] {
       }
     }),
   );
+
+  // M020: Add operating_days column to capacity_shifts + backfill SWING (Mon-Thu)
+  results.push(
+    applyMigration("M020_shift_operating_days", () => {
+      const cols = sqlite.pragma("table_info(capacity_shifts)") as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "operating_days")) {
+        sqlite.exec(`ALTER TABLE capacity_shifts ADD COLUMN operating_days TEXT`);
+      }
+      // Backfill: SWING operates Mon-Thu only (ISO DOW 1-4)
+      sqlite.exec(
+        `UPDATE capacity_shifts SET operating_days = '[1,2,3,4]' WHERE code = 'SWING' AND operating_days IS NULL`,
+      );
+    }),
+  );
   return results;
 }
 

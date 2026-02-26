@@ -7,7 +7,14 @@ import { PieChart } from "echarts/charts";
 import { TooltipComponent, LegendComponent } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 import { useTheme } from "next-themes";
-import type { DailyDemandV2, DailyUtilizationV2, CapacityShift, CapacityLensId } from "@/types";
+import type {
+  DailyDemandV2,
+  DailyUtilizationV2,
+  CapacityShift,
+  CapacityLensId,
+  MonthlyRollupResult,
+} from "@/types";
+import type { ForecastPatternResult } from "@/lib/capacity/forecast-pattern-engine";
 
 echarts.use([PieChart, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -16,6 +23,9 @@ interface CapacityPieChartsProps {
   utilization: DailyUtilizationV2[];
   shifts: CapacityShift[];
   activeLens: CapacityLensId;
+  viewAggregation?: "daily" | "weekly-pattern" | "monthly";
+  patternResult?: ForecastPatternResult | null;
+  monthlyRollup?: MonthlyRollupResult | null;
 }
 
 const SHIFT_COLORS: Record<string, string> = {
@@ -91,6 +101,9 @@ export function CapacityPieCharts({
   utilization,
   shifts,
   activeLens,
+  viewAggregation = "daily",
+  patternResult,
+  monthlyRollup,
 }: CapacityPieChartsProps) {
   const ref1 = useRef<ReactEChartsCore>(null);
   const ref2 = useRef<ReactEChartsCore>(null);
@@ -118,14 +131,33 @@ export function CapacityPieCharts({
   // Donut/ring — best for many-item parts-of-whole breakdown
   const customerDonutOption = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const day of demand) {
-      const mh = getLensTotalMH(day, activeLens);
-      if (mh <= 0) continue;
-      // Distribute proportionally using byCustomer ratios
-      const rawTotal = Object.values(day.byCustomer).reduce((s, v) => s + v, 0);
-      for (const [customer, rawMH] of Object.entries(day.byCustomer)) {
-        const scaled = rawTotal > 0 ? (rawMH / rawTotal) * mh : rawMH;
-        totals.set(customer, (totals.get(customer) ?? 0) + scaled);
+
+    if (viewAggregation === "weekly-pattern" && patternResult) {
+      // Sum avgDemandByCustomerByShift across all shifts × 7 DOWs
+      for (const p of patternResult.pattern) {
+        for (const customers of Object.values(p.avgDemandByCustomerByShift)) {
+          for (const [customer, mh] of Object.entries(customers)) {
+            totals.set(customer, (totals.get(customer) ?? 0) + mh);
+          }
+        }
+      }
+    } else if (viewAggregation === "monthly" && monthlyRollup) {
+      // Sum bucket.byCustomer across all months
+      for (const bucket of monthlyRollup.buckets) {
+        for (const [customer, mh] of Object.entries(bucket.byCustomer)) {
+          totals.set(customer, (totals.get(customer) ?? 0) + mh);
+        }
+      }
+    } else {
+      // Daily mode — existing logic
+      for (const day of demand) {
+        const mh = getLensTotalMH(day, activeLens);
+        if (mh <= 0) continue;
+        const rawTotal = Object.values(day.byCustomer).reduce((s, v) => s + v, 0);
+        for (const [customer, rawMH] of Object.entries(day.byCustomer)) {
+          const scaled = rawTotal > 0 ? (rawMH / rawTotal) * mh : rawMH;
+          totals.set(customer, (totals.get(customer) ?? 0) + scaled);
+        }
       }
     }
 
@@ -171,21 +203,51 @@ export function CapacityPieCharts({
         },
       ],
     };
-  }, [demand, activeLens, tooltipStyle, isDark]);
+  }, [demand, activeLens, tooltipStyle, isDark, viewAggregation, patternResult, monthlyRollup]);
 
   // ── Chart 2: Utilization Zone Distribution ─────────────────────────────
   // Standard pie — 4 clear health-band segments
   const utilizationZoneOption = useMemo(() => {
     const zones = { critical: 0, over: 0, high: 0, normal: 0 };
 
-    for (const day of utilization) {
-      for (const s of day.byShift) {
-        if (s.noCoverage || s.utilization === null) continue;
-        const u = s.utilization;
-        if (u > 120) zones.critical++;
-        else if (u > 100) zones.over++;
-        else if (u > 80) zones.high++;
-        else zones.normal++;
+    if (viewAggregation === "weekly-pattern" && patternResult) {
+      // Classify each (DOW × shift) avg utilization
+      const activeShifts = shifts.filter((s) => s.isActive);
+      for (const p of patternResult.pattern) {
+        for (const shift of activeShifts) {
+          const dem = p.avgDemandByShift[shift.code] ?? 0;
+          const cap = p.avgCapacityByShift[shift.code] ?? 0;
+          if (cap === 0) continue;
+          const u = (dem / cap) * 100;
+          if (u > 120) zones.critical++;
+          else if (u > 100) zones.over++;
+          else if (u > 80) zones.high++;
+          else zones.normal++;
+        }
+      }
+    } else if (viewAggregation === "monthly" && monthlyRollup) {
+      // Classify each (month × shift) avg utilization
+      for (const bucket of monthlyRollup.buckets) {
+        for (const sb of bucket.byShift) {
+          if (sb.avgUtilization === null) continue;
+          const u = sb.avgUtilization;
+          if (u > 120) zones.critical++;
+          else if (u > 100) zones.over++;
+          else if (u > 80) zones.high++;
+          else zones.normal++;
+        }
+      }
+    } else {
+      // Daily mode — existing logic
+      for (const day of utilization) {
+        for (const s of day.byShift) {
+          if (s.noCoverage || s.utilization === null) continue;
+          const u = s.utilization;
+          if (u > 120) zones.critical++;
+          else if (u > 100) zones.over++;
+          else if (u > 80) zones.high++;
+          else zones.normal++;
+        }
       }
     }
 
@@ -229,7 +291,7 @@ export function CapacityPieCharts({
         },
       ],
     };
-  }, [utilization, tooltipStyle, isDark]);
+  }, [utilization, tooltipStyle, isDark, viewAggregation, patternResult, monthlyRollup, shifts]);
 
   // ── Chart 3: Shift Load Nightingale Rose ───────────────────────────────
   // Rose chart (roseType: 'area') — radius encodes magnitude, best for
@@ -238,10 +300,27 @@ export function CapacityPieCharts({
     const activeShifts = shifts.filter((s) => s.isActive);
     const shiftMH = new Map<string, number>(activeShifts.map((s) => [s.code, 0]));
 
-    for (const day of demand) {
-      for (const sd of day.byShift) {
-        const mh = getShiftLensMH(sd, activeLens);
-        shiftMH.set(sd.shiftCode, (shiftMH.get(sd.shiftCode) ?? 0) + mh);
+    if (viewAggregation === "weekly-pattern" && patternResult) {
+      // Sum avgDemandByShift[code] across 7 DOWs
+      for (const p of patternResult.pattern) {
+        for (const [code, mh] of Object.entries(p.avgDemandByShift)) {
+          shiftMH.set(code, (shiftMH.get(code) ?? 0) + mh);
+        }
+      }
+    } else if (viewAggregation === "monthly" && monthlyRollup) {
+      // Sum byShift[].totalDemandMH across months
+      for (const bucket of monthlyRollup.buckets) {
+        for (const sb of bucket.byShift) {
+          shiftMH.set(sb.shiftCode, (shiftMH.get(sb.shiftCode) ?? 0) + sb.totalDemandMH);
+        }
+      }
+    } else {
+      // Daily mode — existing logic
+      for (const day of demand) {
+        for (const sd of day.byShift) {
+          const mh = getShiftLensMH(sd, activeLens);
+          shiftMH.set(sd.shiftCode, (shiftMH.get(sd.shiftCode) ?? 0) + mh);
+        }
       }
     }
 
@@ -281,7 +360,16 @@ export function CapacityPieCharts({
         },
       ],
     };
-  }, [demand, shifts, activeLens, tooltipStyle, isDark]);
+  }, [
+    demand,
+    shifts,
+    activeLens,
+    tooltipStyle,
+    isDark,
+    viewAggregation,
+    patternResult,
+    monthlyRollup,
+  ]);
 
   const hasData = demand.length > 0;
 

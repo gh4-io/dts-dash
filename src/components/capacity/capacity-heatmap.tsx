@@ -16,7 +16,9 @@ import type {
   DailyUtilizationV2,
   CapacityShift,
   CapacityLensId,
+  MonthlyRollupResult,
 } from "@/types";
+import type { ForecastPatternResult } from "@/lib/capacity/forecast-pattern-engine";
 
 interface CapacityHeatmapProps {
   capacity: DailyCapacityV2[];
@@ -25,6 +27,9 @@ interface CapacityHeatmapProps {
   shifts: CapacityShift[];
   activeLens: CapacityLensId;
   onCellClick?: (date: string, shiftCode: string | null) => void;
+  viewAggregation?: "daily" | "weekly-pattern" | "monthly";
+  patternResult?: ForecastPatternResult | null;
+  monthlyRollup?: MonthlyRollupResult | null;
 }
 
 /** Shift display config */
@@ -150,6 +155,9 @@ export function CapacityHeatmap({
   shifts,
   activeLens,
   onCellClick,
+  viewAggregation = "daily",
+  patternResult,
+  monthlyRollup,
 }: CapacityHeatmapProps) {
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
 
@@ -158,12 +166,11 @@ export function CapacityHeatmap({
     [shifts],
   );
 
-  // Build lookup maps
+  // Build lookup maps (always — hooks cannot be conditional)
   const capMap = useMemo(() => new Map(capacity.map((c) => [c.date, c])), [capacity]);
   const demMap = useMemo(() => new Map(demand.map((d) => [d.date, d])), [demand]);
   const utilMap = useMemo(() => new Map(utilization.map((u) => [u.date, u])), [utilization]);
 
-  // Sorted dates
   const dates = useMemo(() => {
     const allDates = new Set([...capMap.keys(), ...utilMap.keys()]);
     return Array.from(allDates).sort();
@@ -177,6 +184,236 @@ export function CapacityHeatmap({
   );
 
   const lensConfig = activeLens !== "planned" ? LENS_TOOLTIP_CONFIG[activeLens] : null;
+
+  // ─── Weekly Pattern Heatmap ───────────────────────────────────────────
+  if (viewAggregation === "weekly-pattern" && patternResult) {
+    return (
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between p-3 border-b border-border">
+          <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
+            <i className="fa-solid fa-table-cells" />
+            Weekly Pattern Heatmap
+          </h3>
+          <span className="text-[10px] text-muted-foreground">
+            {patternResult.totalWeeks} weeks averaged
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <TooltipProvider delayDuration={200}>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs w-[140px]">Day</TableHead>
+                  {activeShifts.map((shift) => (
+                    <TableHead key={shift.code} className="text-xs text-center min-w-[100px]">
+                      <span className="flex items-center justify-center gap-1.5">
+                        <i
+                          className={`fa-solid ${SHIFT_ICONS[shift.code] ?? "fa-clock"} text-[10px] ${SHIFT_COLORS[shift.code] ?? ""}`}
+                        />
+                        {shift.name}
+                      </span>
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-xs text-center min-w-[100px] border-l border-border">
+                    <span className="flex items-center justify-center gap-1.5">
+                      <i className="fa-solid fa-sigma text-[10px] text-muted-foreground" />
+                      Total
+                    </span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {patternResult.pattern.map((p) => {
+                  const isWeekend = p.dayOfWeek >= 6;
+                  const totalUtil =
+                    p.avgCapacityMH > 0 ? (p.avgDemandMH / p.avgCapacityMH) * 100 : null;
+
+                  return (
+                    <TableRow
+                      key={p.dayOfWeek}
+                      className={`hover:bg-transparent ${isWeekend ? "bg-muted/20" : ""}`}
+                    >
+                      <TableCell className="py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-xs font-medium ${isWeekend ? "text-amber-400" : ""}`}
+                          >
+                            {p.label}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            ({p.sampleCount} samples)
+                          </span>
+                        </div>
+                      </TableCell>
+
+                      {activeShifts.map((shift) => {
+                        const demMH = p.avgDemandByShift[shift.code] ?? 0;
+                        const capMH = p.avgCapacityByShift[shift.code] ?? 0;
+                        const util = capMH > 0 ? (demMH / capMH) * 100 : null;
+                        const noCoverage = capMH === 0 && demMH === 0;
+
+                        return (
+                          <TableCell key={shift.code} className="py-1 px-1 text-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div
+                                  className={`rounded-md px-2 py-1.5 text-xs tabular-nums ${getUtilCellClasses(util, noCoverage)}`}
+                                >
+                                  {noCoverage ? (
+                                    <span className="flex items-center justify-center gap-1 text-[10px]">
+                                      <i className="fa-solid fa-ban text-[8px]" />
+                                      N/C
+                                    </span>
+                                  ) : util !== null ? (
+                                    `${util.toFixed(0)}%`
+                                  ) : (
+                                    "—"
+                                  )}
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs max-w-[200px]">
+                                <div className="space-y-1">
+                                  <div className="font-medium">
+                                    {shift.name} — {p.label}
+                                  </div>
+                                  <div>Avg Demand: {demMH.toFixed(1)} MH</div>
+                                  <div>Avg Capacity: {capMH.toFixed(1)} MH</div>
+                                  <div>Avg Gap: {(capMH - demMH).toFixed(1)} MH</div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        );
+                      })}
+
+                      <TableCell className="py-1 px-1 text-center border-l border-border">
+                        <div
+                          className={`rounded-md px-2 py-1.5 text-xs tabular-nums font-medium ${getUtilCellClasses(totalUtil, false)}`}
+                        >
+                          {totalUtil !== null ? `${totalUtil.toFixed(0)}%` : "—"}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Monthly Heatmap ──────────────────────────────────────────────────
+  if (viewAggregation === "monthly" && monthlyRollup) {
+    return (
+      <div className="rounded-lg border border-border bg-card">
+        <div className="flex items-center justify-between p-3 border-b border-border">
+          <h3 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-2">
+            <i className="fa-solid fa-table-cells" />
+            Monthly Utilization Heatmap
+          </h3>
+          <span className="text-[10px] text-muted-foreground">
+            {monthlyRollup.totalMonths} months
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <TooltipProvider delayDuration={200}>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="text-xs w-[140px]">Month</TableHead>
+                  {activeShifts.map((shift) => (
+                    <TableHead key={shift.code} className="text-xs text-center min-w-[100px]">
+                      <span className="flex items-center justify-center gap-1.5">
+                        <i
+                          className={`fa-solid ${SHIFT_ICONS[shift.code] ?? "fa-clock"} text-[10px] ${SHIFT_COLORS[shift.code] ?? ""}`}
+                        />
+                        {shift.name}
+                      </span>
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-xs text-center min-w-[100px] border-l border-border">
+                    <span className="flex items-center justify-center gap-1.5">
+                      <i className="fa-solid fa-sigma text-[10px] text-muted-foreground" />
+                      Total
+                    </span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyRollup.buckets.map((bucket) => (
+                  <TableRow key={bucket.monthKey} className="hover:bg-transparent">
+                    <TableCell className="py-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{bucket.label}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          ({bucket.dayCount} days)
+                        </span>
+                      </div>
+                    </TableCell>
+
+                    {activeShifts.map((shift) => {
+                      const shiftBucket = bucket.byShift.find((s) => s.shiftCode === shift.code);
+                      const util = shiftBucket?.avgUtilization ?? null;
+                      const noCoverage =
+                        (shiftBucket?.totalCapacityMH ?? 0) === 0 &&
+                        (shiftBucket?.totalDemandMH ?? 0) === 0;
+
+                      return (
+                        <TableCell key={shift.code} className="py-1 px-1 text-center">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                className={`rounded-md px-2 py-1.5 text-xs tabular-nums ${getUtilCellClasses(util, noCoverage)}`}
+                              >
+                                {noCoverage ? (
+                                  <span className="flex items-center justify-center gap-1 text-[10px]">
+                                    <i className="fa-solid fa-ban text-[8px]" />
+                                    N/C
+                                  </span>
+                                ) : util !== null ? (
+                                  `${util.toFixed(0)}%`
+                                ) : (
+                                  "—"
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[200px]">
+                              <div className="space-y-1">
+                                <div className="font-medium">
+                                  {shift.name} — {bucket.label}
+                                </div>
+                                <div>Demand: {(shiftBucket?.totalDemandMH ?? 0).toFixed(1)} MH</div>
+                                <div>
+                                  Capacity: {(shiftBucket?.totalCapacityMH ?? 0).toFixed(1)} MH
+                                </div>
+                                <div>Gap: {(shiftBucket?.totalGapMH ?? 0).toFixed(1)} MH</div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TableCell>
+                      );
+                    })}
+
+                    <TableCell className="py-1 px-1 text-center border-l border-border">
+                      <div
+                        className={`rounded-md px-2 py-1.5 text-xs tabular-nums font-medium ${getUtilCellClasses(bucket.avgUtilizationPercent ?? null, false)}`}
+                      >
+                        {bucket.avgUtilizationPercent !== null
+                          ? `${bucket.avgUtilizationPercent.toFixed(0)}%`
+                          : "—"}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TooltipProvider>
+        </div>
+      </div>
+    );
+  }
 
   if (dates.length === 0) {
     return (

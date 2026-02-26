@@ -9,7 +9,9 @@ import type {
   EventCoverageWindow,
   GapSummary,
   CustomerEventSummary,
+  MonthlyRollupResult,
 } from "@/types";
+import type { ForecastPatternResult } from "@/lib/capacity/forecast-pattern-engine";
 // Direct import — NOT barrel (D-047: barrel re-exports server-only modules)
 import { CAPACITY_LENSES } from "@/lib/capacity/lens-config";
 
@@ -25,6 +27,10 @@ interface CapacityKpiStripProps {
   customerEventSummary?: CustomerEventSummary[];
   /** Secondary lens for cross-lens comparison (G-07 session 2) */
   secondaryLens?: CapacityLensId | null;
+  /** Aggregation mode */
+  viewAggregation?: "daily" | "weekly-pattern" | "monthly";
+  patternResult?: ForecastPatternResult | null;
+  monthlyRollup?: MonthlyRollupResult | null;
 }
 
 function getUtilColor(val: number | null): string {
@@ -78,10 +84,53 @@ export function CapacityKpiStrip({
   activeScenarioLabel,
   customerEventSummary,
   secondaryLens,
+  viewAggregation = "daily",
+  patternResult,
+  monthlyRollup,
 }: CapacityKpiStripProps) {
-  const avgUtil = summary.avgUtilization;
-  const peakUtil = summary.peakUtilization;
-  const gap = summary.totalCapacityMH - summary.totalDemandMH;
+  // Mode-aware core KPIs
+  const modeKpis = useMemo(() => {
+    if (viewAggregation === "weekly-pattern" && patternResult) {
+      const p = patternResult.pattern;
+      const totalDemand = p.reduce((s, d) => s + d.avgDemandMH, 0);
+      const totalCapacity = p.reduce((s, d) => s + d.avgCapacityMH, 0);
+      const avgUtil = totalCapacity > 0 ? (totalDemand / totalCapacity) * 100 : null;
+      const peakUtil = p.reduce((max, d) => {
+        const u = d.avgCapacityMH > 0 ? (d.avgDemandMH / d.avgCapacityMH) * 100 : 0;
+        return Math.max(max, u);
+      }, 0);
+      const gap = totalCapacity - totalDemand;
+      return {
+        avgUtil,
+        peakUtil: peakUtil > 0 ? peakUtil : null,
+        totalDemand,
+        totalCapacity,
+        gap,
+        subLabel: `Weekly Pattern (${patternResult.totalWeeks} weeks)`,
+      };
+    }
+    if (viewAggregation === "monthly" && monthlyRollup) {
+      const b = monthlyRollup.buckets;
+      const totalDemand = b.reduce((s, m) => s + m.totalDemandMH, 0);
+      const totalCapacity = b.reduce((s, m) => s + m.totalCapacityMH, 0);
+      const avgUtil = totalCapacity > 0 ? (totalDemand / totalCapacity) * 100 : null;
+      const peakUtil = b.reduce((max, m) => Math.max(max, m.avgUtilizationPercent ?? 0), 0);
+      const gap = totalCapacity - totalDemand;
+      return {
+        avgUtil,
+        peakUtil: peakUtil > 0 ? peakUtil : null,
+        totalDemand,
+        totalCapacity,
+        gap,
+        subLabel: `${b.length} Months`,
+      };
+    }
+    return null;
+  }, [viewAggregation, patternResult, monthlyRollup]);
+
+  const avgUtil = modeKpis?.avgUtil ?? summary.avgUtilization;
+  const peakUtil = modeKpis?.peakUtil ?? summary.peakUtilization;
+  const gap = modeKpis ? modeKpis.gap : summary.totalCapacityMH - summary.totalDemandMH;
 
   const lensKpis = useMemo(() => {
     switch (activeLens) {
@@ -285,7 +334,7 @@ export function CapacityKpiStrip({
         icon="fa-chart-line"
         label="Avg Utilization"
         value={avgUtil !== null ? `${avgUtil.toFixed(1)}%` : "N/A"}
-        subValue={`${dayCount} days`}
+        subValue={modeKpis?.subLabel ?? `${dayCount} days`}
         color={getUtilColor(avgUtil)}
       />
       <KpiCard
@@ -293,21 +342,38 @@ export function CapacityKpiStrip({
         label="Peak Utilization"
         value={peakUtil !== null ? `${peakUtil.toFixed(1)}%` : "N/A"}
         subValue={
-          summary.worstDeficit
-            ? `${summary.worstDeficit.date} ${summary.worstDeficit.shift}`
-            : undefined
+          modeKpis
+            ? viewAggregation === "weekly-pattern"
+              ? "Highest DOW avg"
+              : "Highest month"
+            : summary.worstDeficit
+              ? `${summary.worstDeficit.date} ${summary.worstDeficit.shift}`
+              : undefined
         }
         color={getUtilColor(peakUtil)}
       />
       <KpiCard
         icon="fa-hammer"
-        label="Total Demand"
-        value={`${summary.totalDemandMH.toFixed(0)} MH`}
+        label={
+          modeKpis
+            ? viewAggregation === "weekly-pattern"
+              ? "Typical Week Demand"
+              : "Total Demand"
+            : "Total Demand"
+        }
+        value={`${(modeKpis?.totalDemand ?? summary.totalDemandMH).toFixed(0)} MH`}
+        subValue={viewAggregation === "weekly-pattern" ? "7-day average total" : undefined}
       />
       <KpiCard
         icon="fa-people-group"
-        label="Total Capacity"
-        value={`${summary.totalCapacityMH.toFixed(0)} MH`}
+        label={
+          modeKpis
+            ? viewAggregation === "weekly-pattern"
+              ? "Typical Week Capacity"
+              : "Total Capacity"
+            : "Total Capacity"
+        }
+        value={`${(modeKpis?.totalCapacity ?? summary.totalCapacityMH).toFixed(0)} MH`}
         subValue={`Gap: ${gap >= 0 ? "+" : ""}${gap.toFixed(0)} MH`}
         color={gap < 0 ? "text-red-400" : "text-emerald-400"}
       />

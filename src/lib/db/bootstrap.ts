@@ -137,8 +137,8 @@ function ensureDefaultCapacityData(): void {
     ];
 
     const insertShift = sqlite.prepare(
-      `INSERT INTO capacity_shifts (code, name, start_hour, end_hour, paid_hours, timezone, min_headcount, sort_order, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'UTC', 1, ?, 1, ?, ?)`,
+      `INSERT INTO capacity_shifts (code, name, start_hour, end_hour, paid_hours, timezone, min_headcount, sort_order, is_active, operating_days, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'UTC', 1, ?, 1, ?, ?, ?)`,
     );
 
     const insertPlan = sqlite.prepare(
@@ -147,9 +147,25 @@ function ensureDefaultCapacityData(): void {
     );
 
     const defaultHeadcounts: Record<string, number> = { DAY: 8, SWING: 6, NIGHT: 4 };
+    // SWING operates Mon-Thu only (ISO: 1-4); DAY/NIGHT operate every day
+    const operatingDaysMap: Record<string, string | null> = {
+      DAY: null,
+      SWING: JSON.stringify([1, 2, 3, 4]),
+      NIGHT: null,
+    };
 
     for (const s of shifts) {
-      insertShift.run(s.code, s.name, s.startHour, s.endHour, s.paidHours, s.sortOrder, now, now);
+      insertShift.run(
+        s.code,
+        s.name,
+        s.startHour,
+        s.endHour,
+        s.paidHours,
+        s.sortOrder,
+        operatingDaysMap[s.code] ?? null,
+        now,
+        now,
+      );
       const row = sqlite.prepare("SELECT id FROM capacity_shifts WHERE code = ?").get(s.code) as {
         id: number;
       };

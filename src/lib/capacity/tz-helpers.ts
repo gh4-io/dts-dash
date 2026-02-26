@@ -54,6 +54,13 @@ export function getLocalDateStr(utcDate: Date, tz: string): string {
 }
 
 /**
+ * Convert JS day-of-week (0=Sun..6=Sat) to ISO 8601 (1=Mon..7=Sun).
+ */
+export function toIsoDayOfWeek(jsDay: number): number {
+  return jsDay === 0 ? 7 : jsDay;
+}
+
+/**
  * Validate that a timezone string is a valid IANA timezone.
  */
 export function isValidTimezone(tz: string): boolean {

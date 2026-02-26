@@ -24,6 +24,8 @@ import type { DemandScenario, CapacityLensId, CapacityComputeMode } from "@/type
 import { applyDemandScenario, DEMAND_SCENARIOS } from "@/lib/capacity/scenario-engine";
 import { computeRollingForecast } from "@/lib/capacity/rolling-forecast-engine";
 import { computeGapSummary } from "@/lib/capacity/gap-engine";
+import { computeDayOfWeekPattern } from "@/lib/capacity/forecast-pattern-engine";
+import { aggregateMonthlyRollup } from "@/lib/capacity/monthly-rollup-engine";
 import {
   summarizeEventsByCustomer,
   aggregateCoverageByCustomer,
@@ -107,6 +109,17 @@ function CapacityPageInner() {
   const gapSummary = useMemo(() => {
     return computeGapSummary(effectiveUtilization);
   }, [effectiveUtilization]);
+
+  // Pre-compute aggregation results — shared by KPI strip, heatmap, table, pie charts
+  const patternResult = useMemo(() => {
+    if (viewAggregation !== "weekly-pattern" || effectiveDemand.length === 0) return null;
+    return computeDayOfWeekPattern(effectiveDemand, capacity);
+  }, [viewAggregation, effectiveDemand, capacity]);
+
+  const monthlyRollup = useMemo(() => {
+    if (viewAggregation !== "monthly" || effectiveDemand.length === 0) return null;
+    return aggregateMonthlyRollup(effectiveDemand, capacity, effectiveUtilization);
+  }, [viewAggregation, effectiveDemand, capacity, effectiveUtilization]);
 
   // Warnings dismiss state — resets when data is refreshed
   const [warningsDismissed, setWarningsDismissed] = useState(false);
@@ -309,6 +322,9 @@ function CapacityPageInner() {
               activeScenarioLabel={activeScenario.label}
               customerEventSummary={customerEventSummary}
               secondaryLens={secondaryLens}
+              viewAggregation={viewAggregation}
+              patternResult={patternResult}
+              monthlyRollup={monthlyRollup}
             />
           )}
 
@@ -362,6 +378,9 @@ function CapacityPageInner() {
                   shifts={shifts}
                   activeLens={activeLens}
                   onCellClick={handleCellClick}
+                  viewAggregation={viewAggregation}
+                  patternResult={patternResult}
+                  monthlyRollup={monthlyRollup}
                 />
               </div>
 
@@ -371,6 +390,9 @@ function CapacityPageInner() {
                 utilization={effectiveUtilization}
                 shifts={shifts}
                 activeLens={activeLens}
+                viewAggregation={viewAggregation}
+                patternResult={patternResult}
+                monthlyRollup={monthlyRollup}
               />
             </div>
           </div>
@@ -383,6 +405,9 @@ function CapacityPageInner() {
             activeLens={activeLens}
             eventCountByDate={eventCountByDate}
             secondaryLens={secondaryLens}
+            viewAggregation={viewAggregation}
+            patternResult={patternResult}
+            monthlyRollup={monthlyRollup}
           />
 
           {/* Drilldown drawer — uses ORIGINAL demand (not scenario-adjusted) */}

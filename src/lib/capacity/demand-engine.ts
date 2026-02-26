@@ -17,7 +17,7 @@
  */
 
 import type { CapacityShift, CapacityAssumptions, DailyDemandV2, ShiftDemandV2 } from "@/types";
-import { getLocalHour, getLocalDateStr } from "./tz-helpers";
+import { getLocalHour, getLocalDateStr, toIsoDayOfWeek } from "./tz-helpers";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -39,8 +39,19 @@ export interface DemandWorkPackage {
  * Handles overnight shifts (e.g., Night 23-07).
  * Returns the shift or null if no shift covers that hour.
  */
-export function resolveShiftForHour(hour: number, shifts: CapacityShift[]): CapacityShift | null {
-  for (const shift of shifts) {
+export function resolveShiftForHour(
+  hour: number,
+  shifts: CapacityShift[],
+  isoDow?: number,
+): CapacityShift | null {
+  // Filter to shifts operating on this day of week (when isoDow provided)
+  const operating =
+    isoDow != null
+      ? shifts.filter((s) => !s.operatingDays || s.operatingDays.includes(isoDow))
+      : shifts;
+
+  // Try exact hour match among operating shifts
+  for (const shift of operating) {
     if (shift.startHour < shift.endHour) {
       // Normal shift: e.g., Day 07-15
       if (hour >= shift.startHour && hour < shift.endHour) return shift;
@@ -49,6 +60,26 @@ export function resolveShiftForHour(hour: number, shifts: CapacityShift[]): Capa
       if (hour >= shift.startHour || hour < shift.endHour) return shift;
     }
   }
+
+  // No exact match — find the closest operating shift (covers gaps
+  // left by non-operating shifts, e.g. SWING hours → DAY or NIGHT)
+  if (operating.length > 0) {
+    let closest: CapacityShift | null = null;
+    let minDist = Infinity;
+    for (const shift of operating) {
+      const dStart = Math.abs(hour - shift.startHour);
+      const distToStart = Math.min(dStart, 24 - dStart);
+      const dEnd = Math.abs(hour - shift.endHour);
+      const distToEnd = Math.min(dEnd, 24 - dEnd);
+      const dist = Math.min(distToStart, distToEnd);
+      if (dist < minDist) {
+        minDist = dist;
+        closest = shift;
+      }
+    }
+    return closest;
+  }
+
   return null;
 }
 
@@ -100,7 +131,13 @@ export function enumerateGroundSlots(
   while (current < departure) {
     const localHour = getLocalHour(current, timezone);
     const localDate = getLocalDateStr(current, timezone);
-    const shift = resolveShiftForHour(localHour, activeShifts);
+
+    // Compute ISO day-of-week so resolveShiftForHour can skip non-operating shifts
+    // and dynamically redistribute hours to the nearest operating shift
+    const jsDay = new Date(localDate + "T12:00:00Z").getUTCDay();
+    const isoDow = toIsoDayOfWeek(jsDay);
+
+    const shift = resolveShiftForHour(localHour, activeShifts, isoDow);
 
     if (shift) {
       const key = `${localDate}:${shift.code}`;

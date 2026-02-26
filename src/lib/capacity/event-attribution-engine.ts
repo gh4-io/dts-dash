@@ -15,6 +15,7 @@ import type {
   CustomerEventSummary,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
+import { toIsoDayOfWeek } from "./tz-helpers";
 
 /**
  * Aggregate coverage minutes per (date, shift, customer) from coverage windows.
@@ -35,7 +36,9 @@ export function aggregateCoverageByCustomer(
     while (current < end) {
       const hour = current.getUTCHours();
       const dateStr = current.toISOString().split("T")[0];
-      const shift = resolveShiftForHour(hour, shifts);
+      const jsDay = new Date(dateStr + "T12:00:00Z").getUTCDay();
+      const isoDow = toIsoDayOfWeek(jsDay);
+      const shift = resolveShiftForHour(hour, shifts, isoDow);
 
       if (shift) {
         const key = `${dateStr}|${shift.code}|${w.customer}`;

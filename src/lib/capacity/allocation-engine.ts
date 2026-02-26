@@ -217,8 +217,13 @@ export function applyAllocations(
       demandMap.set(date, day);
     }
 
+    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
+    const isoDow = jsDay === 0 ? 7 : jsDay; // ISO: 1=Mon..7=Sun
+
     const activeShifts = shifts.filter((s) => s.isActive);
     for (const shift of activeShifts) {
+      // Skip shifts that don't operate on this day of week
+      if (shift.operatingDays && !shift.operatingDays.includes(isoDow)) continue;
       let shiftDemand = day.byShift.find((s) => s.shiftCode === shift.code);
       if (!shiftDemand) {
         shiftDemand = {

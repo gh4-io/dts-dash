@@ -109,7 +109,26 @@ export function computeDailyCapacityV2(
   const activeShifts = shifts.filter((s) => s.isActive);
 
   return dates.map((date) => {
+    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
+    const isoDow = jsDay === 0 ? 7 : jsDay; // ISO: 1=Mon..7=Sun
+
     const byShift: ShiftCapacityV2[] = activeShifts.map((shift) => {
+      // Skip non-operating days — return zero capacity
+      if (shift.operatingDays && !shift.operatingDays.includes(isoDow)) {
+        return {
+          shiftCode: shift.code,
+          shiftName: shift.name,
+          rosterHeadcount: 0,
+          effectiveHeadcount: 0,
+          paidHoursPerPerson: shift.paidHours,
+          paidMH: 0,
+          availableMH: 0,
+          productiveMH: 0,
+          hasExceptions: false,
+          belowMinHeadcount: false,
+        };
+      }
+
       const { headcount, hasExceptions } = resolveHeadcount(date, shift.id, plans, exceptions);
       const effectiveHeadcount = headcount * assumptions.paidToAvailable;
 
@@ -161,8 +180,26 @@ export function computeDailyCapacityFromStaffing(
 
   return dates.map((date) => {
     const dayStaffing = staffingMap.get(date);
+    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
+    const isoDow = jsDay === 0 ? 7 : jsDay;
 
     const byShift: ShiftCapacityV2[] = activeShifts.map((shift) => {
+      // Skip non-operating days — return zero capacity
+      if (shift.operatingDays && !shift.operatingDays.includes(isoDow)) {
+        return {
+          shiftCode: shift.code,
+          shiftName: shift.name,
+          rosterHeadcount: 0,
+          effectiveHeadcount: 0,
+          paidHoursPerPerson: shift.paidHours,
+          paidMH: 0,
+          availableMH: 0,
+          productiveMH: 0,
+          hasExceptions: false,
+          belowMinHeadcount: false,
+        };
+      }
+
       const staffing = dayStaffing?.get(shift.code);
       const headcount = staffing?.headcount ?? 0;
       const paidHoursPerPerson = staffing?.effectivePaidHours ?? shift.paidHours;

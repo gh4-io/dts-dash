@@ -502,3 +502,111 @@ describe("timezone-aware enumerateGroundSlots", () => {
     expect(shiftCodes).toContain("SWING");
   });
 });
+
+// ─── resolveShiftForHour with operatingDays (isoDow) ──────────────────────
+
+describe("resolveShiftForHour — operatingDays aware", () => {
+  const shiftsWithOpDays: CapacityShift[] = [
+    { ...shifts[0] }, // DAY 07-15 — every day
+    { ...shifts[1], operatingDays: [1, 2, 3, 4] }, // SWING 15-23 — Mon-Thu
+    { ...shifts[2] }, // NIGHT 23-07 — every day
+  ];
+
+  it("returns SWING on Wednesday (ISO 3) for hour 18", () => {
+    const result = resolveShiftForHour(18, shiftsWithOpDays, 3);
+    expect(result?.code).toBe("SWING");
+  });
+
+  it("redirects hour 16 to DAY on Friday (ISO 5) — nearest shift", () => {
+    // Hour 16 is 1 hour past DAY end (15), 7 hours before NIGHT start (23)
+    const result = resolveShiftForHour(16, shiftsWithOpDays, 5);
+    expect(result?.code).toBe("DAY");
+  });
+
+  it("redirects hour 21 to NIGHT on Saturday (ISO 6) — nearest shift", () => {
+    // Hour 21 is 6 hours past DAY end, 2 hours before NIGHT start (23)
+    const result = resolveShiftForHour(21, shiftsWithOpDays, 6);
+    expect(result?.code).toBe("NIGHT");
+  });
+
+  it("returns DAY for hour 10 on Sunday (ISO 7) — exact match unaffected", () => {
+    const result = resolveShiftForHour(10, shiftsWithOpDays, 7);
+    expect(result?.code).toBe("DAY");
+  });
+});
+
+// ─── operatingDays DOW redistribution ─────────────────────────────────────
+
+describe("enumerateGroundSlots — operatingDays redistribution", () => {
+  // SWING Mon-Thu only (ISO 1-4)
+  const shiftsWithOpDays: CapacityShift[] = [
+    { ...shifts[0] }, // DAY 07-15 — every day
+    { ...shifts[1], operatingDays: [1, 2, 3, 4] }, // SWING 15-23 — Mon-Thu
+    { ...shifts[2] }, // NIGHT 23-07 — every day
+  ];
+
+  it("redistributes SWING hours to DAY/NIGHT on Friday (ISO 5)", () => {
+    // 2026-01-16 is a Friday, ground time spans DAY + SWING + near-NIGHT window
+    const arrival = "2026-01-16T10:00:00.000Z";
+    const departure = "2026-01-16T22:00:00.000Z"; // extends into NIGHT-nearest zone
+    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+    const codes = slots.map((s) => s.shift.code);
+    expect(codes).not.toContain("SWING");
+    expect(codes).toContain("DAY");
+    // Hours 15-19 → DAY (nearest); hours 20-21 → NIGHT (nearest to 23:00 start)
+    expect(codes).toContain("NIGHT");
+  });
+
+  it("includes SWING on Wednesday (ISO 3)", () => {
+    // 2026-01-14 is a Wednesday
+    const arrival = "2026-01-14T10:00:00.000Z";
+    const departure = "2026-01-14T20:00:00.000Z";
+    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+    const codes = slots.map((s) => s.shift.code);
+    expect(codes).toContain("DAY");
+    expect(codes).toContain("SWING");
+  });
+
+  it("redistributes SWING hours on Saturday (ISO 6)", () => {
+    // 2026-01-17 is a Saturday, ground time is fully in SWING window
+    const arrival = "2026-01-17T15:00:00.000Z";
+    const departure = "2026-01-17T22:00:00.000Z";
+    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+    const codes = slots.map((s) => s.shift.code);
+    expect(codes).not.toContain("SWING");
+    // Hours 15-19 → DAY (nearest), hours 20-21 → NIGHT (nearest)
+    expect(codes).toContain("DAY");
+    expect(codes).toContain("NIGHT");
+  });
+
+  it("redistributes SWING hours on Sunday (ISO 7)", () => {
+    // 2026-01-18 is a Sunday
+    const arrival = "2026-01-18T15:00:00.000Z";
+    const departure = "2026-01-18T22:00:00.000Z";
+    const slots = enumerateGroundSlots(arrival, departure, shiftsWithOpDays);
+    const codes = slots.map((s) => s.shift.code);
+    expect(codes).not.toContain("SWING");
+    expect(codes).toContain("DAY");
+    expect(codes).toContain("NIGHT");
+  });
+
+  it("preserves total slot count when window spans the redistribution boundary", () => {
+    // Wednesday 10:00-22:00: DAY + SWING = 2 slots
+    const wedSlots = enumerateGroundSlots(
+      "2026-01-14T10:00:00.000Z",
+      "2026-01-14T22:00:00.000Z",
+      shiftsWithOpDays,
+    );
+    expect(wedSlots.length).toBe(2);
+    expect(wedSlots.map((s) => s.shift.code)).toEqual(["DAY", "SWING"]);
+
+    // Friday 10:00-22:00: DAY + NIGHT = 2 slots (SWING hours redistributed)
+    const friSlots = enumerateGroundSlots(
+      "2026-01-16T10:00:00.000Z",
+      "2026-01-16T22:00:00.000Z",
+      shiftsWithOpDays,
+    );
+    expect(friSlots.length).toBe(2);
+    expect(friSlots.map((s) => s.shift.code)).toEqual(["DAY", "NIGHT"]);
+  });
+});

@@ -16,7 +16,7 @@ import type {
   DailyDemandV2,
 } from "@/types";
 import { resolveShiftForHour } from "./demand-engine";
-import { getLocalHour, getLocalDateStr } from "./tz-helpers";
+import { getLocalHour, getLocalDateStr, toIsoDayOfWeek } from "./tz-helpers";
 
 /**
  * Aggregate hourly concurrency buckets into per-day summaries.
@@ -91,10 +91,11 @@ export function aggregateConcurrencyByShift(
   for (const b of buckets) {
     const d = new Date(b.hour);
     const localHour = getLocalHour(d, timezone);
-    const shift = resolveShiftForHour(localHour, shifts);
-    if (!shift) continue;
-
     const date = getLocalDateStr(d, timezone);
+    const jsDay = new Date(date + "T12:00:00Z").getUTCDay();
+    const isoDow = toIsoDayOfWeek(jsDay);
+    const shift = resolveShiftForHour(localHour, shifts, isoDow);
+    if (!shift) continue;
     let dateMap = grouped.get(date);
     if (!dateMap) {
       dateMap = new Map();
