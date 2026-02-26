@@ -256,6 +256,17 @@ export function applyAllocations(
         if (delta > 0) {
           shiftDelta += delta;
           day.byCustomer[custName] = (day.byCustomer[custName] ?? 0) + delta;
+
+          // Propagate contract delta into wpContributions so the pattern engine
+          // (which derives per-customer demand exclusively from wpContributions)
+          // sees the full contract-adjusted MH — not just baseline WP demand.
+          shiftDemand.wpContributions.push({
+            wpId: -1,
+            aircraftReg: "",
+            customer: custName,
+            allocatedMH: delta,
+            mhSource: "contract",
+          });
         }
       }
 

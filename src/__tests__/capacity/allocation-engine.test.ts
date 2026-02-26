@@ -519,6 +519,124 @@ describe("applyAllocations", () => {
     expect(dayShift.demandMH).toBe(17);
     expect(dayShift.allocatedDemandMH).toBe(17);
   });
+
+  // ── wpContributions contract delta propagation ──
+
+  it("adds synthetic wpContribution for MINIMUM_FLOOR delta", () => {
+    const demand = [makeDemand()]; // 5 MH on DAY, customer "Acme Corp"
+    const contracts = [
+      makeContract({ mode: "MINIMUM_FLOOR", lines: [makeLine({ shiftId: 1, allocatedMh: 10 })] }),
+    ];
+    const result = applyAllocations(demand, contracts, shifts, customerMap);
+    const dayShift = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+
+    // Original WP contribution (5 MH) + synthetic contract entry (delta = 5)
+    expect(dayShift.wpContributions).toHaveLength(2);
+    const synthetic = dayShift.wpContributions[1];
+    expect(synthetic.wpId).toBe(-1);
+    expect(synthetic.customer).toBe("Acme Corp");
+    expect(synthetic.allocatedMH).toBe(5); // 10 - 5 = 5
+    expect(synthetic.mhSource).toBe("contract");
+    expect(synthetic.aircraftReg).toBe("");
+  });
+
+  it("adds synthetic wpContribution for ADDITIVE delta", () => {
+    const demand = [makeDemand()]; // 5 MH on DAY
+    const contracts = [
+      makeContract({ mode: "ADDITIVE", lines: [makeLine({ shiftId: 1, allocatedMh: 3 })] }),
+    ];
+    const result = applyAllocations(demand, contracts, shifts, customerMap);
+    const dayShift = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+
+    expect(dayShift.wpContributions).toHaveLength(2);
+    const synthetic = dayShift.wpContributions[1];
+    expect(synthetic.wpId).toBe(-1);
+    expect(synthetic.customer).toBe("Acme Corp");
+    expect(synthetic.allocatedMH).toBe(3);
+    expect(synthetic.mhSource).toBe("contract");
+  });
+
+  it("adds synthetic wpContribution when customer has zero baseline demand", () => {
+    const demand = [
+      makeDemand({
+        byCustomer: {},
+        byShift: [{ shiftCode: "DAY", demandMH: 0, wpContributions: [] }],
+        totalDemandMH: 0,
+        aircraftCount: 0,
+      }),
+    ];
+    const contracts = [
+      makeContract({ mode: "MINIMUM_FLOOR", lines: [makeLine({ shiftId: 1, allocatedMh: 10 })] }),
+    ];
+    const result = applyAllocations(demand, contracts, shifts, customerMap);
+    const dayShift = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+
+    // No original WPs, just the synthetic contract entry
+    expect(dayShift.wpContributions).toHaveLength(1);
+    expect(dayShift.wpContributions[0]).toEqual({
+      wpId: -1,
+      aircraftReg: "",
+      customer: "Acme Corp",
+      allocatedMH: 10,
+      mhSource: "contract",
+    });
+  });
+
+  it("maintains invariant: sum(wpContributions.allocatedMH) === demandMH", () => {
+    const cm = new Map<number, string>([
+      [100, "Acme Corp"],
+      [200, "Beta Inc"],
+    ]);
+    const demand = [
+      makeDemand({
+        byCustomer: { "Acme Corp": 5, "Beta Inc": 3 },
+        totalDemandMH: 8,
+        byShift: [
+          {
+            shiftCode: "DAY",
+            demandMH: 8,
+            wpContributions: [
+              { customer: "Acme Corp", wpId: "WP1", allocatedMH: 5 },
+              { customer: "Beta Inc", wpId: "WP2", allocatedMH: 3 },
+            ],
+          },
+        ],
+      }),
+    ];
+    const contracts = [
+      makeContract({
+        id: 1,
+        customerId: 100,
+        mode: "MINIMUM_FLOOR",
+        lines: [makeLine({ id: 1, shiftId: 1, allocatedMh: 10 })],
+      }),
+      makeContract({
+        id: 2,
+        customerId: 200,
+        mode: "ADDITIVE",
+        lines: [makeLine({ id: 2, shiftId: 1, allocatedMh: 4 })],
+      }),
+    ];
+
+    const result = applyAllocations(demand, contracts, shifts, cm);
+    const dayShift = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+
+    const wpSum = dayShift.wpContributions.reduce((sum, wp) => sum + wp.allocatedMH, 0);
+    expect(wpSum).toBe(dayShift.demandMH);
+  });
+
+  it("does not add synthetic entry when floor is below normal (delta = 0)", () => {
+    const demand = [makeDemand()]; // 5 MH on DAY
+    const contracts = [
+      makeContract({ mode: "MINIMUM_FLOOR", lines: [makeLine({ shiftId: 1, allocatedMh: 3 })] }),
+    ];
+    const result = applyAllocations(demand, contracts, shifts, customerMap);
+    const dayShift = result[0].byShift.find((s) => s.shiftCode === "DAY")!;
+
+    // Floor (3) < normal (5), so no delta, no synthetic entry
+    expect(dayShift.wpContributions).toHaveLength(1);
+    expect(dayShift.demandMH).toBe(5); // unchanged
+  });
 });
 
 // ─── validateContract ───────────────────────────────────────────────────────
