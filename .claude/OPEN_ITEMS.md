@@ -430,6 +430,27 @@ The Shift action column (highlight, sort, filter, control-break, group-by) uses 
 
 ---
 
+### OI-086 | work_packages.title Mapped to Wrong Field
+
+| Field | Value |
+|-------|-------|
+| **Type** | Data Model Issue |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Created** | 2026-02-26 |
+
+In v0.1.1 and earlier, the inbound work package data field `title` is mapped directly to the database `work_packages.title` column. This should have been mapped to `workpackage_no` instead, as the inbound `title` contains the work package number/identifier. The current `title` mapping may conflate display labels with actual work package identifiers.
+
+**Impact**: Breaking change for v0.3.0+. Will require:
+1. Schema migration to rename or reinterpret the column
+2. Data backfill to preserve existing values
+3. Import logic update to map inbound `title` → `workpackage_no`
+4. UI/API audit to ensure no code depends on `work_packages.title` for display
+
+**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md)
+
+---
+
 ## Acknowledged / Informational
 
 | OI | Title | Notes |
@@ -445,9 +466,9 @@ The Shift action column (highlight, sort, filter, control-break, group-by) uses 
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 2 | 2 | 0 | 0 | 22 |
-| P2 | 9 | 2 | 0 | 0 | 21 |
+| P2 | 10 | 2 | 0 | 0 | 21 |
 | P3 | 5 | 0 | 0 | 2 | 5 |
-| **Total** | **16** | **4** | **0** | **2** | **64** |
+| **Total** | **17** | **4** | **0** | **2** | **64** |
 
 **Latest update (2026-02-26)**: Phase 4 Mobile-First UX complete — 5 workstreams (P4-1 through P4-5). PWA manifest, collapsible sidebar, bottom tab bar, flight board list view, mobile polish pass. 646 tests passing.
 

@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   useReactTable,
   getCoreRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   flexRender,
   type ColumnDef,
@@ -19,16 +18,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useCustomers } from "@/lib/hooks/use-customers";
-import { usePreferences } from "@/lib/hooks/use-preferences";
 import { EmptyState } from "@/components/shared/empty-state";
+import { cn } from "@/lib/utils";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 
 interface FlightBoardListTableProps {
   workPackages: SerializedWorkPackage[];
   onRowClick: (wp: SerializedWorkPackage) => void;
+  isExpanded: boolean;
 }
+
+const INITIAL_BATCH = 50;
+const BATCH_SIZE = 50;
 
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   New: "outline",
@@ -71,11 +73,24 @@ function fmtGroundTime(hours: number): string {
   return `${h}h ${m}m`;
 }
 
-export function FlightBoardListTable({ workPackages, onRowClick }: FlightBoardListTableProps) {
+export function FlightBoardListTable({
+  workPackages,
+  onRowClick,
+  isExpanded,
+}: FlightBoardListTableProps) {
   const { getColor } = useCustomers();
-  const { tablePageSize } = usePreferences();
   const [sorting, setSorting] = useState<SortingState>([{ id: "arrival", desc: false }]);
-  const [pageIndex, setPageIndex] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH);
+  const sentinelRef = useRef<HTMLTableRowElement>(null);
+
+  // Reset visible count when data changes (e.g. new filters applied)
+  const wpRef = useRef(workPackages);
+  useEffect(() => {
+    if (wpRef.current !== workPackages) {
+      wpRef.current = workPackages;
+      setVisibleCount(INITIAL_BATCH);
+    }
+  }, [workPackages]);
 
   const columns = useMemo(
     (): ColumnDef<SerializedWorkPackage>[] => [
@@ -91,6 +106,14 @@ export function FlightBoardListTable({ workPackages, onRowClick }: FlightBoardLi
           </Badge>
         ),
         size: 90,
+      },
+      {
+        accessorKey: "title",
+        header: "WP",
+        cell: ({ row }) => (
+          <span className="text-xs truncate max-w-[120px] block">{row.original.title ?? "—"}</span>
+        ),
+        size: 120,
       },
       {
         accessorKey: "aircraftReg",
@@ -165,17 +188,33 @@ export function FlightBoardListTable({ workPackages, onRowClick }: FlightBoardLi
   const table = useReactTable({
     data: workPackages,
     columns,
-    state: { sorting, pagination: { pageIndex, pageSize: tablePageSize } },
+    state: { sorting },
     onSortingChange: setSorting,
-    onPaginationChange: (updater) => {
-      const next =
-        typeof updater === "function" ? updater({ pageIndex, pageSize: tablePageSize }) : updater;
-      setPageIndex(next.pageIndex);
-    },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
+
+  const { rows } = table.getRowModel();
+  const visibleRows = useMemo(() => rows.slice(0, visibleCount), [rows, visibleCount]);
+  const hasMore = visibleCount < rows.length;
+
+  // Lazy loading via IntersectionObserver
+  const loadMore = useCallback(() => {
+    setVisibleCount((c) => Math.min(c + BATCH_SIZE, rows.length));
+  }, [rows.length]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) loadMore();
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loadMore]);
 
   if (workPackages.length === 0) {
     return (
@@ -188,10 +227,11 @@ export function FlightBoardListTable({ workPackages, onRowClick }: FlightBoardLi
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className={cn("flex flex-col", !isExpanded && "h-full")}>
+      {/* Scrollable area with sticky header */}
+      <div className={cn("overflow-x-auto", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
         <Table>
-          <TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-card">
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id}>
                 {hg.headers.map((header) => (
@@ -216,7 +256,7 @@ export function FlightBoardListTable({ workPackages, onRowClick }: FlightBoardLi
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.map((row) => (
+            {visibleRows.map((row) => (
               <TableRow
                 key={row.id}
                 className="cursor-pointer hover:bg-accent/50"
@@ -229,37 +269,19 @@ export function FlightBoardListTable({ workPackages, onRowClick }: FlightBoardLi
                 ))}
               </TableRow>
             ))}
+            {/* Sentinel row for lazy loading */}
+            {hasMore && (
+              <tr ref={sentinelRef}>
+                <td colSpan={columns.length} className="h-1" />
+              </tr>
+            )}
           </TableBody>
         </Table>
       </div>
-
-      {/* Pagination */}
-      {table.getPageCount() > 1 && (
-        <div className="flex items-center justify-between p-3 border-t border-border">
-          <span className="text-xs text-muted-foreground">
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()} (
-            {workPackages.length} total)
-          </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
-            >
-              <i className="fa-solid fa-chevron-left text-xs" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
-            >
-              <i className="fa-solid fa-chevron-right text-xs" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Status bar */}
+      <div className="flex-shrink-0 px-3 py-1.5 border-t border-border text-xs text-muted-foreground">
+        {Math.min(visibleCount, rows.length)} of {rows.length} work packages
+      </div>
     </div>
   );
 }

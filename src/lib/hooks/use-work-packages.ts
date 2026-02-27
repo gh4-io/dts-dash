@@ -26,6 +26,7 @@ export interface SerializedWorkPackage {
   mhSource: string;
   manualMHOverride: number | null;
   inferredType: string;
+  title: string | null;
 }
 
 interface WorkPackagesState {
