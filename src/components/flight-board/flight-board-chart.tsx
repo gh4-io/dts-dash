@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { CustomChart } from "echarts/charts";
@@ -211,8 +212,16 @@ export interface FlightBoardChartHandle {
   restoreAfterPrint: () => void;
 }
 
-/** Print-safe canvas width: 11in landscape − 1in margins @ 96dpi */
+/** Print-safe canvas width: 11in landscape − 1in margins @ 96 CSS ppi */
 const PRINT_WIDTH = 960;
+/** Printable height: 8.5in − 1in margins @ 96 CSS ppi */
+const PRINT_HEIGHT = 720;
+/** Reduced header height for print (no dataZoom slider) */
+const PRINT_HEADER_H = 80;
+/** Allowance for legend badges + flex gap below chart */
+const PRINT_LEGEND_GAP = 50;
+/** Max body chart height that fits one page */
+const PRINT_MAX_BODY_H = PRINT_HEIGHT - PRINT_HEADER_H - PRINT_LEGEND_GAP;
 
 /** Neutral-light resolved colors for print canvas repaint */
 const PRINT_CC = {
@@ -325,6 +334,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     );
     const [cc, setCc] = useState(ssrFallback);
     const prevCcRef = useRef(ssrFallback);
+    const [printMode, setPrintMode] = useState(false);
+    const prevSizeRef = useRef<{
+      chartWidth: number;
+      headerW: number;
+      headerH: number;
+      bodyW: number;
+      bodyH: number;
+      devicePixelRatio: number;
+    }>({ chartWidth: 0, headerW: 0, headerH: 0, bodyW: 0, bodyH: 0, devicePixelRatio: 1 });
 
     useEffect(() => {
       // Read CSS variables after paint so the browser has applied the new theme class
@@ -367,24 +385,99 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       },
       prepareForPrint: () => {
         prevCcRef.current = cc;
-        setCc(PRINT_CC);
-        // Resize both charts to print-safe width so canvas fits on paper
-        [headerChartRef, bodyChartRef].forEach((r) => {
-          r.current?.getEchartsInstance()?.resize({ width: PRINT_WIDTH });
+        const hInst = headerChartRef.current?.getEchartsInstance();
+        const bInst = bodyChartRef.current?.getEchartsInstance();
+        prevSizeRef.current = {
+          chartWidth,
+          headerW: hInst?.getWidth() ?? 0,
+          headerH: hInst?.getHeight() ?? 0,
+          bodyW: bInst?.getWidth() ?? 0,
+          bodyH: bInst?.getHeight() ?? 0,
+          devicePixelRatio: typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+        };
+
+        // flushSync → synchronous render → useMemo tick recalc →
+        // ReactEChartsCore.componentDidUpdate → setOption() with correct ticks
+        flushSync(() => {
+          setCc(PRINT_CC);
+          setChartWidth(PRINT_WIDTH);
+          setPrintMode(true);
         });
-        // Wait for React render + ECharts canvas flush (double rAF)
+
+        // Update ref so the async adaptive tick effect (dep: cc) reads the correct width
+        chartWidthRef.current = PRINT_WIDTH;
+
+        // Cap body height to fit one page (use saved height from ref, not useMemo value)
+        const printBodyH = Math.min(prevSizeRef.current.bodyH || 300, PRINT_MAX_BODY_H);
+
+        // Compute + apply correct tick intervals synchronously for PRINT_WIDTH.
+        // Belt-and-suspenders: the async adaptive tick effect will also run with chartWidthRef=960.
+        // Using merge mode (default setOption) updates only `interval`, preserving all
+        // formatter/color options set by the last notMerge setOption from componentDidUpdate.
+        const { start: zStart, end: zEnd } = realZoomState.current;
+        const fStartMs = new Date(filterStart).getTime();
+        const fEndMs = new Date(filterEnd).getTime();
+        const totalMs = Math.max(fEndMs - fStartMs, 86400000);
+        const visibleMs = ((zEnd - zStart) / 100) * totalMs;
+        const printIntervalMs = computeTickInterval({
+          availablePixels: Math.max(PRINT_WIDTH - GRID_PADDING, 100),
+          visibleMs,
+        });
+        const printTopIntervalMs = Math.max(printIntervalMs, 3 * 3600000);
+        hInst?.setOption({
+          xAxis: [{ interval: printIntervalMs }, { interval: printTopIntervalMs }],
+        });
+        bInst?.setOption({ xAxis: { interval: printIntervalMs } });
+
+        // resize() triggers synchronous CanvasPainter.refresh() → canvas is correctly drawn
+        // with the above tick intervals before getDataURL() is called below.
+        hInst?.resize({ width: PRINT_WIDTH, height: PRINT_HEADER_H });
+        bInst?.resize({ width: PRINT_WIDTH, height: printBodyH });
+
+        // Capture hi-res (3×) images via the official ECharts API.
+        // getDataURL({ pixelRatio: 3 }) renders the current chart state to an offscreen canvas
+        // at 960 × 3 = 2880 px → ~288 DPI when printed on letter paper (~300 DPI).
+        // Setting painter/layer dpr directly doesn't work because Zrender's Layer stores its
+        // own dpr set at construction time and Layer.resize() reads that, not the painter's.
+        const insertHiResImg = (inst: typeof hInst, w: number, h: number) => {
+          if (!inst) return;
+          const url = inst.getDataURL({ type: "png", pixelRatio: 3 });
+          const img = document.createElement("img");
+          img.src = url;
+          img.style.cssText = `display:block;width:${w}px;height:${h}px;flex-shrink:0;`;
+          img.dataset.printHires = "1";
+          const dom = inst.getDom();
+          dom.style.display = "none";
+          dom.parentElement?.insertBefore(img, dom);
+        };
+        insertHiResImg(hInst, PRINT_WIDTH, PRINT_HEADER_H);
+        insertHiResImg(bInst, PRINT_WIDTH, printBodyH);
+
+        // Single rAF ensures the img DOM insertions are rendered before react-to-print captures
         return new Promise<void>((resolve) => {
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => resolve());
-          });
+          requestAnimationFrame(() => resolve());
         });
       },
       restoreAfterPrint: () => {
-        setCc(prevCcRef.current);
-        // Restore auto-sizing from container
-        [headerChartRef, bodyChartRef].forEach((r) => {
-          r.current?.getEchartsInstance()?.resize();
+        const s = prevSizeRef.current;
+        flushSync(() => {
+          setCc(prevCcRef.current);
+          setChartWidth(s.chartWidth);
+          setPrintMode(false);
         });
+        // Restore ref so the adaptive effect computes correct screen-width ticks
+        chartWidthRef.current = s.chartWidth;
+        const hInstR = headerChartRef.current?.getEchartsInstance();
+        const bInstR = bodyChartRef.current?.getEchartsInstance();
+        // Remove hi-res img replacements and restore ECharts divs
+        [hInstR, bInstR].forEach((inst) => {
+          if (!inst) return;
+          const dom = inst.getDom();
+          dom.style.display = "";
+          dom.parentElement?.querySelectorAll("img[data-print-hires]").forEach((el) => el.remove());
+        });
+        hInstR?.resize({ width: s.headerW, height: s.headerH });
+        bInstR?.resize({ width: s.bodyW, height: s.bodyH });
       },
     }));
 
@@ -1245,6 +1338,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         dataZoom: [
           {
             type: "slider" as const,
+            show: !printMode,
             xAxisIndex: [0, 1],
             filterMode: "weakFilter" as const,
             height: 16,
@@ -1279,6 +1373,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       dateFmt,
       hourFormatter,
       scrollbarWidth,
+      printMode,
     ]);
 
     // ─── BODY OPTION (bars + y-axis, grid lines — time labels live in header) ───
@@ -1888,7 +1983,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       );
     }
 
-    const bodyHeight = computedBodyHeight;
+    const bodyHeight = printMode
+      ? Math.min(computedBodyHeight, PRINT_MAX_BODY_H)
+      : computedBodyHeight;
 
     return (
       <div className={cn("flex flex-col", !isExpanded && "h-full min-h-0")}>
@@ -1898,7 +1995,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             ref={headerChartRef}
             echarts={echarts}
             option={headerOption}
-            style={{ height: 115, width: "100%" }}
+            style={{ height: printMode ? PRINT_HEADER_H : 115, width: "100%" }}
             notMerge
             onEvents={{ datazoom: handleHeaderDataZoom }}
           />

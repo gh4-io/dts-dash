@@ -963,12 +963,6 @@
     padding: 0 !important;
   }
 
-  /* Prevent flex children from exceeding page width */
-  .flex-1 {
-    flex: none !important;
-    width: 100% !important;
-  }
-
   /* 8. Ensure cards and borders are visible on paper */
   .border {
     border-color: hsl(0 0% 89.8%) !important;

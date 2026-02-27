@@ -603,7 +603,7 @@ function FlightBoardPageInner() {
         ) : viewMode === "gantt" ? (
           <div
             className={cn(
-              "rounded-lg border border-border bg-card overflow-hidden",
+              "rounded-lg border border-border bg-card overflow-hidden print:border-0",
               !isExpanded && "flex-1 min-h-0 flex flex-col",
             )}
           >
@@ -628,7 +628,7 @@ function FlightBoardPageInner() {
         ) : (
           <div
             className={cn(
-              "rounded-lg border border-border bg-card overflow-hidden",
+              "rounded-lg border border-border bg-card overflow-hidden print:border-0",
               !isExpanded && "flex-1 min-h-0 flex flex-col",
             )}
           >
