@@ -191,16 +191,17 @@ Added shift boundary markLines (dashed at 07/15/23, labeled Day/Swing/Night) and
 | Field | Value |
 |-------|-------|
 | **Type** | Feature |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P1 |
-| **Owner** | Unassigned |
+| **Owner** | -- |
 | **Created** | 2026-02-20 |
+| **Resolved** | 2026-02-27 |
 
-Add print/export to Flight Board, Capacity, and Analytics. `react-to-print` uses browser native print dialog (local-first, simple hook API, reuses existing CSS). Add "Print" buttons per page; hide UI chrome with `@media print`.
+Print support implemented for Dashboard and Flight Board pages using `react-to-print` v3. Three-layer approach: (1) `@media print` CSS forces Neutral-light variables on all 11 themes, hides chrome via `data-print="hide"` and `.print-hide`, resets layout flow. (2) Reusable `PrintButton` component with `useReactToPrint` hook. (3) ECharts canvas prep layer — `prepareForPrint()`/`restoreAfterPrint()` on chart handle swaps resolved colors to light-mode values before pixel capture.
 
-**Steps**: Install `react-to-print` → print wrappers per page (`FlightBoardPrint`, `CapacityReportPrint`, `AnalyticsDashboardPrint`) → `@media print` CSS → test PDF save in Chrome/Safari.
+**Remaining**: Capacity and Analytics pages not yet wired (can reuse the same `PrintButton` + `printRef` pattern when needed).
 
-**Files**: `src/components/flight-board/`, `src/components/capacity/`, `src/components/dashboard/`
+**Files**: `globals.css`, `print-button.tsx`, `top-menu-bar.tsx`, `sidebar.tsx`, `header.tsx`, `bottom-tab-bar.tsx`, `flight-board-chart.tsx`, `dashboard/page.tsx`, `flight-board/page.tsx`
 
 ---
 

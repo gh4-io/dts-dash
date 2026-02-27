@@ -25,6 +25,7 @@ export function Sidebar() {
 
   return (
     <aside
+      data-print="hide"
       className={cn(
         "hidden lg:flex lg:flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 ease-in-out",
         isExpanded && "lg:w-60",

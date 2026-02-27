@@ -15,7 +15,10 @@ export function BottomTabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
+    <nav
+      data-print="hide"
+      className="fixed bottom-0 left-0 right-0 z-50 flex md:hidden border-t border-border bg-background pb-[env(safe-area-inset-bottom)]"
+    >
       {navItems.map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
         return (

@@ -38,6 +38,7 @@
 | `CustomerBadge` | `src/components/shared/customer-badge.tsx` | Colored dot + name |
 | `LoadingSkeleton` | `src/components/shared/loading-skeleton.tsx` | Skeleton cards/charts |
 | `EmptyState` | `src/components/shared/empty-state.tsx` | No-data display |
+| `PrintButton` | `src/components/shared/print-button.tsx` | Browser print via react-to-print |
 | `FilterBarMobile` | `src/components/shared/filter-bar-mobile.tsx` | Mobile sheet with filters |
 | `Sidebar` | `src/components/layout/sidebar.tsx` | Navigation sidebar |
 | `Header` | `src/components/layout/header.tsx` | Top bar |

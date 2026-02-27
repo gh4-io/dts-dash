@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useMemo, useCallback } from "react";
+import { Suspense, useState, useMemo, useCallback, useRef } from "react";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { AvgGroundTimeCard } from "@/components/dashboard/avg-ground-time-card";
@@ -16,6 +16,7 @@ import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
+import { PrintButton } from "@/components/shared/print-button";
 import { useEffect } from "react";
 
 function DashboardPageInner() {
@@ -26,6 +27,7 @@ function DashboardPageInner() {
   const { timeFormat } = usePreferences();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<ChartTimeRange | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchCustomers();
@@ -107,12 +109,21 @@ function DashboardPageInner() {
 
   return (
     <div className="flex flex-col gap-3 min-h-full">
-      <TopMenuBar title="Dashboard" icon="fa-solid fa-chart-line" />
+      <TopMenuBar
+        title="Dashboard"
+        icon="fa-solid fa-chart-line"
+        actions={
+          <PrintButton contentRef={printRef} documentTitle="Dashboard — CVG Line Maintenance" />
+        }
+      />
 
       {isLoading || snapshotsLoading ? (
         <LoadingSkeleton variant="page" />
       ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1">
+        <div
+          ref={printRef}
+          className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1"
+        >
           {/* Left: flex ratios — MH 65%, Type 32% of remaining */}
           <div className="flex flex-col gap-3">
             <div className="shrink-0">

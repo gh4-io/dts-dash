@@ -207,7 +207,20 @@ function computeShiftBoundaries(
 export interface FlightBoardChartHandle {
   getZoomRange: () => { start: number; end: number } | null;
   dispatchZoom: (start: number, end: number) => void;
+  prepareForPrint: () => Promise<void>;
+  restoreAfterPrint: () => void;
 }
+
+/** Neutral-light resolved colors for print canvas repaint */
+const PRINT_CC = {
+  fg: "hsl(0, 0%, 3.9%)",
+  mutedFg: "hsl(0, 0%, 45.1%)",
+  border: "hsl(0, 0%, 89.8%)",
+  popover: "hsl(0, 0%, 100%)",
+  popoverFg: "hsl(0, 0%, 3.9%)",
+  primary15: "rgba(59,130,246,0.15)",
+  rowHover: "rgba(0,0,0,0.1)",
+};
 
 interface FlightBoardChartProps {
   workPackages: SerializedWorkPackage[];
@@ -308,6 +321,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       [],
     );
     const [cc, setCc] = useState(ssrFallback);
+    const prevCcRef = useRef(ssrFallback);
 
     useEffect(() => {
       // Read CSS variables after paint so the browser has applied the new theme class
@@ -333,7 +347,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       return () => cancelAnimationFrame(raf);
     }, [resolvedTheme]);
 
-    // Expose zoom read/write for parent toolbar handlers
+    // Expose zoom read/write + print helpers for parent toolbar handlers
     useImperativeHandle(ref, () => ({
       getZoomRange: () => {
         const instance = headerChartRef.current?.getEchartsInstance();
@@ -347,6 +361,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         [headerChartRef, bodyChartRef].forEach((r) => {
           r.current?.getEchartsInstance()?.dispatchAction({ type: "dataZoom", start, end });
         });
+      },
+      prepareForPrint: () => {
+        prevCcRef.current = cc;
+        setCc(PRINT_CC);
+        // Wait for React render + ECharts canvas flush (double rAF)
+        return new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolve());
+          });
+        });
+      },
+      restoreAfterPrint: () => {
+        setCc(prevCcRef.current);
       },
     }));
 

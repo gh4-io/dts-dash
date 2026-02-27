@@ -244,10 +244,13 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
           <i className={`${icon} mr-2.5`} />
           {title}
         </h1>
+        <p className="print-only text-xs text-muted-foreground mt-1">
+          Printed {new Date().toLocaleString()}
+        </p>
       </div>
 
       {/* Row 2: Filter Controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 print-hide">
         {/* Date pickers — desktop only */}
         <div className="hidden md:flex items-center gap-2">
           <DateTimePicker
@@ -292,7 +295,9 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
       </div>
 
       {/* Row 3: Active chips */}
-      <ActiveChips chips={chips} onClearAll={handleClearAll} />
+      <div className="print-hide">
+        <ActiveChips chips={chips} onClearAll={handleClearAll} />
+      </div>
     </div>
   );
 }

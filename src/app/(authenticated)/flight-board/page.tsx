@@ -11,6 +11,7 @@ import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { CustomerBadge } from "@/components/shared/customer-badge";
+import { PrintButton } from "@/components/shared/print-button";
 import { FlightBoardListCards } from "@/components/flight-board/flight-board-list-cards";
 import { FlightBoardListTable } from "@/components/flight-board/flight-board-list-table";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ function FlightBoardPageInner() {
   } = usePreferences();
   const zoomInitializedRef = useRef(false);
   const chartRef = useRef<FlightBoardChartHandle>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   // Sync from localStorage after hydration to avoid mismatch
   useEffect(() => {
@@ -179,6 +181,16 @@ function FlightBoardPageInner() {
   const handleFit = useCallback(() => {
     setZoomLevel("all");
     chartRef.current?.dispatchZoom(0, 100);
+  }, []);
+
+  const handleBeforePrint = useCallback(async () => {
+    if (viewMode === "gantt") {
+      await chartRef.current?.prepareForPrint();
+    }
+  }, [viewMode]);
+
+  const handleAfterPrint = useCallback(() => {
+    chartRef.current?.restoreAfterPrint();
   }, []);
 
   // Build format chips for non-default zoom (only show when user changed from default)
@@ -556,6 +568,14 @@ function FlightBoardPageInner() {
               </Popover>
             )}
 
+            {/* Print */}
+            <PrintButton
+              contentRef={printRef}
+              documentTitle="Flight Board — CVG Line Maintenance"
+              onBeforePrint={handleBeforePrint}
+              onAfterPrint={handleAfterPrint}
+            />
+
             {/* Refresh */}
             <Button
               variant="ghost"
@@ -570,79 +590,82 @@ function FlightBoardPageInner() {
         }
       />
 
-      {/* Chart / List */}
-      {error ? (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
-          <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
-          <p className="text-sm text-destructive">{error}</p>
-        </div>
-      ) : isLoading ? (
-        <LoadingSkeleton variant="chart" />
-      ) : viewMode === "gantt" ? (
-        <div
-          className={cn(
-            "rounded-lg border border-border bg-card overflow-hidden",
-            !isExpanded && "flex-1 min-h-0 flex flex-col",
-          )}
-        >
-          <FlightBoardChart
-            ref={chartRef}
-            workPackages={transformedWps}
-            zoomLevel={zoomLevel}
-            timezone={timezone}
-            filterStart={filterStart}
-            filterEnd={filterEnd}
-            isExpanded={isExpanded}
-            condensed={condensed}
-            onBarClick={handleBarClick}
-            onZoomChange={handleZoomChange}
-            transformedRegistrations={registrations}
-            highlightMap={highlightMap}
-            groups={groups}
-            shiftHighlights={shiftHighlights}
-            panMode={panMode}
-          />
-        </div>
-      ) : (
-        <div
-          className={cn(
-            "rounded-lg border border-border bg-card overflow-hidden",
-            !isExpanded && "flex-1 min-h-0 flex flex-col",
-          )}
-        >
-          <div className={cn("md:hidden", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
-            <FlightBoardListCards
+      {/* Printable content wrapper */}
+      <div ref={printRef} className="flex flex-col gap-3 flex-1 min-h-0">
+        {/* Chart / List */}
+        {error ? (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+            <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        ) : isLoading ? (
+          <LoadingSkeleton variant="chart" />
+        ) : viewMode === "gantt" ? (
+          <div
+            className={cn(
+              "rounded-lg border border-border bg-card overflow-hidden",
+              !isExpanded && "flex-1 min-h-0 flex flex-col",
+            )}
+          >
+            <FlightBoardChart
+              ref={chartRef}
               workPackages={transformedWps}
-              onCardClick={handleBarClick}
+              zoomLevel={zoomLevel}
+              timezone={timezone}
+              filterStart={filterStart}
+              filterEnd={filterEnd}
               isExpanded={isExpanded}
+              condensed={condensed}
+              onBarClick={handleBarClick}
+              onZoomChange={handleZoomChange}
+              transformedRegistrations={registrations}
+              highlightMap={highlightMap}
+              groups={groups}
+              shiftHighlights={shiftHighlights}
+              panMode={panMode}
             />
           </div>
-          <div className={cn("hidden md:flex md:flex-col", !isExpanded && "flex-1 min-h-0")}>
-            <FlightBoardListTable
-              workPackages={transformedWps}
-              onRowClick={handleBarClick}
-              isExpanded={isExpanded}
-            />
+        ) : (
+          <div
+            className={cn(
+              "rounded-lg border border-border bg-card overflow-hidden",
+              !isExpanded && "flex-1 min-h-0 flex flex-col",
+            )}
+          >
+            <div className={cn("md:hidden", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
+              <FlightBoardListCards
+                workPackages={transformedWps}
+                onCardClick={handleBarClick}
+                isExpanded={isExpanded}
+              />
+            </div>
+            <div className={cn("hidden md:flex md:flex-col", !isExpanded && "flex-1 min-h-0")}>
+              <FlightBoardListTable
+                workPackages={transformedWps}
+                onRowClick={handleBarClick}
+                isExpanded={isExpanded}
+              />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Interaction hints — Gantt only */}
+        {/* Legend */}
+        {customers.length > 0 && (
+          <div className="flex flex-wrap items-center gap-4 px-1 flex-shrink-0">
+            {customers
+              .filter((c) => c.isActive)
+              .map((c) => (
+                <CustomerBadge key={c.id} name={c.displayName} color={c.color} />
+              ))}
+          </div>
+        )}
+      </div>
+
+      {/* Interaction hints — Gantt only (hidden in print) */}
       {viewMode === "gantt" && (
-        <p className="text-[11px] text-muted-foreground flex-shrink-0">
+        <p className="text-[11px] text-muted-foreground flex-shrink-0 print-hide">
           Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
         </p>
-      )}
-
-      {/* Legend */}
-      {customers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4 px-1 flex-shrink-0">
-          {customers
-            .filter((c) => c.isActive)
-            .map((c) => (
-              <CustomerBadge key={c.id} name={c.displayName} color={c.color} />
-            ))}
-        </div>
       )}
 
       {/* Detail Drawer */}

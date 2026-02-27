@@ -868,3 +868,104 @@
     z-index: -1;
   } */
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Print-only utility: hidden on screen, visible in print                     */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.print-only {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Print Stylesheet                                                           */
+/* Forces Neutral-light palette, hides chrome, resets layout for paper output */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  /* 1. Force Neutral-light CSS variables on ALL themes/modes */
+  :root,
+  .dark,
+  [class*="theme-"],
+  [class*="theme-"].dark {
+    --background: 0 0% 100% !important;
+    --foreground: 0 0% 3.9% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 0 0% 3.9% !important;
+    --popover: 0 0% 100% !important;
+    --popover-foreground: 0 0% 3.9% !important;
+    --primary: 0 0% 9% !important;
+    --primary-foreground: 0 0% 98% !important;
+    --secondary: 0 0% 96.1% !important;
+    --secondary-foreground: 0 0% 9% !important;
+    --muted: 0 0% 96.1% !important;
+    --muted-foreground: 0 0% 45.1% !important;
+    --accent: 0 0% 96.1% !important;
+    --accent-foreground: 0 0% 9% !important;
+    --destructive: 0 84.2% 60.2% !important;
+    --destructive-foreground: 0 0% 98% !important;
+    --border: 0 0% 89.8% !important;
+    --input: 0 0% 89.8% !important;
+    --ring: 0 0% 3.9% !important;
+  }
+
+  /* 2. Page geometry */
+  @page {
+    size: landscape;
+    margin: 0.5in;
+  }
+
+  /* 3. Hide layout chrome */
+  [data-print="hide"] {
+    display: none !important;
+  }
+
+  /* 4. Hide interactive controls */
+  .print-hide {
+    display: none !important;
+  }
+
+  /* 5. Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* 6. Reset layout flow — allow content to flow across pages */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .h-dvh,
+  [style*="height: 100dvh"] {
+    height: auto !important;
+  }
+
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+
+  .overflow-y-auto {
+    overflow: visible !important;
+  }
+
+  /* 7. Reset flex containers that constrain to viewport */
+  main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* 8. Ensure cards and borders are visible on paper */
+  .border {
+    border-color: hsl(0 0% 89.8%) !important;
+  }
+
+  /* 9. Recharts SVG inherits CSS variable overrides naturally */
+  .recharts-wrapper text {
+    fill: hsl(0, 0%, 3.9%) !important;
+  }
+
+  .recharts-cartesian-grid line {
+    stroke: hsl(0, 0%, 89.8%) !important;
+  }
+}

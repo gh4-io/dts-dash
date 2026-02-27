@@ -744,3 +744,20 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact**: PATCH (implementation detail)
 **Links**: D-053, D-054, OI-075, OI-077
+
+---
+
+## D-057 | 2026-02-27 | Print Support — Three-Layer Architecture (OI-057)
+
+**Decision**: Implement browser-native print via `react-to-print` v3 with a three-layer approach:
+
+1. **CSS layer** — `@media print` block in `globals.css` forces Neutral-light CSS custom properties on all 11 theme presets × 2 modes via `!important`. Hides layout chrome with `[data-print="hide"]` attribute selector and interactive controls with `.print-hide` class. Resets `h-dvh`/`overflow-hidden` to allow content to flow across pages. Landscape `@page` geometry with 0.5in margins.
+2. **Component layer** — Reusable `PrintButton` wraps `useReactToPrint()` hook. `data-print="hide"` on sidebar, header, bottom-tab-bar. `.print-only` class for timestamp shown only on paper.
+3. **ECharts prep layer** — `FlightBoardChartHandle` extended with `prepareForPrint()`/`restoreAfterPrint()`. Before print, swaps `cc` color state to `PRINT_CC` (Neutral-light resolved HSL values), waits double-rAF for React render + ECharts canvas flush. After print, restores original theme colors.
+
+**Rationale**: ECharts renders to canvas (baked pixels), so CSS `@media print` alone cannot restyle it — explicit color state swap + repaint needed. Recharts (Dashboard) renders to SVG, so CSS variable overrides work naturally. `react-to-print` copies canvas content to the print iframe (confirmed since v2.0.0).
+
+**Alternatives rejected**: (1) Server-side PDF generation (puppeteer/playwright) — heavyweight, requires headless browser. (2) `html2canvas` screenshot — lower fidelity than native print. (3) ECharts `getDataURL()` — only captures one chart at a time, no page layout control.
+
+**Version impact**: MINOR (new feature, backwards-compatible)
+**Links**: OI-057, D-022 (themes)

@@ -55,7 +55,10 @@ export function Header() {
   const isAdmin = role === "admin" || role === "superadmin";
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
+    <header
+      data-print="hide"
+      className="flex h-14 items-center justify-between border-b border-border bg-background px-4"
+    >
       {/* Mobile menu button — visible on md–lg only (bottom tab bar handles < md) */}
       <button
         className="hidden md:block lg:hidden p-2 text-muted-foreground hover:text-foreground"
