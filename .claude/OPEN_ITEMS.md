@@ -197,9 +197,16 @@ Added shift boundary markLines (dashed at 07/15/23, labeled Day/Swing/Night) and
 | **Created** | 2026-02-20 |
 | **Resolved** | 2026-02-27 |
 
-Print support implemented for Dashboard and Flight Board pages using `react-to-print` v3. Three-layer approach: (1) `@media print` CSS forces Neutral-light variables on all 11 themes, hides chrome via `data-print="hide"` and `.print-hide`, resets layout flow. (2) Reusable `PrintButton` component with `useReactToPrint` hook. (3) ECharts canvas prep layer — `prepareForPrint()`/`restoreAfterPrint()` on chart handle swaps resolved colors to light-mode values before pixel capture.
+Print support implemented for Dashboard and Flight Board pages using `react-to-print` v3. Three-layer approach: (1) `@media print` CSS forces Neutral-light variables on all 11 themes, hides chrome via `data-print="hide"` and `.print-hide`, resets layout flow. (2) Reusable `PrintButton` component with `useReactToPrint` hook. (3) ECharts canvas prep layer — `prepareForPrint()`/`restoreAfterPrint()` on chart handle.
 
-**Remaining**: Capacity and Analytics pages not yet wired (can reuse the same `PrintButton` + `printRef` pattern when needed).
+**Final ECharts print implementation (Take 3 — 2026-02-27):**
+- **Tick density**: compute tick interval synchronously in `prepareForPrint` using `filterStart`/`filterEnd` + `realZoomState` → `computeTickInterval({ availablePixels: 840, visibleMs })` → merge-mode `setOption({ xAxis: [{ interval }] })` before `resize()`. `chartWidthRef.current = PRINT_WIDTH` also set so the async adaptive tick effect reads the correct width when it fires. Belt-and-suspenders approach eliminates race condition from prior implementation.
+- **Pixelation**: `getDataURL({ pixelRatio: 3 })` (official ECharts API) renders current chart state to an offscreen 2880px canvas (~288 DPI on letter paper). Insert as `<img width="960px">` before each ECharts div (hide the div); `restoreAfterPrint` removes imgs and unhides divs. Prior `painter.dpr` approach was incorrect — Zrender's `Layer` stores its own `dpr` set at construction time; `Layer.resize()` reads `layer.dpr`, not `painter.dpr`.
+- **Page overflow**: `PRINT_MAX_BODY_H = 590px` cap on body height; `printMode` state shrinks header to 80px and hides dataZoom slider via `show: !printMode`.
+- **Border**: `print:border-0` on both Gantt and List card wrappers.
+- **Fit**: `PRINT_WIDTH = 960` CSS px = 10" × 96 CSS ppi (landscape letter − 0.5in margins). Physical DPI handled by browser rasterization.
+
+**Remaining**: Capacity and Analytics pages not yet wired (reuse `PrintButton` + `printRef` pattern when needed).
 
 **Files**: `globals.css`, `print-button.tsx`, `top-menu-bar.tsx`, `sidebar.tsx`, `header.tsx`, `bottom-tab-bar.tsx`, `flight-board-chart.tsx`, `dashboard/page.tsx`, `flight-board/page.tsx`
 
@@ -471,7 +478,7 @@ In v0.1.1 and earlier, the inbound work package data field `title` is mapped dir
 | P3 | 5 | 0 | 0 | 2 | 5 |
 | **Total** | **17** | **4** | **0** | **2** | **64** |
 
-**Latest update (2026-02-26)**: Phase 4 Mobile-First UX complete — 5 workstreams (P4-1 through P4-5). PWA manifest, collapsible sidebar, bottom tab bar, flight board list view, mobile polish pass. 646 tests passing.
+**Latest update (2026-02-27)**: Flight Board print fully resolved (OI-057). Fixed tick density (synchronous interval computation + chartWidthRef), pixelation (getDataURL pixelRatio:3 + img replacement), page overflow (590px body cap), border, and zoom slider. Phase 4 Mobile-First UX complete (2026-02-26) — 5 workstreams. 646 tests passing.
 
 ---
 
