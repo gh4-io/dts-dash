@@ -211,6 +211,9 @@ export interface FlightBoardChartHandle {
   restoreAfterPrint: () => void;
 }
 
+/** Print-safe canvas width: 11in landscape − 1in margins @ 96dpi */
+const PRINT_WIDTH = 960;
+
 /** Neutral-light resolved colors for print canvas repaint */
 const PRINT_CC = {
   fg: "hsl(0, 0%, 3.9%)",
@@ -365,6 +368,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       prepareForPrint: () => {
         prevCcRef.current = cc;
         setCc(PRINT_CC);
+        // Resize both charts to print-safe width so canvas fits on paper
+        [headerChartRef, bodyChartRef].forEach((r) => {
+          r.current?.getEchartsInstance()?.resize({ width: PRINT_WIDTH });
+        });
         // Wait for React render + ECharts canvas flush (double rAF)
         return new Promise<void>((resolve) => {
           requestAnimationFrame(() => {
@@ -374,6 +381,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       },
       restoreAfterPrint: () => {
         setCc(prevCcRef.current);
+        // Restore auto-sizing from container
+        [headerChartRef, bodyChartRef].forEach((r) => {
+          r.current?.getEchartsInstance()?.resize();
+        });
       },
     }));
 
