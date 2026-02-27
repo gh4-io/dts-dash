@@ -244,7 +244,7 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
           <i className={`${icon} mr-2.5`} />
           {title}
         </h1>
-        <p className="print-only text-xs text-muted-foreground mt-1">
+        <p className="print-only text-xs text-muted-foreground mt-1" suppressHydrationWarning>
           Printed {new Date().toLocaleString()}
         </p>
       </div>
