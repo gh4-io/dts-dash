@@ -277,6 +277,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const bodyWrapperRef = useRef<HTMLDivElement>(null);
     const containerHeightRef = useRef<number>(0);
     const [containerHeight, setContainerHeight] = useState(0);
+    const [scrollbarWidth, setScrollbarWidth] = useState(0);
     // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
     const [nowTimestamp, setNowTimestamp] = useState(0);
     // ─── Row hover highlight refs (graphic-based, no React re-render) ───
@@ -613,13 +614,15 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             {
               xAxis: [
                 {
-                  // Bottom axis — time labels (sticky: always visible above slider)
+                  // Bottom axis — time labels inside (above axis line), ticks below
                   type: "value",
                   position: "bottom",
                   min: timeGrid.axisMin,
                   max: timeGrid.axisMax,
                   interval: intervalMs,
                   axisLabel: {
+                    inside: true,
+                    margin: 2,
                     interval: 0,
                     color: cc.fg,
                     fontSize: 12,
@@ -760,21 +763,24 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       return () => observer.disconnect();
     }, [workPackages.length]);
 
-    // ─── Track body wrapper container height for row padding ───
+    // ─── Track body wrapper container height + scrollbar width ───
     useEffect(() => {
       const wrapper = bodyWrapperRef.current;
       if (!wrapper) return;
 
       containerHeightRef.current = wrapper.clientHeight;
       setContainerHeight(wrapper.clientHeight);
+      setScrollbarWidth(wrapper.offsetWidth - wrapper.clientWidth);
 
       const observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const newHeight = entry.contentRect.height;
+          const newSbw = wrapper.offsetWidth - wrapper.clientWidth;
           if (Math.abs(newHeight - containerHeightRef.current) > 5) {
             containerHeightRef.current = newHeight;
             setContainerHeight(newHeight);
           }
+          setScrollbarWidth(newSbw);
         }
       });
 
@@ -1105,14 +1111,14 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           {
             type: "text",
             right: 25,
-            top: 6,
+            top: 4,
             style: { text: tzLabel, fill: cc.mutedFg, fontSize: 20 },
             z: 100,
           },
           {
             type: "text",
             left: 100,
-            top: 6,
+            top: 4,
             style: {
               text: initialDateStr, // ✅ Computed on initial render
               fill: cc.mutedFg,
@@ -1124,12 +1130,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         ],
         grid: {
           left: 100,
-          right: 20,
-          top: 62,
-          bottom: 46,
+          right: 20 + scrollbarWidth,
+          top: 50,
+          bottom: 5,
         },
         xAxis: [
-          // Bottom axis — time labels (sticky: always visible above slider)
+          // Bottom axis — time labels rendered inside (above axis line), ticks below
           {
             type: "value" as const,
             position: "bottom" as const,
@@ -1137,6 +1143,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             max: timeGrid.axisMax,
             interval: timeGrid.intervalMs,
             axisLabel: {
+              inside: true,
+              margin: 2,
               interval: 0,
               color: cc.fg,
               fontSize: 12,
@@ -1201,8 +1209,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             type: "slider" as const,
             xAxisIndex: [0, 1],
             filterMode: "weakFilter" as const,
-            height: 18,
-            bottom: 14,
+            height: 16,
+            top: 52,
             start: zoomRange.start,
             end: zoomRange.end,
             handleSize: "80%",
@@ -1232,6 +1240,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       timezone,
       dateFmt,
       hourFormatter,
+      scrollbarWidth,
     ]);
 
     // ─── BODY OPTION (bars + y-axis, grid lines — time labels live in header) ───
@@ -1851,7 +1860,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             ref={headerChartRef}
             echarts={echarts}
             option={headerOption}
-            style={{ height: 135, width: "100%" }}
+            style={{ height: 115, width: "100%" }}
             notMerge
             onEvents={{ datazoom: handleHeaderDataZoom }}
           />
