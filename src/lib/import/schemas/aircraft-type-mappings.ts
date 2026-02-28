@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/lib/db/client";
-import { aircraftTypeMappings, unifiedImportLog } from "@/lib/db/schema";
+import { aircraftTypeMappings, importLog } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { registerSchema } from "../registry";
@@ -151,7 +151,7 @@ const aircraftTypeMappingsSchema: ImportSchema = {
 
     // Create log entry
     const logEntry = db
-      .insert(unifiedImportLog)
+      .insert(importLog)
       .values({
         importedAt: now,
         dataType: "aircraft-type-mappings",
@@ -160,12 +160,12 @@ const aircraftTypeMappingsSchema: ImportSchema = {
         fileName: ctx.fileName || null,
         importedBy: ctx.userId,
         status: "success",
-        recordsTotal: records.length,
+        recordCount: records.length,
         recordsInserted: 0,
         recordsUpdated: 0,
         recordsSkipped: 0,
       })
-      .returning({ id: unifiedImportLog.id })
+      .returning({ id: importLog.id })
       .get();
 
     const logId = logEntry.id;
@@ -236,9 +236,9 @@ const aircraftTypeMappingsSchema: ImportSchema = {
       }
 
       // Update log
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({ recordsInserted: inserted, recordsUpdated: updated, recordsSkipped: skipped })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
 
       log.info({ logId, inserted, updated, skipped }, "Aircraft type mappings import committed");
@@ -247,16 +247,16 @@ const aircraftTypeMappingsSchema: ImportSchema = {
       errors.push(errMsg);
       log.error({ err, logId }, "Aircraft type mappings import failed");
 
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({ status: "failed", errors: JSON.stringify([errMsg]) })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
     }
 
     return {
       success: errors.length === 0,
       logId,
-      recordsTotal: records.length,
+      recordCount: records.length,
       recordsInserted: inserted,
       recordsUpdated: updated,
       recordsSkipped: skipped,

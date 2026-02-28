@@ -2,13 +2,13 @@
  * GET /api/admin/import/history?page=1&pageSize=10&type=work-packages
  *
  * Unified import history across all data types.
- * Queries unified_import_log with optional type filter.
+ * Queries import_log with optional type filter.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { unifiedImportLog, users } from "@/lib/db/schema";
+import { importLog, users } from "@/lib/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
@@ -27,12 +27,12 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * pageSize;
 
     // Build WHERE clause
-    const conditions = typeFilter ? and(eq(unifiedImportLog.dataType, typeFilter)) : undefined;
+    const conditions = typeFilter ? and(eq(importLog.dataType, typeFilter)) : undefined;
 
     // Total count
     const countResult = db
       .select({ count: sql<number>`COUNT(*)` })
-      .from(unifiedImportLog)
+      .from(importLog)
       .where(conditions)
       .get();
     const total = countResult?.count ?? 0;
@@ -40,26 +40,26 @@ export async function GET(request: NextRequest) {
     // Paginated results with user display name
     const rows = db
       .select({
-        id: unifiedImportLog.id,
-        importedAt: unifiedImportLog.importedAt,
-        dataType: unifiedImportLog.dataType,
-        source: unifiedImportLog.source,
-        format: unifiedImportLog.format,
-        fileName: unifiedImportLog.fileName,
-        importedBy: unifiedImportLog.importedBy,
-        status: unifiedImportLog.status,
-        recordsTotal: unifiedImportLog.recordsTotal,
-        recordsInserted: unifiedImportLog.recordsInserted,
-        recordsUpdated: unifiedImportLog.recordsUpdated,
-        recordsSkipped: unifiedImportLog.recordsSkipped,
-        warnings: unifiedImportLog.warnings,
-        errors: unifiedImportLog.errors,
+        id: importLog.id,
+        importedAt: importLog.importedAt,
+        dataType: importLog.dataType,
+        source: importLog.source,
+        format: importLog.format,
+        fileName: importLog.fileName,
+        importedBy: importLog.importedBy,
+        status: importLog.status,
+        recordsTotal: importLog.recordCount,
+        recordsInserted: importLog.recordsInserted,
+        recordsUpdated: importLog.recordsUpdated,
+        recordsSkipped: importLog.recordsSkipped,
+        warnings: importLog.warnings,
+        errors: importLog.errors,
         userDisplayName: users.displayName,
       })
-      .from(unifiedImportLog)
-      .leftJoin(users, eq(unifiedImportLog.importedBy, users.id))
+      .from(importLog)
+      .leftJoin(users, eq(importLog.importedBy, users.id))
       .where(conditions)
-      .orderBy(desc(unifiedImportLog.importedAt))
+      .orderBy(desc(importLog.importedAt))
       .limit(pageSize)
       .offset(offset)
       .all();

@@ -2,7 +2,7 @@
  * POST /api/admin/import/commit
  *
  * Schema-driven commit. Accepts schemaId + content + fieldMapping,
- * calls schema.commit(), logs to unified_import_log.
+ * calls schema.commit(), logs to import_log.
  *
  * Backwards-compatible: if no schemaId is provided and jsonContent is present,
  * falls back to work-packages commit (legacy behavior).

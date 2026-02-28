@@ -19,7 +19,7 @@ import {
   manufacturers,
   engineTypes,
   appConfig,
-  unifiedImportLog,
+  importLog,
 } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     // Log the reset action
     const userId = getSessionUserId(session);
     try {
-      db.insert(unifiedImportLog)
+      db.insert(importLog)
         .values({
           importedAt: new Date().toISOString(),
           dataType: schemaId,
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
           fileName: "RESET",
           importedBy: userId,
           status: "success",
-          recordsTotal: 0,
+          recordCount: 0,
         })
         .run();
     } catch (logErr) {

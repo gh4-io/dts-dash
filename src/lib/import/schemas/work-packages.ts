@@ -12,7 +12,7 @@
 import { registerSchema } from "../registry";
 import type { ImportSchema, ImportContext, CommitResult, ImportSummaryBadge } from "../types";
 import { db } from "@/lib/db/client";
-import { workPackages, unifiedImportLog } from "@/lib/db/schema";
+import { workPackages, importLog } from "@/lib/db/schema";
 import { eq, inArray, and, gte, lte } from "drizzle-orm";
 import { isCanceled } from "@/lib/utils/status";
 import { invalidateCache } from "@/lib/data/reader";
@@ -653,7 +653,7 @@ const workPackagesSchema: ImportSchema = {
     let logId: number;
     try {
       const inserted = db
-        .insert(unifiedImportLog)
+        .insert(importLog)
         .values({
           importedAt,
           dataType: "work-packages",
@@ -662,14 +662,14 @@ const workPackagesSchema: ImportSchema = {
           fileName: ctx.fileName ?? null,
           importedBy: ctx.userId,
           status: "success",
-          recordsTotal: records.length,
+          recordCount: records.length,
           recordsInserted: 0,
           recordsUpdated: 0,
           recordsSkipped: 0,
           warnings: null,
           errors: null,
         })
-        .returning({ id: unifiedImportLog.id })
+        .returning({ id: importLog.id })
         .get();
 
       logId = inserted.id;
@@ -679,7 +679,7 @@ const workPackagesSchema: ImportSchema = {
       return {
         success: false,
         logId: 0,
-        recordsTotal: records.length,
+        recordCount: records.length,
         recordsInserted: 0,
         recordsUpdated: 0,
         recordsSkipped: 0,
@@ -784,12 +784,12 @@ const workPackagesSchema: ImportSchema = {
 
       // Update import log to failed
       try {
-        db.update(unifiedImportLog)
+        db.update(importLog)
           .set({
             status: "failed",
             errors: (err as Error).message,
           })
-          .where(eq(unifiedImportLog.id, logId))
+          .where(eq(importLog.id, logId))
           .run();
       } catch (updateErr) {
         log.error({ err: updateErr, logId }, "Failed to update import log status");
@@ -798,7 +798,7 @@ const workPackagesSchema: ImportSchema = {
       return {
         success: false,
         logId,
-        recordsTotal: records.length,
+        recordCount: records.length,
         recordsInserted: 0,
         recordsUpdated: 0,
         recordsSkipped: 0,
@@ -809,14 +809,14 @@ const workPackagesSchema: ImportSchema = {
 
     // 6. Update import log with final counts
     try {
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({
           recordsInserted: newRecords.length,
           recordsUpdated: changedRecords.length,
           recordsSkipped: skippedCount,
           warnings: warnings.length > 0 ? JSON.stringify(warnings) : null,
         })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
     } catch (updateErr) {
       log.error({ err: updateErr, logId }, "Failed to update import log counts");
@@ -826,7 +826,7 @@ const workPackagesSchema: ImportSchema = {
       {
         logId,
         source: ctx.source,
-        recordsTotal: records.length,
+        recordCount: records.length,
         inserted: newRecords.length,
         updated: changedRecords.length,
         skipped: skippedCount,
@@ -837,7 +837,7 @@ const workPackagesSchema: ImportSchema = {
     return {
       success: true,
       logId,
-      recordsTotal: records.length,
+      recordCount: records.length,
       recordsInserted: newRecords.length,
       recordsUpdated: changedRecords.length,
       recordsSkipped: skippedCount,

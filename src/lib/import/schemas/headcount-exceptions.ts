@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/lib/db/client";
-import { headcountExceptions, capacityShifts, unifiedImportLog } from "@/lib/db/schema";
+import { headcountExceptions, capacityShifts, importLog } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { registerSchema } from "../registry";
@@ -163,7 +163,7 @@ const headcountExceptionsSchema: ImportSchema = {
     let skipped = 0;
 
     const logEntry = db
-      .insert(unifiedImportLog)
+      .insert(importLog)
       .values({
         importedAt: now,
         dataType: "headcount-exceptions",
@@ -172,9 +172,9 @@ const headcountExceptionsSchema: ImportSchema = {
         fileName: ctx.fileName || null,
         importedBy: ctx.userId,
         status: "success",
-        recordsTotal: records.length,
+        recordCount: records.length,
       })
-      .returning({ id: unifiedImportLog.id })
+      .returning({ id: importLog.id })
       .get();
     const logId = logEntry.id;
 
@@ -237,7 +237,7 @@ const headcountExceptionsSchema: ImportSchema = {
         }
       }
 
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({
           recordsInserted: inserted,
           recordsUpdated: updated,
@@ -245,7 +245,7 @@ const headcountExceptionsSchema: ImportSchema = {
           status: errors.length > 0 ? "partial" : "success",
           warnings: warnings.length > 0 ? JSON.stringify(warnings) : null,
         })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
 
       log.info({ logId, inserted, updated, skipped }, "Headcount exceptions import committed");
@@ -253,16 +253,16 @@ const headcountExceptionsSchema: ImportSchema = {
       const errMsg = err instanceof Error ? err.message : String(err);
       errors.push(errMsg);
       log.error({ err, logId }, "Headcount exceptions import failed");
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({ status: "failed", errors: JSON.stringify([errMsg]) })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
     }
 
     return {
       success: errors.length === 0,
       logId,
-      recordsTotal: records.length,
+      recordCount: records.length,
       recordsInserted: inserted,
       recordsUpdated: updated,
       recordsSkipped: skipped,

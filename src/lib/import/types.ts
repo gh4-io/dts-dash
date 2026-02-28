@@ -159,7 +159,7 @@ export interface FieldMapping {
 export interface CommitResult {
   success: boolean;
   logId: number;
-  recordsTotal: number;
+  recordCount: number;
   recordsInserted: number;
   recordsUpdated: number;
   recordsSkipped: number;

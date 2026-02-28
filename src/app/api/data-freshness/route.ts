@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
-import { unifiedImportLog } from "@/lib/db/schema";
+import { importLog } from "@/lib/db/schema";
 import { desc, eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
@@ -19,10 +19,10 @@ export async function GET() {
     }
 
     const latest = db
-      .select({ importedAt: unifiedImportLog.importedAt })
-      .from(unifiedImportLog)
-      .where(eq(unifiedImportLog.dataType, "work-packages"))
-      .orderBy(desc(unifiedImportLog.importedAt))
+      .select({ importedAt: importLog.importedAt })
+      .from(importLog)
+      .where(eq(importLog.dataType, "work-packages"))
+      .orderBy(desc(importLog.importedAt))
       .limit(1)
       .get();
 

@@ -274,6 +274,8 @@ export async function commitImportData(
         status: "success",
         errors: null,
         idempotencyKey: idempotencyKey || null,
+        dataType: "work-packages",
+        format: "json",
       })
       .returning({ id: importLog.id })
       .get();
@@ -446,6 +448,20 @@ export async function commitImportData(
     }
 
     return { success: false, logId, recordCount: records.length, newCount: 0, changedCount: 0, skippedCount: 0, upsertedCount: 0, canceledCount: 0 };
+  }
+
+  // Update import log with actual counts
+  try {
+    db.update(importLog)
+      .set({
+        recordsInserted: newRecords.length,
+        recordsUpdated: changedRecords.length,
+        recordsSkipped: skippedCount,
+      })
+      .where(eq(importLog.id, logId))
+      .run();
+  } catch (updateErr) {
+    log.error({ err: updateErr, logId }, "Failed to update import log counts");
   }
 
   // Invalidate caches

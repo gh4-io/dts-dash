@@ -74,7 +74,14 @@ export function createTables() {
       imported_by INTEGER NOT NULL REFERENCES users(id),
       status TEXT NOT NULL,
       errors TEXT,
-      idempotency_key TEXT
+      idempotency_key TEXT,
+      data_type TEXT NOT NULL DEFAULT 'work-packages',
+      format TEXT NOT NULL DEFAULT 'json',
+      records_inserted INTEGER NOT NULL DEFAULT 0,
+      records_updated INTEGER NOT NULL DEFAULT 0,
+      records_skipped INTEGER NOT NULL DEFAULT 0,
+      field_mapping TEXT,
+      warnings TEXT
     );
 
     CREATE TABLE IF NOT EXISTS work_packages (
@@ -268,26 +275,6 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
-    -- Unified Import Log (v0.2.0)
-    CREATE TABLE IF NOT EXISTS unified_import_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      imported_at TEXT NOT NULL,
-      data_type TEXT NOT NULL,
-      source TEXT NOT NULL,
-      format TEXT NOT NULL,
-      file_name TEXT,
-      imported_by INTEGER NOT NULL REFERENCES users(id),
-      status TEXT NOT NULL,
-      records_total INTEGER NOT NULL,
-      records_inserted INTEGER NOT NULL DEFAULT 0,
-      records_updated INTEGER NOT NULL DEFAULT 0,
-      records_skipped INTEGER NOT NULL DEFAULT 0,
-      field_mapping TEXT,
-      warnings TEXT,
-      errors TEXT,
-      idempotency_key TEXT
-    );
-
     -- Capacity Modeling (v0.3.0)
     CREATE TABLE IF NOT EXISTS capacity_shifts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -354,8 +341,7 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_hcp_shift ON headcount_plans(shift_id);
     CREATE INDEX IF NOT EXISTS idx_hcp_effective ON headcount_plans(effective_from, effective_to);
     CREATE INDEX IF NOT EXISTS idx_hce_shift_date ON headcount_exceptions(shift_id, exception_date);
-    CREATE INDEX IF NOT EXISTS idx_unified_import_log_type ON unified_import_log(data_type);
-    CREATE INDEX IF NOT EXISTS idx_unified_import_log_imported_at ON unified_import_log(imported_at);
+    CREATE INDEX IF NOT EXISTS idx_import_log_data_type ON import_log(data_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_type ON analytics_events(event_type);
     CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at);

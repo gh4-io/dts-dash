@@ -18,7 +18,7 @@ import {
   manufacturers,
   aircraftModels,
   engineTypes,
-  unifiedImportLog,
+  importLog,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { fuzzyMatchCustomer } from "@/lib/utils/fuzzy-match";
@@ -467,9 +467,9 @@ const aircraftSchema: ImportSchema = {
         }
       }
 
-      // ── Log to unifiedImportLog ─────────────────────────────────────
+      // ── Log to importLog ─────────────────────────────────────
       const logEntry = await db
-        .insert(unifiedImportLog)
+        .insert(importLog)
         .values({
           importedAt: now,
           dataType: "aircraft",
@@ -479,14 +479,14 @@ const aircraftSchema: ImportSchema = {
           importedBy: ctx.userId,
           status:
             allErrors.length > 0 ? (inserted > 0 || updated > 0 ? "partial" : "failed") : "success",
-          recordsTotal: records.length,
+          recordCount: records.length,
           recordsInserted: inserted,
           recordsUpdated: updated,
           recordsSkipped: skipped,
           warnings: allWarnings.length > 0 ? JSON.stringify(allWarnings) : null,
           errors: allErrors.length > 0 ? JSON.stringify(allErrors) : null,
         })
-        .returning({ id: unifiedImportLog.id })
+        .returning({ id: importLog.id })
         .get();
 
       log.info(
@@ -504,7 +504,7 @@ const aircraftSchema: ImportSchema = {
       return {
         success: allErrors.length === 0,
         logId: logEntry.id,
-        recordsTotal: records.length,
+        recordCount: records.length,
         recordsInserted: inserted,
         recordsUpdated: updated,
         recordsSkipped: skipped,
@@ -517,7 +517,7 @@ const aircraftSchema: ImportSchema = {
 
       // Log failure
       const failEntry = await db
-        .insert(unifiedImportLog)
+        .insert(importLog)
         .values({
           importedAt: now,
           dataType: "aircraft",
@@ -526,20 +526,20 @@ const aircraftSchema: ImportSchema = {
           fileName: ctx.fileName ?? null,
           importedBy: ctx.userId,
           status: "failed",
-          recordsTotal: records.length,
+          recordCount: records.length,
           recordsInserted: 0,
           recordsUpdated: 0,
           recordsSkipped: records.length,
           warnings: null,
           errors: JSON.stringify([errorMessage]),
         })
-        .returning({ id: unifiedImportLog.id })
+        .returning({ id: importLog.id })
         .get();
 
       return {
         success: false,
         logId: failEntry.id,
-        recordsTotal: records.length,
+        recordCount: records.length,
         recordsInserted: 0,
         recordsUpdated: 0,
         recordsSkipped: records.length,

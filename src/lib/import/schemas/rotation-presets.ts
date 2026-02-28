@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/lib/db/client";
-import { rotationPresets, unifiedImportLog } from "@/lib/db/schema";
+import { rotationPresets, importLog } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { registerSchema } from "../registry";
@@ -145,7 +145,7 @@ const rotationPresetsSchema: ImportSchema = {
     let skipped = 0;
 
     const logEntry = db
-      .insert(unifiedImportLog)
+      .insert(importLog)
       .values({
         importedAt: now,
         dataType: "rotation-presets",
@@ -154,9 +154,9 @@ const rotationPresetsSchema: ImportSchema = {
         fileName: ctx.fileName || null,
         importedBy: ctx.userId,
         status: "success",
-        recordsTotal: records.length,
+        recordCount: records.length,
       })
-      .returning({ id: unifiedImportLog.id })
+      .returning({ id: importLog.id })
       .get();
     const logId = logEntry.id;
 
@@ -213,13 +213,13 @@ const rotationPresetsSchema: ImportSchema = {
         }
       }
 
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({
           recordsInserted: inserted,
           recordsUpdated: updated,
           recordsSkipped: skipped,
         })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
 
       log.info({ logId, inserted, updated, skipped }, "Rotation presets import committed");
@@ -227,16 +227,16 @@ const rotationPresetsSchema: ImportSchema = {
       const errMsg = err instanceof Error ? err.message : String(err);
       errors.push(errMsg);
       log.error({ err, logId }, "Rotation presets import failed");
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({ status: "failed", errors: JSON.stringify([errMsg]) })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
     }
 
     return {
       success: errors.length === 0,
       logId,
-      recordsTotal: records.length,
+      recordCount: records.length,
       recordsInserted: inserted,
       recordsUpdated: updated,
       recordsSkipped: skipped,

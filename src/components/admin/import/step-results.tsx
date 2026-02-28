@@ -43,7 +43,7 @@ export function StepResults({ result, onImportMore }: StepResultsProps) {
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total" value={result.recordsTotal} icon="fa-solid fa-database" />
+        <StatCard label="Total" value={result.recordCount} icon="fa-solid fa-database" />
         <StatCard
           label="Inserted"
           value={result.recordsInserted}

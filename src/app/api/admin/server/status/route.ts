@@ -22,7 +22,6 @@ const TABLE_NAMES = [
   "aircraft",
   "import_log",
   "master_data_import_log",
-  "unified_import_log",
   "analytics_events",
   "app_config",
   "cron_job_runs",
@@ -92,12 +91,12 @@ export async function GET() {
     try {
       const row = sqlite
         .prepare(
-          "SELECT imported_at, records_total, source, file_name FROM unified_import_log WHERE data_type = 'work-packages' ORDER BY imported_at DESC LIMIT 1",
+          "SELECT imported_at, record_count, source, file_name FROM import_log WHERE data_type = 'work-packages' ORDER BY imported_at DESC LIMIT 1",
         )
         .get() as
         | {
             imported_at: string;
-            records_total: number;
+            record_count: number;
             source: string;
             file_name: string | null;
           }
@@ -105,13 +104,13 @@ export async function GET() {
       if (row) {
         lastImport = {
           importedAt: row.imported_at,
-          recordCount: row.records_total,
+          recordCount: row.record_count,
           source: row.source,
           fileName: row.file_name,
         };
       }
     } catch {
-      // unified_import_log table may not exist
+      // import_log table may not exist
     }
 
     // Canceled WPs count

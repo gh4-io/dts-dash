@@ -229,6 +229,15 @@ export const importLog = sqliteTable("import_log", {
   status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
   errors: text("errors"),
   idempotencyKey: text("idempotency_key"),
+  dataType: text("data_type").notNull().default("work-packages"),
+  format: text("format", { enum: ["csv", "json"] })
+    .notNull()
+    .default("json"),
+  recordsInserted: integer("records_inserted").notNull().default(0),
+  recordsUpdated: integer("records_updated").notNull().default(0),
+  recordsSkipped: integer("records_skipped").notNull().default(0),
+  fieldMapping: text("field_mapping"),
+  warnings: text("warnings"),
 });
 
 // ─── Analytics Events ───────────────────────────────────────────────────────
@@ -788,7 +797,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   analyticsEvents: many(analyticsEvents),
   importLogs: many(importLog),
   masterDataImportLogs: many(masterDataImportLog),
-  unifiedImportLogs: many(unifiedImportLog),
   feedbackPosts: many(feedbackPosts),
   feedbackComments: many(feedbackComments),
   mhOverrides: many(mhOverrides),
@@ -911,38 +919,6 @@ export const aircraftRelations = relations(aircraft, ({ one }) => ({
 export const masterDataImportLogRelations = relations(masterDataImportLog, ({ one }) => ({
   importedByUser: one(users, {
     fields: [masterDataImportLog.importedBy],
-    references: [users.id],
-  }),
-}));
-
-// ─── Unified Import Log ────────────────────────────────────────────────────
-
-export const unifiedImportLog = sqliteTable("unified_import_log", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  importedAt: text("imported_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-  dataType: text("data_type").notNull(),
-  source: text("source", { enum: ["file", "paste", "api"] }).notNull(),
-  format: text("format", { enum: ["csv", "json"] }).notNull(),
-  fileName: text("file_name"),
-  importedBy: integer("imported_by")
-    .notNull()
-    .references(() => users.id),
-  status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
-  recordsTotal: integer("records_total").notNull(),
-  recordsInserted: integer("records_inserted").notNull().default(0),
-  recordsUpdated: integer("records_updated").notNull().default(0),
-  recordsSkipped: integer("records_skipped").notNull().default(0),
-  fieldMapping: text("field_mapping"),
-  warnings: text("warnings"),
-  errors: text("errors"),
-  idempotencyKey: text("idempotency_key"),
-});
-
-export const unifiedImportLogRelations = relations(unifiedImportLog, ({ one }) => ({
-  importedByUser: one(users, {
-    fields: [unifiedImportLog.importedBy],
     references: [users.id],
   }),
 }));

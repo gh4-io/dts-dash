@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/lib/db/client";
-import { headcountPlans, capacityShifts, unifiedImportLog } from "@/lib/db/schema";
+import { headcountPlans, capacityShifts, importLog } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { registerSchema } from "../registry";
@@ -189,7 +189,7 @@ const headcountPlansSchema: ImportSchema = {
     let skipped = 0;
 
     const logEntry = db
-      .insert(unifiedImportLog)
+      .insert(importLog)
       .values({
         importedAt: now,
         dataType: "headcount-plans",
@@ -198,9 +198,9 @@ const headcountPlansSchema: ImportSchema = {
         fileName: ctx.fileName || null,
         importedBy: ctx.userId,
         status: "success",
-        recordsTotal: records.length,
+        recordCount: records.length,
       })
-      .returning({ id: unifiedImportLog.id })
+      .returning({ id: importLog.id })
       .get();
     const logId = logEntry.id;
 
@@ -254,7 +254,7 @@ const headcountPlansSchema: ImportSchema = {
         inserted++;
       }
 
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({
           recordsInserted: inserted,
           recordsUpdated: 0,
@@ -262,7 +262,7 @@ const headcountPlansSchema: ImportSchema = {
           status: errors.length > 0 ? "partial" : "success",
           warnings: warnings.length > 0 ? JSON.stringify(warnings) : null,
         })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
 
       log.info({ logId, inserted, skipped }, "Headcount plans import committed");
@@ -270,16 +270,16 @@ const headcountPlansSchema: ImportSchema = {
       const errMsg = err instanceof Error ? err.message : String(err);
       errors.push(errMsg);
       log.error({ err, logId }, "Headcount plans import failed");
-      db.update(unifiedImportLog)
+      db.update(importLog)
         .set({ status: "failed", errors: JSON.stringify([errMsg]) })
-        .where(eq(unifiedImportLog.id, logId))
+        .where(eq(importLog.id, logId))
         .run();
     }
 
     return {
       success: errors.length === 0,
       logId,
-      recordsTotal: records.length,
+      recordCount: records.length,
       recordsInserted: inserted,
       recordsUpdated: 0,
       recordsSkipped: skipped,
