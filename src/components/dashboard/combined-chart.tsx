@@ -34,6 +34,13 @@ interface CombinedChartProps {
   timezone?: string;
   timeFormat?: "12h" | "24h";
   onSelectionChange?: (range: ChartTimeRange | null) => void;
+  /** Override chart SVG height (default 340). Use a fixed value for print layouts. */
+  height?: number;
+  /**
+   * Override chart SVG width. Pass an explicit pixel value for print to bypass
+   * ResponsiveContainer's ResizeObserver (which fires async and misses the print capture).
+   */
+  width?: number;
 }
 
 interface SelectionStats {
@@ -50,6 +57,8 @@ export function CombinedChart({
   timezone = "UTC",
   timeFormat = "24h",
   onSelectionChange,
+  height = 340,
+  width,
 }: CombinedChartProps) {
   const chartData = useMemo(() => {
     return snapshots.map((s) => ({
@@ -315,8 +324,114 @@ export function CombinedChart({
     );
   }
 
+  // Print path: explicit width/height bypasses ResponsiveContainer's async ResizeObserver.
+  // isAnimationActive={false} on Bar/Line ensures bars and the line are fully painted at
+  // frame 0 — no animation in progress when react-to-print clones the DOM.
+  if (width !== undefined) {
+    return (
+      <ComposedChart
+        data={chartData}
+        width={width}
+        height={height}
+        margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
+      >
+        <CartesianGrid
+          strokeDasharray="3 3"
+          stroke="hsl(var(--muted-foreground))"
+          opacity={0.2}
+          horizontal={true}
+          vertical={false}
+        />
+        {midnightHours.map((m) => (
+          <ReferenceLine
+            key={`midnight-${m.hour}`}
+            x={m.hour}
+            stroke="hsl(var(--foreground))"
+            strokeWidth={1}
+            strokeDasharray="6 3"
+            opacity={0.5}
+            label={{
+              value: m.dateLabel,
+              position: "insideTopRight",
+              fill: "hsl(var(--foreground))",
+              fontSize: 10,
+              fontWeight: 700,
+              offset: 4,
+            }}
+          />
+        ))}
+        {nowHourKey && (
+          <ReferenceLine
+            x={nowHourKey}
+            stroke="#ef4444"
+            strokeWidth={2}
+            label={{
+              value: "NOW",
+              position: "insideTopLeft",
+              fill: "#ef4444",
+              fontSize: 10,
+              fontWeight: 700,
+              offset: 4,
+            }}
+          />
+        )}
+        <XAxis
+          dataKey="hour"
+          tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
+          ticks={alignedTicks}
+          tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+          axisLine={{ stroke: "hsl(var(--muted-foreground))" }}
+          tickFormatter={formatTick}
+        />
+        <YAxis
+          tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+          width={35}
+        />
+        <Legend
+          wrapperStyle={{
+            fontSize: 11,
+            paddingTop: 8,
+            color: "hsl(var(--foreground))",
+            pointerEvents: "none",
+          }}
+          formatter={(value) => <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>}
+        />
+        <Bar
+          dataKey="arrivals"
+          name="Arrivals"
+          fill="#3b82f6"
+          radius={[2, 2, 0, 0]}
+          barSize={8}
+          isAnimationActive={false}
+        />
+        <Bar
+          dataKey="departures"
+          name="Departures"
+          fill="#f43f5e"
+          radius={[2, 2, 0, 0]}
+          barSize={8}
+          isAnimationActive={false}
+        />
+        <Line
+          dataKey="onGround"
+          name="On Ground"
+          type="monotone"
+          stroke="#eab308"
+          strokeWidth={2}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </ComposedChart>
+    );
+  }
+
+  // Normal path: ResponsiveContainer measures the DOM and passes dimensions to ComposedChart.
   return (
     <>
+      {/* Stats bar — only shown in interactive (non-print) mode */}
       <div
         className={`flex items-center gap-3 px-2 py-1.5 mb-2 rounded-md text-xs transition-colors ${selectionStats ? "bg-primary/10 border border-primary/20" : "border border-transparent"}`}
       >
@@ -358,7 +473,7 @@ export function CombinedChart({
           <span className="invisible">placeholder</span>
         )}
       </div>
-      <ResponsiveContainer width="100%" height={340}>
+      <ResponsiveContainer width="100%" height={height}>
         <ComposedChart
           data={chartData}
           margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
@@ -375,11 +490,9 @@ export function CombinedChart({
             horizontal={true}
             vertical={false}
           />
-
-          {/* Day separator lines at midnight */}
           {midnightHours.map((m) => (
             <ReferenceLine
-              key={m.hour}
+              key={`midnight-${m.hour}`}
               x={m.hour}
               stroke="hsl(var(--foreground))"
               strokeWidth={1}
@@ -395,8 +508,6 @@ export function CombinedChart({
               }}
             />
           ))}
-
-          {/* NOW indicator */}
           {nowHourKey && (
             <ReferenceLine
               x={nowHourKey}
@@ -412,8 +523,6 @@ export function CombinedChart({
               }}
             />
           )}
-
-          {/* Selection highlight overlay */}
           {activeSelectionBounds && (
             <ReferenceArea
               x1={activeSelectionBounds.x1}
@@ -423,7 +532,6 @@ export function CombinedChart({
               stroke="none"
             />
           )}
-
           <XAxis
             dataKey="hour"
             tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}

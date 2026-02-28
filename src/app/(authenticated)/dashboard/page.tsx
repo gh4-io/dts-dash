@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useState, useMemo, useCallback, useRef } from "react";
+import { Suspense, useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { AvgGroundTimeCard } from "@/components/dashboard/avg-ground-time-card";
@@ -17,7 +18,6 @@ import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { PrintButton } from "@/components/shared/print-button";
-import { useEffect } from "react";
 
 function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
@@ -27,6 +27,7 @@ function DashboardPageInner() {
   const { timeFormat } = usePreferences();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<ChartTimeRange | null>(null);
+  const [printMode, setPrintMode] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,6 +96,20 @@ function DashboardPageInner() {
     setTimeRange(range);
   }, []);
 
+  const handleBeforePrint = useCallback(async () => {
+    // flushSync forces a synchronous React render so the print layout is in the DOM.
+    // The setTimeout gives Recharts time to complete its componentDidMount → setState →
+    // re-render cycle, which runs after the flushSync batch and computes bar heights /
+    // line paths. Without this, react-to-print captures the DOM before that second
+    // render finishes and the chart appears blank.
+    flushSync(() => setPrintMode(true));
+    await new Promise<void>((resolve) => setTimeout(resolve, 150));
+  }, []);
+
+  const handleAfterPrint = useCallback(() => {
+    setPrintMode(false);
+  }, []);
+
   if (error) {
     return (
       <div className="space-y-3">
@@ -113,73 +128,121 @@ function DashboardPageInner() {
         title="Dashboard"
         icon="fa-solid fa-chart-line"
         actions={
-          <PrintButton contentRef={printRef} documentTitle="Dashboard — CVG Line Maintenance" />
+          <PrintButton
+            contentRef={printRef}
+            documentTitle="Dashboard — CVG Line Maintenance"
+            onBeforePrint={handleBeforePrint}
+            onAfterPrint={handleAfterPrint}
+          />
         }
       />
 
       {isLoading || snapshotsLoading ? (
         <LoadingSkeleton variant="page" />
       ) : (
-        <div
-          ref={printRef}
-          className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1"
-        >
-          {/* Left: flex ratios — MH 65%, Type 32% of remaining */}
-          <div className="flex flex-col gap-3">
-            <div className="shrink-0">
-              <AvgGroundTimeCard workPackages={displayWps} />
-            </div>
-            <MhByOperatorCard
-              workPackages={displayWps}
-              onOperatorClick={handleOperatorFromCard}
-              className="flex-[2]"
-            />
-            <div className="shrink-0">
-              <TotalAircraftCard
-                workPackages={displayWps}
-                filterStart={start}
-                filterEnd={end}
-                timezone={timezone}
-              />
-            </div>
-            <AircraftByTypeCard workPackages={displayWps} className="flex-[3]" />
-          </div>
-
-          {/* Center: chart + operator table */}
-          <div className="flex flex-col gap-3">
-            <div className="rounded-lg border border-border bg-card p-4 flex-1 flex flex-col">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-                <i className="fa-solid fa-chart-column" />
-                Arrivals / Departures / On Ground
-                <span className="ml-auto">{timezone === "UTC" ? "UTC" : "Eastern (ET)"}</span>
-              </h3>
-              <div className="flex-1 min-h-[250px]">
+        <div ref={printRef} className="flex-1">
+          {printMode ? (
+            // ── Print layout: full-width chart → 3-col KPI row → full-width table ──
+            <div className="flex flex-col gap-2">
+              {/* Row 1: Arrivals / Departures / On Ground — full page width */}
+              <div className="rounded-lg border border-border bg-card p-4">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="fa-solid fa-chart-column" />
+                  Arrivals / Departures / On Ground
+                  <span className="ml-auto">{timezone === "UTC" ? "UTC" : "Eastern (ET)"}</span>
+                </h3>
                 <CombinedChart
                   snapshots={displaySnapshots}
                   timezone={timezone}
                   timeFormat={timeFormat}
-                  onSelectionChange={handleTimeRangeChange}
+                  height={200}
+                  width={928}
                 />
               </div>
-            </div>
-            <OperatorPerformance
-              workPackages={displayWps}
-              focusedOperator={focusedOperator}
-              onOperatorClick={handleOperatorClick}
-              className="flex-1"
-            />
-          </div>
 
-          {/* Right: Donut stretches to match full height */}
-          <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
-            <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
-              <i className="fa-solid fa-chart-pie" />
-              Aircraft By Customer
-            </h3>
-            <div className="flex-1">
-              <CustomerDonut workPackages={displayWps} onCustomerClick={handleOperatorFromCard} />
+              {/* Row 2: Average Ground Time | Aircraft & Turns | Total Aircraft By Type */}
+              <div className="grid grid-cols-3 gap-2">
+                <AvgGroundTimeCard workPackages={displayWps} />
+                <TotalAircraftCard
+                  workPackages={displayWps}
+                  filterStart={start}
+                  filterEnd={end}
+                  timezone={timezone}
+                />
+                <AircraftByTypeCard workPackages={displayWps} />
+              </div>
+
+              {/* Row 3: Operator Performance — full width so table columns have room */}
+              <OperatorPerformance
+                workPackages={displayWps}
+                focusedOperator={null}
+                onOperatorClick={() => {}}
+              />
             </div>
-          </div>
+          ) : (
+            // ── Normal layout: 3-column grid ────────────────────────────────────
+            <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1">
+              {/* Left: flex ratios — MH 65%, Type 32% of remaining */}
+              <div className="flex flex-col gap-3">
+                <div className="shrink-0">
+                  <AvgGroundTimeCard workPackages={displayWps} />
+                </div>
+                <MhByOperatorCard
+                  workPackages={displayWps}
+                  onOperatorClick={handleOperatorFromCard}
+                  className="flex-[2]"
+                />
+                <div className="shrink-0">
+                  <TotalAircraftCard
+                    workPackages={displayWps}
+                    filterStart={start}
+                    filterEnd={end}
+                    timezone={timezone}
+                  />
+                </div>
+                <AircraftByTypeCard workPackages={displayWps} className="flex-[3]" />
+              </div>
+
+              {/* Center: chart + operator table */}
+              <div className="flex flex-col gap-3">
+                <div className="rounded-lg border border-border bg-card p-4 flex-1 flex flex-col">
+                  <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                    <i className="fa-solid fa-chart-column" />
+                    Arrivals / Departures / On Ground
+                    <span className="ml-auto">{timezone === "UTC" ? "UTC" : "Eastern (ET)"}</span>
+                  </h3>
+                  <div className="flex-1 min-h-[250px]">
+                    <CombinedChart
+                      snapshots={displaySnapshots}
+                      timezone={timezone}
+                      timeFormat={timeFormat}
+                      onSelectionChange={handleTimeRangeChange}
+                    />
+                  </div>
+                </div>
+                <OperatorPerformance
+                  workPackages={displayWps}
+                  focusedOperator={focusedOperator}
+                  onOperatorClick={handleOperatorClick}
+                  className="flex-1"
+                />
+              </div>
+
+              {/* Right: Donut stretches to match full height */}
+              <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="fa-solid fa-chart-pie" />
+                  Aircraft By Customer
+                </h3>
+                <div className="flex-1">
+                  <CustomerDonut
+                    workPackages={displayWps}
+                    onCustomerClick={handleOperatorFromCard}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
