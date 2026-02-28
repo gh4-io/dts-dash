@@ -60,7 +60,11 @@ export function TotalAircraftCard({
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Turns</p>
           </div>
         </div>
-        {dateRange && <p className="text-xs text-muted-foreground text-center">{dateRange}</p>}
+        {dateRange && (
+          <p className="text-xs text-muted-foreground text-center" suppressHydrationWarning>
+            {dateRange}
+          </p>
+        )}
       </div>
     </KpiCard>
   );
