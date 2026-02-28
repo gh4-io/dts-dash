@@ -193,22 +193,10 @@ function FlightBoardPageInner() {
     chartRef.current?.restoreAfterPrint();
   }, []);
 
-  // Build format chips for non-default zoom (only show when user changed from default)
+  // SUPPRESSED: Zoom format chips hidden — zoom preset tags not shown in TopMenuBar.
+  // Original logic: shows "Zoom: {level}" chip when zoomLevel !== effectiveDefaultZoom.
   const effectiveDefaultZoom = defaultZoom || "3d";
-  const formatChips: ActiveChip[] = useMemo(
-    () =>
-      zoomLevel !== effectiveDefaultZoom
-        ? [
-            {
-              id: "zoom",
-              label: `Zoom: ${zoomLevel}`,
-              icon: "fa-solid fa-magnifying-glass",
-              onRemove: () => setZoomLevel(effectiveDefaultZoom),
-            },
-          ]
-        : [],
-    [zoomLevel, effectiveDefaultZoom],
-  );
+  const formatChips: ActiveChip[] = [];
 
   const ZOOM_LEVELS = [
     { id: "6h", label: "6h" },
