@@ -7,237 +7,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added - Demand Contracts Redesign (from `feat/demand-contracts`)
-- **Hierarchical demand contracts model** — parent `demand_contracts` + child `demand_allocation_lines` replaces flat `demand_allocations`
-- **Period types** — WEEKLY, MONTHLY, ANNUAL, TOTAL, PER_EVENT (D-048)
-- **Sanity check projection** — SHORTFALL / OK / EXCESS
-- **Collapsible admin grid** — contracts with inline line editing
-- **Migration M015** — DROP old table, CREATE new tables with CASCADE FKs
-- **Breaking:** `demand_allocations` API endpoint removed (use `demand_contracts`)
+---
 
-### Added - Capacity Enhancements (E-01 through E-06 + G-01, from `feat/capacity-layout`)
+## [0.2.0] - 2026-02-28
 
-#### Rolling 8-Week Forecast (E-01)
-- Recency-weighted DOW forecast engine with hyperbolic decay, emerald dashed line on daily chart
-- Configurable history window, confidence levels (high/medium/low), "8W Forecast" toggle
+> **MINOR release** — all changes are backwards-compatible; all new functionality is additive.
 
-#### Scenario Toggle (E-02)
-- Demand multiplier engine (Baseline 1.0x, +10% Demand 1.1x), utilization recomputed
-- Lens overlay values never scaled by scenarios
+### Added
 
-#### Gap Analysis (E-03)
-- Surplus/deficit classification engine, diverging bar "Gap" view mode, gap KPI card
+#### Universal Import Hub
+- **Single schema-driven Data Hub** replacing 3 siloed import pipelines (Customers, Aircraft Types, Data Import)
+- **6-Step Import Wizard** — Select Type → Load Data → Map Fields → Validate → Confirm → Results
+- **9 Pluggable Import Schemas** — work-packages, customers, aircraft, aircraft-type-mappings, aircraft-models, manufacturers, engine-types, users, app-config
+- **3-Pass Auto-Mapping Engine** — exact alias → case-insensitive → fuzzy normalized; manual select dropdowns per field
+- **Unified Import History** — single audit log across all data types with type filtering and pagination
+- **Export & Templates** — export existing data (JSON/CSV) and download example templates per schema type
+- **Contextual Help Panel** — desktop right sidebar ↔ mobile bottom sheet; step-specific guidance and field reference tables
+- **Schema Registry** — `registerSchema()` API; new schemas auto-register by adding a file to `src/lib/import/schemas/`
+- **Admin Nav Consolidation** — 9 items → 7 items; "Data Hub" replaces Customers + Aircraft Types + Data Import
+- **Backwards-compatible redirects** — `/admin/customers` and `/admin/aircraft-types` redirect to Data Hub equivalents
+- Auto-detect JSON/CSV schema type from uploaded data content
+- New `unified_import_log` database table (replaces siloed per-type logs)
+- 13 new UI components and 4 new API routes (`/schemas`, `/parse`, `/export`, `/template`)
 
-#### UI Integration (E-04)
-- Scenario selector, KPI strip wiring, effective data routing to charts
-- Forecast uses original demand; drilldown drawer uses original demand
+#### Capacity Modeling
+- **Full Capacity Suite** — 3-tier productivity model (Paid Hours × paidToAvailable × availableToProductive × nightFactor), demand distribution engine (EVEN/WEIGHTED curves), utilization heatmap, shift drilldown drawer, headcount plans + exceptions, and admin settings UI
+- **Rotation-Based Staffing** — rotation pattern library (21-dot visual grid editor, presets), named staffing configurations (create/rename/duplicate/activate/compare), custom shift definitions per category (Day/Swing/Night/Other), weekly staffing matrix with full productivity chain + coverage gap warnings; staffing-driven capacity mode
+- **Demand Contracts** — hierarchical `demand_contracts` + `demand_allocation_lines` model (replaces flat `demand_allocations`); period types WEEKLY, MONTHLY, ANNUAL, TOTAL, PER_EVENT; contract priority field (lowest number wins); SHORTFALL / OK / EXCESS sanity check; collapsible admin grid with inline line editing
+- **7-Lens Analysis UI** — Demand, Capacity, Utilization, Events, Worked Hours, Billed Hours, Concurrency; Daily / Weekly Pattern aggregation toggle; cross-lens overlay comparison with delta KPI cards
+- **Rolling 8-Week Forecast** — recency-weighted DOW forecast engine (hyperbolic decay), emerald dashed line overlay, configurable history window and confidence levels
+- **Scenario Toggle** — Baseline vs. +10% Demand multiplier; utilization recomputed; lens overlays never scaled
+- **Gap Analysis** — surplus / deficit / balanced / tight classification; diverging bar "Gap" view mode; gap KPI card
+- **Per-Customer Attribution** — event attribution engine; KPI strip shows top 3 customers by event count when Events lens is active
+- **Cross-Lens Comparison** — any second lens as overlay; delta KPI cards; comparison column in summary table
+- **Monthly Roll-Up** — monthly aggregate view engine + chart toggle
+- **Contract MH Pipeline** — 4-level MH resolution chain: manual override → WP `TotalMH` → contract PER_EVENT → system default (3.0); `mhSource` tag per WP in API responses; Flight Board tooltip + drawer label for contract-sourced MH
+- **Staffing-Derived Shift Routing** — non-operating shifts derived from rotation aggregation map (replaces static `operatingDays` column); demand redistributes to nearest operating shift via circular distance fallback; three routing modes (Staffing / Headcount / None); `shiftRouting` debug object in overview API
+- **Timezone Support** — IANA timezone field on shift definitions; engines read timezone internally
+- **Flight Events** — record and attribute external maintenance events per shift/date with aircraft type and planned status + recurring schedules
+- **Worked Hours** — log actual mechanic hours worked per shift
+- **Billed Hours** — track billable hours per customer/shift
+- **Rate Forecast** — configurable demand growth rate forecasting
+- **Concurrency Pressure** — concurrent WP overlap analysis with visual KPI
+- **Projection Overlay** — per-customer-per-shift MH projection with autocomplete customer inputs; weekly MH projections view
+- **By Customer Toggle** — customer-breakdown view in forecast pattern chart
+- **Compute Mode Badge** — shows active model: "Rotation | Config Name" or "Headcount Plan"
+- **Today Reference Line** — dashed "Today" vertical line + future-date shading on daily chart
+- **Warnings Bell** — badge indicator in `TopMenuBar` for active capacity warnings with dismiss support
+- Rotation preset system; seed data relocated to `public/seed`
+- 2 new Import Hub schemas for capacity: `rotation-patterns`, `staffing-shifts`; 3 more for `capacity-shifts`, `headcount-plans`, `headcount-exceptions`
+- 4+ new database tables: `rotation_patterns`, `staffing_configs`, `staffing_shifts`, `capacity_shifts`, `capacity_assumptions`, `headcount_plans`, `headcount_exceptions`, `demand_contracts`, `demand_allocation_lines`
 
-#### Compute Mode Badge (E-05, G-05)
-- Shows active capacity model: "Rotation | Config Name" or "Headcount Plan"
+#### Mobile-First UX (Phase 4)
+- **Collapsible Sidebar** — expanded / icon-only / hidden modes with localStorage persistence; Radix Tooltip labels in icon-only mode
+- **Bottom Tab Bar** — fixed bottom navigation for mobile (< `sm` breakpoint)
+- **Mobile Header Touch Targets** — all interactive header elements raised to `h-11` / `min-h-[44px]`
+- **Flight Board List View** — mobile card stack with lazy pagination + TanStack sortable table for desktop; toggle persisted to localStorage
+- **PWA Manifest** — `site.webmanifest` with standalone display, 5 icon sizes, theme-color meta tags
+- Admin data grids — horizontal scroll on small screens; capacity pie charts — responsive `grid-cols-1 md:grid-cols-3`
 
-#### Today Line + Future Shading (E-06, G-06)
-- Dashed "Today" reference line, subtle future-date shading on daily chart
+#### Flight Board Enhancements
+- **Sticky Time Axis Headers** — fixed date + hour headers remain visible during vertical scroll
+- **Shift Column** — visual shift action lane with background shading per active shift
+- **Responsive View Panel** — vertical popover on narrow screens for View/Filter controls
+- **List View Integration** — Gantt / List toggle in view panel; list mode auto-selects on mobile
 
-#### Aggregation Toggle (G-01)
-- Daily / Weekly Pattern toggle, decoupled from lens selection
-- Any of 7 lenses works with either aggregation mode
+#### Dashboard Enhancements
+- **NOW Time Indicator** — live vertical reference line on the combined daily chart
 
-#### Per-Customer Event Attribution (G-10)
-- Event attribution engine: `aggregateCoverageByCustomer`, `summarizeEventsByCustomer`, `buildCustomerCoverageMap`
-- KPI strip shows top 3 customers by event count + "+N more" badge when Events lens active
-- New types: `CustomerCoverageAggregate`, `CustomerEventSummary`
-- No schema migration needed (customer field already existed)
+#### Print Support
+- **Dashboard Print Layout** — optimized print stylesheet; chart re-renders at print dimensions
+- **Flight Board Print Layout** — landscape print; ECharts canvas resizes to fit paper width; tick density and overflow corrections
+
+#### Admin Enhancements
+- **Application & Runtime Info** — new section on `/admin/server` showing app version, Node.js version, platform, memory usage, uptime, and environment
+- **Database Backup Cron Job** — scheduled automatic database backups
+
+#### Auth & Registration
+- **Username field** — required on the registration form with server-side validation
+
+#### Config & Infrastructure
+- **YAML-primary config resolution** — `server.config.yml` is authoritative; env vars are fallback only
+- **Unified base URL** — `baseUrl` / `BASE_URL` replaces the former `AUTH_URL` split (D-037)
+- **Server-side facet extraction** — filter dropdowns (Operator, Aircraft, Type) populated from server queries rather than client-side scan
+- **Migration consolidation** — M003–M021 merged into canonical `createTables()` (single authoritative schema definition)
+
+#### Docker
+- **Configurable UID/GID** — `PUID` / `PGID` build args and runtime env vars for file permission control
+
+### Changed
+- Admin navigation: 9 items → 7 items (Data Hub consolidation)
+- Import history moved to unified `unified_import_log` (all data types in one view)
+- Demand model: MH now **distributed** across ground-time slots, not duplicated per day
+- Capacity model defaults: Day = 5.20 MH/person, Night = 4.42 MH/person (was flat 6.5)
+- `paidToAvailable` reframed as headcount reduction factor in admin UI
+- `/capacity` page layout redesigned — 2-column grid; summary chart; 3 pie charts replacing sunburst
+- `operatingDays` field removed from `CapacityShift` — scheduling now derived from rotation data
+
+### Removed
+- `demand_allocations` API endpoint removed — use `demand_contracts` (see Migration Notes)
+- Static `operating_days` column removed from `capacity_shifts` (M021)
 
 ### Fixed
-- Capacity showing 0 on days without work packages (forecast-pattern-engine)
-- E-01–E-04 review issues (I-01, I-06, R-01, R-05)
+- Import Hub: 6-bug fix pass post-launch + follow-up code review fix pass
+- System user cannot be deleted or demoted via Admin UI (OI-061)
+- Self-service profile editing now permitted; user form fields correctly pre-populated (OI-062, OI-063)
+- Dashboard Aircraft & Turns card date range mismatch with global FilterBar (OI-074)
+- Flight board chart colors reset to defaults on rapid customer color updates (OI-079)
+- Capacity "below minimum" false warnings on non-operating shifts (OI-081)
+- Flight board ECharts chart not updating on theme switch (CSS variable race + dispose/reinit cycle) (OI-083)
+- Flight board sticky header layout misalignment and time axis offset with scrollbar
+- Hydration mismatches: TotalAircraftCard date range, print timestamp, flight board condensed view button
+- Capacity zero-capacity bug and false coverage gap positives for overnight shifts
+- Contract MH delta not propagating into `wpContributions` breakdown
+- M017 migration for `aircraft_type` column missing from schema init
+- Docker: prod image reduced from 1.77 GB to 355 MB (80% reduction)
+- Docker: `data/seed` directory missing in builder stage
 
-### Notes
-- 11 new files, 9 modified. 53 new tests (574 total). Zero API changes for E-01–E-06 + G-01 + G-10.
-- All engines are pure functions (zero DB imports)
-- Version bump TBD at merge/release time
+### Security
+- Role-based access control (admin/superadmin) enforced on all import and capacity admin endpoints
+- Confirmed records (customers, aircraft) protected from overwrite by re-import
+- Superadmin role blocked from bulk user creation via import (must use Admin UI)
+- Idempotency key support on import commits to prevent duplicate submissions
+
+### Migration Notes (v0.1.x → v0.2.0)
+- **`demand_allocations` endpoint removed** — migrate to `demand_contracts` API. The hierarchical model is documented in `.claude/SPECS/REQ_DataImport.md`.
+- **Database auto-migrates** — `instrumentation.ts` → `bootstrap.ts` applies all migrations on startup. No manual steps needed.
+- **Old import URLs redirect** — `/admin/customers` and `/admin/aircraft-types` redirect to Data Hub equivalents automatically.
 
 ---
 
-## [0.2.0] - 2026-02-21
-
-### Added - Rotation-Based Staffing Matrix (v0.3.0)
-
-#### Major Features
-- **Rotation-Based Staffing System** — Advanced scheduling with 3-week (21-day) rotation cycles
-  - **Rotation Pattern Library** — Create/edit reusable on/off cycle patterns with visual grid editor
-  - **Staffing Configurations** — Named configuration sets for experimentation (duplicate, activate, compare)
-  - **Custom Shift Definitions** — Combine rotation patterns with shift times, category (Day/Swing/Night/Other), breaks, headcount
-  - **Weekly Staffing Matrix** — Auto-computed headcount/MH heatmap with productivity chain calculations
-  - **Three-Panel Admin UI** — Rotation patterns (left), shift card-bars by category (center), weekly visualization + stats (right)
-
-#### New API Routes
-- `GET/POST /api/admin/capacity/rotation-patterns` — List/create rotation patterns
-- `PUT/DELETE /api/admin/capacity/rotation-patterns/[id]` — Update/delete pattern (delete blocked if in use)
-- `POST /api/admin/capacity/rotation-patterns/bulk` — Bulk activate/deactivate/delete
-- `GET/POST /api/admin/capacity/staffing-configs` — List/create staffing configs (with shift count + headcount)
-- `GET/PUT/DELETE /api/admin/capacity/staffing-configs/[id]` — Config CRUD (delete blocked if active)
-- `POST /api/admin/capacity/staffing-configs/[id]/activate` — Set active config (deactivates others)
-- `POST /api/admin/capacity/staffing-configs/[id]/duplicate` — Deep copy config + all shifts
-- `GET/POST /api/admin/capacity/staffing-shifts` — List/create shifts within a config
-- `PUT/DELETE /api/admin/capacity/staffing-shifts/[id]` — Update/delete shift
-- `POST /api/admin/capacity/staffing-shifts/bulk` — Bulk shift operations
-- `GET /api/admin/capacity/staffing-matrix` — Computed weekly matrix (headcount + paid/available/productive MH)
-
-#### Database
-- **Migration M007** — 3 new tables: `rotation_patterns`, `staffing_configs`, `staffing_shifts`
-- **Bootstrap** — Seeds 5 default rotation patterns + 1 default config on first run
-- **Indexes** — config_id, config_id+category, rotation_id for query performance
-
-#### UI Components (7 new)
-- `RotationDots` — 21-dot visual grid (3×7) for rotation pattern display
-- `RotationPatternEditor` — Interactive grid editor dialog with presets
-- `RotationPatternList` — Left panel with bulk select, active toggle, inline actions
-- `StaffingConfigSelector` — Config dropdown with create/rename/duplicate/activate/delete
-- `ShiftDefinitionsGrid` — Center panel with category-grouped card-bars, inline headcount editing
-- `WeeklyMatrixPanel` — Right panel heatmap grid, MH summary cards, key stats, coverage gap warnings
-
-#### Import Schemas (2 new)
-- `rotation-patterns` — Import/export rotation patterns via Data Hub
-- `staffing-shifts` — Import/export shift definitions via Data Hub
-
-#### Staffing Engine (pure functions, unit tested)
-- `isWorkingDay()` — Resolve rotation pattern for any date
-- `computeEffectivePaidHours()` — MH override or computed from shift duration
-- `resolveStaffingDay()` — Per-day headcount by category from rotation engine
-- `computeWeeklyMatrix()` — 7-day matrix with full productivity chain
-- `resolveStaffingForCapacity()` — Output format compatible with existing capacity engine
-- 36 unit tests covering edge cases (pattern wrapping, negative offsets, overnight shifts)
-
-### Added - Universal Import Hub (v0.2.0)
-
-#### Major Features
-- **Universal Import Hub** — Single schema-driven interface replacing 3 siloed import pipelines
-  - **Pluggable Schema System** — 9 importable data types (work packages, customers, aircraft, aircraft-type-mappings, aircraft-models, manufacturers, engine-types, users, app-config)
-  - **6-Step Import Wizard** — Select Type → Load Data → Map Fields → Validate → Confirm → Results
-  - **Visual Field Mapping** — Auto-mapping with 3-pass strategy (exact alias → case-insensitive → fuzzy normalized), manual select dropdowns per field
-  - **Unified Import History** — Single audit log across all data types with type filtering, pagination, user attribution
-  - **Export & Templates** — Export existing data with universal filters, download example templates (JSON/CSV)
-  - **Contextual Help Panel** — Right-side toggleable docs, field reference tables, step-specific guidance (responsive: desktop sidebar ↔ mobile bottom sheet)
-
-#### New API Routes
-- `GET /api/admin/import/schemas` — List all registered schemas with metadata
-- `POST /api/admin/import/parse` — Parse content + auto-map source fields to schema fields
-- `POST /api/admin/import/export` — Export data for a schema with optional filters
-- `GET /api/admin/import/template` — Download example template file (JSON/CSV)
-- **Refactored** `POST /api/admin/import/validate` — Schema-driven validation (backwards-compatible)
-- **Refactored** `POST /api/admin/import/commit` — Schema-driven commit (backwards-compatible)
-- **Refactored** `GET /api/admin/import/history` — Queries unified log, supports type filtering
-- **Refactored** `POST /api/admin/import/reset` — Accepts schemaId, multi-table reset capability
-
-#### Database
-- **New Table:** `unified_import_log` (16 columns: id, importedAt, dataType, source, format, fileName, importedBy, status, recordsTotal/Inserted/Updated/Skipped, fieldMapping, warnings, errors, idempotencyKey)
-- **New Relations:** `unifiedImportLog` → `users` (importedBy FK)
-
-#### UI Components (13 new)
-- `ImportHub` — Main state machine orchestrator (6-step wizard + toolbar + history)
-- `ImportStepper` — Visual step indicator (responsive circles + labels)
-- `ImportToolbar` — Import/Export/Template action buttons with dropdown menus
-- `StepSelectType` — Schema card grid grouped by category
-- `StepLoadData` — Drag & drop + paste textarea for raw data
-- `StepFieldMapping` — Target × source select dropdowns, auto-map button, preview
-- `StepValidation` — Errors, warnings, summary badges, data preview
-- `StepConfirmImport` — Final review before commit
-- `StepResults` — Success/failure stats (inserted/updated/skipped)
-- `ImportHistory` — Unified history table with type filter + pagination
-- `DataPreviewTable` — Auto-column detection, cell truncation, empty state
-- `HelpPanel` — Contextual docs (desktop right panel ↔ mobile bottom sheet)
-- `ExportDialog` — Format selection modal for exports
-
-#### Backend Infrastructure
-- **Schema Registry** — `registerSchema()`, `getSchema()`, `getAllSchemas()`, `toSerializable()`
-- **Auto-Mapping Engine** — 3-pass field mapping (exact alias → case-insensitive → fuzzy normalized)
-- **Unified Parser** — Auto-detects JSON/CSV, delegates to existing parsers, size validation
-- **Validation Pipeline** — Per-field validation, schema post-validation hooks, preview row generation
-- **Export System** — Universal data export with filter DSL, template generation from field types
-- **9 Import Schemas** (all with full lifecycle hooks: preProcess, postMapValidate, commit, postCommit, summarize):
-  - `work-packages` — 25 fields, OData preProcess, version-based change detection, cache invalidation
-  - `customers` — 17 fields, COLOR_PALETTE auto-assign, cascading dedup (GUID→name)
-  - `aircraft` — 14 fields, fuzzy operator matching, cascading dedup (GUID→reg+serial→reg)
-  - `aircraft-type-mappings` — Pattern-based normalization rules
-  - `aircraft-models` — Model codes with manufacturer FK resolution
-  - `manufacturers` — Reference data with sort order
-  - `engine-types` — Reference data with manufacturer
-  - `users` — Bulk user creation with temp passwords, superadmin protection
-  - `app-config` — Key-value configuration backup/restore
-
-#### Navigation & Pages
-- **Admin Nav Consolidation** — 9 items → 7 items; "Data Hub" replaces Customers + Aircraft Types + Data Import
-- **Redirect Pages** — `/admin/customers` → `/admin/import?type=customers`, `/admin/aircraft-types` → `/admin/import?type=aircraft-type-mappings`
-- **Data Hub Page** — `/admin/import` wired to `ImportHub` component
-
-#### Developer Experience
-- **Backwards Compatibility** — Old API endpoints still work (legacy route redirects, schemaId fallback to work-packages)
-- **Type Safety** — Full TypeScript interfaces for all import types (FieldDef, ImportSchema, CommitResult, ValidationPreview, etc.)
-- **Extensibility** — New schemas can be added by creating a file in `src/lib/import/schemas/`, auto-registers at module load
-- **Logging** — Structured pino logging, child loggers per endpoint, full audit trail in unified_import_log
-
-### Added - Capacity Modeling MVP (v0.3.0)
-
-#### Major Features
-- **3-Tier Capacity Model** — Replaces flat 6.5 MH/person with configurable chain: Paid Hours x paidToAvailable x availableToProductive x nightFactor = Productive MH/person
-- **Demand Distribution Engine** — Distributes WP man-hours across ground-time shift slots (replaces old per-day duplication model). Configurable demand curves (EVEN/WEIGHTED) with arrival/departure weights.
-- **Capacity Heatmap** — Date x Shift grid with color-coded utilization cells, click-to-drilldown
-- **Shift Drilldown Drawer** — Explainable capacity chain breakdown and WP attribution per cell
-- **Effective-Dated Headcount Plans** — Per-shift headcount with date ranges and weekday overrides
-- **Headcount Exceptions** — Date-specific delta overrides for holidays, overtime, etc.
-- **Admin Capacity Settings** — Headcount plan editor + model assumptions editor with live preview sliders
-
-#### New Database Tables
-- `capacity_shifts` — Shift window definitions (code, hours, paid time, min headcount)
-- `capacity_assumptions` — Productivity factors, demand curve config (single active row)
-- `headcount_plans` — Effective-dated headcount targets per shift
-- `headcount_exceptions` — Date-specific headcount delta overrides
-
-#### New API Routes
-- `GET /api/capacity/overview` — Full capacity+demand+utilization with drilldown data
-- `GET /api/admin/capacity/shifts` — List active shifts
-- `GET/PUT /api/admin/capacity/assumptions` — Read/update productivity factors
-- `GET/POST /api/admin/capacity/headcount-plans` — List/create headcount plans
-- `PUT/DELETE /api/admin/capacity/headcount-plans/[id]` — Update/delete plans
-- `GET/POST /api/admin/capacity/headcount-exceptions` — List/create exceptions
-- `PUT/DELETE /api/admin/capacity/headcount-exceptions/[id]` — Update/delete exceptions
-
-#### New UI Components
-- `CapacityHeatmap` — Date x Shift utilization grid with color coding and tooltips
-- `CapacityKpiStrip` — KPI cards (avg/peak utilization, demand, capacity, critical days)
-- `CapacitySummaryChart` — Recharts bar/line chart with stacked/total view toggle
-- `ShiftDrilldownDrawer` — Sheet drawer with capacity chain and demand breakdown
-- `HeadcountGrid` — Admin editor for headcount plans and exceptions
-- `AssumptionsForm` — Admin editor with sliders and live preview
-
-#### Import Hub Integration
-- 3 new import schemas: `capacity-shifts`, `headcount-plans`, `headcount-exceptions`
-- All schemas support JSON/CSV, export, templates
-
-#### Behavioral Changes
-- **Demand model**: MH is now DISTRIBUTED across ground-time slots (not duplicated per day). A 3-day WP with 3 MH shows 1 MH/slot = 3 MH total (was 3 MH/day = 9 MH total).
-- **Capacity model**: Day shift = 5.20 MH/person (was 6.5), Night = 4.42 MH/person. All factors admin-configurable.
-
-### Changed
-- Admin navigation restructured for Data Hub UX
-- Import history moved to unified table (all data types in one view)
-- Admin nav: added "Capacity" link after "Cron Jobs"
-- Config panel: added info banner linking to admin capacity settings
+## [0.1.1] - 2026-02-23
 
 ### Fixed
-- N/A (new feature)
-
-### Security
-- Role-based access control (admin/superadmin only) on all import endpoints
-- Source protection for "confirmed" records (customers, aircraft)
-- Superadmin role blocked from bulk user imports
-- Idempotency key support for re-submit safety
-
-### Notes
-- **MINOR version bump** (v0.1.0 → v0.2.0) — all changes are backwards-compatible; new functionality is additive
-- Old customer/aircraft-type editor components remain in codebase but are no longer linked from nav (can be deprecated in v0.3.0)
-- Migration path: existing users' old import URLs continue to work via legacy fallback logic
+- Resolved 9 session and authentication bugs (token version mismatch, session invalidation on password change, role elevation edge cases)
 
 ---
 
@@ -246,5 +149,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
 
 [Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...HEAD
-[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.2.0
+[0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0
