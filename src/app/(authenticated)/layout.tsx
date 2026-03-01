@@ -4,6 +4,7 @@ import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { SidebarHydrator } from "@/components/layout/sidebar-hydrator";
 import { DeviceTypeHydrator } from "@/components/layout/device-type-hydrator";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { IosInstallPrompt } from "@/components/shared/ios-install-prompt";
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
           </div>
         </div>
         <BottomTabBar />
+        <IosInstallPrompt />
       </DeviceTypeHydrator>
     </TooltipProvider>
   );
