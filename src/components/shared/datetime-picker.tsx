@@ -155,18 +155,18 @@ export function DateTimePicker({
 
   const formatDisplay = () => {
     const y = wc.year;
-    const mo = (wc.month + 1).toString().padStart(2, "0");
-    const d = wc.day.toString().padStart(2, "0");
+    const mo = wc.month + 1;
+    const d = wc.day;
     const hStr = wc.hour.toString().padStart(2, "0");
     const mStr = wc.minute.toString().padStart(2, "0");
 
     if (is12h) {
       const p = wc.hour >= 12 ? "PM" : "AM";
       const h12 = wc.hour === 0 ? 12 : wc.hour > 12 ? wc.hour - 12 : wc.hour;
-      return `${y}-${mo}-${d} ${h12}:${mStr} ${p}`;
+      return `${mo}/${d}/${y} ${h12}:${mStr} ${p}`;
     }
 
-    return `${y}-${mo}-${d} ${hStr}:${mStr}`;
+    return `${mo}/${d}/${y} ${hStr}:${mStr}`;
   };
 
   // UTC equivalent annotation for non-UTC timezones

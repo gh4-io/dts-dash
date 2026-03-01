@@ -1248,7 +1248,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           },
           {
             type: "text",
-            left: 100,
+            left: 25,
             top: 4,
             style: {
               text: initialDateStr, // ✅ Computed on initial render
