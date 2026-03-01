@@ -847,3 +847,23 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact**: MINOR (new feature, mobile-optimized UX)
 **Links**: [PLAN_DEVICE_DETECTION.md](PLAN_DEVICE_DETECTION.md) (Phase 4), D-061 (device detection)
+
+---
+
+## D-063 | 2026-03-01 | Sub-Build Tracking — Tracked build.json + Pre-Commit Hook
+
+**Context:** Wanted granular progress tracking with git-comparable checkpoints beyond semver.
+
+**Decision:** Approach B — `build.json` tracked in git, updated by pre-commit hook.
+- Build number = `git rev-list --count HEAD + 1` (computed pre-commit)
+- `build.json` committed with every change → in git history, survives fresh clone
+- `next.config.ts` bakes number into `BUILD_NUMBER` env var at build time
+- Surfaces in: health check API, admin Server page, git tags (`v{semver}+b{n}`)
+- Docker: flows through `COPY . .`; CI can override with `--build-arg BUILD_NUMBER=<n>`
+- Tag checkpoints with: `scripts/tag-checkpoint.sh "label"`
+
+**Alternatives considered:**
+- Approach A (gitignored + post-commit): cleaner git log but lost history, breaks after clone
+- Approach C (git commit count injected at build): automatic but no file in repo
+
+**Impact:** No API breaking changes. New fields added to health check and server info responses (backwards-compatible MINOR addition).

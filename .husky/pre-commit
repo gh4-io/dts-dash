@@ -1,1 +1,19 @@
+#!/bin/sh
+# ── Generate build.json (tracked) ──────────────────────────────
+CURRENT=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+BUILD=$((CURRENT + 1))
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+cat > build.json << EOF
+{
+  "build": $BUILD,
+  "branch": "$BRANCH",
+  "timestamp": "$TIMESTAMP"
+}
+EOF
+
+git add build.json
+
+# ── Run lint-staged ─────────────────────────────────────────────
 npx lint-staged

@@ -45,6 +45,7 @@ export async function GET() {
   const body = {
     status: healthy ? "healthy" : "unhealthy",
     version: process.env.npm_package_version || packageJson.version,
+    build: Number(process.env.BUILD_NUMBER ?? 0),
     uptime: `${Math.floor(uptimeMs / 1000)}s`,
     checks,
   };

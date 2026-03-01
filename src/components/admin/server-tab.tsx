@@ -50,6 +50,9 @@ interface ServerInfo {
   app: {
     name: string;
     version: string;
+    build: number;
+    buildBranch: string;
+    buildTimestamp: string | null;
     nextVersion: string;
     environment: string;
   };
@@ -305,6 +308,21 @@ export function ServerTab() {
                 <dd className="font-medium">{info.app.name}</dd>
                 <dt className="text-muted-foreground">Version</dt>
                 <dd className="font-mono">v{info.app.version}</dd>
+                <dt className="text-muted-foreground">Build</dt>
+                <dd className="font-mono">
+                  b{info.app.build}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({info.app.buildBranch})
+                  </span>
+                </dd>
+                {info.app.buildTimestamp && (
+                  <>
+                    <dt className="text-muted-foreground">Built</dt>
+                    <dd className="text-xs text-muted-foreground">
+                      {new Date(info.app.buildTimestamp).toLocaleString()}
+                    </dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">Next.js</dt>
                 <dd className="font-mono">{info.app.nextVersion}</dd>
                 <dt className="text-muted-foreground">Environment</dt>

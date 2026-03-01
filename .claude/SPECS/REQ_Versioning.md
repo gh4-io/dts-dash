@@ -203,6 +203,39 @@ npm version minor --no-git-tag-version  # 0.2.0
 
 ---
 
+## Sub-Build Tracking
+
+Each commit automatically receives a monotonically increasing build number via the git pre-commit hook.
+
+### Format
+- `build.json` (tracked in git, project root) stores the current build number
+- Build number = git commit count + 1 (computed at pre-commit time)
+- Displayed as: `v0.2.0 (b202)` in the admin Server page
+
+### How It Works
+1. Pre-commit hook (`/.husky/pre-commit`) reads `git rev-list --count HEAD`, adds 1, writes `build.json`
+2. `build.json` is staged and committed alongside code changes
+3. `next.config.ts` reads `build.json` at build time → injects `BUILD_NUMBER`, `BUILD_BRANCH`, `BUILD_TIMESTAMP` env vars
+4. API routes read `process.env.BUILD_NUMBER` at runtime
+5. Docker builds: `build.json` flows through `COPY . .`; CI can override with `--build-arg BUILD_NUMBER=<n>`
+
+### Where Build Number Appears
+- `GET /api/health` → `{ build: 202 }`
+- `GET /api/admin/server/info` → `{ app: { build: 202, buildBranch: "dev", buildTimestamp: "..." } }`
+- Admin → Server → Application & Runtime section
+
+### Git Tagging Checkpoints
+To create a named checkpoint at any commit:
+```bash
+./scripts/tag-checkpoint.sh "End of Phase 5"
+# Creates tag: v0.2.0+b202
+```
+
+### Decision
+D-063 — See DECISIONS.md
+
+---
+
 ## Version Tracking
 
 The canonical version lives in `package.json`. It is updated on the release branch only, never on `dev`. The `dev` branch always reflects the *next unreleased* state — its package.json version represents what was last released, not what's in progress.

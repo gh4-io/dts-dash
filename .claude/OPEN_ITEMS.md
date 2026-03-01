@@ -555,6 +555,7 @@ In v0.1.1 and earlier, the inbound work package data field `title` is mapped dir
 | OI-072 | G-09: Monthly Roll-Up Aggregation | `monthly-rollup-engine.ts`, `MonthlyRollupChart` (4 view modes), 16 tests | 2026-02-25 |
 | OI-073 | G-10: Per-Customer Event Attribution | `event-attribution-engine.ts`, top-3 customer KPI strip, 17 tests | 2026-02-24 |
 | OI-082 | Staffing-Derived Shift Routing | Replaced static `operatingDays` with `deriveNonOperatingFromStaffing()` — staffing map drives shift existence. M021 drops column. 17 new tests. | 2026-02-26 |
+| OI-087 | Sub-Build Tracking Implementation | Implemented Approach B (tracked build.json + pre-commit hook). Build number auto-increments on every commit. Surfaces in health check, admin Server page, and git tags. D-063. | 2026-03-01 |
 
 ### Phase 4 — Mobile-First UX (2026-02-26)
 

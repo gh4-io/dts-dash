@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import buildInfo from "./build.json";
 
 const securityHeaders = [
   {
@@ -45,6 +46,11 @@ const nextConfig: NextConfig = {
   transpilePackages: ["echarts", "zrender"],
   turbopack: {},
   allowedDevOrigins: ["http://localhost:3000"],
+  env: {
+    BUILD_NUMBER: String(buildInfo.build),
+    BUILD_BRANCH: buildInfo.branch,
+    BUILD_TIMESTAMP: buildInfo.timestamp,
+  },
   async headers() {
     return [
       {

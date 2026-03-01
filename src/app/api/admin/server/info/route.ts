@@ -30,6 +30,9 @@ export async function GET() {
       app: {
         name: getAppTitle(),
         version: pkg.version,
+        build: Number(process.env.BUILD_NUMBER ?? 0),
+        buildBranch: process.env.BUILD_BRANCH ?? "unknown",
+        buildTimestamp: process.env.BUILD_TIMESTAMP ?? null,
         nextVersion: pkg.dependencies?.next ?? "unknown",
         environment: process.env.NODE_ENV ?? "unknown",
       },
