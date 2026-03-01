@@ -5,6 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { usePreferences } from "@/lib/hooks/use-preferences";
+import { useDeviceType } from "@/lib/hooks/use-device-type";
 import { MobileNav } from "./mobile-nav";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 
@@ -12,6 +13,7 @@ export function Header() {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { data: session } = useSession();
   const { update: updatePrefs } = usePreferences();
+  const device = useDeviceType();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mounted = useSyncExternalStore(
@@ -75,67 +77,71 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-          title={`Theme: ${themeLabel}`}
-        >
-          <i className={themeIcon} />
-        </button>
-
-        {/* User menu */}
-        <div className="relative" ref={menuRef}>
+        {/* Theme toggle — hidden on phone, available in menu sheet */}
+        {device.type !== "phone" && (
           <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="flex h-11 md:h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            onClick={toggleTheme}
+            className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            title={`Theme: ${themeLabel}`}
           >
-            <i className="fa-solid fa-user-circle" />
-            <span className="hidden sm:inline">{session?.user?.name || "User"}</span>
-            <i className="fa-solid fa-chevron-down text-xs" />
+            <i className={themeIcon} />
           </button>
+        )}
 
-          {menuOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover py-1 shadow-lg">
-              <Link
-                href="/account"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
-              >
-                <i className="fa-solid fa-user w-4 text-center" />
-                Account
-              </Link>
-              <Link
-                href="/settings"
-                onClick={() => setMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
-              >
-                <i className="fa-solid fa-gear w-4 text-center" />
-                Settings
-              </Link>
-              {isAdmin && (
+        {/* User menu — hidden on phone, available in menu sheet */}
+        {device.type !== "phone" && (
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="flex h-11 md:h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            >
+              <i className="fa-solid fa-user-circle" />
+              <span className="hidden sm:inline">{session?.user?.name || "User"}</span>
+              <i className="fa-solid fa-chevron-down text-xs" />
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover py-1 shadow-lg">
                 <Link
-                  href="/admin"
+                  href="/account"
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
                 >
-                  <i className="fa-solid fa-shield-halved w-4 text-center" />
-                  Admin
+                  <i className="fa-solid fa-user w-4 text-center" />
+                  Account
                 </Link>
-              )}
-              <hr className="my-1 border-border" />
-              <button
-                onClick={() => {
-                  signOut({ callbackUrl: "/login" });
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
-              >
-                <i className="fa-solid fa-right-from-bracket w-4 text-center" />
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
+                <Link
+                  href="/settings"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
+                >
+                  <i className="fa-solid fa-gear w-4 text-center" />
+                  Settings
+                </Link>
+                {isAdmin && (
+                  <Link
+                    href="/admin"
+                    onClick={() => setMenuOpen(false)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
+                  >
+                    <i className="fa-solid fa-shield-halved w-4 text-center" />
+                    Admin
+                  </Link>
+                )}
+                <hr className="my-1 border-border" />
+                <button
+                  onClick={() => {
+                    signOut({ callbackUrl: "/login" });
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
+                >
+                  <i className="fa-solid fa-right-from-bracket w-4 text-center" />
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

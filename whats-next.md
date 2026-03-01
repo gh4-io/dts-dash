@@ -1,133 +1,264 @@
-# Handoff Document — Post Capacity Phase 3
+<original_task>
+Implement Dashboard print support: the "Arrivals / Departures / On Ground" (CombinedChart / Recharts) should render across the full page width when printed, with KPI tiles tiled below it left-to-right, learning from the Flight Board print implementation. The core problem across the entire session: the chart consistently renders with NO visible bars, NO line, and NO data in the printed PDF — only axes/grid/legend appear (or nothing at all after the last change).
+</original_task>
 
-**Created:** 2026-02-25
-**Branch:** `feat/capacity-phase3`
-**Repo:** `gh4-io/dts-dash`
-**Latest Commit:** `9932512` — `docs: mark Capacity Phase 3 complete — full pipeline verified`
-**Tests:** 590 passing (23 files)
-**Build:** Clean
-**Lint:** 0 errors, 0 warnings
-**Migration Counter:** M019 (demand_contracts priority)
+<work_completed>
+## Print layout architecture — complete and user-accepted
 
----
+`src/app/(authenticated)/dashboard/page.tsx`:
+- Added `flushSync` import from `react-dom`
+- Added `printMode` state: `const [printMode, setPrintMode] = useState(false)`
+- Added `handleBeforePrint`: `async () => { flushSync(() => setPrintMode(true)); }`
+- Added `handleAfterPrint`: `() => { setPrintMode(false); }`
+- `PrintButton` wired with both callbacks, `contentRef={printRef}`, `documentTitle="Dashboard — CVG Line Maintenance"`
 
-## What Just Happened
+Print layout (3 rows) — accepted by user:
+- Row 1 (full width): card wrapper + `<CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} height={200} width={928} />`
+- Row 2 (3-col grid): `<AvgGroundTimeCard>` | `<TotalAircraftCard filterStart={start} filterEnd={end} timezone={timezone}>` | `<AircraftByTypeCard>`
+- Row 3 (full width): `<OperatorPerformance focusedOperator={null} onOperatorClick={() => {}}>`
 
-Capacity Phase 3 (Contract MH Pipeline) is **COMPLETE**. All 4 ROADMAP items verified done:
+User corrections already applied:
+- Uses existing `TotalAircraftCard` (labelled "Aircraft & Turns") and `AircraftByTypeCard` ("Total Aircraft By Type") — not custom inline KPI divs
+- `MhByOperatorCard` and `CustomerDonut` excluded from print (user approved)
+- OperatorPerformance on its own full-width row (not crammed into a column — avoids table overflow at ~374px)
 
-1. `computeEffectiveMH()` 4-level chain: manual > WP MH > contract PER_EVENT > default
-2. `MHSource "contract"` in type system, all views consume it
-3. Null WP MH import support (warns, doesn't reject)
-4. Contract priority field (M019, D-052) — lowest priority number wins
+## CombinedChart props extension — complete
 
-The priority field was the final missing piece — implemented this session. The rest of the pipeline was already built in prior sessions but tracking docs hadn't been updated.
+`src/components/dashboard/combined-chart.tsx`:
+- Added `height?: number` (default 340) — allows print to pass `height={200}`
+- Added `width?: number` — when provided, bypasses ResponsiveContainer entirely
+- Added print render path: `if (width !== undefined) { return <ComposedChart width={width} height={height}>...</ComposedChart>; }`
+- Stats bar (`selectionStats` display) now only rendered when `onSelectionChange !== undefined` — hides in print mode (cleaner output, saves ~30px)
 
----
+## LAST CHANGE THIS SESSION — made things "worse" (needs revert)
 
-## Immediate Next Steps
+The `chartChildren` variable was changed from a JSX Fragment to a keyed array. User reported this was worse than before. This change should be reverted as the first step in the next session.
+</work_completed>
 
-### 1. Merge & Release
+<work_remaining>
+## STEP 1 — Revert the keyed-array change (restore Fragment)
 
-`feat/capacity-phase3` is ready to merge into `master`. All gates pass.
+In `src/components/dashboard/combined-chart.tsx`, lines ~338-468, `chartChildren` is currently a keyed array. Revert it to a Fragment. The Fragment was always working for the screen chart (user never reported a broken screen chart). The screen chart must not be broken.
 
-```bash
-git checkout master
-git merge feat/capacity-phase3
-# Tag release (MINOR bump per D-028 — new features, backwards-compatible)
-# Update package.json version if needed
+```tsx
+// Restore this form:
+const chartChildren = (
+  <>
+    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))" opacity={0.2} horizontal={true} vertical={false} />
+    {midnightHours.map((m) => (
+      <ReferenceLine key={`midnight-${m.hour}`} x={m.hour} stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="6 3" opacity={0.5}
+        label={{ value: m.dateLabel, position: "insideTopRight", fill: "hsl(var(--foreground))", fontSize: 10, fontWeight: 700, offset: 4 }} />
+    ))}
+    {nowHourKey && (
+      <ReferenceLine key="now" x={nowHourKey} stroke="#ef4444" strokeWidth={2}
+        label={{ value: "NOW", position: "insideTopLeft", fill: "#ef4444", fontSize: 10, fontWeight: 700, offset: 4 }} />
+    )}
+    {activeSelectionBounds && (
+      <ReferenceArea key="selection" x1={activeSelectionBounds.x1} x2={activeSelectionBounds.x2} fill="hsl(var(--primary))" fillOpacity={0.12} stroke="none" />
+    )}
+    <XAxis dataKey="hour" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} ticks={alignedTicks}
+      tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }} axisLine={{ stroke: "hsl(var(--muted-foreground))" }} tickFormatter={formatTick} />
+    <YAxis tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={35} />
+    <Tooltip active={dragStart ? false : undefined} contentStyle={{ ... }} labelFormatter={...} />
+    <Legend wrapperStyle={{ ... }} formatter={...} />
+    <Bar dataKey="arrivals" name="Arrivals" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={8} />
+    <Bar dataKey="departures" name="Departures" fill="#f43f5e" radius={[2, 2, 0, 0]} barSize={8} />
+    <Line dataKey="onGround" name="On Ground" type="monotone" stroke="#eab308" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+  </>
+);
 ```
 
-**Branches to delete after merge:**
-- `feat/capacity-phase3`
-- `feat/capacity-layout` (already merged into phase3)
+Note: The `chartChildren` Fragment is fine for the normal path inside ResponsiveContainer. The print path (`if (width !== undefined)`) should be expanded inline (not use `chartChildren` at all) so the two paths can have different props.
 
----
+## STEP 2 — Primary fix: disable Recharts animations in print path
 
-## Open Items — Prioritized Backlog
+**Highest-confidence untested root cause**: Recharts `Bar` and `Line` animate on mount by default:
+- `Bar` animation: bar height starts at 0 and animates upward (~400ms)
+- `Line` animation: uses SVG strokeDasharray trick, path length starts at 0% and animates to 100% (~1500ms)
 
-### Bugs (fix first)
+When `flushSync(() => setPrintMode(true))` renders the chart and react-to-print immediately clones the DOM, Recharts' animation is at frame 0: bars have height 0, line has length 0 — nothing is visible in the cloned SVG even though the data is present.
 
-| OI | Title | Priority | Notes |
-|----|-------|----------|-------|
-| OI-074 | Dashboard Aircraft & Turns section date mismatch | P2 | Chart/table ignores FilterBar date selection |
-| OI-047 | Flight Board chart color reset on rapid clicks | P2 | ECharts re-render race condition |
-| OI-043 | Chunked upload Location header returns localhost behind proxy | P2 | Only affects reverse-proxy deployments |
+**The fix**: In the print render path (`if (width !== undefined)`), expand children inline and add `isAnimationActive={false}` to all three data elements:
 
-### Partial / In-Progress
+```tsx
+if (width !== undefined) {
+  return (
+    <ComposedChart
+      data={chartData}
+      width={width}
+      height={height}
+      margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
+    >
+      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))" opacity={0.2} horizontal={true} vertical={false} />
+      {midnightHours.map((m) => (
+        <ReferenceLine key={`midnight-${m.hour}`} x={m.hour} stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="6 3" opacity={0.5}
+          label={{ value: m.dateLabel, position: "insideTopRight", fill: "hsl(var(--foreground))", fontSize: 10, fontWeight: 700, offset: 4 }} />
+      ))}
+      <XAxis dataKey="hour" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} ticks={alignedTicks}
+        tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }} axisLine={{ stroke: "hsl(var(--muted-foreground))" }} tickFormatter={formatTick} />
+      <YAxis tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={35} />
+      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8, color: "hsl(var(--foreground))", pointerEvents: "none" }}
+        formatter={(value) => <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>} />
+      <Bar dataKey="arrivals" name="Arrivals" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={8} isAnimationActive={false} />
+      <Bar dataKey="departures" name="Departures" fill="#f43f5e" radius={[2, 2, 0, 0]} barSize={8} isAnimationActive={false} />
+      <Line dataKey="onGround" name="On Ground" type="monotone" stroke="#eab308" strokeWidth={2} dot={false} isAnimationActive={false} />
+    </ComposedChart>
+  );
+}
+```
 
-| OI | Title | Priority | Notes |
-|----|-------|----------|-------|
-| OI-042 | Dashboard chart issues & enhancements | P1 | Partially resolved — some chart items remain |
-| OI-044 | Generic db:cleanup + data retention policy | P2 | Partially resolved — needs retention policy |
+No `<Tooltip>` needed in print path (non-interactive). No `activeSelectionBounds` needed (print never has a live drag). No mouse handlers needed on the print ComposedChart — remove `onMouseDown/Move/Up/Leave` from `chartProps` or just don't spread chartProps in the print branch.
 
-### Temporary Code (remove when stable)
+## STEP 3 — Verification
+1. `npm run lint` — 0 warnings, 0 errors
+2. `npm run build` — passes
+3. Print Dashboard → bars (blue/red) and yellow on-ground line visible
+4. Print 2–3 times consecutively → consistent results
+5. Close print dialog → screen chart fully interactive (drag-to-select, cross-filter)
+6. Screen chart shows midnight separators, NOW line, bars, on-ground line as before
 
-| OI | Title | Priority | Notes |
-|----|-------|----------|-------|
-| OI-066 | Capacity Dev Overview page | P3 | "DEV" badge — remove when capacity is production-stable |
-| OI-067 | Weekly MH Projections | P3 | "TEMP" badge — M018 table, remove when no longer needed |
+## FALLBACK — if animation disable doesn't fix it
 
-### Enhancements (P1)
+If bars/line are still blank after `isAnimationActive={false}`:
 
-| OI | Title | Notes |
-|----|-------|-------|
-| OI-038 | Interactive fuzzy match resolution (Data Hub) | Import field mapping UX improvement |
-| OI-040 | Dashboard layout: utilization + turns + combined analytics | Multi-section layout redesign |
-| OI-059 | Time/date indicator display area | Better placement for current time display |
+**Diagnose first**: In `handleBeforePrint`, after `flushSync(...)`, add:
+```ts
+const svg = printRef.current?.querySelector('.recharts-wrapper svg');
+console.log('SVG innerHTML length:', svg?.innerHTML.length);
+console.log('First rect height:', svg?.querySelector('rect[height]')?.getAttribute('height'));
+```
+This tells you: (a) is the SVG present at all, and (b) do bar rects have non-zero height.
 
-### Enhancements (P2–P3)
+**If SVG is present but empty (no rects)**: Recharts didn't finish rendering. Try adding one RAF delay after flushSync:
+```ts
+flushSync(() => setPrintMode(true));
+await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+```
 
-| OI | Title | Notes |
-|----|-------|-------|
-| OI-041 | Collapsible sidebar with icon-only mode | Also OI-054 (duplicate) |
-| OI-046 | Customer SP ID mapping | Future: map SharePoint IDs to customers |
-| OI-048 | Rate limiting as system preference | server.config.yml setting |
-| OI-049 | Admin Settings tab layout redesign | UX improvement |
-| OI-051 | iPad quick info panel (long press) | Touch UX |
-| OI-052 | Flight Board toggle: Gantt vs list view | Alternative visualization |
-| OI-053 | iOS home screen installation (PWA) | manifest.json + service worker |
-| OI-055 | Sticky time headers on flight board | Horizontal scroll UX |
-| OI-056 | Shift highlighting with visual time separators | Flight board visual enhancement |
-| OI-057 | Integrate react-to-print for print/export | Cross-page print support |
+**If SVG is absent**: ComposedChart standalone isn't mounting in the synchronous flushSync path. Consider rendering the print chart as a permanently-mounted hidden element (not conditionally rendered) and showing/hiding it via CSS — this avoids the mount timing issue entirely.
 
-### Features (P2)
+**If SVG has rects with non-zero height but they're invisible**: CSS variable resolution failure in the print iframe. Switch stroke/fill values to hardcoded hex everywhere in the print path.
 
-| OI | Title | Notes |
-|----|-------|-------|
-| OI-050 | AOG aircraft condition & visual tracking | Needs discovery on data source |
+**Nuclear option (SVG img-swap)**: Same technique as ECharts but for SVG:
+```ts
+const svg = printRef.current?.querySelector('.recharts-wrapper svg') as SVGElement;
+const serialized = new XMLSerializer().serializeToString(svg);
+const dataUrl = 'data:image/svg+xml;base64,' + btoa(serialized);
+const img = document.createElement('img');
+img.src = dataUrl; img.width = 928; img.height = 200;
+svg.parentElement!.replaceChild(img, svg);
+// store reference to restore in handleAfterPrint
+```
+</work_remaining>
 
----
+<attempted_approaches>
+## Attempt 1: Pass `width={928}` to ResponsiveContainer
+Thought setting the width prop on ResponsiveContainer would pre-size it. WRONG: ResponsiveContainer initializes `containerWidth = -1` and only updates via ResizeObserver callback (async). Style prop sets CSS but does not initialize internal state. Chart rendered empty.
 
-## Tech Debt: Component Cleanup
+## Attempt 2: Double RAF delay in handleBeforePrint
+```ts
+await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+```
+Two animation frames are not enough for ResizeObserver → React state → re-render cycle to complete. Chart still empty.
 
-Five capacity components exceed 300 lines (identified during pre-merge review). See `.claude/COMPONENT_CLEANUP.md` for extraction strategies. Rule: refactor only when touching the file for other reasons.
+## Attempt 3: Bypass ResponsiveContainer (print path with explicit width/height)
+Added `if (width !== undefined)` branch rendering `<ComposedChart width={width} height={height}>` directly. This is architecturally correct — `ComposedChart` IS documented to work standalone with explicit `width` and `height`. However, introduced a shared `chartChildren` variable (Fragment) that gets passed to both paths. Chart still empty (for unknown reason at this point — animation was never disabled).
 
-| Component | Lines | File |
-|-----------|-------|------|
-| CapacitySummaryChart | 827 | `src/components/capacity/capacity-summary-chart.tsx` |
-| ShiftDrilldownDrawer | 777 | `src/components/capacity/shift-drilldown-drawer.tsx` |
-| CapacityTable | 670 | `src/components/capacity/capacity-table.tsx` |
-| MonthlyRollupChart | 601 | `src/components/capacity/monthly-rollup-chart.tsx` |
-| ForecastPatternChart | 545 | `src/components/capacity/forecast-pattern-chart.tsx` |
+## Attempt 4: Fragment → keyed array (LAST CHANGE — "worse")
+Diagnosed the Fragment as the cause: "Recharts uses `React.Children.map` internally; a Fragment is treated as one opaque child." This diagnosis was **wrong**. The screen chart always worked with the Fragment — Recharts v2 internally unwraps Fragments. Converting to a keyed array made things worse (user confirmed). The change needs to be reverted.
 
----
+## What was NEVER tried
+- `isAnimationActive={false}` — most likely root cause, never tested
+- Inspecting the print DOM to verify what's actually in the SVG at capture time
+- SVG serialization / img-swap approach
+- Permanently-hidden print chart that avoids conditional-mount timing
+</attempted_approaches>
 
-## Key Architecture Context
+<critical_context>
+## How react-to-print works
+`useReactToPrint` awaits `onBeforePrint`, then calls `cloneNode(true)` on `contentRef.current`, injects the clone into a hidden iframe, copies all `<style>` and `<link rel="stylesheet">` tags from the parent document, then calls `iframe.contentWindow.print()`. CSS custom properties (`hsl(var(--...))`) should be available in the iframe because all stylesheets are copied.
 
-- All capacity engines are **pure functions** (zero DB imports) in `*-engine.ts`
-- All DB access through `*-data.ts` layer (Drizzle queries)
-- **D-047 barrel import trap**: `"use client"` components use direct imports from `@/lib/capacity/lens-config`, NOT the barrel (`@/lib/capacity`) which re-exports server-only modules
-- **D-028 semver**: STOP and NOTIFY before any backwards-incompatible change
-- **D-049 timezone**: Shift hours stored in local time + `timezone` IANA field
-- Transformer caching: `cachedContractMap` is module-level, lazy-initialized
+## Why SVG is different from ECharts canvas
+ECharts renders to a `<canvas>` element. `canvas.cloneNode(true)` creates a blank canvas — pixel data is NOT copied. That's why Flight Board needed `getDataURL()` → img swap. Recharts renders SVG which IS part of the DOM tree and IS copied faithfully by `cloneNode(true)`. The img-swap technique is not needed for Recharts IF the SVG was fully rendered before cloning.
 
-## Key Files
+## Recharts animation — the likely culprit
+- Default: `isAnimationActive={true}` on `<Bar>` and `<Line>`
+- Bar animation: `<rect>` starts at height 0, animates up via CSS transform. Duration ~400ms
+- Line animation: `<path>` uses `strokeDasharray` trick starting at 0% path length, animates to 100%. Duration ~1500ms
+- At frame 0 (immediately after mount), bars have zero height and line has zero length → both invisible
+- `flushSync` triggers a synchronous React render (component mounts, initial state set) but Recharts then kicks off animations using its own internal `requestAnimationFrame` / `setTimeout` — those are NOT synchronous and are NOT affected by `flushSync`
+- Result: react-to-print captures the DOM before animations complete → blank chart
 
-| File | Purpose |
-|------|---------|
-| `.claude/ROADMAP.md` | Full project status — start here |
-| `.claude/OPEN_ITEMS.md` | All tracked issues (74 items, 14 open) |
-| `.claude/DECISIONS.md` | Decision log (D-001 through D-052) |
-| `.claude/COMPONENT_CLEANUP.md` | Capacity component refactoring tracker |
-| `src/lib/data/transformer.ts` | Core effectiveMH pipeline + contract cache |
-| `src/lib/capacity/` | All capacity engines + data layer |
+## Print dimensions reference
+- CSS reference pixel: 96 ppi
+- Landscape Letter, `@page { margin: 0.5in }`: printable = 10" × 7.5" = **960 × 720 CSS px**
+- Chart: `width={928}` to leave 16px for card `p-4` padding on each side
+- Chart: `height={200}` — short to leave room for tile row + operator table below
+
+## Current broken state of combined-chart.tsx
+The keyed array (lines ~338-468) looks like:
+```tsx
+const chartChildren = [
+  <CartesianGrid key="grid" ... />,
+  ...midnightHours.map(...),
+  nowHourKey ? <ReferenceLine key="now" ... /> : null,
+  activeSelectionBounds ? <ReferenceArea key="selection" ... /> : null,
+  <XAxis key="xaxis" ... />,
+  <YAxis key="yaxis" ... />,
+  <Tooltip key="tooltip" ... />,
+  <Legend key="legend" ... />,
+  <Bar key="bar-arrivals" ... />,     // no isAnimationActive={false}
+  <Bar key="bar-departures" ... />,   // no isAnimationActive={false}
+  <Line key="line-onground" ... />,   // no isAnimationActive={false}
+];
+```
+Both the print path (`if (width !== undefined)`) and the normal path use this same variable. This must be split: Fragment for normal path, inline expanded JSX with `isAnimationActive={false}` for print path.
+
+## Branch / git state
+- Branch: `dev`
+- `combined-chart.tsx` — dirty (modified, not committed). Current state has keyed array (broken).
+- `dashboard/page.tsx` — dirty (modified, not committed). Current state has print layout (correct).
+- `flight-board/page.tsx` — also dirty (from prior Flight Board print work, separate feature)
+- `globals.css` — also dirty (from prior Flight Board print work)
+- No commits have been made this session.
+
+## Related: Flight Board print (already solved, for reference)
+Solution used in `flight-board-chart.tsx` (ECharts / canvas):
+1. `flushSync` → `setCc(PRINT_CC)`, `setChartWidth(PRINT_WIDTH)`, `setPrintMode(true)` — synchronous React render causes ECharts to call `setOption()` with correct tick density
+2. `chart.getDataURL({ pixelRatio: 3 })` → base64 PNG
+3. DOM manipulation: replace `<canvas>` with `<img src={base64}>` before react-to-print clones
+4. `restoreAfterPrint`: remove img, restore original canvas + sizes
+Lesson for Recharts: "freeze the data into the DOM before capture." For SVG, this means `isAnimationActive={false}` so the data shapes are at their final positions on first paint.
+</critical_context>
+
+<current_state>
+## Deliverable status
+
+| Item | Status |
+|------|--------|
+| Print button on Dashboard | ✅ Complete |
+| handleBeforePrint / handleAfterPrint | ✅ Complete |
+| Print layout (3-row structure) | ✅ Complete, user-accepted |
+| KPI tiles (correct components) | ✅ Complete |
+| CombinedChart `width`/`height` props | ✅ Complete |
+| ResponsiveContainer bypass (print path) | ✅ Structurally in place |
+| Chart renders with data in print | ❌ BROKEN — never worked across 4 attempts |
+| Screen chart unbroken | ⚠️ POSSIBLY BROKEN — keyed array change may have broken it |
+
+## What's in the files right now
+
+**`dashboard/page.tsx`** — correct, no further changes needed
+
+**`combined-chart.tsx`** — broken, needs 2 changes:
+1. Revert `chartChildren` from keyed array back to Fragment (restores screen chart)
+2. Expand print path inline with `isAnimationActive={false}` on Bar/Line (primary fix attempt)
+
+## No commits made this session
+All changes are unstaged dirty working tree edits. Can be reverted with `git diff` / `git checkout` if needed. The correct state to save: keep all `dashboard/page.tsx` changes, revert `combined-chart.tsx` keyed-array portion and replace with the animation fix approach.
+
+## Next session priority
+1. Revert `chartChildren` to Fragment in `combined-chart.tsx`
+2. Expand print path inline + add `isAnimationActive={false}`
+3. Test print — if bars/line appear, done
+4. If still blank, inspect SVG DOM as described in fallback steps
+</current_state>

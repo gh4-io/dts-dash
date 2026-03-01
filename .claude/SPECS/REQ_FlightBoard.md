@@ -14,6 +14,8 @@ Uses TopMenuBar with filter dropdowns and active filter chips. See [REQ_Filters.
 
 ## Layout
 
+### Desktop & Tablet
+
 Current implementation with TopMenuBar architecture:
 
 ```
@@ -257,8 +259,16 @@ Bars display as much information as the available width allows. Content is rende
 - Vertical centering within bar height
 
 ## Legend (below Gantt)
+
+### Desktop & Tablet
 - ECharts built-in legend component or custom horizontal row of colored dots with customer labels
 - Customer colors from `useCustomers()` store (D-010) — not hardcoded
+- Helps users identify color-coded bars in Gantt
+
+### Phone (List View)
+- **Hidden** — not needed since each card shows operator color dot inline
+- Color coding is clear from the card itself (color dot + operator name)
+- Saves vertical space on small screens
 
 ## Click-to-Detail (Bar Click)
 
@@ -357,6 +367,167 @@ FilterBar → useFilters() → fetch /api/work-packages?start=&end=&op=&ac=&type
                                                    ↓ (link click)
                                             FilterBar updated → Gantt re-renders
 ```
+
+## Mobile Layout (Phone Only) — D-062
+
+### Default View: List
+
+**Why list instead of Gantt?**
+- Canvas-based ECharts Gantt doesn't scale well to <400px viewport
+- Touch interactions (drag-to-pan, pinch-to-zoom) are complex and unreliable on small screens
+- List view is naturally responsive and mobile-friendly
+- Users can still tap to expand full detail drawer with all information
+
+### List View Specifications (Compact Mobile Design)
+
+#### Minimum Layout (Compact Card)
+
+```
+┌─────────────────────────────────────────────┐
+│ C-FOIJ ● CargoJet                     [New] │  ← reg + color dot + operator + status badge
+│ 05:38 → 10:00 UTC (4h 22m)        WP: ✓    │  ← arrival → departure (ground) + WP indicator
+│ [Tap for B767, CJT507, 3.0 MH]              │  ← hint: secondary info available
+└─────────────────────────────────────────────┘
+```
+
+**Card dimensions**:
+- Height: 80–90px (3 lines + padding)
+- Width: Full width (minus padding)
+- Padding: 12px (touch-safe vertical hit area)
+
+#### Card Structure
+
+**Line 1 (Header)**:
+```
+C-FOIJ ● CargoJet                          [New]
+^reg   ^dot ^operator name         ^status badge
+```
+
+| Element | Details | Priority |
+|---------|---------|----------|
+| Registration | Bold, 16px | 🔴 CRITICAL |
+| Operator dot | Color from `useCustomers()` | 🔴 CRITICAL |
+| Operator name | Customer name, 14px gray | 🔴 CRITICAL |
+| Status badge | "New", "Approved", etc. — right-aligned pill | 🔴 CRITICAL |
+
+**Line 2 (Schedule & WP)**:
+```
+05:38 → 10:00 UTC (4h 22m)        WP: ✓
+^arrival ^departure ^ground       ^WP indicator
+```
+
+| Element | Details | Priority |
+|---------|---------|----------|
+| Arrival | Formatted in selected TZ, 14px | 🔴 CRITICAL |
+| Arrow | Visual separator | — |
+| Departure | Formatted in selected TZ, 14px | 🔴 CRITICAL |
+| Ground duration | Computed (4h 22m), 12px gray | 🟡 HIGH |
+| WP indicator | "✓" (has WP) or "—" (no WP), right-aligned | 🔴 CRITICAL |
+
+**Line 3 (Secondary Info Hint)**:
+```
+[Tap for B767, CJT507, 3.0 MH]
+         ^aircraft type ^flight ID ^MH
+```
+
+| Element | Details | Priority |
+|---------|---------|----------|
+| Hint text | "Tap for [type, flight ID, MH]", 12px italic gray | 🟢 LOW |
+| Aircraft type | Shown in hint (e.g., "B767") | 🟢 LOW |
+| Flight ID | Shown in hint (e.g., "CJT507") | 🟢 LOW |
+| Man-hours | Shown in hint (e.g., "3.0 MH") | 🟢 LOW |
+
+#### Visual Design
+
+**Colors & Spacing**:
+- Background: `bg-card` (slightly elevated from background)
+- Border: `border-b` (separator line)
+- Operator dot: Customer color (5–6px circle, left of name)
+- Status badge: Accent background, contrasting text
+- Tap hint: `text-muted-foreground text-xs italic`
+- Hover: `bg-accent/10` (subtle highlight on mouse, full tap area on touch)
+
+**Typography**:
+- Line 1: Registration `font-bold text-base`, Operator `text-sm text-muted`, Badge `text-xs`
+- Line 2: Times `text-sm`, Ground `text-xs text-muted`, WP `text-sm`
+- Line 3: Hint `text-xs italic text-muted-foreground`
+
+#### Card Example (Visual)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                                                               │
+│  C-FOIJ ● CargoJet Airways                              New   │
+│                                                               │
+│  05:38 → 10:00 UTC (4h 22m)                         WP: ✓    │
+│                                                               │
+│  Tap for B767, CJT507, 3.0 MH                               │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Compact HTML/Tailwind Structure
+
+```tsx
+<div className="border-b p-3 hover:bg-accent/10 cursor-pointer transition-colors">
+  {/* Line 1: Registration + Operator + Status */}
+  <div className="flex items-center justify-between mb-1">
+    <div className="flex items-center gap-2">
+      <span className="font-bold text-base">C-FOIJ</span>
+      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: customerColor }} />
+      <span className="text-sm text-muted-foreground">CargoJet Airways</span>
+    </div>
+    <Badge variant="outline" className="text-xs">New</Badge>
+  </div>
+
+  {/* Line 2: Schedule + WP */}
+  <div className="flex items-center justify-between mb-1">
+    <span className="text-sm">
+      05:38 → 10:00 UTC <span className="text-xs text-muted-foreground">(4h 22m)</span>
+    </span>
+    <span className="text-sm">WP: ✓</span>
+  </div>
+
+  {/* Line 3: Secondary Info Hint */}
+  <div className="text-xs italic text-muted-foreground">
+    Tap for B767, CJT507, 3.0 MH
+  </div>
+</div>
+```
+
+### Interaction
+
+- **Tap card**: Opens FlightDetailDrawer (full work package details)
+- **Detail drawer**: Shows all info including aircraft type, flight ID, MH, comments, links
+- **Swipe**: Scroll up/down through list
+- **Sorting**: Click column header to sort (Arrival, Departure, Ground, Status)
+
+### Responsive Behavior
+
+- **Phone portrait** (375px): Full-width cards, single column
+- **Phone landscape** (667px): May show 2 cards side-by-side (optional)
+- **Tablet+** (768px+): Switch to Gantt view (list view available via toggle)
+
+### Sorting
+
+- Cards sorted by arrival time (earliest first)
+- Click column header (if visible) to sort by: Arrival, Departure, Ground Duration, MH
+- Sort state persists to localStorage (per device, not synced to DB — D-056)
+
+### View Mode Toggle
+
+- **Not shown on phone by default** (list is hardcoded default)
+- **Optional**: If user wants Gantt on phone, a "View Mode" toggle in the mobile Menu sheet can enable it
+  - Located in: Menu (bottom tab) → "View Mode" → Gantt (advanced users only)
+  - Persists to localStorage per device
+
+### Responsive Behavior
+
+- **Phone portrait** (<600px): Full-width cards, 1-column stack
+- **Phone landscape** (600px–767px): 2-column grid (optional; list may be more practical)
+- **Tablet landscape**: Gantt view available again (>768px, see Desktop & Tablet section above)
+
+---
 
 ## Components
 | Component | File | Purpose |

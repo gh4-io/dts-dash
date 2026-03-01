@@ -24,13 +24,38 @@
 - Each page's `useFilterUrlSync()` hook hydrates from URL on mount
 - See [REQ_Filters.md](REQ_Filters.md) for full URL sync spec
 
-## Responsive Behavior
+## Responsive Behavior (D-061)
 
-| Breakpoint | Sidebar | FilterBar | Content |
-|-----------|---------|-----------|---------|
-| ≥1280px (xl) | Expanded (240px) | 2-row inline | Full layout |
-| ≥768px (md) | Collapsed (64px) | 2×2 grid | 2-col grid |
-| <768px (sm) | Sheet overlay | Sheet overlay | Single column |
+### Device Detection Strategy
+
+**Primary (Browser-based):**
+- Detect device type using browser APIs: `navigator.maxTouchPoints`, viewport width, orientation
+- Classification: **Phone** (touch + width < 768px), **Tablet** (touch + 768px–1279px), **Desktop** (1280px+ or no touch capability)
+- Store in Zustand hook `useDeviceType()` with real-time resize/orientation listeners
+- Update on window resize and orientation change
+
+**Fallback (Pixel-based, non-mobile-assuming):**
+- If device detection unavailable, classify by viewport width **only**
+- Default to **Desktop** layout (NOT mobile) unless width proves otherwise
+- Breakpoints (fallback):
+  - **Desktop**: ≥1280px (xl)
+  - **Tablet**: 768px–1279px (md)
+  - **Phone**: <768px (sm) — only if explicitly detected
+
+### Layout by Device Type
+
+| Device | Sidebar | FilterBar | Content | Notes |
+|--------|---------|-----------|---------|-------|
+| **Phone** | Sheet overlay (hamburger toggle) | Sheet overlay (stacked) | Single column, full width | Touch-optimized: 44px+ tap targets |
+| **Tablet** | Collapsed (64px icon-only) | 2×2 grid or stacked | 2-col grid (portrait) / 3-col (landscape) | May have touchscreen; orientation matters |
+| **Desktop** | Expanded (240px) | 2-row inline | Full layout, 3+ columns | Assume keyboard/mouse; no touch limit |
+
+### Implementation Details
+
+- **Hook**: `src/lib/hooks/use-device-type.ts` returns `'phone' | 'tablet' | 'desktop'`
+- **Store**: Zustand with runtime detection on mount + resize/orientation listeners
+- **Fallback logic**: If `navigator.maxTouchPoints` unavailable, classify by viewport width alone (default Desktop)
+- **Avoid**: Do **not** assume mobile layout for >1280px devices even if they report touch capability
 
 ## Theme
 - Dark default, light available via toggle

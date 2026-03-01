@@ -18,12 +18,14 @@ import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { PrintButton } from "@/components/shared/print-button";
+import { useDeviceType } from "@/lib/hooks/use-device-type";
 
 function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
   const { snapshots, isLoading: snapshotsLoading } = useHourlySnapshots();
   const { fetch: fetchCustomers } = useCustomers();
   const { start, end, timezone } = useFilters();
+  const device = useDeviceType();
   const { timeFormat } = usePreferences();
   const [focusedOperator, setFocusedOperator] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<ChartTimeRange | null>(null);
@@ -181,7 +183,15 @@ function DashboardPageInner() {
             </div>
           ) : (
             // ── Normal layout: 3-column grid ────────────────────────────────────
-            <div className="grid grid-cols-1 xl:grid-cols-[250px_1fr_300px] gap-3 flex-1">
+            <div
+              className={
+                device.type === "desktop"
+                  ? "grid grid-cols-[250px_1fr_300px] gap-3 flex-1"
+                  : device.type === "tablet"
+                    ? "grid grid-cols-2 gap-3 flex-1"
+                    : "flex flex-col gap-3 flex-1"
+              }
+            >
               {/* Left: flex ratios — MH 65%, Type 32% of remaining */}
               <div className="flex flex-col gap-3">
                 <div className="shrink-0">

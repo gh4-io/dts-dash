@@ -761,3 +761,89 @@ customers.sp_id                  populated from ID field in cust.json during cus
 
 **Version impact**: MINOR (new feature, backwards-compatible)
 **Links**: OI-057, D-022 (themes)
+
+---
+
+## D-061 | 2026-02-28 | Device Detection — Browser APIs + Pixel Fallback
+
+**Decision**: Replace CSS media query breakpoints with explicit runtime device classification using `navigator.maxTouchPoints` and viewport width.
+
+**Device Classification**:
+1. **Primary**: Touch capability + viewport width
+   - **Phone**: `navigator.maxTouchPoints > 0 AND width < 768px`
+   - **Tablet**: `navigator.maxTouchPoints > 0 AND 768px ≤ width < 1280px`
+   - **Desktop**: `width ≥ 1280px OR no touch`
+2. **Fallback** (if detection unavailable): Viewport width only
+   - **Desktop**: ≥1280px (default — **NOT mobile**)
+   - **Tablet**: 768px–1279px
+   - **Phone**: <768px (only if explicitly width-detected)
+
+**Implementation**:
+- New hook `useDeviceType()` in `src/lib/hooks/use-device-type.ts` with Zustand store
+- Real-time detection on client mount + resize/orientation listeners (debounced 300ms)
+- Wrapper component `<DeviceTypeHydrator>` for SSR safety (skipHydration)
+- Components conditionally render layout variants based on `device.type`, not CSS media queries
+
+**Rationale**:
+1. **Accuracy** — Tablets in landscape mode have same width as desktop; media queries can't distinguish. Touch capability is the primary UX differentiator.
+2. **Testability** — Classification logic is explicit TypeScript, not CSS black-box. Easy to unit test all scenarios.
+3. **Fallback safety** — Defaults to Desktop layout (not mobile) when touch detection unavailable, preventing accidental mobile layouts on resized desktop browsers.
+4. **Maintains Tailwind** — Not removing Tailwind; using device type for **conditional component rendering**. Legacy `hidden sm:`, `md:`, `xl:` classes removed where device type is explicit.
+
+**Trade-offs**:
+- ~2KB additional JS (hook + store)
+- Touchscreen laptops will render tablet/phone components at ≥1280px (acceptable tradeoff; layouts are still usable)
+- More complex than CSS media queries, but more maintainable and explicit
+
+**Version impact**: MINOR (UI refactor, backwards-compatible, no data model changes)
+**Links**: [PLAN_DEVICE_DETECTION.md](PLAN_DEVICE_DETECTION.md), REQ_UI_Interactions.md (D-061), REQ_Dashboard_UI.md
+
+---
+
+## D-062 | 2026-02-28 | Mobile-First Navigation & Layout Adjustments (Phase 4)
+
+**Decision**: Optimize mobile (phone) UX with device-specific navigation and layout changes.
+
+**Changes**:
+1. **Bottom Tab Bar** (phone only, fixed 4 tabs):
+   - Dashboard | Flights | Feedback | Menu
+   - Replace hamburger sidebar menu
+   - Menu tab opens bottom sheet with user account + view mode + logout
+
+2. **Header Simplification** (phone only):
+   - Hide mode toggle (◐ theme icon)
+   - Hide user menu dropdown
+   - Reclaim ~60px vertical space
+   - Both controls move to "Menu" tab in bottom sheet
+
+3. **Flight Board** (phone only):
+   - Default to list view (not Gantt)
+   - Rationale: ECharts Gantt doesn't scale well on small screens; complex touch interactions
+   - List view: Card-based layout with aircraft info, arrivals/departures, customer color dot
+   - Tap to expand detail drawer (existing pattern)
+   - View mode toggle hidden (Gantt is desktop/tablet only)
+
+4. **Dashboard Layout** (phone only):
+   - Reorder: Graphs on top, KPI cards below
+   - Combined chart → Donut → KPI cards → Operator table (single-column stack)
+   - Rationale: Graphs provide more operational context; KPI summary cards follow naturally
+   - Touch-optimized card sizes and spacing
+
+5. **Print Functions**:
+   - Hide print button on phone devices
+   - Print is a desktop workflow; mobile users don't print
+
+**Rationale**:
+- **Bottom tab bar**: Standard mobile UX pattern. Four tabs = balanced, discoverable. Hamburger icon/sheet is desktop pattern.
+- **Header simplification**: Every pixel matters on 375px screens. Theme toggle + user menu rarely used on mobile (data-focused workflow).
+- **Flight Board list default**: Gantt requires wide viewport + precise touch interactions. List view is naturally responsive.
+- **Dashboard reordering**: Mobile users scroll top-to-bottom. Graphs first = faster decision-making. Summary cards provide context after.
+- **Print hidden**: No mobile browser print workflow; saves space and prevents confusion.
+
+**Trade-offs**:
+- Phone users lose access to theme toggle in header (available in Menu → bottom sheet).
+- Flight Board doesn't offer Gantt on phone (limits advanced timeline features on small screens).
+- Menu becomes a bottom sheet (not sidebar) — different from tablet/desktop but more appropriate for touch.
+
+**Version impact**: MINOR (new feature, mobile-optimized UX)
+**Links**: [PLAN_DEVICE_DETECTION.md](PLAN_DEVICE_DETECTION.md) (Phase 4), D-061 (device detection)

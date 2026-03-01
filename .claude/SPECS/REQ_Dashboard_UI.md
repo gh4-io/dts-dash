@@ -64,14 +64,27 @@ Derived from CVG Line Maintenance dashboard screenshots:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Layout Grid (CSS)
+### Layout Grid (by Device Type)
 
-| Section | Desktop (xl) | Tablet (md) | Mobile (sm) |
-|---------|-------------|-------------|-------------|
-| KPI cards | Left column, ~250px fixed | Full width, 2-column grid | Full width, stacked |
-| Combined chart | Center, flex-grow | Full width below KPIs | Full width, reduced height |
-| Donut chart | Right, ~300px fixed | Beside combined chart | Full width, 200px height |
-| Operator Performance | Full width below charts | Full width | Full width, horizontal scroll |
+| Section | Desktop | Tablet | Phone |
+|---------|---------|--------|-------|
+| KPI cards | Left column, ~250px fixed | Full width, 2-column grid (portrait) / 3-col (landscape) | Full width, stacked (below graphs) |
+| Combined chart | Center, flex-grow | Full width below KPIs | Full width, on top (reordered) |
+| Donut chart | Right, ~300px fixed | Beside combined chart (landscape) / Below (portrait) | Full width, 200px height (below chart) |
+| Operator Performance | Full width below charts | Full width | Full width, horizontal scroll with touch drag (bottom) |
+
+**Note:** Layout selection driven by `useDeviceType()` hook, not CSS media queries. Falls back to viewport width if device detection unavailable.
+
+### Mobile Phone Layout Order (D-062)
+
+For phone devices, render order is **reordered** to prioritize operational context (graphs first):
+
+1. **Combined Bar+Line Chart** (arrivals/departures/on-ground)
+2. **Donut Chart** (aircraft by customer)
+3. **KPI Cards** (stacked, 1-column)
+4. **Operator Performance Table** (horizontal scroll)
+
+**Rationale**: On small screens, graphs provide immediate operational insight. KPI summary cards and detailed tables follow naturally. Users scroll top-to-bottom through decreasing levels of detail.
 
 ---
 

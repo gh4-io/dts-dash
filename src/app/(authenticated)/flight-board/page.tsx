@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useSidebar } from "@/lib/hooks/use-sidebar";
+import { useDeviceType } from "@/lib/hooks/use-device-type";
 import type { FlightBoardChartHandle } from "@/components/flight-board/flight-board-chart";
 import type { ActiveChip } from "@/components/shared/active-chips";
 
@@ -33,9 +34,11 @@ function FlightBoardPageInner() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const device = useDeviceType();
   const [viewMode, setViewMode] = useState<"gantt" | "list">("gantt");
   const [viewOpen, setViewOpen] = useState(false);
   const [panMode, setPanMode] = useState(false);
+
   const {
     loaded: prefsLoaded,
     compactMode: condensed,
@@ -46,28 +49,32 @@ function FlightBoardPageInner() {
   const chartRef = useRef<FlightBoardChartHandle>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
-  // Sync from localStorage after hydration to avoid mismatch
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from localStorage to avoid SSR mismatch
-    setHydrated(true);
-    const stored = localStorage.getItem("flightBoardExpanded");
-    if (stored === "true") setIsExpanded(true);
-    const storedView = localStorage.getItem("flightBoardViewMode");
-    if (storedView === "list") setViewMode("list");
-  }, []);
-
   // Determine if we're too narrow for horizontal inline expansion
   const sidebarMode = useSidebar((s) => s.mode);
-  const [windowWidth, setWindowWidth] = useState(
-    typeof window !== "undefined" ? window.innerWidth : 1920,
-  );
+  const [windowWidth, setWindowWidth] = useState(1920);
+
+  // Sync from localStorage and device type after first render
+  useEffect(() => {
+    // Set hydration and load persistent state from localStorage
+    const expanded = localStorage.getItem("flightBoardExpanded") === "true";
+    const viewFromStorage = localStorage.getItem("flightBoardViewMode");
+    const defaultViewMode = device.type === "phone" ? "list" : "gantt";
+    const viewModeFromStorage =
+      viewFromStorage === "list" || viewFromStorage === "gantt" ? viewFromStorage : defaultViewMode;
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from localStorage to avoid SSR mismatch
+    if (expanded) setIsExpanded(true);
+    if (viewModeFromStorage !== "gantt") setViewMode(viewModeFromStorage);
+    setHydrated(true);
+  }, [device.type]);
 
   useEffect(() => {
     const handleResize = () => {
       setViewOpen(false);
-
       setWindowWidth(window.innerWidth);
     };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initialize state from current window on mount
+    setWindowWidth(window.innerWidth);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -194,8 +201,6 @@ function FlightBoardPageInner() {
   }, []);
 
   // SUPPRESSED: Zoom format chips hidden — zoom preset tags not shown in TopMenuBar.
-  // Original logic: shows "Zoom: {level}" chip when zoomLevel !== effectiveDefaultZoom.
-  const effectiveDefaultZoom = defaultZoom || "3d";
   const formatChips: ActiveChip[] = [];
 
   const ZOOM_LEVELS = [
@@ -224,33 +229,35 @@ function FlightBoardPageInner() {
                     viewOpen ? "max-w-[700px] opacity-100" : "max-w-0 opacity-0",
                   )}
                 >
-                  {/* Gantt / List toggle */}
-                  <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
-                    <Button
-                      variant={viewMode === "gantt" ? "default" : "ghost"}
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        setViewMode("gantt");
-                        localStorage.setItem("flightBoardViewMode", "gantt");
-                      }}
-                      title="Gantt chart"
-                    >
-                      <i className="fa-solid fa-chart-gantt" />
-                    </Button>
-                    <Button
-                      variant={viewMode === "list" ? "default" : "ghost"}
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        setViewMode("list");
-                        localStorage.setItem("flightBoardViewMode", "list");
-                      }}
-                      title="List view"
-                    >
-                      <i className="fa-solid fa-list" />
-                    </Button>
-                  </div>
+                  {/* Gantt / List toggle — hidden on phone */}
+                  {device.type !== "phone" && (
+                    <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
+                      <Button
+                        variant={viewMode === "gantt" ? "default" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          setViewMode("gantt");
+                          localStorage.setItem("flightBoardViewMode", "gantt");
+                        }}
+                        title="Gantt chart"
+                      >
+                        <i className="fa-solid fa-chart-gantt" />
+                      </Button>
+                      <Button
+                        variant={viewMode === "list" ? "default" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          setViewMode("list");
+                          localStorage.setItem("flightBoardViewMode", "list");
+                        }}
+                        title="List view"
+                      >
+                        <i className="fa-solid fa-list" />
+                      </Button>
+                    </div>
+                  )}
 
                   {/* Gantt-specific controls */}
                   {viewMode === "gantt" && (
@@ -637,8 +644,8 @@ function FlightBoardPageInner() {
           </div>
         )}
 
-        {/* Legend */}
-        {customers.length > 0 && (
+        {/* Legend — hidden on phone (colors shown inline on list cards) */}
+        {customers.length > 0 && device.type !== "phone" && (
           <div className="flex flex-wrap items-center gap-4 px-1 flex-shrink-0">
             {customers
               .filter((c) => c.isActive)

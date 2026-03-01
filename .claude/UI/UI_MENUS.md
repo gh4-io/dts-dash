@@ -62,11 +62,52 @@ Left sidebar, always visible on desktop, collapsible on tablet, sheet on mobile.
 - Icons only, tooltip on hover for labels
 - Active item: accent-colored icon
 
-### Mobile (sm, sheet overlay)
-- Hamburger trigger in header
-- Full-height sheet from left
-- Same items as desktop expanded view
-- Close on route navigation or X button
+### Mobile (phone, bottom tab bar)
+
+**NEW (D-062)**: Mobile navigation moved to fixed bottom tab bar (4 tabs).
+
+```
+┌────────────────────────────────────────┐
+│ [remaining app content]                │
+├────────────────────────────────────────┤
+│ [📊] [✈] [💬] [≡]                      │
+│ Dashboard | Flights | Feedback | Menu  │
+└────────────────────────────────────────┘
+```
+
+**Tab Specifications**:
+
+| Tab | Icon | Route/Action | Notes |
+|-----|------|-------------|-------|
+| Dashboard | `fa-solid fa-chart-line` | Navigate `/dashboard` | Summary view |
+| Flights | `fa-solid fa-plane-departure` | Navigate `/flight-board` | Flight operations |
+| Feedback | `fa-solid fa-comments` | Navigate `/feedback` (TBD) | User feedback |
+| Menu | `fa-solid fa-ellipsis-vertical` | Open mobile menu sheet | User + settings |
+
+**Menu Sheet** (from "Menu" tab, bottom sheet):
+
+```
+┌──────────────────────────────┐
+│ × (close)                    │
+├──────────────────────────────┤
+│ 👤 [Username]                │
+│    [email@example.com]       │
+├──────────────────────────────┤
+│ 👤 Account                   │
+│ 🛡 Admin (if admin+)         │
+├──────────────────────────────┤
+│ View Mode: [Gantt/List] (*)  │
+├──────────────────────────────┤
+│ ⇥ Logout                     │
+└──────────────────────────────┘
+```
+
+**(*) View Mode Toggle**: Only shown on Flight Board page (allows phone users to switch to Gantt if desired; defaults to List).
+
+**Header** (phone):
+- Hide theme toggle (`◐` icon)
+- Hide user menu dropdown
+- Both controls available in Menu sheet bottom nav tab
 
 ### Navigation Items
 

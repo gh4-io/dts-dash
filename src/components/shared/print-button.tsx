@@ -2,6 +2,7 @@
 
 import { useReactToPrint } from "react-to-print";
 import { Button } from "@/components/ui/button";
+import { useDeviceType } from "@/lib/hooks/use-device-type";
 import type { RefObject } from "react";
 
 interface PrintButtonProps {
@@ -17,12 +18,18 @@ export function PrintButton({
   onBeforePrint,
   onAfterPrint,
 }: PrintButtonProps) {
+  const device = useDeviceType();
   const handlePrint = useReactToPrint({
     contentRef,
     documentTitle,
     onBeforePrint,
     onAfterPrint,
   });
+
+  // Hide print button on phone
+  if (device.type === "phone") {
+    return null;
+  }
 
   return (
     <Button
