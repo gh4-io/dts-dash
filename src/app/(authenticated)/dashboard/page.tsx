@@ -233,7 +233,8 @@ function DashboardPageInner() {
               />
             </div>
           ) : (
-            // Tablet / Desktop grid
+            // Tablet (2-col) / Desktop (3-col fixed) grid
+            // Phone is handled above; the else here catches tablet + desktop
             <div
               className={
                 device.type === "desktop"
