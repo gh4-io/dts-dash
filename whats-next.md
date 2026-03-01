@@ -1,264 +1,229 @@
 <original_task>
-Implement Dashboard print support: the "Arrivals / Departures / On Ground" (CombinedChart / Recharts) should render across the full page width when printed, with KPI tiles tiled below it left-to-right, learning from the Flight Board print implementation. The core problem across the entire session: the chart consistently renders with NO visible bars, NO line, and NO data in the printed PDF — only axes/grid/legend appear (or nothing at all after the last change).
+Continue the mobile-first UX deployment for the CVG Line Maintenance Operations Dashboard. This session was a continuation from a prior conversation that implemented Phases A–D of the mobile deployment. The work in this session focused on polish, bug fixes, and PWA improvements across several user-reported issues.
 </original_task>
 
 <work_completed>
-## Print layout architecture — complete and user-accepted
+## Commits made this session (4 total, all on `dev` branch)
 
-`src/app/(authenticated)/dashboard/page.tsx`:
-- Added `flushSync` import from `react-dom`
-- Added `printMode` state: `const [printMode, setPrintMode] = useState(false)`
-- Added `handleBeforePrint`: `async () => { flushSync(() => setPrintMode(true)); }`
-- Added `handleAfterPrint`: `() => { setPrintMode(false); }`
-- `PrintButton` wired with both callbacks, `contentRef={printRef}`, `documentTitle="Dashboard — CVG Line Maintenance"`
+### 1. `818fff9` — fix(mobile): polish phone UX — card redesign, layout reorder, tab bar fixes
+**Files changed (6):**
 
-Print layout (3 rows) — accepted by user:
-- Row 1 (full width): card wrapper + `<CombinedChart snapshots={displaySnapshots} timezone={timezone} timeFormat={timeFormat} height={200} width={928} />`
-- Row 2 (3-col grid): `<AvgGroundTimeCard>` | `<TotalAircraftCard filterStart={start} filterEnd={end} timezone={timezone}>` | `<AircraftByTypeCard>`
-- Row 3 (full width): `<OperatorPerformance focusedOperator={null} onOperatorClick={() => {}}>`
+- **`src/components/flight-board/flight-board-list-cards.tsx`** — Complete rewrite to compact 3-line card design:
+  - Line 1: Registration (bold) + operator color dot + operator name (truncated) + status badge
+  - Line 2: Arrival → Departure UTC (ground time) + WP indicator (✓/—, green/gray)
+  - Line 3: Secondary info hint (inferredType · flightId · effectiveMH + source label)
+  - Replaced old 4-row layout that had customer first, registration buried, no WP indicator
+  - Added `formatTime()` (HH:mm UTC) and `formatGroundTime()` (Xh Xm) helpers
+  - Changed card container from rounded-lg with bg-card to border-b flat list style with hover:bg-accent/10
 
-User corrections already applied:
-- Uses existing `TotalAircraftCard` (labelled "Aircraft & Turns") and `AircraftByTypeCard` ("Total Aircraft By Type") — not custom inline KPI divs
-- `MhByOperatorCard` and `CustomerDonut` excluded from print (user approved)
-- OperatorPerformance on its own full-width row (not crammed into a column — avoids table overflow at ~374px)
+- **`src/app/(authenticated)/flight-board/page.tsx`** — Two changes:
+  - List/table toggle: replaced CSS breakpoints (`md:hidden` / `hidden md:flex`) with `device.type === "phone"` ternary
+  - Expanded mode default: changed from `localStorage.getItem("flightBoardExpanded") === "true"` to `expandedRaw !== null ? expandedRaw === "true" : device.type === "phone"` — phone defaults to expanded, desktop/tablet defaults to collapsed
 
-## CombinedChart props extension — complete
+- **`src/app/(authenticated)/dashboard/page.tsx`** — Phone-specific layout reorder:
+  - Added `device.type === "phone"` branch that renders: chart first → KPI cards → donut → operator table
+  - Tablet/desktop grid unchanged (3-col desktop, 2-col tablet)
+  - Phone layout is flat `flex flex-col` with components rendered individually (no column grouping)
 
-`src/components/dashboard/combined-chart.tsx`:
-- Added `height?: number` (default 340) — allows print to pass `height={200}`
-- Added `width?: number` — when provided, bypasses ResponsiveContainer entirely
-- Added print render path: `if (width !== undefined) { return <ComposedChart width={width} height={height}>...</ComposedChart>; }`
-- Stats bar (`selectionStats` display) now only rendered when `onSelectionChange !== undefined` — hides in print mode (cleaner output, saves ~30px)
+- **`src/components/layout/bottom-tab-bar.tsx`** — Two fixes:
+  - Removed Capacity from navItems (was `{ href: "/capacity", ... }`) per D-062 spec
+  - Changed icon from `fa-ellipsis-vertical` to `fa-bars`, added `text-[10px]` on Menu label span to match other nav item text size
 
-## LAST CHANGE THIS SESSION — made things "worse" (needs revert)
+- **`src/components/layout/header.tsx`** — Added early return `if (device.type === "phone") return null;` at line 60, eliminating the 56px whitespace bar on phone. Removed now-redundant `device.type !== "phone"` conditional guards around theme toggle and user menu (TypeScript narrowing made them dead code after the early return).
 
-The `chartChildren` variable was changed from a JSX Fragment to a keyed array. User reported this was worse than before. This change should be reverted as the first step in the next session.
+- **`src/lib/hooks/use-device-type.ts`** — Fixed infinite re-render loop:
+  - Changed `useEffect` dependency from `[device]` to `[]` (empty)
+  - Replaced reactive store access with `useDeviceTypeStore.getState()` inside effect
+  - Added guard: only call `setDevice()` when values actually changed
+  - Added explicit type annotation for `detectionMethod` variable
+
+### 2. `93e1d0d` — feat(pwa): redesign app icons and add iOS install prompt
+**Files created (6):**
+- `public/icons/apple-touch-icon.svg` — 180x180 SVG (wrench+plane, later deleted)
+- `public/icons/icon-192.svg` — 192x192 SVG (later deleted)
+- `public/icons/icon-512.svg` — 512x512 SVG (later deleted)
+- `public/icons/icon-maskable-192.svg` — 192x192 SVG with safe zone padding (later deleted)
+- `public/icons/icon-maskable-512.svg` — 512x512 SVG with safe zone padding (later deleted)
+- **`src/components/shared/ios-install-prompt.tsx`** — iOS Safari "Add to Home Screen" banner:
+  - Detection: `isIosSafari()` checks UA for iPad/iPhone/iPod + excludes CriOS/FxiOS/EdgiOS
+  - Standalone check: `navigator.standalone` (Safari-specific) + `display-mode: standalone` media query
+  - Dismissal persisted to localStorage key `"ios-install-dismissed"`
+  - Auto-dismiss after 30 seconds
+  - Positioned `bottom-[calc(70px+env(safe-area-inset-bottom))]` (above bottom tab bar)
+  - Slide-in animation via Tailwind `animate-in slide-in-from-bottom`
+  - Shows share icon + "Install this app: tap **Share** then **Add to Home Screen**"
+  - Fixed lint error: moved `dismiss` function declaration above `useEffect` (was `function dismiss()` after effect, changed to `const dismiss = () => {...}` before effect, and inlined the auto-dismiss logic to avoid referencing `dismiss` in effect)
+
+**Files modified (6):**
+- `src/app/(authenticated)/layout.tsx` — Added `import { IosInstallPrompt }` and `<IosInstallPrompt />` component
+- 5 PNG icon files replaced with wrench+plane SVG-to-PNG conversions (via sharp)
+
+### 3. `38982a2` — fix(pwa): replace generated icons with B777 design, remove SVGs
+**Files deleted (5):** All SVG icon files removed (apple-touch-icon.svg, icon-192.svg, icon-512.svg, icon-maskable-192.svg, icon-maskable-512.svg)
+**Files modified (5):** All PNG icons replaced with user-provided B777 top-view design:
+- Source image: `.claude/assets/icon--top-view-of-b777-with-calendar-parts--this-i.png` (1024x1024)
+- Conversion via sharp: `resize(N, N, { fit: 'cover' }).png()`
+- Maskable variants: content resized to 80%, extended with white background padding
+- Sizes: 192, 512, maskable-192, maskable-512, apple-touch-icon (180)
+
+## Failed attempt: dark icon version
+- User provided a light B777 icon and asked for a dark version
+- Attempted programmatic pixel manipulation via sharp raw buffer:
+  - Pass 1: swapped white pixels → dark navy (#0f172a), brightened dark blue elements
+  - Pass 2: refined thresholds for aircraft body, outlines, grays
+- Result was poor quality — artifacts at anti-aliased edges, muddy colors, loss of detail
+- User rejected: "very poor render" — pixel-level color swapping is wrong tool for this
+- Recommended using a design tool (Figma/Illustrator) for proper layer-based inversion
+- Dark version file exists at `.claude/assets/icon-dark-512.png` but is NOT used anywhere
 </work_completed>
 
 <work_remaining>
-## STEP 1 — Revert the keyed-array change (restore Fragment)
+## No immediate blockers — mobile deployment is functionally complete
 
-In `src/components/dashboard/combined-chart.tsx`, lines ~338-468, `chartChildren` is currently a keyed array. Revert it to a Fragment. The Fragment was always working for the screen chart (user never reported a broken screen chart). The screen chart must not be broken.
+### Testing & Validation (Phase E)
+1. **Mobile device testing** — Test on actual iOS and Android devices (not just Chrome DevTools emulation):
+   - Verify bottom tab bar renders correctly on iPhone (with notch safe area)
+   - Verify iOS install prompt appears in Safari, dismisses correctly, persists dismissal
+   - Verify PWA icon displays correctly when added to home screen
+   - Test flight board list cards at various widths (375px iPhone SE → 667px landscape)
+   - Test dashboard chart-on-top layout on phone
 
-```tsx
-// Restore this form:
-const chartChildren = (
-  <>
-    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))" opacity={0.2} horizontal={true} vertical={false} />
-    {midnightHours.map((m) => (
-      <ReferenceLine key={`midnight-${m.hour}`} x={m.hour} stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="6 3" opacity={0.5}
-        label={{ value: m.dateLabel, position: "insideTopRight", fill: "hsl(var(--foreground))", fontSize: 10, fontWeight: 700, offset: 4 }} />
-    ))}
-    {nowHourKey && (
-      <ReferenceLine key="now" x={nowHourKey} stroke="#ef4444" strokeWidth={2}
-        label={{ value: "NOW", position: "insideTopLeft", fill: "#ef4444", fontSize: 10, fontWeight: 700, offset: 4 }} />
-    )}
-    {activeSelectionBounds && (
-      <ReferenceArea key="selection" x1={activeSelectionBounds.x1} x2={activeSelectionBounds.x2} fill="hsl(var(--primary))" fillOpacity={0.12} stroke="none" />
-    )}
-    <XAxis dataKey="hour" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} ticks={alignedTicks}
-      tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }} axisLine={{ stroke: "hsl(var(--muted-foreground))" }} tickFormatter={formatTick} />
-    <YAxis tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={35} />
-    <Tooltip active={dragStart ? false : undefined} contentStyle={{ ... }} labelFormatter={...} />
-    <Legend wrapperStyle={{ ... }} formatter={...} />
-    <Bar dataKey="arrivals" name="Arrivals" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={8} />
-    <Bar dataKey="departures" name="Departures" fill="#f43f5e" radius={[2, 2, 0, 0]} barSize={8} />
-    <Line dataKey="onGround" name="On Ground" type="monotone" stroke="#eab308" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-  </>
-);
-```
+2. **Lighthouse audit** — Run Lighthouse mobile audit to check:
+   - PWA score (manifest, icons, service worker — note: no service worker yet)
+   - Performance (CLS from device detection hydration, LCP)
+   - Accessibility (touch targets, contrast ratios)
 
-Note: The `chartChildren` Fragment is fine for the normal path inside ResponsiveContainer. The print path (`if (width !== undefined)`) should be expanded inline (not use `chartChildren` at all) so the two paths can have different props.
+3. **Edge cases to verify**:
+   - iPad detection: should classify as "tablet" (touch + 768-1280px)
+   - iPad in landscape: should classify as "tablet" or "desktop" depending on width
+   - Desktop browser resized narrow: should remain "desktop" (no touch = desktop fallback)
+   - Flight board expanded mode persistence: toggle on phone, reload, should stay expanded
+   - Flight board view mode persistence: switch to gantt on phone, reload, should remember
 
-## STEP 2 — Primary fix: disable Recharts animations in print path
+### Documentation updates needed
+- `.claude/ROADMAP.md` — Update Phase 4 status with PWA and icon work
+- `.claude/OPEN_ITEMS.md` — Close any related mobile OIs, add new ones for testing
+- `memory/MEMORY.md` — Update with PWA work, icon replacement, iOS install prompt
 
-**Highest-confidence untested root cause**: Recharts `Bar` and `Line` animate on mount by default:
-- `Bar` animation: bar height starts at 0 and animates upward (~400ms)
-- `Line` animation: uses SVG strokeDasharray trick, path length starts at 0% and animates to 100% (~1500ms)
+### Future considerations (not blocking)
+- **Service Worker** — No SW yet; adding one would enable offline caching and improve PWA score
+- **Dark icon version** — Needs to be created in a design tool, not programmatically
+- **Android install prompt** — `beforeinstallprompt` event could trigger a native-feeling prompt on Chrome Android (currently only iOS Safari is handled)
+- **Push to origin** — Branch is 34 commits ahead of `origin/dev`
 
-When `flushSync(() => setPrintMode(true))` renders the chart and react-to-print immediately clones the DOM, Recharts' animation is at frame 0: bars have height 0, line has length 0 — nothing is visible in the cloned SVG even though the data is present.
-
-**The fix**: In the print render path (`if (width !== undefined)`), expand children inline and add `isAnimationActive={false}` to all three data elements:
-
-```tsx
-if (width !== undefined) {
-  return (
-    <ComposedChart
-      data={chartData}
-      width={width}
-      height={height}
-      margin={{ top: 20, right: 10, left: 0, bottom: 0 }}
-    >
-      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground))" opacity={0.2} horizontal={true} vertical={false} />
-      {midnightHours.map((m) => (
-        <ReferenceLine key={`midnight-${m.hour}`} x={m.hour} stroke="hsl(var(--foreground))" strokeWidth={1} strokeDasharray="6 3" opacity={0.5}
-          label={{ value: m.dateLabel, position: "insideTopRight", fill: "hsl(var(--foreground))", fontSize: 10, fontWeight: 700, offset: 4 }} />
-      ))}
-      <XAxis dataKey="hour" tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} ticks={alignedTicks}
-        tickLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }} axisLine={{ stroke: "hsl(var(--muted-foreground))" }} tickFormatter={formatTick} />
-      <YAxis tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={35} />
-      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8, color: "hsl(var(--foreground))", pointerEvents: "none" }}
-        formatter={(value) => <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>} />
-      <Bar dataKey="arrivals" name="Arrivals" fill="#3b82f6" radius={[2, 2, 0, 0]} barSize={8} isAnimationActive={false} />
-      <Bar dataKey="departures" name="Departures" fill="#f43f5e" radius={[2, 2, 0, 0]} barSize={8} isAnimationActive={false} />
-      <Line dataKey="onGround" name="On Ground" type="monotone" stroke="#eab308" strokeWidth={2} dot={false} isAnimationActive={false} />
-    </ComposedChart>
-  );
-}
-```
-
-No `<Tooltip>` needed in print path (non-interactive). No `activeSelectionBounds` needed (print never has a live drag). No mouse handlers needed on the print ComposedChart — remove `onMouseDown/Move/Up/Leave` from `chartProps` or just don't spread chartProps in the print branch.
-
-## STEP 3 — Verification
-1. `npm run lint` — 0 warnings, 0 errors
-2. `npm run build` — passes
-3. Print Dashboard → bars (blue/red) and yellow on-ground line visible
-4. Print 2–3 times consecutively → consistent results
-5. Close print dialog → screen chart fully interactive (drag-to-select, cross-filter)
-6. Screen chart shows midnight separators, NOW line, bars, on-ground line as before
-
-## FALLBACK — if animation disable doesn't fix it
-
-If bars/line are still blank after `isAnimationActive={false}`:
-
-**Diagnose first**: In `handleBeforePrint`, after `flushSync(...)`, add:
-```ts
-const svg = printRef.current?.querySelector('.recharts-wrapper svg');
-console.log('SVG innerHTML length:', svg?.innerHTML.length);
-console.log('First rect height:', svg?.querySelector('rect[height]')?.getAttribute('height'));
-```
-This tells you: (a) is the SVG present at all, and (b) do bar rects have non-zero height.
-
-**If SVG is present but empty (no rects)**: Recharts didn't finish rendering. Try adding one RAF delay after flushSync:
-```ts
-flushSync(() => setPrintMode(true));
-await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-```
-
-**If SVG is absent**: ComposedChart standalone isn't mounting in the synchronous flushSync path. Consider rendering the print chart as a permanently-mounted hidden element (not conditionally rendered) and showing/hiding it via CSS — this avoids the mount timing issue entirely.
-
-**If SVG has rects with non-zero height but they're invisible**: CSS variable resolution failure in the print iframe. Switch stroke/fill values to hardcoded hex everywhere in the print path.
-
-**Nuclear option (SVG img-swap)**: Same technique as ECharts but for SVG:
-```ts
-const svg = printRef.current?.querySelector('.recharts-wrapper svg') as SVGElement;
-const serialized = new XMLSerializer().serializeToString(svg);
-const dataUrl = 'data:image/svg+xml;base64,' + btoa(serialized);
-const img = document.createElement('img');
-img.src = dataUrl; img.width = 928; img.height = 200;
-svg.parentElement!.replaceChild(img, svg);
-// store reference to restore in handleAfterPrint
-```
+### Print chart fix (from prior session, still pending)
+The `whats-next.md` from the prior session documented a broken Dashboard print chart (Recharts bars/line render blank). The fix hypothesis: add `isAnimationActive={false}` to Bar/Line in the print render path. This was never attempted. See prior session's detailed notes in git history.
 </work_remaining>
 
 <attempted_approaches>
-## Attempt 1: Pass `width={928}` to ResponsiveContainer
-Thought setting the width prop on ResponsiveContainer would pre-size it. WRONG: ResponsiveContainer initializes `containerWidth = -1` and only updates via ResizeObserver callback (async). Style prop sets CSS but does not initialize internal state. Chart rendered empty.
+## Dark icon generation (FAILED)
+- **Approach**: sharp raw pixel buffer manipulation — iterate all pixels, classify by luminance/color, swap white→navy, brighten dark blues
+- **Why it failed**: Anti-aliased edges between colors created artifacts. Gradient areas got misclassified. The algorithm can't understand "layers" — it only sees individual pixels. Semi-transparent edges get wrong colors. Result looked muddy and unprofessional.
+- **Lesson**: Programmatic pixel swapping is not suitable for design-quality icon variants. Use a vector design tool where you can properly adjust fills/strokes by layer.
+- **Artifacts to clean up**: `.claude/assets/icon-dark-512.png` exists but is unused
 
-## Attempt 2: Double RAF delay in handleBeforePrint
-```ts
-await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-```
-Two animation frames are not enough for ResizeObserver → React state → re-render cycle to complete. Chart still empty.
+## iOS install prompt lint error
+- Agent created `dismiss()` as a `function` declaration after the `useEffect` that referenced it
+- ESLint `react-hooks/immutability` rule flagged: "Cannot access variable before it is declared"
+- Fix: moved to `const dismiss = () => {...}` before the effect, and inlined `saveDismissed(); setVisible(false);` in the auto-dismiss timeout to avoid the stale closure issue
 
-## Attempt 3: Bypass ResponsiveContainer (print path with explicit width/height)
-Added `if (width !== undefined)` branch rendering `<ComposedChart width={width} height={height}>` directly. This is architecturally correct — `ComposedChart` IS documented to work standalone with explicit `width` and `height`. However, introduced a shared `chartChildren` variable (Fragment) that gets passed to both paths. Chart still empty (for unknown reason at this point — animation was never disabled).
+## Bottom tab bar Menu text size mismatch
+- The `<button>` element has browser default font styling that overrides parent's `text-[10px]`
+- The `<Link>` elements (rendered as `<a>`) don't have this issue
+- Fix: added explicit `className="text-[10px]"` on the Menu label `<span>`
 
-## Attempt 4: Fragment → keyed array (LAST CHANGE — "worse")
-Diagnosed the Fragment as the cause: "Recharts uses `React.Children.map` internally; a Fragment is treated as one opaque child." This diagnosis was **wrong**. The screen chart always worked with the Fragment — Recharts v2 internally unwraps Fragments. Converting to a keyed array made things worse (user confirmed). The change needs to be reverted.
-
-## What was NEVER tried
-- `isAnimationActive={false}` — most likely root cause, never tested
-- Inspecting the print DOM to verify what's actually in the SVG at capture time
-- SVG serialization / img-swap approach
-- Permanently-hidden print chart that avoids conditional-mount timing
+## Install prompt agent timeout
+- The background agent creating the iOS install prompt got stuck running `npm run build` (WSL2 can be slow)
+- Had to stop the agent manually and verify/finish the work directly
+- The agent had already created the component and integrated it into layout.tsx before getting stuck
 </attempted_approaches>
 
 <critical_context>
-## How react-to-print works
-`useReactToPrint` awaits `onBeforePrint`, then calls `cloneNode(true)` on `contentRef.current`, injects the clone into a hidden iframe, copies all `<style>` and `<link rel="stylesheet">` tags from the parent document, then calls `iframe.contentWindow.print()`. CSS custom properties (`hsl(var(--...))`) should be available in the iframe because all stylesheets are copied.
+## Device detection architecture (D-061, from prior session)
+- Primary: `navigator.maxTouchPoints > 0` + viewport width
+- Classification: phone (touch + <768), tablet (touch + 768-1280), desktop (≥1280 or no touch)
+- **Critical**: no touch + <768 = DESKTOP (not phone) — prevents false mobile detection on resized desktop browsers
+- Zustand store with `useDeviceTypeStore.getState()` pattern to avoid infinite re-render loops
+- `useEffect` with empty deps `[]` — runs once, resize/orientation listeners handle updates
 
-## Why SVG is different from ECharts canvas
-ECharts renders to a `<canvas>` element. `canvas.cloneNode(true)` creates a blank canvas — pixel data is NOT copied. That's why Flight Board needed `getDataURL()` → img swap. Recharts renders SVG which IS part of the DOM tree and IS copied faithfully by `cloneNode(true)`. The img-swap technique is not needed for Recharts IF the SVG was fully rendered before cloning.
+## Mobile navigation decisions (D-062, from prior session)
+- Phone: bottom tab bar (Dashboard, Flights, Feedback, Menu) — NO Capacity
+- Phone: header returns null entirely (reclaims 56px)
+- Phone: sidebar returns null
+- Phone: Menu sheet (Radix Sheet from bottom) has user menu + view mode
+- Tablet: hamburger menu in header, collapsible sidebar
+- Desktop: full sidebar
 
-## Recharts animation — the likely culprit
-- Default: `isAnimationActive={true}` on `<Bar>` and `<Line>`
-- Bar animation: `<rect>` starts at height 0, animates up via CSS transform. Duration ~400ms
-- Line animation: `<path>` uses `strokeDasharray` trick starting at 0% path length, animates to 100%. Duration ~1500ms
-- At frame 0 (immediately after mount), bars have zero height and line has zero length → both invisible
-- `flushSync` triggers a synchronous React render (component mounts, initial state set) but Recharts then kicks off animations using its own internal `requestAnimationFrame` / `setTimeout` — those are NOT synchronous and are NOT affected by `flushSync`
-- Result: react-to-print captures the DOM before animations complete → blank chart
+## Flight board list card design
+- 3-line compact card matching `.claude/FLIGHT_BOARD_LIST_DESIGN.md` spec
+- Critical fields: registration (bold), arrival→departure times, WP indicator (✓/—)
+- Non-critical in line 3: inferredType, flightId, effectiveMH with source label
+- Cards use `<button>` wrapper for full clickability
+- IntersectionObserver lazy loading (30-item batches)
 
-## Print dimensions reference
-- CSS reference pixel: 96 ppi
-- Landscape Letter, `@page { margin: 0.5in }`: printable = 10" × 7.5" = **960 × 720 CSS px**
-- Chart: `width={928}` to leave 16px for card `p-4` padding on each side
-- Chart: `height={200}` — short to leave room for tile row + operator table below
+## PWA manifest (`public/site.webmanifest`)
+- `display: "standalone"`, `start_url: "/dashboard"`, `background_color: "#09090b"`
+- Icons reference PNG files only (SVGs were removed)
+- `apple-mobile-web-app-capable: true` in layout.tsx metadata
 
-## Current broken state of combined-chart.tsx
-The keyed array (lines ~338-468) looks like:
-```tsx
-const chartChildren = [
-  <CartesianGrid key="grid" ... />,
-  ...midnightHours.map(...),
-  nowHourKey ? <ReferenceLine key="now" ... /> : null,
-  activeSelectionBounds ? <ReferenceArea key="selection" ... /> : null,
-  <XAxis key="xaxis" ... />,
-  <YAxis key="yaxis" ... />,
-  <Tooltip key="tooltip" ... />,
-  <Legend key="legend" ... />,
-  <Bar key="bar-arrivals" ... />,     // no isAnimationActive={false}
-  <Bar key="bar-departures" ... />,   // no isAnimationActive={false}
-  <Line key="line-onground" ... />,   // no isAnimationActive={false}
-];
-```
-Both the print path (`if (width !== undefined)`) and the normal path use this same variable. This must be split: Fragment for normal path, inline expanded JSX with `isAnimationActive={false}` for print path.
+## Git state
+- Branch: `dev`, 34 commits ahead of `origin/dev`
+- Working tree clean except 2 untracked files in `.claude/assets/` (source icon + failed dark version)
+- No uncommitted changes in src/
 
-## Branch / git state
-- Branch: `dev`
-- `combined-chart.tsx` — dirty (modified, not committed). Current state has keyed array (broken).
-- `dashboard/page.tsx` — dirty (modified, not committed). Current state has print layout (correct).
-- `flight-board/page.tsx` — also dirty (from prior Flight Board print work, separate feature)
-- `globals.css` — also dirty (from prior Flight Board print work)
-- No commits have been made this session.
-
-## Related: Flight Board print (already solved, for reference)
-Solution used in `flight-board-chart.tsx` (ECharts / canvas):
-1. `flushSync` → `setCc(PRINT_CC)`, `setChartWidth(PRINT_WIDTH)`, `setPrintMode(true)` — synchronous React render causes ECharts to call `setOption()` with correct tick density
-2. `chart.getDataURL({ pixelRatio: 3 })` → base64 PNG
-3. DOM manipulation: replace `<canvas>` with `<img src={base64}>` before react-to-print clones
-4. `restoreAfterPrint`: remove img, restore original canvas + sizes
-Lesson for Recharts: "freeze the data into the DOM before capture." For SVG, this means `isAnimationActive={false}` so the data shapes are at their final positions on first paint.
+## Key file paths
+- `src/lib/hooks/use-device-type.ts` — Device detection hook
+- `src/components/layout/bottom-tab-bar.tsx` — Phone bottom nav
+- `src/components/layout/mobile-menu-sheet.tsx` — Phone menu sheet
+- `src/components/shared/ios-install-prompt.tsx` — iOS install banner
+- `src/components/flight-board/flight-board-list-cards.tsx` — Mobile card list
+- `src/app/(authenticated)/flight-board/page.tsx` — Flight board page
+- `src/app/(authenticated)/dashboard/page.tsx` — Dashboard page
+- `public/site.webmanifest` — PWA manifest
+- `public/icons/` — 5 PNG icon files (B777 design)
+- `.claude/FLIGHT_BOARD_LIST_DESIGN.md` — Card design spec
+- `.claude/MOBILE_REQUIREMENTS_SUMMARY.md` — Mobile requirements quick reference
 </critical_context>
 
 <current_state>
 ## Deliverable status
 
-| Item | Status |
-|------|--------|
-| Print button on Dashboard | ✅ Complete |
-| handleBeforePrint / handleAfterPrint | ✅ Complete |
-| Print layout (3-row structure) | ✅ Complete, user-accepted |
-| KPI tiles (correct components) | ✅ Complete |
-| CombinedChart `width`/`height` props | ✅ Complete |
-| ResponsiveContainer bypass (print path) | ✅ Structurally in place |
-| Chart renders with data in print | ❌ BROKEN — never worked across 4 attempts |
-| Screen chart unbroken | ⚠️ POSSIBLY BROKEN — keyed array change may have broken it |
+| Feature | Status |
+|---------|--------|
+| Device detection hook (use-device-type) | Complete ✅ |
+| Bottom tab bar (phone only) | Complete ✅ |
+| Mobile menu sheet | Complete ✅ (prior session) |
+| Header hidden on phone | Complete ✅ |
+| Sidebar hidden on phone | Complete ✅ (prior session) |
+| Flight board list card redesign (3-line) | Complete ✅ |
+| Flight board expanded default on phone | Complete ✅ |
+| Flight board device-type toggle (cards/table) | Complete ✅ |
+| Dashboard chart-on-top for phone | Complete ✅ |
+| Legend hidden on phone | Complete ✅ (prior session) |
+| Bottom tab bar icon/text fix | Complete ✅ |
+| PWA icons (B777 light design) | Complete ✅ |
+| iOS Safari install prompt | Complete ✅ |
+| Dark icon version | Not done ❌ (needs design tool) |
+| Mobile testing on real devices | Not started |
+| Push to origin | Not done (34 commits ahead) |
 
-## What's in the files right now
+## Git log (this session's commits)
+```
+38982a2 fix(pwa): replace generated icons with B777 design, remove SVGs
+93e1d0d feat(pwa): redesign app icons and add iOS install prompt
+818fff9 fix(mobile): polish phone UX — card redesign, layout reorder, tab bar fixes
+```
 
-**`dashboard/page.tsx`** — correct, no further changes needed
+## Working tree
+- Clean (no staged or unstaged changes)
+- 2 untracked files in `.claude/assets/` (icon source images, not shipped)
 
-**`combined-chart.tsx`** — broken, needs 2 changes:
-1. Revert `chartChildren` from keyed array back to Fragment (restores screen chart)
-2. Expand print path inline with `isAnimationActive={false}` on Bar/Line (primary fix attempt)
+## Build / Lint
+- `npm run build` — passes ✅
+- `npm run lint` — clean ✅
 
-## No commits made this session
-All changes are unstaged dirty working tree edits. Can be reverted with `git diff` / `git checkout` if needed. The correct state to save: keep all `dashboard/page.tsx` changes, revert `combined-chart.tsx` keyed-array portion and replace with the animation fix approach.
-
-## Next session priority
-1. Revert `chartChildren` to Fragment in `combined-chart.tsx`
-2. Expand print path inline + add `isAnimationActive={false}`
-3. Test print — if bars/line appear, done
-4. If still blank, inspect SVG DOM as described in fallback steps
+## Open questions
+- Should we push the 34 commits to origin?
+- Dark icon version — user may want to revisit with a design tool
+- Dashboard print chart (Recharts blank bars) still unresolved from prior session
 </current_state>
