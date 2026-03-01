@@ -292,6 +292,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const headerChartRef = useRef<ReactEChartsCore>(null);
     const bodyChartRef = useRef<ReactEChartsCore>(null);
     const syncLock = useRef(false);
+    // Guard: prevents Date Anchor effect from calling setOption while Adaptive Ticks
+    // is mid-update with replaceMerge (which temporarily tears down the xAxis).
+    const isUpdatingAxisRef = useRef(false);
     // Track real dataZoom state (for adaptive tick interval)
     const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
     // Track body chart container width for pixel-based tick computation
@@ -736,47 +739,110 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       // Top axis interval: coarser than time ticks (minimum 3h) for day labels
       const topIntervalMs = Math.max(intervalMs, 3 * 3600000);
 
-      // Update header chart — bottom axis (time labels, sticky) + top axis (day names)
-      const wideView = intervalMs >= 12 * 3600000;
-      const headerInstance = headerChartRef.current?.getEchartsInstance();
-      if (headerInstance) {
-        try {
-          headerInstance.setOption(
-            {
-              xAxis: [
-                {
-                  // Bottom axis — time labels inside (above axis line), ticks below
+      // Guard: signal to the Date Anchor effect that axis is being rebuilt
+      isUpdatingAxisRef.current = true;
+      try {
+        // Update header chart — bottom axis (time labels, sticky) + top axis (day names)
+        const wideView = intervalMs >= 12 * 3600000;
+        const headerInstance = headerChartRef.current?.getEchartsInstance();
+        if (headerInstance) {
+          try {
+            headerInstance.setOption(
+              {
+                xAxis: [
+                  {
+                    // Bottom axis — time labels inside (above axis line), ticks below
+                    type: "value",
+                    position: "bottom",
+                    min: timeGrid.axisMin,
+                    max: timeGrid.axisMax,
+                    interval: intervalMs,
+                    axisLabel: {
+                      inside: true,
+                      margin: 2,
+                      interval: 0,
+                      color: cc.fg,
+                      fontSize: 12,
+                      formatter: (value: number) => {
+                        if (midnightSet.has(value)) {
+                          if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
+                          const dateStr = dateFmt.format(new Date(value));
+                          const timeStr = hourFormatter.format(new Date(value));
+                          return `{date|${dateStr}}\n{time|${timeStr}}`;
+                        }
+                        if (wideView) return "";
+                        return `{time|${hourFormatter.format(new Date(value))}}`;
+                      },
+                      rich: {
+                        date: {
+                          fontWeight: "bold" as const,
+                          fontSize: 12,
+                          lineHeight: 16,
+                          color: cc.fg,
+                        },
+                        time: { fontSize: 12, lineHeight: 16 },
+                      },
+                    },
+                    axisLine: { show: true, lineStyle: { color: cc.border } },
+                    axisTick: {
+                      show: true,
+                      alignWithLabel: true,
+                      length: 6,
+                      lineStyle: { color: cc.mutedFg },
+                    },
+                    splitLine: { show: false },
+                  },
+                  {
+                    // Top axis (day labels) — coarser interval, formatter filters to day boundaries
+                    type: "value",
+                    position: "top",
+                    min: timeGrid.axisMin,
+                    max: timeGrid.axisMax,
+                    interval: topIntervalMs,
+                    axisLabel: {
+                      interval: 0,
+                      color: cc.fg,
+                      fontSize: 12,
+                      fontWeight: "bold" as const,
+                      formatter: (value: number) => {
+                        // Show day name only at midnight OR at the first tick of a new day
+                        if (midnightSet.has(value))
+                          return dayNameFmt.format(new Date(value)).toUpperCase();
+                        const prevDay = dayNameFmt.format(new Date(value - topIntervalMs));
+                        const curDay = dayNameFmt.format(new Date(value));
+                        if (curDay !== prevDay) return curDay.toUpperCase();
+                        // Show on the very first axis tick so viewport always has a day label
+                        if (value <= timeGrid.axisMin + topIntervalMs && value >= timeGrid.axisMin)
+                          return curDay.toUpperCase();
+                        return "";
+                      },
+                    },
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                  },
+                ],
+              },
+              { replaceMerge: ["xAxis"] },
+            );
+          } catch (err) {
+            console.warn("[Adaptive Ticks] header setOption error:", err);
+          }
+        }
+
+        // Update body chart — single axis (top, no labels — time labels are in sticky header)
+        const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+        if (bodyInstance) {
+          try {
+            bodyInstance.setOption(
+              {
+                xAxis: {
                   type: "value",
-                  position: "bottom",
+                  position: "top",
                   min: timeGrid.axisMin,
                   max: timeGrid.axisMax,
                   interval: intervalMs,
-                  axisLabel: {
-                    inside: true,
-                    margin: 2,
-                    interval: 0,
-                    color: cc.fg,
-                    fontSize: 12,
-                    formatter: (value: number) => {
-                      if (midnightSet.has(value)) {
-                        if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
-                        const dateStr = dateFmt.format(new Date(value));
-                        const timeStr = hourFormatter.format(new Date(value));
-                        return `{date|${dateStr}}\n{time|${timeStr}}`;
-                      }
-                      if (wideView) return "";
-                      return `{time|${hourFormatter.format(new Date(value))}}`;
-                    },
-                    rich: {
-                      date: {
-                        fontWeight: "bold" as const,
-                        fontSize: 12,
-                        lineHeight: 16,
-                        color: cc.fg,
-                      },
-                      time: { fontSize: 12, lineHeight: 16 },
-                    },
-                  },
+                  axisLabel: { show: false },
                   axisLine: { show: true, lineStyle: { color: cc.border } },
                   axisTick: {
                     show: true,
@@ -784,81 +850,24 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                     length: 6,
                     lineStyle: { color: cc.mutedFg },
                   },
-                  splitLine: { show: false },
-                },
-                {
-                  // Top axis (day labels) — coarser interval, formatter filters to day boundaries
-                  type: "value",
-                  position: "top",
-                  min: timeGrid.axisMin,
-                  max: timeGrid.axisMax,
-                  interval: topIntervalMs,
-                  axisLabel: {
-                    interval: 0,
-                    color: cc.fg,
-                    fontSize: 12,
-                    fontWeight: "bold" as const,
-                    formatter: (value: number) => {
-                      // Show day name only at midnight OR at the first tick of a new day
-                      if (midnightSet.has(value))
-                        return dayNameFmt.format(new Date(value)).toUpperCase();
-                      const prevDay = dayNameFmt.format(new Date(value - topIntervalMs));
-                      const curDay = dayNameFmt.format(new Date(value));
-                      if (curDay !== prevDay) return curDay.toUpperCase();
-                      // Show on the very first axis tick so viewport always has a day label
-                      if (value <= timeGrid.axisMin + topIntervalMs && value >= timeGrid.axisMin)
-                        return curDay.toUpperCase();
-                      return "";
+                  splitLine: {
+                    show: true,
+                    lineStyle: {
+                      color: "rgba(128,128,128,0.25)",
+                      width: 1,
+                      type: "dashed" as const,
                     },
-                  },
-                  axisLine: { show: false },
-                  axisTick: { show: false },
-                  splitLine: { show: false },
-                },
-              ],
-            },
-            { replaceMerge: ["xAxis"] },
-          );
-        } catch (err) {
-          console.warn("[Adaptive Ticks] header setOption error:", err);
-        }
-      }
-
-      // Update body chart — single axis (top, no labels — time labels are in sticky header)
-      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
-      if (bodyInstance) {
-        try {
-          bodyInstance.setOption(
-            {
-              xAxis: {
-                type: "value",
-                position: "top",
-                min: timeGrid.axisMin,
-                max: timeGrid.axisMax,
-                interval: intervalMs,
-                axisLabel: { show: false },
-                axisLine: { show: true, lineStyle: { color: cc.border } },
-                axisTick: {
-                  show: true,
-                  alignWithLabel: true,
-                  length: 6,
-                  lineStyle: { color: cc.mutedFg },
-                },
-                splitLine: {
-                  show: true,
-                  lineStyle: {
-                    color: "rgba(128,128,128,0.25)",
-                    width: 1,
-                    type: "dashed" as const,
                   },
                 },
               },
-            },
-            { replaceMerge: ["xAxis"] },
-          );
-        } catch (err) {
-          console.warn("[Adaptive Ticks] body setOption error:", err);
+              { replaceMerge: ["xAxis"] },
+            );
+          } catch (err) {
+            console.warn("[Adaptive Ticks] body setOption error:", err);
+          }
         }
+      } finally {
+        isUpdatingAxisRef.current = false;
       }
     }, [
       filterStart,
@@ -921,6 +930,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
     // ✅ STEP 3b: Update visible window start date label
     useEffect(() => {
+      // Skip if the Adaptive Ticks effect is mid-update with replaceMerge —
+      // the axis is temporarily torn down during that window, and calling
+      // setOption here would read axisBuilder on the destroyed axis.
+      if (isUpdatingAxisRef.current) return;
+
       const { start } = realZoomState.current;
       const filterStartMs = new Date(filterStart).getTime();
       const filterEndMs = new Date(filterEnd).getTime();

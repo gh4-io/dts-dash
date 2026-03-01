@@ -473,7 +473,7 @@ export function CombinedChart({
           <span className="invisible">placeholder</span>
         )}
       </div>
-      <ResponsiveContainer width="100%" height={height}>
+      <ResponsiveContainer width="100%" height={height} minWidth={0}>
         <ComposedChart
           data={chartData}
           margin={{ top: 20, right: 10, left: 0, bottom: 0 }}

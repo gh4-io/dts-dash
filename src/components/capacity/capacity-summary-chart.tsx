@@ -413,7 +413,12 @@ export function CapacitySummaryChart({
       </div>
 
       <div className={`p-3${fillHeight ? " flex-1 min-h-0" : ""}`}>
-        <ResponsiveContainer width="100%" height={fillHeight ? "100%" : 340}>
+        <ResponsiveContainer
+          width="100%"
+          height={fillHeight ? "100%" : 340}
+          minWidth={0}
+          minHeight={0}
+        >
           <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
 
