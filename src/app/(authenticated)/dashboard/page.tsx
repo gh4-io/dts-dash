@@ -181,15 +181,64 @@ function DashboardPageInner() {
                 onOperatorClick={() => {}}
               />
             </div>
+          ) : // ── Normal layout: 3-column grid ────────────────────────────────────
+          device.type === "phone" ? (
+            // Phone: chart on top, then KPI cards, then donut, then operator table
+            <div className="flex flex-col gap-3 flex-1">
+              {/* Chart first on phone */}
+              <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="fa-solid fa-chart-column" />
+                  Arrivals / Departures / On Ground
+                  <span className="ml-auto">{timezone === "UTC" ? "UTC" : "Eastern (ET)"}</span>
+                </h3>
+                <div className="min-h-[250px]">
+                  <CombinedChart
+                    snapshots={displaySnapshots}
+                    timezone={timezone}
+                    timeFormat={timeFormat}
+                    onSelectionChange={handleTimeRangeChange}
+                  />
+                </div>
+              </div>
+
+              {/* KPI cards */}
+              <AvgGroundTimeCard workPackages={displayWps} />
+              <MhByOperatorCard
+                workPackages={displayWps}
+                onOperatorClick={handleOperatorFromCard}
+              />
+              <TotalAircraftCard
+                workPackages={displayWps}
+                filterStart={start}
+                filterEnd={end}
+                timezone={timezone}
+              />
+              <AircraftByTypeCard workPackages={displayWps} />
+
+              {/* Donut */}
+              <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
+                <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
+                  <i className="fa-solid fa-chart-pie" />
+                  Aircraft By Customer
+                </h3>
+                <CustomerDonut workPackages={displayWps} onCustomerClick={handleOperatorFromCard} />
+              </div>
+
+              {/* Operator table */}
+              <OperatorPerformance
+                workPackages={displayWps}
+                focusedOperator={focusedOperator}
+                onOperatorClick={handleOperatorClick}
+              />
+            </div>
           ) : (
-            // ── Normal layout: 3-column grid ────────────────────────────────────
+            // Tablet / Desktop grid
             <div
               className={
                 device.type === "desktop"
                   ? "grid grid-cols-[250px_1fr_300px] gap-3 flex-1"
-                  : device.type === "tablet"
-                    ? "grid grid-cols-2 gap-3 flex-1"
-                    : "flex flex-col gap-3 flex-1"
+                  : "grid grid-cols-2 gap-3 flex-1"
               }
             >
               {/* Left: flex ratios — MH 65%, Type 32% of remaining */}

@@ -10,7 +10,6 @@ import { MobileMenuSheet } from "./mobile-menu-sheet";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
   { href: "/flight-board", label: "Flights", icon: "fa-solid fa-plane-departure" },
-  { href: "/capacity", label: "Capacity", icon: "fa-solid fa-gauge-high" },
   { href: "/feedback", label: "Feedback", icon: "fa-solid fa-comments" },
 ];
 
@@ -58,8 +57,8 @@ export function BottomTabBar() {
           )}
           title="Menu"
         >
-          <i className="fa-solid fa-ellipsis-vertical text-base" />
-          <span>Menu</span>
+          <i className="fa-solid fa-bars text-base" />
+          <span className="text-[10px]">Menu</span>
         </button>
       </nav>
 

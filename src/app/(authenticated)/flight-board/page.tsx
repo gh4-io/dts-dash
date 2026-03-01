@@ -56,7 +56,8 @@ function FlightBoardPageInner() {
   // Sync from localStorage and device type after first render
   useEffect(() => {
     // Set hydration and load persistent state from localStorage
-    const expanded = localStorage.getItem("flightBoardExpanded") === "true";
+    const expandedRaw = localStorage.getItem("flightBoardExpanded");
+    const expanded = expandedRaw !== null ? expandedRaw === "true" : device.type === "phone";
     const viewFromStorage = localStorage.getItem("flightBoardViewMode");
     const defaultViewMode = device.type === "phone" ? "list" : "gantt";
     const viewModeFromStorage =
@@ -627,20 +628,19 @@ function FlightBoardPageInner() {
               !isExpanded && "flex-1 min-h-0 flex flex-col",
             )}
           >
-            <div className={cn("md:hidden", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
+            {device.type === "phone" ? (
               <FlightBoardListCards
                 workPackages={transformedWps}
                 onCardClick={handleBarClick}
                 isExpanded={isExpanded}
               />
-            </div>
-            <div className={cn("hidden md:flex md:flex-col", !isExpanded && "flex-1 min-h-0")}>
+            ) : (
               <FlightBoardListTable
                 workPackages={transformedWps}
                 onRowClick={handleBarClick}
                 isExpanded={isExpanded}
               />
-            </div>
+            )}
           </div>
         )}
 

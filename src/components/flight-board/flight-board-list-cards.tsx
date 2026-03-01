@@ -24,6 +24,22 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   Canceled: "destructive",
 };
 
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "UTC",
+  });
+}
+
+function formatGroundTime(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  return `${h}h ${m}m`;
+}
+
 function getMhSourceLabel(source: string): string {
   switch (source) {
     case "manual":
@@ -35,24 +51,6 @@ function getMhSourceLabel(source: string): string {
     default:
       return "Default";
   }
-}
-
-function formatTimeRange(arrival: string, departure: string): string {
-  const a = new Date(arrival);
-  const d = new Date(departure);
-  const fmt = (dt: Date) =>
-    dt.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) +
-    " " +
-    dt.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: "UTC",
-    });
-  const diffMs = d.getTime() - a.getTime();
-  const hours = Math.floor(diffMs / 3600000);
-  const mins = Math.round((diffMs % 3600000) / 60000);
-  return `${fmt(a)} → ${fmt(d)} UTC (${hours}h ${mins}m)`;
 }
 
 export function FlightBoardListCards({
@@ -108,45 +106,55 @@ export function FlightBoardListCards({
   return (
     <div className={cn("flex flex-col", !isExpanded && "h-full")}>
       {/* Scrollable card area */}
-      <div className={cn("space-y-2 p-1", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
+      <div className={cn("p-1", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
         {visibleWps.map((wp) => {
           const color = getColor(wp.customer);
           return (
             <button
               key={wp.id}
               onClick={() => onCardClick(wp)}
-              className="w-full text-left rounded-lg border border-border bg-card p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+              className="w-full text-left border-b border-border p-3 cursor-pointer hover:bg-accent/10 active:bg-accent/20 transition-colors"
             >
-              {/* Row 1: Customer + Status */}
+              {/* Line 1: Registration + Operator dot + name + Status badge */}
               <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="flex items-center gap-1.5 text-sm font-medium truncate">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className="font-bold text-base whitespace-nowrap">{wp.aircraftReg}</span>
                   <span
-                    className="h-2.5 w-2.5 rounded-full shrink-0"
+                    className="h-1.5 w-1.5 rounded-full shrink-0"
                     style={{ backgroundColor: color }}
                   />
-                  {wp.customer}
-                </span>
+                  <span className="text-sm text-muted-foreground truncate">{wp.customer}</span>
+                </div>
                 <Badge
                   variant={STATUS_VARIANT[wp.status] ?? "secondary"}
-                  className="text-[10px] shrink-0"
+                  className="text-[10px] shrink-0 ml-2"
                 >
                   {wp.status}
                 </Badge>
               </div>
 
-              {/* Row 2: WP title + Registration */}
-              <div className="flex items-baseline gap-2 mb-0.5">
-                {wp.title && <span className="text-xs text-muted-foreground">{wp.title}</span>}
-                <span className="text-base font-semibold">{wp.aircraftReg}</span>
+              {/* Line 2: Arrival → Departure + ground time + WP indicator */}
+              <div className="flex items-center justify-between mb-1 text-sm">
+                <div className="flex items-baseline gap-1 min-w-0 flex-1">
+                  <span className="whitespace-nowrap">
+                    {formatTime(wp.arrival)} → {formatTime(wp.departure)}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    UTC ({formatGroundTime(wp.groundHours)})
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "whitespace-nowrap shrink-0 ml-2 font-semibold text-sm",
+                    wp.hasWorkpackage ? "text-emerald-500" : "text-muted-foreground",
+                  )}
+                >
+                  WP: {wp.hasWorkpackage ? "✓" : "—"}
+                </span>
               </div>
 
-              {/* Row 3: Time range */}
-              <div className="text-xs text-muted-foreground mb-0.5">
-                {formatTimeRange(wp.arrival, wp.departure)}
-              </div>
-
-              {/* Row 4: Type, flight, MH */}
-              <div className="text-xs text-muted-foreground">
+              {/* Line 3: Secondary info hint */}
+              <div className="text-xs italic text-muted-foreground">
                 {wp.inferredType}
                 {wp.flightId && <> · {wp.flightId}</>}
                 {" · "}

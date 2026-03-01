@@ -56,6 +56,11 @@ export function Header() {
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin" || role === "superadmin";
 
+  // Hide entire header on phone — bottom tab bar + menu sheet handle navigation
+  if (device.type === "phone") {
+    return null;
+  }
+
   return (
     <header
       data-print="hide"
@@ -77,71 +82,65 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Theme toggle — hidden on phone, available in menu sheet */}
-        {device.type !== "phone" && (
+        <button
+          onClick={toggleTheme}
+          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          title={`Theme: ${themeLabel}`}
+        >
+          <i className={themeIcon} />
+        </button>
+
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={toggleTheme}
-            className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-            title={`Theme: ${themeLabel}`}
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="flex h-11 md:h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           >
-            <i className={themeIcon} />
+            <i className="fa-solid fa-user-circle" />
+            <span className="hidden sm:inline">{session?.user?.name || "User"}</span>
+            <i className="fa-solid fa-chevron-down text-xs" />
           </button>
-        )}
 
-        {/* User menu — hidden on phone, available in menu sheet */}
-        {device.type !== "phone" && (
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="flex h-11 md:h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              <i className="fa-solid fa-user-circle" />
-              <span className="hidden sm:inline">{session?.user?.name || "User"}</span>
-              <i className="fa-solid fa-chevron-down text-xs" />
-            </button>
-
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover py-1 shadow-lg">
+          {menuOpen && (
+            <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover py-1 shadow-lg">
+              <Link
+                href="/account"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
+              >
+                <i className="fa-solid fa-user w-4 text-center" />
+                Account
+              </Link>
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
+              >
+                <i className="fa-solid fa-gear w-4 text-center" />
+                Settings
+              </Link>
+              {isAdmin && (
                 <Link
-                  href="/account"
+                  href="/admin"
                   onClick={() => setMenuOpen(false)}
                   className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
                 >
-                  <i className="fa-solid fa-user w-4 text-center" />
-                  Account
+                  <i className="fa-solid fa-shield-halved w-4 text-center" />
+                  Admin
                 </Link>
-                <Link
-                  href="/settings"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
-                >
-                  <i className="fa-solid fa-gear w-4 text-center" />
-                  Settings
-                </Link>
-                {isAdmin && (
-                  <Link
-                    href="/admin"
-                    onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-popover-foreground hover:bg-accent"
-                  >
-                    <i className="fa-solid fa-shield-halved w-4 text-center" />
-                    Admin
-                  </Link>
-                )}
-                <hr className="my-1 border-border" />
-                <button
-                  onClick={() => {
-                    signOut({ callbackUrl: "/login" });
-                  }}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
-                >
-                  <i className="fa-solid fa-right-from-bracket w-4 text-center" />
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+              <hr className="my-1 border-border" />
+              <button
+                onClick={() => {
+                  signOut({ callbackUrl: "/login" });
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-destructive hover:bg-accent"
+              >
+                <i className="fa-solid fa-right-from-bracket w-4 text-center" />
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

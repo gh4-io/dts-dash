@@ -57,16 +57,29 @@ export function useDeviceType(): DeviceContext {
       const isTouchCapable = navigator.maxTouchPoints > 0;
       const type = classifyDevice(width, navigator.maxTouchPoints);
       const isLandscape = width > height;
-      const detectionMethod = isTouchCapable ? "touch+width" : "width-only";
+      const detectionMethod: "touch+width" | "width-only" = isTouchCapable
+        ? "touch+width"
+        : "width-only";
 
-      device.setDevice({
-        type,
-        width,
-        height,
-        isTouchCapable,
-        isLandscape,
-        detectionMethod,
-      });
+      // Use getState() to avoid depending on reactive store in the effect
+      const current = useDeviceTypeStore.getState();
+      // Only update if something actually changed (prevents re-render loops)
+      if (
+        current.type !== type ||
+        current.width !== width ||
+        current.height !== height ||
+        current.isTouchCapable !== isTouchCapable ||
+        current.isLandscape !== isLandscape
+      ) {
+        current.setDevice({
+          type,
+          width,
+          height,
+          isTouchCapable,
+          isLandscape,
+          detectionMethod,
+        });
+      }
     };
 
     // Initial detection
@@ -81,7 +94,7 @@ export function useDeviceType(): DeviceContext {
       window.removeEventListener("resize", debouncedDetect);
       window.removeEventListener("orientationchange", debouncedDetect);
     };
-  }, [device]);
+  }, []); // Empty deps — runs once on mount, resize/orientation listeners handle updates
 
   return device;
 }
