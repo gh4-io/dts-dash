@@ -26,6 +26,9 @@ export function PreferencesLoader() {
     defaultTimezone,
   } = usePreferences();
   const appliedRef = useRef(false);
+  // Tracks the initial DB→theme sync so we don't re-call setTheme on every
+  // colorMode Zustand update (the toggle/form already call setTheme directly).
+  const themeAppliedRef = useRef(false);
 
   // Capture initial URL params at mount time, before useFilterUrlSync
   // modifies the URL with UTC-computed defaults after 100ms
@@ -41,13 +44,21 @@ export function PreferencesLoader() {
     }
   }, [session, loaded, fetchPrefs]);
 
-  // Sync user's color mode to next-themes once preferences are loaded
-  // (also re-syncs if user changes colorMode via settings/account page)
+  // Sync the user's saved color mode to next-themes exactly once — when
+  // preferences are first loaded from the DB. Subsequent changes go through
+  // the toggle (header) or PreferencesForm which call setTheme directly,
+  // avoiding double-calls that cause the twitchy color-scheme flash.
   useEffect(() => {
-    if (loaded) {
+    if (loaded && !themeAppliedRef.current) {
+      themeAppliedRef.current = true;
       setTheme(colorMode);
     }
-  }, [loaded, colorMode, setTheme]);
+    // colorMode and setTheme intentionally omitted: we only want this to fire
+    // once on initial load. setTheme is stable (next-themes guarantee) and
+    // colorMode changes from user interactions are handled by the toggle/form
+    // calling setTheme directly — no re-sync needed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // Apply user's default date range & timezone to the filter store once
   useEffect(() => {

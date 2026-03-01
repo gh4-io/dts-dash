@@ -106,14 +106,14 @@ export function FlightBoardListCards({
   return (
     <div className={cn("flex flex-col", !isExpanded && "h-full")}>
       {/* Scrollable card area */}
-      <div className={cn("p-1", !isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
+      <div className={cn(!isExpanded && "flex-1 min-h-0 overflow-y-auto")}>
         {visibleWps.map((wp) => {
           const color = getColor(wp.customer);
           return (
             <button
               key={wp.id}
               onClick={() => onCardClick(wp)}
-              className="w-full text-left border-b border-border p-3 cursor-pointer hover:bg-accent/10 active:bg-accent/20 transition-colors"
+              className="w-full text-left border-b border-border px-4 py-3 cursor-pointer hover:bg-accent/10 active:bg-accent/20 transition-colors"
             >
               {/* Line 1: Registration + Operator dot + name + Status badge */}
               <div className="flex items-center justify-between gap-2 mb-1">
@@ -145,11 +145,11 @@ export function FlightBoardListCards({
                 </div>
                 <span
                   className={cn(
-                    "whitespace-nowrap shrink-0 ml-2 font-semibold text-sm",
+                    "shrink-0 ml-2 text-[12px] truncate max-w-[140px]",
                     wp.hasWorkpackage ? "text-emerald-500" : "text-muted-foreground",
                   )}
                 >
-                  WP: {wp.hasWorkpackage ? "✓" : "—"}
+                  WP: {wp.workpackageNo ?? wp.title ?? (wp.hasWorkpackage ? "✓" : "—")}
                 </span>
               </div>
 
@@ -167,7 +167,7 @@ export function FlightBoardListCards({
         {hasMore && <div ref={sentinelRef} className="h-1" />}
       </div>
       {/* Status bar */}
-      <div className="flex-shrink-0 px-3 py-1.5 text-xs text-muted-foreground">
+      <div className="flex-shrink-0 px-4 py-1.5 text-xs text-muted-foreground">
         {Math.min(visibleCount, workPackages.length)} of {workPackages.length} work packages
       </div>
     </div>

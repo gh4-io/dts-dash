@@ -1417,7 +1417,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               departure: wp.departure,
               groundHours: wp.groundHours,
               status: wp.status,
-              workpackageNo: wp.workpackageNo,
+              workpackageNo: wp.workpackageNo ?? wp.title,
               effectiveMH: wp.effectiveMH,
               mhSource: wp.mhSource,
               comments: wp.calendarComments,

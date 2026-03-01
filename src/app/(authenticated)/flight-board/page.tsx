@@ -621,6 +621,16 @@ function FlightBoardPageInner() {
               panMode={panMode}
             />
           </div>
+        ) : device.type === "phone" ? (
+          <div
+            className={cn("-mx-4 overflow-hidden", !isExpanded && "flex-1 min-h-0 flex flex-col")}
+          >
+            <FlightBoardListCards
+              workPackages={transformedWps}
+              onCardClick={handleBarClick}
+              isExpanded={isExpanded}
+            />
+          </div>
         ) : (
           <div
             className={cn(
@@ -628,19 +638,11 @@ function FlightBoardPageInner() {
               !isExpanded && "flex-1 min-h-0 flex flex-col",
             )}
           >
-            {device.type === "phone" ? (
-              <FlightBoardListCards
-                workPackages={transformedWps}
-                onCardClick={handleBarClick}
-                isExpanded={isExpanded}
-              />
-            ) : (
-              <FlightBoardListTable
-                workPackages={transformedWps}
-                onRowClick={handleBarClick}
-                isExpanded={isExpanded}
-              />
-            )}
+            <FlightBoardListTable
+              workPackages={transformedWps}
+              onRowClick={handleBarClick}
+              isExpanded={isExpanded}
+            />
           </div>
         )}
 
