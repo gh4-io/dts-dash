@@ -158,7 +158,10 @@ export function applySorts(
   sorts: SortLevel[],
   timezone?: string,
 ): SerializedWorkPackage[] {
-  if (sorts.length === 0) return wps;
+  // Default sort: arrival ascending (hardcoded baseline for flight board)
+  if (sorts.length === 0) {
+    return [...wps].sort((a, b) => new Date(a.arrival).getTime() - new Date(b.arrival).getTime());
+  }
 
   return [...wps].sort((a, b) => {
     for (const { column, direction } of sorts) {
