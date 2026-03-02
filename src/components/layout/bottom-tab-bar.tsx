@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
-import { MobileMenuSheet } from "./mobile-menu-sheet";
+import { MobileMenuPopup } from "./mobile-menu-popup";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-solid fa-chart-line" },
@@ -48,21 +48,28 @@ export function BottomTabBar() {
           );
         })}
 
-        {/* Menu button */}
+        {/* Menu button — toggles popup, icon swaps between bars and xmark */}
         <button
-          onClick={() => setMenuOpen(true)}
+          onClick={() => setMenuOpen((prev) => !prev)}
           className={cn(
             "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors min-h-11",
-            "text-muted-foreground hover:text-foreground",
+            menuOpen
+              ? "text-primary border-t-2 border-primary -mt-px"
+              : "text-muted-foreground hover:text-foreground",
           )}
           title="Menu"
         >
-          <i className="fa-solid fa-bars text-base" />
+          <i
+            className={cn(
+              "fa-solid text-base transition-transform duration-200",
+              menuOpen ? "fa-xmark" : "fa-bars",
+            )}
+          />
           <span className="text-[10px]">Menu</span>
         </button>
       </nav>
 
-      <MobileMenuSheet open={menuOpen} onOpenChange={setMenuOpen} />
+      <MobileMenuPopup open={menuOpen} onOpenChange={setMenuOpen} />
     </>
   );
 }
