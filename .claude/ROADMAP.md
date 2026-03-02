@@ -114,6 +114,30 @@
   - `loadPerEventContractMap()` resolves by lowest priority number (tiebreaker: higher MH)
   - Admin grid shows Priority column; editor has Priority input (0–9999)
 
+### v0.3.0 — Feature Backlog (Post-Phase 4)
+
+**Status**: Planned — Ready for roadmap sequencing.
+
+| WS | Feature | Type | Priority | OI |
+|----|---------|----|----------|-----|
+| v0.3-1 | Aircraft Phase Badges on Mobile Flight Board List | Enhancement | P2 | OI-090 |
+| v0.3-2 | Right-Click to Hide/Show Graph Components | Enhancement | P2 | OI-091 |
+| v0.3-3 | Comments Per Flight Event (Feedback Logging) | Feature | P2 | OI-092 |
+| v0.3-4 | Unique Ground Event Markers (AOG, BTB, etc.) | Feature | P2 | OI-093 |
+| v0.3-5 | One-Time Notification System (Close/Dismiss) | Feature | P2 | OI-094 |
+| v0.3-6 | App Version Update Walkthrough / Feature Tour | Feature | P2 | OI-095 |
+
+**Scope**: 6 enhancements + features spanning mobile UX, graphs, flight events, notifications, and user onboarding.
+**Sizing**: Mix of S (notifications, tour) and M (phase badges, graph toggles, comments, ground markers).
+**Dependencies**: All can be worked in parallel; no hard blocker dependencies on v0.2.0.
+
+**Notes**:
+- Mobile phase badges (v0.3-1) extends P4-3 Flight Board List View (OI-077)
+- Graph component toggling (v0.3-2) applies to `/capacity` page charts
+- Comments (v0.3-3) + Ground markers (v0.3-4) enhance flight detail drawer
+- Notifications (v0.3-5) + Tour (v0.3-6) are admin-configurable system features
+- All items ready for intake into sprint planning
+
 ## Milestones
 
 | ID | Name | Scope | Status | Size | Dependencies |

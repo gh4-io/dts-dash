@@ -341,6 +341,145 @@ This matches the existing sidebar collapse pattern and gives iPad users a persis
 
 ---
 
+### OI-090 | Aircraft Phase Badges on Mobile Flight Board List
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+Add visual phase indicators for aircraft lifecycle on the mobile flight board list view. Show badges or status text for: **Scheduled**, **Arriving**, **On Ground**, **Departing**, **Complete**. Phases are derived from WP arrival/departure times and ground window status.
+
+**Considerations**: (1) Derive phase from current time vs WP window; (2) Use color/icon coding (e.g., blue=Scheduled, orange=Arriving, red=On Ground, purple=Departing, green=Complete); (3) Update real-time as window progresses.
+
+**Files**: `src/components/flight-board/flight-board-list-cards.tsx`, `src/lib/utils/flight-helpers.ts`, `src/types/index.ts`
+**Links**: OI-077 (Phase 4 P4-3), [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md)
+
+---
+
+### OI-091 | Right-Click to Hide/Show Graph Components
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+Add right-click context menu on capacity graphs to toggle visibility of specific data series/components. E.g., right-click on Capacity Utilization chart → menu with checkboxes for lines: Baseline, Forecast, Scenario, etc. Selection persists via localStorage per page/lens.
+
+**Implementation**: Recharts charts don't natively support right-click; need custom ECharts integration or tooltip-based toggle UI. Alternatively: add a small "eye" toggle button in chart legend instead of right-click.
+
+**Files**: `src/components/capacity/*.tsx`, `src/lib/hooks/use-chart-visibility.ts` (new)
+**Links**: [REQ_Dashboard_UI.md](SPECS/REQ_Dashboard_UI.md), [REQ_OtherPages.md](SPECS/REQ_OtherPages.md)
+
+---
+
+### OI-092 | Comments Per Flight Event
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+Add a comments/notes system tied to individual work packages/flight events. Users can attach feedback, maintenance logs, or status updates. Comments are surfaced in:
+- Flight detail drawer (expandable section)
+- Admin event view
+- Export/audit trail
+
+**Schema**: New `flight_comments` table: `id`, `wp_id` (FK), `user_id` (FK), `comment_text`, `created_at`, `updated_at`.
+
+**UI**: Comment input + thread display; integrate with analytics event logging (OI-019).
+
+**Files**: `src/lib/db/schema.ts`, `src/app/api/admin/work-packages/[id]/comments/route.ts`, `src/components/flight-board/flight-detail-drawer.tsx`
+**Links**: [REQ_Analytics.md](SPECS/REQ_Analytics.md)
+
+---
+
+### OI-093 | Unique Ground Event Markers (AOG, BTB, etc.)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+Add special markers for notable ground events beyond standard on-ground status:
+- **AOG** (Aircraft on Ground) — unscheduled maintenance
+- **BTB** (Back to Blocks) — departure complete
+- **Ferry** — positioning/non-revenue flight
+- **Maintenance** — scheduled heavy maintenance
+
+Markers visible on flight board Gantt (icon overlay) and mobile list (badge). Data source: WP `status` field or new `ground_event_type` column.
+
+**Considerations**: Coordinate with OI-050 (AOG tracking). May require schema addition if not already captured in status field.
+
+**Files**: `src/lib/db/schema.ts`, `src/components/flight-board/flight-board-chart.tsx`, `src/components/flight-board/flight-board-list-cards.tsx`
+**Links**: OI-050, [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md)
+
+---
+
+### OI-094 | One-Time Notification System with Dismiss + Close Options
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+Implement a notification system for one-time messages/alerts (e.g., system maintenance notices, feature announcements, deprecation warnings). Notifications display via toast/banner and provide two interaction options:
+- **Close** — dismiss until next login (cleared on session end)
+- **Dismiss** — don't show this notification again (persisted in DB, survives login)
+
+**Schema**: New `notifications` table: `id`, `key` (unique slug), `title`, `body`, `type` (info/warning/error), `active` (bool), `created_at`.
+New `user_notification_dismissals` table: `user_id`, `notification_key`, `dismissed_at`.
+
+**UI**: Toast at top or banner in header; slides out and fades.
+
+**Logic**: On page load, fetch active notifications; exclude those in user's dismissals table.
+
+**Files**: `src/lib/db/schema.ts`, `src/app/api/admin/notifications/route.ts`, `src/app/api/user/notification-dismissals/route.ts`, `src/components/shared/notification-toast.tsx` (new), `src/lib/hooks/use-notifications.ts` (new)
+**Links**: [REQ_Admin.md](SPECS/REQ_Admin.md)
+
+---
+
+### OI-095 | App Version Update Walkthrough / Feature Tour
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+Add an interactive guided tour/walkthrough that launches when users log in after an app version update. Highlights new features, UI changes, and breaking changes introduced in the new revision. Tour is dismissible and can be re-triggered from Help/Account menu.
+
+**Features**:
+- **Version detection** — compare `app.version` (from build.json or config) against stored `last_viewed_version` in user preferences
+- **Tour steps** — modular steps with highlights, tooltips, and navigation (Next/Skip/Done)
+- **Multi-step walkthrough** — use Shepherd.js or custom Radix Dialog chain
+- **Skip option** — users can dismiss and continue; "What's New" badge on Help menu until dismissed
+- **Persistent state** — `last_viewed_version` stored in `user_preferences`, updated when tour completes
+
+**UI Pattern**: Modal overlay with spotlight highlighting new/changed UI elements; step descriptions explain purpose and usage.
+
+**Files**: `src/lib/db/schema.ts` (update user_preferences), `src/lib/hooks/use-version-tour.ts` (new), `src/components/shared/feature-tour.tsx` (new), `src/app/api/user/preferences/route.ts` (update to track version)
+**Links**: [REQ_Account.md](SPECS/REQ_Account.md), [REQ_Versioning.md](SPECS/REQ_Versioning.md)
+
+---
+
 ## Backlog
 
 ### OI-046 | Customer SP ID in Work Packages
@@ -468,17 +607,59 @@ In v0.1.1 and earlier, the inbound work package data field `title` is mapped dir
 
 ---
 
+### OI-088 | Theme Toggle Race Condition (Production) — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-03-01 |
+| **Resolved** | 2026-03-01 |
+
+Theme switching was twitchy in Docker production (class toggled but `color-scheme` briefly reverted); sometimes the switch wouldn't stick. Root cause: three-part race condition only visible under production API latency (~200ms) vs. dev (~5ms).
+
+**Root cause**: `fetchPrefs()` (initial DB load) resolved AFTER a concurrent user `update()` call. The stale GET response blindly overwrote `colorMode` in Zustand → `PreferencesLoader` re-called `setTheme(oldValue)` → theme reverted. In dev this race window was too narrow to observe.
+
+**Fix (3 changes)**:
+1. `use-preferences.ts` `fetch()` — bail out if `get().loaded` is already true (user has taken control) instead of overwriting state with stale response.
+2. `use-preferences.ts` `update()` — set `loaded: true` immediately alongside the optimistic state so the bail-out condition in (1) is reachable.
+3. `preferences-loader.tsx` — guard the `setTheme` effect with a `useRef` flag so it fires only once on initial DB load, not on every subsequent `colorMode` change (which eliminated the double-`setTheme` call).
+
+**Files**: `src/lib/hooks/use-preferences.ts`, `src/components/layout/preferences-loader.tsx`
+
+---
+
+### OI-089 | update() Revert Does Not Call setTheme
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-01 |
+
+When `update()` fails (PUT returns non-OK or network error), the revert block restores `colorMode` in Zustand but does NOT call `setTheme()`. Since `header.tsx` and `PreferencesForm` already called `setTheme(newValue)` before the API response, the theme stays visually applied even though Zustand has reverted. On the next user interaction the cycle is off by one step.
+
+**Fix**: Add `setTheme(prev.colorMode)` at the start of both revert blocks in `update()` (the `!res.ok` branch and the `catch` branch).
+
+**Files**: `src/lib/hooks/use-preferences.ts`
+
+---
+
 ## Summary
 
 | Priority | Open | Partial | In Progress | Acknowledged | Resolved |
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
-| P1 | 2 | 2 | 0 | 0 | 22 |
-| P2 | 10 | 2 | 0 | 0 | 21 |
-| P3 | 5 | 0 | 0 | 2 | 5 |
-| **Total** | **17** | **4** | **0** | **2** | **64** |
+| P1 | 1 | 2 | 0 | 0 | 23 |
+| P2 | 16 | 2 | 0 | 0 | 21 |
+| P3 | 6 | 0 | 0 | 2 | 5 |
+| **Total** | **23** | **4** | **0** | **2** | **65** |
 
-**Latest update (2026-02-27)**: Flight Board print fully resolved (OI-057). Fixed tick density (synchronous interval computation + chartWidthRef), pixelation (getDataURL pixelRatio:3 + img replacement), page overflow (590px body cap), border, and zoom slider. Phase 4 Mobile-First UX complete (2026-02-26) — 5 workstreams. 646 tests passing.
+**Latest update (2026-03-01)**: Added 6 v0.3.0+ feature ideas (OI-090–OI-095): aircraft phase badges on mobile FB list, right-click graph component toggling, flight event comments system, ground event markers (AOG/BTB), one-time notification system with dismiss options, revision history walkthrough with changelog UI.
 
 ---
 

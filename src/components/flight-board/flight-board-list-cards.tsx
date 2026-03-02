@@ -29,7 +29,7 @@ function formatCardDateTime(
   arrivalIso: string,
   departureIso: string,
   timezone: string,
-): { text: string; tzAbbr: string } {
+): { arrDate: string; arrTime: string; depDate: string | null; depTime: string; tzAbbr: string } {
   const arr = new Date(arrivalIso);
   const dep = new Date(departureIso);
 
@@ -44,7 +44,6 @@ function formatCardDateTime(
     minute: "2-digit",
     hour12: false,
   });
-  // Extract short tz abbreviation (e.g. "UTC", "EST")
   const tzFmt = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     timeZoneName: "short",
@@ -54,15 +53,14 @@ function formatCardDateTime(
 
   const arrDate = dateFmt.format(arr);
   const depDate = dateFmt.format(dep);
-  const arrTime = timeFmt.format(arr);
-  const depTime = timeFmt.format(dep);
 
-  const text =
-    arrDate === depDate
-      ? `${arrDate} ${arrTime} → ${depTime}`
-      : `${arrDate} ${arrTime} → ${depDate} ${depTime}`;
-
-  return { text, tzAbbr };
+  return {
+    arrDate,
+    arrTime: timeFmt.format(arr),
+    depDate: depDate !== arrDate ? depDate : null,
+    depTime: timeFmt.format(dep),
+    tzAbbr,
+  };
 }
 
 function formatGroundTime(hours: number): string {
@@ -149,7 +147,7 @@ export function FlightBoardListCards({
             >
               {/* Line 1: Registration + date/time + tz + ground time + Status badge */}
               {(() => {
-                const { text: dtText, tzAbbr } = formatCardDateTime(
+                const { arrDate, arrTime, depDate, depTime, tzAbbr } = formatCardDateTime(
                   wp.arrival,
                   wp.departure,
                   timezone,
@@ -160,7 +158,19 @@ export function FlightBoardListCards({
                       <span className="font-bold text-base whitespace-nowrap">
                         {wp.aircraftReg}
                       </span>
-                      <span className="text-sm whitespace-nowrap">{dtText}</span>
+                      <span className="text-sm whitespace-nowrap">
+                        <sup className="text-[10px] font-semibold text-muted-foreground">
+                          {arrDate}
+                        </sup>{" "}
+                        {arrTime} →{" "}
+                        {depDate && (
+                          <sup className="text-[10px] font-semibold text-muted-foreground">
+                            {depDate}
+                          </sup>
+                        )}
+                        {depDate && " "}
+                        {depTime}
+                      </span>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {tzAbbr} ({formatGroundTime(wp.groundHours)})
                       </span>
@@ -190,7 +200,8 @@ export function FlightBoardListCards({
                     wp.hasWorkpackage ? "text-emerald-500" : "text-muted-foreground",
                   )}
                 >
-                  WP: {wp.workpackageNo ?? wp.title ?? (wp.hasWorkpackage ? "✓" : "—")}
+                  <span className="font-semibold">WP:</span>{" "}
+                  {wp.workpackageNo ?? wp.title ?? (wp.hasWorkpackage ? "✓" : "—")}
                 </span>
               </div>
 
