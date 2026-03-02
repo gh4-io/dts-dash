@@ -627,6 +627,7 @@ function FlightBoardPageInner() {
               workPackages={transformedWps}
               onCardClick={handleBarClick}
               isExpanded={isExpanded}
+              timezone={timezone}
             />
           </div>
         ) : (

@@ -11,6 +11,7 @@ interface FlightBoardListCardsProps {
   workPackages: SerializedWorkPackage[];
   onCardClick: (wp: SerializedWorkPackage) => void;
   isExpanded: boolean;
+  timezone: string;
 }
 
 const INITIAL_BATCH = 30;
@@ -24,14 +25,44 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   Canceled: "destructive",
 };
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", {
+function formatCardDateTime(
+  arrivalIso: string,
+  departureIso: string,
+  timezone: string,
+): { text: string; tzAbbr: string } {
+  const arr = new Date(arrivalIso);
+  const dep = new Date(departureIso);
+
+  const dateFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    month: "numeric",
+    day: "numeric",
+  });
+  const timeFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-    timeZone: "UTC",
   });
+  // Extract short tz abbreviation (e.g. "UTC", "EST")
+  const tzFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    timeZoneName: "short",
+  });
+  const tzParts = tzFmt.formatToParts(arr);
+  const tzAbbr = tzParts.find((p) => p.type === "timeZoneName")?.value ?? timezone;
+
+  const arrDate = dateFmt.format(arr);
+  const depDate = dateFmt.format(dep);
+  const arrTime = timeFmt.format(arr);
+  const depTime = timeFmt.format(dep);
+
+  const text =
+    arrDate === depDate
+      ? `${arrDate} ${arrTime} → ${depTime}`
+      : `${arrDate} ${arrTime} → ${depDate} ${depTime}`;
+
+  return { text, tzAbbr };
 }
 
 function formatGroundTime(hours: number): string {
@@ -57,6 +88,7 @@ export function FlightBoardListCards({
   workPackages,
   onCardClick,
   isExpanded,
+  timezone,
 }: FlightBoardListCardsProps) {
   const { getColor } = useCustomers();
   const [visibleCount, setVisibleCount] = useState(INITIAL_BATCH);
@@ -115,37 +147,46 @@ export function FlightBoardListCards({
               onClick={() => onCardClick(wp)}
               className="w-full text-left border-b border-border px-4 py-3 cursor-pointer hover:bg-accent/10 active:bg-accent/20 transition-colors"
             >
-              {/* Line 1: Registration + Operator dot + name + Status badge */}
-              <div className="flex items-center justify-between gap-2 mb-1">
+              {/* Line 1: Registration + date/time + tz + ground time + Status badge */}
+              {(() => {
+                const { text: dtText, tzAbbr } = formatCardDateTime(
+                  wp.arrival,
+                  wp.departure,
+                  timezone,
+                );
+                return (
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <div className="flex items-baseline gap-1.5 min-w-0 flex-1">
+                      <span className="font-bold text-base whitespace-nowrap">
+                        {wp.aircraftReg}
+                      </span>
+                      <span className="text-sm whitespace-nowrap">{dtText}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {tzAbbr} ({formatGroundTime(wp.groundHours)})
+                      </span>
+                    </div>
+                    <Badge
+                      variant={STATUS_VARIANT[wp.status] ?? "secondary"}
+                      className="text-[10px] shrink-0 ml-2"
+                    >
+                      {wp.status}
+                    </Badge>
+                  </div>
+                );
+              })()}
+
+              {/* Line 2: Customer + WP indicator */}
+              <div className="flex items-center justify-between mb-1 text-sm">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <span className="font-bold text-base whitespace-nowrap">{wp.aircraftReg}</span>
                   <span
                     className="h-1.5 w-1.5 rounded-full shrink-0"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="text-sm text-muted-foreground truncate">{wp.customer}</span>
-                </div>
-                <Badge
-                  variant={STATUS_VARIANT[wp.status] ?? "secondary"}
-                  className="text-[10px] shrink-0 ml-2"
-                >
-                  {wp.status}
-                </Badge>
-              </div>
-
-              {/* Line 2: Arrival → Departure + ground time + WP indicator */}
-              <div className="flex items-center justify-between mb-1 text-sm">
-                <div className="flex items-baseline gap-1 min-w-0 flex-1">
-                  <span className="whitespace-nowrap">
-                    {formatTime(wp.arrival)} → {formatTime(wp.departure)}
-                  </span>
-                  <span className="text-xs text-muted-foreground truncate">
-                    UTC ({formatGroundTime(wp.groundHours)})
-                  </span>
+                  <span className="text-muted-foreground truncate">{wp.customer}</span>
                 </div>
                 <span
                   className={cn(
-                    "shrink-0 ml-2 text-[12px] truncate max-w-[140px]",
+                    "shrink-0 ml-2 text-[12px] truncate",
                     wp.hasWorkpackage ? "text-emerald-500" : "text-muted-foreground",
                   )}
                 >
