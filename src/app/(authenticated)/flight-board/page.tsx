@@ -58,14 +58,12 @@ function FlightBoardPageInner() {
     // Set hydration and load persistent state from localStorage
     const expandedRaw = localStorage.getItem("flightBoardExpanded");
     const expanded = expandedRaw !== null ? expandedRaw === "true" : device.type === "phone";
-    const viewFromStorage = localStorage.getItem("flightBoardViewMode");
+    // viewMode persistence disabled — always default per device (gantt desktop, list phone)
     const defaultViewMode = device.type === "phone" ? "list" : "gantt";
-    const viewModeFromStorage =
-      viewFromStorage === "list" || viewFromStorage === "gantt" ? viewFromStorage : defaultViewMode;
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from localStorage to avoid SSR mismatch
     if (expanded) setIsExpanded(true);
-    if (viewModeFromStorage !== "gantt") setViewMode(viewModeFromStorage);
+    if (defaultViewMode !== "gantt") setViewMode(defaultViewMode);
     setHydrated(true);
   }, [device.type]);
 
@@ -239,7 +237,7 @@ function FlightBoardPageInner() {
                         className="h-7 px-2 text-xs"
                         onClick={() => {
                           setViewMode("gantt");
-                          localStorage.setItem("flightBoardViewMode", "gantt");
+                          // localStorage.setItem("flightBoardViewMode", "gantt");
                         }}
                         title="Gantt chart"
                       >
@@ -251,7 +249,7 @@ function FlightBoardPageInner() {
                         className="h-7 px-2 text-xs"
                         onClick={() => {
                           setViewMode("list");
-                          localStorage.setItem("flightBoardViewMode", "list");
+                          // localStorage.setItem("flightBoardViewMode", "list");
                         }}
                         title="List view"
                       >
@@ -397,7 +395,7 @@ function FlightBoardPageInner() {
                       className="h-7 px-2 text-xs flex-1"
                       onClick={() => {
                         setViewMode("gantt");
-                        localStorage.setItem("flightBoardViewMode", "gantt");
+                        // localStorage.setItem("flightBoardViewMode", "gantt");
                       }}
                       title="Gantt chart"
                     >
@@ -410,7 +408,7 @@ function FlightBoardPageInner() {
                       className="h-7 px-2 text-xs flex-1"
                       onClick={() => {
                         setViewMode("list");
-                        localStorage.setItem("flightBoardViewMode", "list");
+                        // localStorage.setItem("flightBoardViewMode", "list");
                       }}
                       title="List view"
                     >
