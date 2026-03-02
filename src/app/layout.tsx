@@ -25,6 +25,10 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
 };
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -33,10 +37,6 @@ export async function generateMetadata(): Promise<Metadata> {
     title: appTitle,
     description: `${appTitle} — Operations Dashboard`,
     manifest: "/site.webmanifest",
-    themeColor: [
-      { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-      { media: "(prefers-color-scheme: dark)", color: "#0a0a1a" },
-    ],
     formatDetection: {
       telephone: true,
       email: true,
@@ -73,8 +73,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           systemColorMode={appearance.defaultColorMode}
         />
         <TimelineScript />
-        <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
         <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
