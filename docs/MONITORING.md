@@ -1,6 +1,6 @@
 # Monitoring Runbook
 
-> CVG Line Maintenance Dashboard v0.1.1
+> CVG Line Maintenance Dashboard v0.2.0
 
 ## Health Check
 
@@ -15,7 +15,7 @@ No authentication required. Returns:
 ```json
 {
   "status": "healthy",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "uptime": "3600s",
   "checks": {
     "database": { "status": "ok" },

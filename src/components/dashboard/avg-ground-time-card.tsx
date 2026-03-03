@@ -20,12 +20,10 @@ export function AvgGroundTimeCard({ workPackages }: AvgGroundTimeCardProps) {
     const short = workPackages.filter((wp) => wp.groundHours < 24);
     const long = workPackages.filter((wp) => wp.groundHours >= 24);
 
-    const avgS = short.length > 0
-      ? short.reduce((sum, wp) => sum + wp.groundHours, 0) / short.length
-      : 0;
-    const avgL = long.length > 0
-      ? long.reduce((sum, wp) => sum + wp.groundHours, 0) / long.length
-      : 0;
+    const avgS =
+      short.length > 0 ? short.reduce((sum, wp) => sum + wp.groundHours, 0) / short.length : 0;
+    const avgL =
+      long.length > 0 ? long.reduce((sum, wp) => sum + wp.groundHours, 0) / long.length : 0;
 
     return {
       avgShort: avgS,
@@ -37,14 +35,15 @@ export function AvgGroundTimeCard({ workPackages }: AvgGroundTimeCardProps) {
 
   return (
     <KpiCard title="Average Ground Time" icon="fa-solid fa-clock">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">&lt; 24 Hrs</p>
+      <div className="flex items-center gap-3">
+        <div className="text-center flex-1">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">&lt; 24 Hrs</p>
           <p className="text-2xl font-bold tabular-nums">{formatHM(avgShort)}</p>
           <p className="text-xs text-muted-foreground">{shortCount} visits</p>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">&ge; 24 Hrs</p>
+        <div className="h-10 w-px bg-border" />
+        <div className="text-center flex-1">
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">&ge; 24 Hrs</p>
           <p className="text-2xl font-bold tabular-nums">{formatHM(avgLong)}</p>
           <p className="text-xs text-muted-foreground">{longCount} visits</p>
         </div>

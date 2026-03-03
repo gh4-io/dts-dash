@@ -23,9 +23,7 @@ export function parseODataJSON<T>(jsonContent: string): ParsedOData<T> {
   try {
     parsed = JSON.parse(jsonContent);
   } catch (error) {
-    throw new Error(
-      `Invalid JSON: ${error instanceof Error ? error.message : String(error)}`
-    );
+    throw new Error(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   // Detect format and extract records
@@ -45,9 +43,15 @@ export function parseODataJSON<T>(jsonContent: string): ParsedOData<T> {
       return {
         records: obj.value as T[],
         format: "simple",
-        metadata: obj["odata.metadata"]
-          ? { odataMetadata: obj["odata.metadata"] }
-          : undefined,
+        metadata: obj["odata.metadata"] ? { odataMetadata: obj["odata.metadata"] } : undefined,
+      };
+    }
+
+    // Wrapped data format: { "data": [...] }
+    if (obj.data && Array.isArray(obj.data)) {
+      return {
+        records: obj.data as T[],
+        format: "simple",
       };
     }
 
@@ -65,7 +69,7 @@ export function parseODataJSON<T>(jsonContent: string): ParsedOData<T> {
   }
 
   throw new Error(
-    "Unrecognized OData format. Expected bare array, { value: [...] }, or { d: { results: [...] } }"
+    "Unrecognized JSON format. Expected bare array, { value: [...] }, { data: [...] }, or { d: { results: [...] } }",
   );
 }
 

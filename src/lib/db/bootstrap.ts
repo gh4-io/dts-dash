@@ -92,12 +92,147 @@ function ensureDefaultConfig(): void {
 }
 
 /**
+ * Ensure default capacity modeling data exists.
+ * Seeds capacity_shifts, capacity_assumptions, and headcount_plans if empty.
+ * Uses INSERT OR IGNORE so existing data is never overwritten.
+ */
+function ensureDefaultCapacityData(): void {
+  const now = new Date().toISOString();
+
+  // Check if capacity_shifts has any rows
+  const shiftCount = sqlite.prepare("SELECT COUNT(*) as cnt FROM capacity_shifts").get() as {
+    cnt: number;
+  };
+
+  if (shiftCount.cnt === 0) {
+    // Derive paidHours from start/end times instead of hardcoding
+    const computeShiftHours = (start: number, end: number): number =>
+      end > start ? end - start : 24 - start + end;
+
+    const shifts = [
+      {
+        code: "DAY",
+        name: "Day",
+        startHour: 7,
+        endHour: 15,
+        paidHours: computeShiftHours(7, 15),
+        sortOrder: 0,
+      },
+      {
+        code: "SWING",
+        name: "Swing",
+        startHour: 15,
+        endHour: 23,
+        paidHours: computeShiftHours(15, 23),
+        sortOrder: 1,
+      },
+      {
+        code: "NIGHT",
+        name: "Night",
+        startHour: 23,
+        endHour: 7,
+        paidHours: computeShiftHours(23, 7),
+        sortOrder: 2,
+      },
+    ];
+
+    const insertShift = sqlite.prepare(
+      `INSERT INTO capacity_shifts (code, name, start_hour, end_hour, paid_hours, timezone, min_headcount, sort_order, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'UTC', 1, ?, 1, ?, ?)`,
+    );
+
+    const insertPlan = sqlite.prepare(
+      `INSERT INTO headcount_plans (station, shift_id, headcount, effective_from, label, created_at, updated_at)
+       VALUES ('CVG', ?, ?, '2020-01-01', ?, ?, ?)`,
+    );
+
+    const defaultHeadcounts: Record<string, number> = { DAY: 8, SWING: 6, NIGHT: 4 };
+
+    for (const s of shifts) {
+      insertShift.run(s.code, s.name, s.startHour, s.endHour, s.paidHours, s.sortOrder, now, now);
+      const row = sqlite.prepare("SELECT id FROM capacity_shifts WHERE code = ?").get(s.code) as {
+        id: number;
+      };
+      insertPlan.run(row.id, defaultHeadcounts[s.code], `Default ${s.name} shift`, now, now);
+    }
+
+    log.info("Seeded default capacity shifts and headcount plans");
+  }
+
+  // Check if capacity_assumptions has any rows
+  const assumptionCount = sqlite
+    .prepare("SELECT COUNT(*) as cnt FROM capacity_assumptions")
+    .get() as { cnt: number };
+
+  if (assumptionCount.cnt === 0) {
+    sqlite
+      .prepare(
+        `INSERT INTO capacity_assumptions (station, paid_to_available, available_to_productive, default_mh_no_wp, night_productivity_factor, demand_curve, arrival_weight, departure_weight, allocation_mode, is_active, updated_at)
+         VALUES ('CVG', 0.89, 0.73, 3.0, 0.85, 'EVEN', 0.0, 0.0, 'DISTRIBUTE', 1, ?)`,
+      )
+      .run(now);
+    log.info("Seeded default capacity assumptions");
+  }
+}
+
+/**
+ * Seed default rotation patterns and a default staffing config if none exist.
+ */
+function ensureDefaultStaffingData(): void {
+  const now = new Date().toISOString();
+
+  // Check if rotation_patterns has any rows
+  const patternCount = sqlite.prepare("SELECT COUNT(*) as cnt FROM rotation_patterns").get() as {
+    cnt: number;
+  };
+
+  if (patternCount.cnt === 0) {
+    const patterns = [
+      { name: "Standard 5-2", pattern: "oxxxxoxoxxxxoxoxxxxox", sort: 0 },
+      { name: "Compressed 4-3", pattern: "oxxxxoooxxxxoooxxxxoo", sort: 1 },
+      { name: "Weekend Bridge", pattern: "xoooooxxoooooxxooooox", sort: 2 },
+      { name: "Panama 2-2-3", pattern: "xxooxxxooxxoooxxooxxx", sort: 3 },
+      { name: "3-Week Rotation A", pattern: "oxxxooxooxxxoxoxxooox", sort: 4 },
+    ];
+
+    const insertPattern = sqlite.prepare(
+      `INSERT INTO rotation_patterns (name, pattern, is_active, sort_order, created_at, updated_at)
+       VALUES (?, ?, 1, ?, ?, ?)`,
+    );
+
+    for (const p of patterns) {
+      insertPattern.run(p.name, p.pattern, p.sort, now, now);
+    }
+
+    log.info("Seeded 5 default rotation patterns");
+  }
+
+  // Check if staffing_configs has any rows
+  const configCount = sqlite.prepare("SELECT COUNT(*) as cnt FROM staffing_configs").get() as {
+    cnt: number;
+  };
+
+  if (configCount.cnt === 0) {
+    sqlite
+      .prepare(
+        `INSERT INTO staffing_configs (name, description, is_active, created_at, updated_at)
+         VALUES (?, ?, 0, ?, ?)`,
+      )
+      .run("Default Configuration", "Auto-created default staffing configuration", now, now);
+
+    log.info("Seeded default staffing configuration");
+  }
+}
+
+/**
  * Main bootstrap entry point. Called from instrumentation.ts on server startup.
  *
  * 1. Create tables (IF NOT EXISTS)
  * 2. Run migrations (idempotent)
  * 3. Ensure system user exists
  * 4. Ensure default config keys exist
+ * 5. Ensure default capacity data exists
+ * 6. Ensure default staffing data exists
  */
 export function bootstrapDatabase(): void {
   try {
@@ -110,6 +245,8 @@ export function bootstrapDatabase(): void {
 
     ensureSystemUser();
     ensureDefaultConfig();
+    ensureDefaultCapacityData();
+    ensureDefaultStaffingData();
 
     log.info("Database bootstrap complete");
   } catch (err) {

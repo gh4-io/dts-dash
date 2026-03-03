@@ -74,7 +74,6 @@ export function computeHourlySnapshots(
  * Generate hour boundaries between start and end dates
  * Aligns to hour boundaries in the specified timezone
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function generateHourBoundaries(start: Date, end: Date, _timezone: string): Date[] {
   const boundaries: Date[] = [];
 

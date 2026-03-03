@@ -122,6 +122,13 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
       const res = await fetch("/api/account/preferences");
       if (res.ok) {
         const data = await res.json();
+        // If the user already interacted (update() was called concurrently), don't
+        // overwrite their choices with the stale GET response. This prevents the race
+        // condition where the API response arrives after a theme toggle and reverts it.
+        if (get().loaded) {
+          set({ loading: false });
+          return;
+        }
         set({
           colorMode: data.colorMode ?? defaults.colorMode,
           themePreset: data.themePreset ?? defaults.themePreset,
@@ -148,8 +155,9 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
 
   update: async (partial) => {
     const prev = get();
-    // Optimistic update
-    set({ ...partial });
+    // Optimistic update — also set loaded:true so any in-flight fetchPrefs response
+    // knows the user has taken control and won't overwrite these values.
+    set({ ...partial, loaded: true });
 
     if (partial.themePreset !== undefined || partial.accentColor !== undefined) {
       get().applyTheme();

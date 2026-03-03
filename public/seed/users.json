@@ -1,0 +1,29 @@
+[
+  {
+    "id": null,
+    "email": "admin@cvg.local",
+    "username": "admin",
+    "displayName": "Admin",
+    "password": "admin123",
+    "role": "superadmin",
+    "isActive": true
+  },
+  {
+    "id": null,
+    "email": "user@cvg.local",
+    "username": "user",
+    "displayName": "Test User",
+    "password": "user123",
+    "role": "user",
+    "isActive": true
+  },
+  {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "email": "system@internal",
+    "username": null,
+    "displayName": "API Ingest",
+    "password": "",
+    "role": "user",
+    "isActive": false
+  }
+]

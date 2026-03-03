@@ -21,6 +21,10 @@ import type { SortLevel } from "@/lib/hooks/use-actions";
 
 const MAX_LEVELS = 4;
 
+function makeBlankLevel(): SortLevel {
+  return { column: ACTION_COLUMNS[0].key, direction: "asc" };
+}
+
 interface SortDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -30,10 +34,10 @@ export function SortDialog({ open, onOpenChange }: SortDialogProps) {
   const { sorts, setSorts } = useActions();
   const [draft, setDraft] = useState<SortLevel[]>([]);
 
-  // Hydrate draft when dialog opens
+  // Hydrate draft when dialog opens — always show at least 1 row
   useEffect(() => {
     if (!open) return;
-    setDraft(sorts);
+    setDraft(sorts.length > 0 ? sorts : [makeBlankLevel()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -47,7 +51,8 @@ export function SortDialog({ open, onOpenChange }: SortDialogProps) {
   };
 
   const removeLevel = (index: number) => {
-    setDraft(draft.filter((_, i) => i !== index));
+    const next = draft.filter((_, i) => i !== index);
+    setDraft(next.length > 0 ? next : [makeBlankLevel()]);
   };
 
   const updateColumn = (index: number, column: string) => {
@@ -57,10 +62,8 @@ export function SortDialog({ open, onOpenChange }: SortDialogProps) {
   const toggleDirection = (index: number) => {
     setDraft(
       draft.map((s, i) =>
-        i === index
-          ? { ...s, direction: s.direction === "asc" ? "desc" : "asc" }
-          : s
-      )
+        i === index ? { ...s, direction: s.direction === "asc" ? "desc" : "asc" } : s,
+      ),
     );
   };
 
@@ -80,21 +83,12 @@ export function SortDialog({ open, onOpenChange }: SortDialogProps) {
         </DialogHeader>
 
         <div className="space-y-2 min-h-[100px]">
-          {draft.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No sort levels. Click &quot;Add Level&quot; to start.
-            </p>
-          )}
-
           {draft.map((level, idx) => (
             <div key={idx} className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground w-4 shrink-0 text-right">
                 {idx + 1}.
               </span>
-              <Select
-                value={level.column}
-                onValueChange={(v) => updateColumn(idx, v)}
-              >
+              <Select value={level.column} onValueChange={(v) => updateColumn(idx, v)}>
                 <SelectTrigger className="h-8 text-xs flex-1">
                   <SelectValue />
                 </SelectTrigger>
@@ -146,11 +140,7 @@ export function SortDialog({ open, onOpenChange }: SortDialogProps) {
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button size="sm" onClick={handleApply}>

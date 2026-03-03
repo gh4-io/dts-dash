@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sqlite } from "@/lib/db/client";
+import packageJson from "../../../../package.json";
 
 const startTime = Date.now();
 
@@ -43,7 +44,8 @@ export async function GET() {
   const uptimeMs = Date.now() - startTime;
   const body = {
     status: healthy ? "healthy" : "unhealthy",
-    version: process.env.npm_package_version || "0.1.1",
+    version: process.env.npm_package_version || packageJson.version,
+    build: Number(process.env.BUILD_NUMBER ?? 0),
     uptime: `${Math.floor(uptimeMs / 1000)}s`,
     checks,
   };

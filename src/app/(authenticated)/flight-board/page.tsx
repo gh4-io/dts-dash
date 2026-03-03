@@ -11,8 +11,14 @@ import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { CustomerBadge } from "@/components/shared/customer-badge";
+import { PrintButton } from "@/components/shared/print-button";
+import { FlightBoardListCards } from "@/components/flight-board/flight-board-list-cards";
+import { FlightBoardListTable } from "@/components/flight-board/flight-board-list-table";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useSidebar } from "@/lib/hooks/use-sidebar";
+import { useDeviceType } from "@/lib/hooks/use-device-type";
 import type { FlightBoardChartHandle } from "@/components/flight-board/flight-board-chart";
 import type { ActiveChip } from "@/components/shared/active-chips";
 
@@ -27,6 +33,12 @@ function FlightBoardPageInner() {
   const [selectedWp, setSelectedWp] = useState<SerializedWorkPackage | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const device = useDeviceType();
+  const [viewMode, setViewMode] = useState<"gantt" | "list">("gantt");
+  const [viewOpen, setViewOpen] = useState(false);
+  const [panMode, setPanMode] = useState(false);
+
   const {
     loaded: prefsLoaded,
     compactMode: condensed,
@@ -34,24 +46,49 @@ function FlightBoardPageInner() {
     update: updatePreferences,
   } = usePreferences();
   const zoomInitializedRef = useRef(false);
+  const chartRef = useRef<FlightBoardChartHandle>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
-  // Sync from localStorage after hydration to avoid mismatch
+  // Determine if we're too narrow for horizontal inline expansion
+  const sidebarMode = useSidebar((s) => s.mode);
+  const [windowWidth, setWindowWidth] = useState(1920);
+
+  // Sync from localStorage and device type after first render
   useEffect(() => {
-    const stored = localStorage.getItem("flightBoardExpanded");
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
-    if (stored === "true") setIsExpanded(true);
+    // Set hydration and load persistent state from localStorage
+    const expandedRaw = localStorage.getItem("flightBoardExpanded");
+    const expanded = expandedRaw !== null ? expandedRaw === "true" : device.type === "phone";
+    // viewMode persistence disabled — always default per device (gantt desktop, list phone)
+    const defaultViewMode = device.type === "phone" ? "list" : "gantt";
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from localStorage to avoid SSR mismatch
+    if (expanded) setIsExpanded(true);
+    if (defaultViewMode !== "gantt") setViewMode(defaultViewMode);
+    setHydrated(true);
+  }, [device.type]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewOpen(false);
+      setWindowWidth(window.innerWidth);
+    };
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initialize state from current window on mount
+    setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Sidebar expanded ≈ needs ~1600px; sidebar folded/icons ≈ needs ~1280px
+  const narrowThreshold = sidebarMode === "expanded" ? 1600 : 1280;
+  const useVerticalView = windowWidth < narrowThreshold;
 
   // Initialize zoom from user preference / system config once prefs have loaded
   useEffect(() => {
     if (!prefsLoaded || zoomInitializedRef.current) return;
     zoomInitializedRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred to avoid SSR hydration mismatch
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: deferred hydration from user preferences
     if (defaultZoom) setZoomLevel(defaultZoom);
   }, [prefsLoaded, defaultZoom]);
-  const [viewOpen, setViewOpen] = useState(false);
-  const [panMode, setPanMode] = useState(false);
-  const chartRef = useRef<FlightBoardChartHandle>(null);
 
   const { workPackages, isLoading, error } = useWorkPackages();
   const { customers } = useCustomers();
@@ -70,6 +107,7 @@ function FlightBoardPageInner() {
     registrations,
     highlightMap,
     groups,
+    shiftHighlights,
   } = useTransformedData(workPackages);
 
   const handleBarClick = useCallback((wp: SerializedWorkPackage) => {
@@ -151,22 +189,18 @@ function FlightBoardPageInner() {
     chartRef.current?.dispatchZoom(0, 100);
   }, []);
 
-  // Build format chips for non-default zoom (only show when user changed from default)
-  const effectiveDefaultZoom = defaultZoom || "3d";
-  const formatChips: ActiveChip[] = useMemo(
-    () =>
-      zoomLevel !== effectiveDefaultZoom
-        ? [
-            {
-              id: "zoom",
-              label: `Zoom: ${zoomLevel}`,
-              icon: "fa-solid fa-magnifying-glass",
-              onRemove: () => setZoomLevel(effectiveDefaultZoom),
-            },
-          ]
-        : [],
-    [zoomLevel, effectiveDefaultZoom],
-  );
+  const handleBeforePrint = useCallback(async () => {
+    if (viewMode === "gantt") {
+      await chartRef.current?.prepareForPrint();
+    }
+  }, [viewMode]);
+
+  const handleAfterPrint = useCallback(() => {
+    chartRef.current?.restoreAfterPrint();
+  }, []);
+
+  // SUPPRESSED: Zoom format chips hidden — zoom preset tags not shown in TopMenuBar.
+  const formatChips: ActiveChip[] = [];
 
   const ZOOM_LEVELS = [
     { id: "6h", label: "6h" },
@@ -184,128 +218,357 @@ function FlightBoardPageInner() {
         formatChips={formatChips}
         actions={
           <div className="flex items-center gap-1">
-            {/* Inline items — slide out to the left when viewOpen */}
-            <div
-              className={cn(
-                "flex items-center gap-1 overflow-hidden transition-all duration-200",
-                viewOpen ? "max-w-[600px] opacity-100" : "max-w-0 opacity-0",
-              )}
-            >
-              {/* Zoom presets */}
-              <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
-                {ZOOM_LEVELS.map((level) => {
-                  const levelHours = parseInt(level.id); // "6h" → 6, "12h" → 12, etc.
-                  const disabled = filterSpanHours < levelHours;
+            {/* View panel — always visible (both Gantt and List modes) */}
+            {!useVerticalView && (
+              <>
+                {/* Horizontal inline expansion */}
+                <div
+                  className={cn(
+                    "flex items-center gap-1 overflow-hidden transition-all duration-200",
+                    viewOpen ? "max-w-[700px] opacity-100" : "max-w-0 opacity-0",
+                  )}
+                >
+                  {/* Gantt / List toggle — hidden on phone */}
+                  {device.type !== "phone" && (
+                    <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
+                      <Button
+                        variant={viewMode === "gantt" ? "default" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          setViewMode("gantt");
+                          // localStorage.setItem("flightBoardViewMode", "gantt");
+                        }}
+                        title="Gantt chart"
+                      >
+                        <i className="fa-solid fa-chart-gantt" />
+                      </Button>
+                      <Button
+                        variant={viewMode === "list" ? "default" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => {
+                          setViewMode("list");
+                          // localStorage.setItem("flightBoardViewMode", "list");
+                        }}
+                        title="List view"
+                      >
+                        <i className="fa-solid fa-list" />
+                      </Button>
+                    </div>
+                  )}
 
-                  return (
-                    <Button
-                      key={level.id}
-                      variant={zoomLevel === level.id ? "default" : "ghost"}
-                      size="sm"
-                      disabled={disabled} // ✅ Disable when filter span < preset hours
-                      title={
-                        disabled
-                          ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h`
-                          : undefined
-                      }
-                      className={cn(
-                        "h-7 px-2 text-xs",
-                        zoomLevel !== level.id && "text-muted-foreground",
+                  {/* Gantt-specific controls */}
+                  {viewMode === "gantt" && (
+                    <>
+                      <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
+                      {/* Zoom presets */}
+                      <div className="flex items-center rounded-md border bg-muted/50 p-0.5 shrink-0">
+                        {ZOOM_LEVELS.map((level) => {
+                          const levelHours = parseInt(level.id);
+                          const disabled = filterSpanHours < levelHours;
+                          return (
+                            <Button
+                              key={level.id}
+                              variant={zoomLevel === level.id ? "default" : "ghost"}
+                              size="sm"
+                              disabled={disabled}
+                              title={
+                                disabled
+                                  ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h`
+                                  : undefined
+                              }
+                              className={cn(
+                                "h-7 px-2 text-xs",
+                                zoomLevel !== level.id && "text-muted-foreground",
+                              )}
+                              onClick={() => setZoomLevel(level.id)}
+                            >
+                              {level.label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 shrink-0"
+                        onClick={handleZoomIn}
+                        title="Zoom in"
+                      >
+                        <i className="fa-solid fa-magnifying-glass-plus text-xs" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 shrink-0"
+                        onClick={handleZoomOut}
+                        title="Zoom out"
+                      >
+                        <i className="fa-solid fa-magnifying-glass-minus text-xs" />
+                      </Button>
+                      {hydrated && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 w-9 p-0 shrink-0"
+                          onClick={toggleCondensed}
+                          title={condensed ? "Normal density" : "Condensed view"}
+                        >
+                          <i
+                            className={cn("fa-solid", condensed ? "fa-bars" : "fa-bars-staggered")}
+                          />
+                        </Button>
                       )}
-                      onClick={() => setZoomLevel(level.id)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 shrink-0"
+                        onClick={handleNow}
+                        title="Center on Now"
+                      >
+                        <i className="fa-solid fa-clock text-xs" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 shrink-0"
+                        onClick={handleFit}
+                        title="Fit All Data"
+                      >
+                        <i className="fa-solid fa-arrows-left-right-to-line text-xs" />
+                      </Button>
+                      <Button
+                        variant={panMode ? "default" : "ghost"}
+                        size="sm"
+                        className="h-9 w-9 p-0 shrink-0"
+                        onClick={() => setPanMode((v) => !v)}
+                        title={panMode ? "Switch to pointer" : "Hand tool (drag to pan)"}
+                      >
+                        <i className="fa-solid fa-hand text-xs" />
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Expand/Collapse — always visible */}
+                  <div className="w-px h-5 bg-border mx-0.5 shrink-0" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 w-9 p-0 shrink-0"
+                    onClick={toggleExpanded}
+                    title={isExpanded ? "Collapse" : "Expand"}
+                  >
+                    <i className={cn("fa-solid", isExpanded ? "fa-compress" : "fa-expand")} />
+                  </Button>
+                </div>
+                <Button
+                  variant={viewOpen ? "default" : "outline"}
+                  size="sm"
+                  className="h-9 text-xs gap-1.5 shrink-0"
+                  onClick={() => setViewOpen((v) => !v)}
+                >
+                  <i className="fa-solid fa-sliders" />
+                  View
+                </Button>
+              </>
+            )}
+
+            {useVerticalView && (
+              <Popover open={viewOpen} onOpenChange={setViewOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={viewOpen ? "default" : "outline"}
+                    size="sm"
+                    className="h-9 text-xs gap-1.5 shrink-0"
+                  >
+                    <i className="fa-solid fa-sliders" />
+                    View
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-48 p-1.5 space-y-0.5">
+                  {/* Gantt / List toggle */}
+                  <div className="flex items-center rounded-md border bg-muted/50 p-0.5">
+                    <Button
+                      variant={viewMode === "gantt" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 px-2 text-xs flex-1"
+                      onClick={() => {
+                        setViewMode("gantt");
+                        // localStorage.setItem("flightBoardViewMode", "gantt");
+                      }}
+                      title="Gantt chart"
                     >
-                      {level.label}
+                      <i className="fa-solid fa-chart-gantt mr-1.5" />
+                      Gantt
                     </Button>
-                  );
-                })}
-              </div>
+                    <Button
+                      variant={viewMode === "list" ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 px-2 text-xs flex-1"
+                      onClick={() => {
+                        setViewMode("list");
+                        // localStorage.setItem("flightBoardViewMode", "list");
+                      }}
+                      title="List view"
+                    >
+                      <i className="fa-solid fa-list mr-1.5" />
+                      List
+                    </Button>
+                  </div>
 
-              {/* Zoom +/- */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={handleZoomIn}
-                title="Zoom in"
-              >
-                <i className="fa-solid fa-magnifying-glass-plus text-xs" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={handleZoomOut}
-                title="Zoom out"
-              >
-                <i className="fa-solid fa-magnifying-glass-minus text-xs" />
-              </Button>
+                  {/* Gantt-specific controls */}
+                  {viewMode === "gantt" && (
+                    <>
+                      <div className="border-t border-border my-1" />
 
-              {/* Expand/Collapse */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={toggleExpanded}
-                title={isExpanded ? "Collapse" : "Expand"}
-              >
-                <i className={cn("fa-solid", isExpanded ? "fa-compress" : "fa-expand")} />
-              </Button>
+                      {/* Zoom presets — single row */}
+                      <div className="flex items-center rounded-md border bg-muted/50 p-0.5">
+                        {ZOOM_LEVELS.map((level) => {
+                          const levelHours = parseInt(level.id);
+                          const disabled = filterSpanHours < levelHours;
+                          return (
+                            <Button
+                              key={level.id}
+                              variant={zoomLevel === level.id ? "default" : "ghost"}
+                              size="sm"
+                              disabled={disabled}
+                              title={
+                                disabled
+                                  ? `Disabled: filter range is only ${filterSpanHours.toFixed(1)}h`
+                                  : undefined
+                              }
+                              className={cn(
+                                "h-7 px-2 text-xs flex-1",
+                                zoomLevel !== level.id && "text-muted-foreground",
+                              )}
+                              onClick={() => {
+                                setZoomLevel(level.id);
+                                setViewOpen(false);
+                              }}
+                            >
+                              {level.label}
+                            </Button>
+                          );
+                        })}
+                      </div>
 
-              {/* Condensed view */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={toggleCondensed}
-                title={condensed ? "Normal density" : "Condensed view"}
-              >
-                <i className={cn("fa-solid", condensed ? "fa-bars" : "fa-bars-staggered")} />
-              </Button>
+                      <div className="border-t border-border my-1" />
 
-              {/* Center on Now */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={handleNow}
-                title="Center on Now"
-              >
-                <i className="fa-solid fa-clock text-xs" />
-              </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-full justify-start gap-2 text-xs"
+                        onClick={handleZoomIn}
+                      >
+                        <i className="fa-solid fa-magnifying-glass-plus w-4 text-center text-muted-foreground" />
+                        Zoom In
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-full justify-start gap-2 text-xs"
+                        onClick={handleZoomOut}
+                      >
+                        <i className="fa-solid fa-magnifying-glass-minus w-4 text-center text-muted-foreground" />
+                        Zoom Out
+                      </Button>
 
-              {/* Fit All */}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={handleFit}
-                title="Fit All Data"
-              >
-                <i className="fa-solid fa-arrows-left-right-to-line text-xs" />
-              </Button>
+                      <div className="border-t border-border my-1" />
 
-              {/* Hand tool (pan mode) */}
-              <Button
-                variant={panMode ? "default" : "ghost"}
-                size="sm"
-                className="h-9 w-9 p-0 shrink-0"
-                onClick={() => setPanMode((v) => !v)}
-                title={panMode ? "Switch to pointer" : "Hand tool (drag to pan)"}
-              >
-                <i className="fa-solid fa-hand text-xs" />
-              </Button>
-            </div>
+                      {hydrated && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-full justify-start gap-2 text-xs"
+                          onClick={() => {
+                            toggleCondensed();
+                            setViewOpen(false);
+                          }}
+                        >
+                          <i
+                            className={cn(
+                              "fa-solid w-4 text-center text-muted-foreground",
+                              condensed ? "fa-bars" : "fa-bars-staggered",
+                            )}
+                          />
+                          {condensed ? "Normal Density" : "Condensed"}
+                        </Button>
+                      )}
 
-            {/* View toggle button */}
-            <Button
-              variant={viewOpen ? "default" : "outline"}
-              size="sm"
-              className="h-9 text-xs gap-1.5 shrink-0"
-              onClick={() => setViewOpen((v) => !v)}
-            >
-              <i className="fa-solid fa-sliders" />
-              View
-            </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-full justify-start gap-2 text-xs"
+                        onClick={() => {
+                          handleNow();
+                          setViewOpen(false);
+                        }}
+                      >
+                        <i className="fa-solid fa-clock w-4 text-center text-muted-foreground" />
+                        Center on Now
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-full justify-start gap-2 text-xs"
+                        onClick={() => {
+                          handleFit();
+                          setViewOpen(false);
+                        }}
+                      >
+                        <i className="fa-solid fa-arrows-left-right-to-line w-4 text-center text-muted-foreground" />
+                        Fit All Data
+                      </Button>
+
+                      <div className="border-t border-border my-1" />
+
+                      <Button
+                        variant={panMode ? "default" : "ghost"}
+                        size="sm"
+                        className="h-8 w-full justify-start gap-2 text-xs"
+                        onClick={() => {
+                          setPanMode((v) => !v);
+                          setViewOpen(false);
+                        }}
+                      >
+                        <i className="fa-solid fa-hand w-4 text-center text-muted-foreground" />
+                        {panMode ? "Pointer Mode" : "Pan Mode"}
+                      </Button>
+                    </>
+                  )}
+
+                  <div className="border-t border-border my-1" />
+
+                  {/* Expand/Collapse — always visible */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-full justify-start gap-2 text-xs"
+                    onClick={() => {
+                      toggleExpanded();
+                      setViewOpen(false);
+                    }}
+                  >
+                    <i
+                      className={cn(
+                        "fa-solid w-4 text-center text-muted-foreground",
+                        isExpanded ? "fa-compress" : "fa-expand",
+                      )}
+                    />
+                    {isExpanded ? "Collapse" : "Expand"}
+                  </Button>
+                </PopoverContent>
+              </Popover>
+            )}
+
+            {/* Print */}
+            <PrintButton
+              contentRef={printRef}
+              documentTitle="Flight Board — CVG Line Maintenance"
+              onBeforePrint={handleBeforePrint}
+              onAfterPrint={handleAfterPrint}
+            />
 
             {/* Refresh */}
             <Button
@@ -321,54 +584,84 @@ function FlightBoardPageInner() {
         }
       />
 
-      {/* Gantt Chart */}
-      {error ? (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
-          <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
-          <p className="text-sm text-destructive">{error}</p>
-        </div>
-      ) : isLoading ? (
-        <LoadingSkeleton variant="chart" />
-      ) : (
-        <div
-          className={cn(
-            "rounded-lg border border-border bg-card overflow-hidden",
-            !isExpanded && "flex-1 min-h-0 flex flex-col",
-          )}
-        >
-          <FlightBoardChart
-            ref={chartRef}
-            workPackages={transformedWps}
-            zoomLevel={zoomLevel}
-            timezone={timezone}
-            filterStart={filterStart}
-            filterEnd={filterEnd}
-            isExpanded={isExpanded}
-            condensed={condensed}
-            onBarClick={handleBarClick}
-            onZoomChange={handleZoomChange}
-            transformedRegistrations={registrations}
-            highlightMap={highlightMap}
-            groups={groups}
-            panMode={panMode}
-          />
-        </div>
-      )}
+      {/* Printable content wrapper */}
+      <div ref={printRef} className="flex flex-col gap-3 flex-1 min-h-0">
+        {/* Chart / List */}
+        {error ? (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-6 text-center">
+            <i className="fa-solid fa-triangle-exclamation text-2xl text-destructive mb-2 block" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        ) : isLoading ? (
+          <LoadingSkeleton variant="chart" />
+        ) : viewMode === "gantt" ? (
+          <div
+            className={cn(
+              "rounded-lg border border-border bg-card overflow-hidden print:border-0",
+              !isExpanded && "flex-1 min-h-0 flex flex-col",
+            )}
+          >
+            <FlightBoardChart
+              ref={chartRef}
+              workPackages={transformedWps}
+              zoomLevel={zoomLevel}
+              timezone={timezone}
+              filterStart={filterStart}
+              filterEnd={filterEnd}
+              isExpanded={isExpanded}
+              condensed={condensed}
+              onBarClick={handleBarClick}
+              onZoomChange={handleZoomChange}
+              transformedRegistrations={registrations}
+              highlightMap={highlightMap}
+              groups={groups}
+              shiftHighlights={shiftHighlights}
+              panMode={panMode}
+            />
+          </div>
+        ) : device.type === "phone" ? (
+          <div
+            className={cn("-mx-4 overflow-hidden", !isExpanded && "flex-1 min-h-0 flex flex-col")}
+          >
+            <FlightBoardListCards
+              workPackages={transformedWps}
+              onCardClick={handleBarClick}
+              isExpanded={isExpanded}
+              timezone={timezone}
+            />
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "rounded-lg border border-border bg-card overflow-hidden print:border-0",
+              !isExpanded && "flex-1 min-h-0 flex flex-col",
+            )}
+          >
+            <FlightBoardListTable
+              workPackages={transformedWps}
+              onRowClick={handleBarClick}
+              isExpanded={isExpanded}
+            />
+          </div>
+        )}
 
-      {/* Interaction hints */}
-      <p className="text-[11px] text-muted-foreground flex-shrink-0">
-        Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
-      </p>
+        {/* Legend — hidden on phone (colors shown inline on list cards) */}
+        {customers.length > 0 && device.type !== "phone" && (
+          <div className="flex flex-wrap items-center gap-4 px-1 flex-shrink-0">
+            {customers
+              .filter((c) => c.isActive)
+              .map((c) => (
+                <CustomerBadge key={c.id} name={c.displayName} color={c.color} />
+              ))}
+          </div>
+        )}
+      </div>
 
-      {/* Legend */}
-      {customers.length > 0 && (
-        <div className="flex flex-wrap items-center gap-4 px-1 flex-shrink-0">
-          {customers
-            .filter((c) => c.isActive)
-            .map((c) => (
-              <CustomerBadge key={c.id} name={c.displayName} color={c.color} />
-            ))}
-        </div>
+      {/* Interaction hints — Gantt only (hidden in print) */}
+      {viewMode === "gantt" && (
+        <p className="text-[11px] text-muted-foreground flex-shrink-0 print-hide">
+          Ctrl+Scroll to zoom · Shift+Scroll to pan · Click bar for details · Hand tool to drag-pan
+        </p>
       )}
 
       {/* Detail Drawer */}

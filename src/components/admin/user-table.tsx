@@ -47,7 +47,7 @@ export function UserTable({
   onDelete,
 }: UserTableProps) {
   return (
-    <div className="rounded-lg border border-border">
+    <div className="rounded-lg border border-border overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>

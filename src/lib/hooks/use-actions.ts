@@ -31,8 +31,8 @@ export interface ColumnFilterRule {
   id: string;
   column: ActionColumnKey;
   operator: "=" | "!=" | "in" | "not in" | ">" | "<" | ">=" | "<=";
-  value: string;       // for scalar operators
-  values: string[];    // for set operators (in / not in)
+  value: string; // for scalar operators
+  values: string[]; // for set operators (in / not in)
 }
 
 interface ActionsState {
@@ -71,19 +71,16 @@ export const useActions = create<ActionsState & ActionsActions>()((set, get) => 
   setGroupBy: (config) => set({ groupBy: config }),
   setColumnFilters: (filters) => set({ columnFilters: filters }),
 
-  removeSortLevel: (index) =>
-    set((s) => ({ sorts: s.sorts.filter((_, i) => i !== index) })),
+  removeSortLevel: (index) => set((s) => ({ sorts: s.sorts.filter((_, i) => i !== index) })),
   disableBreak: (column) =>
     set((s) => ({
       controlBreaks: s.controlBreaks.map((b) =>
-        b.column === column ? { ...b, enabled: false } : b
+        b.column === column ? { ...b, enabled: false } : b,
       ),
     })),
   disableHighlight: (id) =>
     set((s) => ({
-      highlights: s.highlights.map((h) =>
-        h.id === id ? { ...h, enabled: false } : h
-      ),
+      highlights: s.highlights.map((h) => (h.id === id ? { ...h, enabled: false } : h)),
     })),
   clearGroupBy: () => set({ groupBy: null }),
   removeColumnFilter: (id) =>
@@ -122,6 +119,7 @@ export const ACTION_COLUMNS = [
   { key: "arrival", label: "Arrival", type: "date" as const },
   { key: "departure", label: "Departure", type: "date" as const },
   { key: "effectiveMH", label: "Man-Hours", type: "number" as const },
+  { key: "shift", label: "Shift", type: "string" as const },
 ] as const;
 
 export type ActionColumnKey = (typeof ACTION_COLUMNS)[number]["key"];

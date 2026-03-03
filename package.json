@@ -1,6 +1,6 @@
 {
   "name": "dtsd",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
@@ -27,7 +27,10 @@
     "db:cleanup": "tsx scripts/db/cleanup.ts",
     "db:seed-reference": "tsx scripts/db/seed-reference.ts",
     "audit": "npm audit --audit-level=high",
-    "generate-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\""
+    "generate-secret": "node -e \"console.log(require('crypto').randomBytes(48).toString('base64url'))\"",
+    "docker:build": "docker build --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd .",
+    "docker:build:tag": "docker build --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:$(node -p \"require('./package.json').version\") .",
+    "docker:build:dev": "docker build --target dev --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:dev ."
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",
@@ -52,6 +55,7 @@
     "react": "19.2.3",
     "react-day-picker": "^9.13.2",
     "react-dom": "19.2.3",
+    "react-to-print": "^3.3.0",
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.4.0",
     "tsx": "^4.21.0",

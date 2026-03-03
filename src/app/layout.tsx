@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthProvider } from "@/components/layout/session-provider";
@@ -19,11 +19,40 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  userScalable: true,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
+};
+
 export async function generateMetadata(): Promise<Metadata> {
   const appTitle = getAppTitle();
   return {
     title: appTitle,
     description: `${appTitle} — Operations Dashboard`,
+    manifest: "/site.webmanifest",
+    formatDetection: {
+      telephone: true,
+      email: true,
+      address: false,
+    },
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "black-translucent",
+      title: appTitle,
+    },
+    icons: {
+      apple: "/icons/apple-touch-icon.png",
+    },
+    other: {
+      "mobile-web-app-capable": "yes",
+    },
   };
 }
 
@@ -33,7 +62,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const appearance = getAppearanceDefaults();
 
   return (
-    <html lang="en" className={`theme-${appearance.defaultThemePreset}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`theme-${appearance.defaultThemePreset} safe-area`}
+      suppressHydrationWarning
+    >
       <head>
         <ThemeScript
           systemPreset={appearance.defaultThemePreset}

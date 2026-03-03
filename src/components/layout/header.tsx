@@ -5,6 +5,7 @@ import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { usePreferences } from "@/lib/hooks/use-preferences";
+import { useDeviceType } from "@/lib/hooks/use-device-type";
 import { MobileNav } from "./mobile-nav";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 
@@ -12,6 +13,7 @@ export function Header() {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { data: session } = useSession();
   const { update: updatePrefs } = usePreferences();
+  const device = useDeviceType();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mounted = useSyncExternalStore(
@@ -54,11 +56,19 @@ export function Header() {
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin" || role === "superadmin";
 
+  // Hide entire header on phone — bottom tab bar + menu sheet handle navigation
+  if (device.type === "phone") {
+    return null;
+  }
+
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-background px-4">
-      {/* Mobile menu button */}
+    <header
+      data-print="hide"
+      className="flex h-14 items-center justify-between border-b border-border bg-background px-4"
+    >
+      {/* Mobile menu button — visible on md–lg only (bottom tab bar handles < md) */}
       <button
-        className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+        className="hidden md:block lg:hidden p-2 text-muted-foreground hover:text-foreground"
         onClick={() => setMobileNavOpen(true)}
       >
         <i className="fa-solid fa-bars" />
@@ -72,20 +82,18 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        {/* Theme toggle */}
         <button
           onClick={toggleTheme}
-          className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           title={`Theme: ${themeLabel}`}
         >
           <i className={themeIcon} />
         </button>
 
-        {/* User menu */}
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            className="flex h-11 md:h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
           >
             <i className="fa-solid fa-user-circle" />
             <span className="hidden sm:inline">{session?.user?.name || "User"}</span>

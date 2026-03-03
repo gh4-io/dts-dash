@@ -1,16 +1,19 @@
+/**
+ * GET /api/admin/import/history?page=1&pageSize=10&type=work-packages
+ *
+ * Unified import history across all data types.
+ * Queries import_log with optional type filter.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { importLog, users } from "@/lib/db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/admin/import/history");
 
-/**
- * GET /api/admin/import/history?page=1&pageSize=10
- * Returns paginated import history with user display names
- */
 export async function GET(request: NextRequest) {
   try {
     const session = await auth();
@@ -20,30 +23,42 @@ export async function GET(request: NextRequest) {
 
     const page = parseInt(request.nextUrl.searchParams.get("page") || "1");
     const pageSize = parseInt(request.nextUrl.searchParams.get("pageSize") || "10");
+    const typeFilter = request.nextUrl.searchParams.get("type");
     const offset = (page - 1) * pageSize;
 
-    // Get total count
+    // Build WHERE clause
+    const conditions = typeFilter ? and(eq(importLog.dataType, typeFilter)) : undefined;
+
+    // Total count
     const countResult = db
       .select({ count: sql<number>`COUNT(*)` })
       .from(importLog)
+      .where(conditions)
       .get();
     const total = countResult?.count ?? 0;
 
-    // Get paginated results with user display name
+    // Paginated results with user display name
     const rows = db
       .select({
         id: importLog.id,
         importedAt: importLog.importedAt,
-        recordCount: importLog.recordCount,
+        dataType: importLog.dataType,
         source: importLog.source,
+        format: importLog.format,
         fileName: importLog.fileName,
         importedBy: importLog.importedBy,
         status: importLog.status,
+        recordsTotal: importLog.recordCount,
+        recordsInserted: importLog.recordsInserted,
+        recordsUpdated: importLog.recordsUpdated,
+        recordsSkipped: importLog.recordsSkipped,
+        warnings: importLog.warnings,
         errors: importLog.errors,
         userDisplayName: users.displayName,
       })
       .from(importLog)
       .leftJoin(users, eq(importLog.importedBy, users.id))
+      .where(conditions)
       .orderBy(desc(importLog.importedAt))
       .limit(pageSize)
       .offset(offset)
@@ -60,9 +75,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     log.error({ err: error }, "GET error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

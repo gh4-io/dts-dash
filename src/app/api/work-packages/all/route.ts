@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { readWorkPackages } from "@/lib/data/reader";
 import { transformWorkPackages } from "@/lib/data/transformer";
-import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
+import {
+  applyDateRangeFilter,
+  applyFilters,
+  extractFacets,
+  parseFilterParams,
+} from "@/lib/utils/filter-helpers";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/work-packages/all");
@@ -29,18 +34,18 @@ export async function GET(request: NextRequest) {
     const rawData = readWorkPackages();
     const workPackages = await transformWorkPackages(rawData);
 
-    // Apply filters
+    // Two-stage filter: date range first (for facets), then entity filters
+    const dateScoped = applyDateRangeFilter(workPackages, filterParams);
+    const facets = extractFacets(dateScoped);
     const filtered = applyFilters(workPackages, filterParams);
 
     return NextResponse.json({
       data: filtered,
       total: filtered.length,
+      facets,
     });
   } catch (error) {
     log.error({ err: error }, "Error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

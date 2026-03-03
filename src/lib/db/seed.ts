@@ -307,6 +307,8 @@ export async function seedData(options: SeedOptions = {}) {
           importedBy: systemUserId ?? 1,
           status: "success",
           errors: null,
+          dataType: "work-packages",
+          format: "json",
         })
         .returning({ id: schema.importLog.id })
         .get();

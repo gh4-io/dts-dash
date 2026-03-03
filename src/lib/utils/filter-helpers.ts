@@ -19,9 +19,7 @@ export function parseFilterParams(query: URLSearchParams): Partial<FilterState> 
 
   const operators = operatorsRaw ? operatorsRaw.split(",").filter(Boolean) : [];
   const aircraft = aircraftRaw ? aircraftRaw.split(",").filter(Boolean) : [];
-  const types = typesRaw
-    ? (typesRaw.split(",").filter(Boolean) as AircraftType[])
-    : [];
+  const types = typesRaw ? (typesRaw.split(",").filter(Boolean) as AircraftType[]) : [];
 
   return {
     ...(start && { start }),
@@ -71,17 +69,15 @@ export function validateFilterState(state: Partial<FilterState>): {
 }
 
 /**
- * Apply filters to work packages
- * Returns filtered array
+ * Apply date-range filter only (no operator/aircraft/type filtering).
+ * Used to scope the dataset by time window before extracting facets.
  */
-export function applyFilters(
+export function applyDateRangeFilter(
   workPackages: WorkPackage[],
-  filters: Partial<FilterState>
+  filters: Partial<FilterState>,
 ): WorkPackage[] {
-  let filtered = [...workPackages];
+  let filtered = workPackages;
 
-  // Date range filter — show work packages that OVERLAP with the time window
-  // A work package overlaps if: arrival < endDate AND departure > startDate
   if (filters.start && filters.end) {
     const startDate = new Date(filters.start);
     const endDate = new Date(filters.end);
@@ -94,22 +90,76 @@ export function applyFilters(
     filtered = filtered.filter((wp) => wp.arrival < endDate);
   }
 
-  // Operator filter (customer)
+  return filtered;
+}
+
+/**
+ * Apply operator/aircraft/type filters (assumes date-range already applied).
+ */
+function applyEntityFilters(
+  workPackages: WorkPackage[],
+  filters: Partial<FilterState>,
+): WorkPackage[] {
+  let filtered = workPackages;
+
   if (filters.operators && filters.operators.length > 0) {
     filtered = filtered.filter((wp) => filters.operators!.includes(wp.customer));
   }
-
-  // Aircraft filter (registration)
   if (filters.aircraft && filters.aircraft.length > 0) {
     filtered = filtered.filter((wp) => filters.aircraft!.includes(wp.aircraftReg));
   }
-
-  // Type filter
   if (filters.types && filters.types.length > 0) {
     filtered = filtered.filter((wp) => filters.types!.includes(wp.inferredType));
   }
 
   return filtered;
+}
+
+/**
+ * Apply filters to work packages
+ * Returns filtered array
+ */
+export function applyFilters(
+  workPackages: WorkPackage[],
+  filters: Partial<FilterState>,
+): WorkPackage[] {
+  const dateFiltered = applyDateRangeFilter(workPackages, filters);
+  return applyEntityFilters(dateFiltered, filters);
+}
+
+/** Facets: unique sorted values for key string columns */
+export interface Facets {
+  customer: string[];
+  aircraftReg: string[];
+  inferredType: string[];
+  status: string[];
+}
+
+/**
+ * Extract unique sorted values for string columns from a work package set.
+ * Call on the date-range-filtered (but not entity-filtered) set to get all
+ * available options within the time window.
+ */
+export function extractFacets(workPackages: WorkPackage[]): Facets {
+  const customers = new Set<string>();
+  const aircraft = new Set<string>();
+  const types = new Set<string>();
+  const statuses = new Set<string>();
+
+  for (const wp of workPackages) {
+    if (wp.customer) customers.add(wp.customer);
+    if (wp.aircraftReg) aircraft.add(wp.aircraftReg);
+    if (wp.inferredType) types.add(wp.inferredType);
+    if (wp.status) statuses.add(wp.status);
+  }
+
+  const sort = (a: string, b: string) => a.localeCompare(b);
+  return {
+    customer: Array.from(customers).sort(sort),
+    aircraftReg: Array.from(aircraft).sort(sort),
+    inferredType: Array.from(types).sort(sort),
+    status: Array.from(statuses).sort(sort),
+  };
 }
 
 /**

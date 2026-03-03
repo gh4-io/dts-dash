@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db/client";
 import { importLog } from "@/lib/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/data-freshness");
@@ -21,6 +21,7 @@ export async function GET() {
     const latest = db
       .select({ importedAt: importLog.importedAt })
       .from(importLog)
+      .where(eq(importLog.dataType, "work-packages"))
       .orderBy(desc(importLog.importedAt))
       .limit(1)
       .get();
@@ -36,9 +37,6 @@ export async function GET() {
     return NextResponse.json({ importedAt, ageHours });
   } catch (error) {
     log.error({ err: error }, "Error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

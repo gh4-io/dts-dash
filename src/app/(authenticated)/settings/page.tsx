@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -50,6 +50,9 @@ const PAGE_SIZES = [10, 25, 30, 50, 100];
 export default function SettingsPage() {
   const { setTheme } = useTheme();
   const prefs = usePreferences();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!prefs.loaded) {
@@ -91,7 +94,7 @@ export default function SettingsPage() {
             {COLOR_MODES.map((mode) => (
               <Button
                 key={mode.value}
-                variant={prefs.colorMode === mode.value ? "default" : "outline"}
+                variant={mounted && prefs.colorMode === mode.value ? "default" : "outline"}
                 size="sm"
                 onClick={() => handleColorModeChange(mode.value)}
               >
@@ -146,7 +149,7 @@ export default function SettingsPage() {
           </div>
           <Switch
             id="compact-mode"
-            checked={prefs.compactMode}
+            checked={mounted && prefs.compactMode}
             onCheckedChange={(checked) => prefs.update({ compactMode: checked })}
           />
         </div>

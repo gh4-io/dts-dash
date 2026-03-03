@@ -46,12 +46,51 @@ interface ServerStatus {
   uptimeMs: number;
 }
 
+interface ServerInfo {
+  app: {
+    name: string;
+    version: string;
+    build: number;
+    buildBranch: string;
+    buildTimestamp: string | null;
+    nextVersion: string;
+    environment: string;
+  };
+  runtime: {
+    nodeVersion: string;
+    processUptimeMs: number;
+    memoryRssBytes: number;
+    memoryHeapUsedBytes: number;
+    memoryHeapTotalBytes: number;
+  };
+  system: {
+    hostname: string;
+    platform: string;
+    arch: string;
+    osType: string;
+    osRelease: string;
+    systemUptimeMs: number;
+    cpuCount: number;
+    cpuModel: string;
+    memoryTotalBytes: number;
+    memoryFreeBytes: number;
+    loadAvg: [number, number, number];
+  };
+}
+
 interface ActionState {
   loading: boolean;
   message: { type: "success" | "error"; text: string } | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function formatBytes(bytes: number, decimals = 1): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(decimals)} ${units[i]}`;
+}
 
 function formatUptime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -82,14 +121,15 @@ export function ServerTab() {
   const { data: session } = useSession();
   const isSuperadmin = session?.user?.role === "superadmin";
 
+  const [info, setInfo] = useState<ServerInfo | null>(null);
+  const [infoLoading, setInfoLoading] = useState(true);
+
   const [status, setStatus] = useState<ServerStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
 
   // Per-action states
   const [actions, setActions] = useState<Record<string, ActionState>>({});
-  const [graceHours, setGraceHours] = useState(DEFAULT_CLEANUP_GRACE_HOURS);
-
   // Flight display settings (system-wide)
   const [flightSettings, setFlightSettings] = useState<{
     hideCanceled: boolean;
@@ -106,6 +146,23 @@ export function ServerTab() {
       [key]: { ...getAction(key), ...state },
     }));
   };
+
+  // Fetch app/runtime/system info
+  const fetchInfo = useCallback(async () => {
+    setInfoLoading(true);
+    try {
+      const res = await fetch("/api/admin/server/info");
+      if (res.ok) setInfo(await res.json());
+    } catch {
+      // silently fail — section shows nothing
+    } finally {
+      setInfoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInfo();
+  }, [fetchInfo]);
 
   // Fetch server status
   const fetchStatus = useCallback(async () => {
@@ -147,13 +204,6 @@ export function ServerTab() {
   useEffect(() => {
     fetchFlightSettings();
   }, [fetchFlightSettings]);
-
-  // Sync manual cleanup grace period input with system setting
-  useEffect(() => {
-    if (flightSettings) {
-      setGraceHours(flightSettings.cleanupGraceHours);
-    }
-  }, [flightSettings]);
 
   // Save flight settings
   const saveFlightSettings = async () => {
@@ -226,6 +276,131 @@ export function ServerTab() {
 
   return (
     <div className="space-y-6">
+      {/* ── Application & Runtime ────────────────────────────────────── */}
+      <section className="rounded-lg border border-border bg-card p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-server text-muted-foreground" />
+            <h3 className="text-lg font-semibold">Application &amp; Runtime</h3>
+          </div>
+          <Button variant="ghost" size="sm" onClick={fetchInfo} disabled={infoLoading}>
+            <i className={`fa-solid fa-arrows-rotate mr-2 ${infoLoading ? "fa-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+
+        {infoLoading && !info && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <i className="fa-solid fa-spinner fa-spin" />
+            Loading info...
+          </div>
+        )}
+
+        {info && (
+          <div className="space-y-5">
+            {/* Application */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Application
+              </p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Name</dt>
+                <dd className="font-medium">{info.app.name}</dd>
+                <dt className="text-muted-foreground">Version</dt>
+                <dd className="font-mono">v{info.app.version}</dd>
+                <dt className="text-muted-foreground">Build</dt>
+                <dd className="font-mono">
+                  b{info.app.build}
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    ({info.app.buildBranch})
+                  </span>
+                </dd>
+                {info.app.buildTimestamp && (
+                  <>
+                    <dt className="text-muted-foreground">Built</dt>
+                    <dd className="text-xs text-muted-foreground">
+                      {new Date(info.app.buildTimestamp).toLocaleString()}
+                    </dd>
+                  </>
+                )}
+                <dt className="text-muted-foreground">Next.js</dt>
+                <dd className="font-mono">{info.app.nextVersion}</dd>
+                <dt className="text-muted-foreground">Environment</dt>
+                <dd>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                      info.app.environment === "production"
+                        ? "bg-emerald-500/15 text-emerald-500"
+                        : "bg-amber-500/15 text-amber-500"
+                    }`}
+                  >
+                    {info.app.environment}
+                  </span>
+                </dd>
+              </dl>
+            </div>
+
+            {/* Runtime */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Runtime
+              </p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Node.js</dt>
+                <dd className="font-mono">{info.runtime.nodeVersion}</dd>
+                <dt className="text-muted-foreground">Process Up</dt>
+                <dd>{formatUptime(info.runtime.processUptimeMs)}</dd>
+                <dt className="text-muted-foreground">Heap Used</dt>
+                <dd>
+                  {formatBytes(info.runtime.memoryHeapUsedBytes)} /{" "}
+                  {formatBytes(info.runtime.memoryHeapTotalBytes)}
+                </dd>
+                <dt className="text-muted-foreground">RSS</dt>
+                <dd>{formatBytes(info.runtime.memoryRssBytes)}</dd>
+              </dl>
+            </div>
+
+            {/* System */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                System
+              </p>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+                <dt className="text-muted-foreground">Hostname</dt>
+                <dd className="font-mono">{info.system.hostname}</dd>
+                <dt className="text-muted-foreground">OS</dt>
+                <dd>
+                  {info.system.osType} {info.system.arch}
+                </dd>
+                <dt className="text-muted-foreground">CPU</dt>
+                <dd>
+                  {info.system.cpuCount} core{info.system.cpuCount !== 1 ? "s" : ""} —{" "}
+                  <span className="text-muted-foreground">{info.system.cpuModel}</span>
+                </dd>
+                <dt className="text-muted-foreground">Memory</dt>
+                <dd>
+                  {formatBytes(info.system.memoryFreeBytes)} free /{" "}
+                  {formatBytes(info.system.memoryTotalBytes)} total
+                </dd>
+                <dt className="text-muted-foreground">System Up</dt>
+                <dd>{formatUptime(info.system.systemUptimeMs)}</dd>
+                {info.system.loadAvg[0] > 0 && (
+                  <>
+                    <dt className="text-muted-foreground">Load Avg</dt>
+                    <dd className="font-mono">
+                      {info.system.loadAvg[0].toFixed(2)}&nbsp;&nbsp;
+                      {info.system.loadAvg[1].toFixed(2)}&nbsp;&nbsp;
+                      {info.system.loadAvg[2].toFixed(2)}
+                      <span className="ml-2 text-xs text-muted-foreground">(1m / 5m / 15m)</span>
+                    </dd>
+                  </>
+                )}
+              </dl>
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* ── Database Status ──────────────────────────────────────────── */}
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
@@ -451,28 +626,19 @@ export function ServerTab() {
             <h3 className="font-semibold">Cleanup Canceled WPs</h3>
           </div>
           <p className="mb-3 text-sm text-muted-foreground">
-            Permanently delete canceled work packages older than the grace period.
+            Permanently delete canceled work packages older than the grace period (
+            {flightSettings?.cleanupGraceHours ?? DEFAULT_CLEANUP_GRACE_HOURS}h, configured above in
+            Flight Display).
           </p>
-          <div className="mb-3 flex items-center gap-2">
-            <label htmlFor="grace-hours" className="text-sm text-muted-foreground">
-              Grace period (hours):
-            </label>
-            <input
-              id="grace-hours"
-              type="number"
-              min={0}
-              value={graceHours}
-              onChange={(e) => setGraceHours(Math.max(0, Number(e.target.value)))}
-              className="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm"
-            />
-          </div>
           <Button
             size="sm"
             variant="outline"
             disabled={getAction("cleanup").loading}
             onClick={() =>
               performAction("cleanup", "/api/admin/server/cleanup", {
-                body: { graceHours },
+                body: {
+                  graceHours: flightSettings?.cleanupGraceHours ?? DEFAULT_CLEANUP_GRACE_HOURS,
+                },
               })
             }
           >

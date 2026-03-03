@@ -1,6 +1,7 @@
 "use client";
 
 import { useReducer, useCallback } from "react";
+import Link from "next/link";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -38,7 +39,7 @@ function reducer(state: LocalState, action: Action): LocalState {
         shifts: state.shifts.map((s) =>
           s.name === action.shiftName
             ? { ...s, headcount: Math.max(0, s.headcount + action.delta) }
-            : s
+            : s,
         ),
         isDirty: true,
       };
@@ -54,11 +55,7 @@ function reducer(state: LocalState, action: Action): LocalState {
  * Key this component on config version from parent to reset state on upstream changes:
  *   <ConfigPanel key={configKey} config={config} ... />
  */
-export function ConfigPanel({
-  config,
-  onConfigChange,
-  onRefetch,
-}: ConfigPanelProps) {
+export function ConfigPanel({ config, onConfigChange, onRefetch }: ConfigPanelProps) {
   const [state, dispatch] = useReducer(reducer, {
     defaultMH: config.defaultMH,
     wpMHMode: config.wpMHMode,
@@ -74,12 +71,9 @@ export function ConfigPanel({
     dispatch({ type: "SET_WP_MODE", value: checked ? "include" : "exclude" });
   }, []);
 
-  const handleHeadcountChange = useCallback(
-    (shiftName: string, delta: number) => {
-      dispatch({ type: "SET_HEADCOUNT", shiftName, delta });
-    },
-    []
-  );
+  const handleHeadcountChange = useCallback((shiftName: string, delta: number) => {
+    dispatch({ type: "SET_HEADCOUNT", shiftName, delta });
+  }, []);
 
   const handleApply = useCallback(async () => {
     await onConfigChange({
@@ -95,15 +89,24 @@ export function ConfigPanel({
     <div className="rounded-lg border border-border bg-card p-4">
       <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-3 flex items-center gap-2">
         <i className="fa-solid fa-sliders" />
-        Capacity Configuration
+        Quick Configuration
       </h3>
+
+      {/* Info banner linking to admin pages */}
+      <div className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400 mb-3">
+        <i className="fa-solid fa-circle-info mr-1" />
+        For advanced capacity modeling (productivity factors, effective-dated headcount plans,
+        demand curves), use the{" "}
+        <Link href="/admin/capacity" className="underline hover:text-blue-300">
+          Admin Capacity settings
+        </Link>
+        .
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Default MH Slider */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
-            Default MH per WP
-          </Label>
+          <Label className="text-xs text-muted-foreground">Default MH per WP</Label>
           <div className="flex items-center gap-3">
             <Slider
               value={[state.defaultMH]}
@@ -121,27 +124,18 @@ export function ConfigPanel({
 
         {/* WP MH Include/Exclude Toggle */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
-            WP Man-Hours
-          </Label>
+          <Label className="text-xs text-muted-foreground">WP Man-Hours</Label>
           <div className="flex items-center gap-2">
-            <Switch
-              checked={state.wpMHMode === "include"}
-              onCheckedChange={handleWpMHToggle}
-            />
+            <Switch checked={state.wpMHMode === "include"} onCheckedChange={handleWpMHToggle} />
             <span className="text-sm">
-              {state.wpMHMode === "include"
-                ? "Use WP hours when available"
-                : "Use default MH only"}
+              {state.wpMHMode === "include" ? "Use WP hours when available" : "Use default MH only"}
             </span>
           </div>
         </div>
 
         {/* Shift Headcounts */}
         <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">
-            Shift Headcounts
-          </Label>
+          <Label className="text-xs text-muted-foreground">Shift Headcounts</Label>
           <div className="flex gap-3">
             {state.shifts.map((shift) => (
               <ShiftControl
@@ -178,11 +172,7 @@ function ShiftControl({
   onDecrement: () => void;
 }) {
   const shiftIcon =
-    shift.name === "Day"
-      ? "fa-sun"
-      : shift.name === "Swing"
-        ? "fa-cloud-sun"
-        : "fa-moon";
+    shift.name === "Day" ? "fa-sun" : shift.name === "Swing" ? "fa-cloud-sun" : "fa-moon";
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -198,9 +188,7 @@ function ShiftControl({
         >
           -
         </button>
-        <span className="text-sm font-mono w-6 text-center tabular-nums">
-          {shift.headcount}
-        </span>
+        <span className="text-sm font-mono w-6 text-center tabular-nums">{shift.headcount}</span>
         <button
           onClick={onIncrement}
           className="h-6 w-6 rounded border border-border bg-muted text-xs hover:bg-accent flex items-center justify-center"
@@ -209,8 +197,7 @@ function ShiftControl({
         </button>
       </div>
       <span className="text-[9px] text-muted-foreground">
-        {String(shift.startHour).padStart(2, "0")}–
-        {String(shift.endHour).padStart(2, "0")}
+        {String(shift.startHour).padStart(2, "0")}–{String(shift.endHour).padStart(2, "0")}
       </span>
     </div>
   );

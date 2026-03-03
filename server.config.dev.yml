@@ -1,0 +1,140 @@
+# Development Server Configuration
+# This file is tracked in git as a template
+# Production instances use server.config.yml (gitignored)
+
+# ─── Application ─────────────────────────────────────────────────────────────
+app:
+  # Site title shown in browser tab, sidebar, login page, and nav
+  # Default: "Dashboard"
+  title: "CVG Dashboard"
+
+  # Public base URL — only needed behind a reverse proxy that rewrites the Host header
+  # (e.g. Cloudflare Tunnel). Leave commented for auto-detection via trustHost.
+  # YAML takes priority over BASE_URL env var.
+  # baseUrl: "https://dashboard.example.com"
+
+# ─── Authentication ──────────────────────────────────────────────────────────
+# auth:
+#   # Auth.js JWT signing secret. Must be 32+ characters in production.
+#   # If not set here or via AUTH_SECRET env var, one is auto-generated on first run.
+#   # YAML takes priority over AUTH_SECRET env var.
+#   # Generate with: npm run generate-secret
+#   secret: "your-secret-here"
+
+# ─── Database ────────────────────────────────────────────────────────────────
+# database:
+#   # SQLite database file path (absolute or relative to project root).
+#   # YAML takes priority over DATABASE_PATH env var.
+#   # Default: ./data/dashboard.db
+#   path: "./data/dashboard.db"
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  # Server-side pino log level
+  # Values: trace | debug | info | warn | error | fatal
+  # Development default: debug | Production recommended: info
+  level: "debug"
+
+# ─── Features ─────────────────────────────────────────────────────────────────
+features:
+  # Enable the /api/seed endpoint for programmatic seeding
+  # ⚠️  Always false in production
+  enableSeedEndpoint: false
+
+  # Enable the in-app cron scheduler
+  # Set to false to disable all scheduled background tasks
+  cronEnabled: true
+
+# ─── Timeline Defaults ────────────────────────────────────────────────────────
+timeline:
+  # Days before today the flight board starts (supports fractions: -0.5 = 12 hours ago)
+  startOffset: -0.5
+
+  # Default number of days the window spans from startOffset
+  # endOffset is derived: startOffset + defaultDays (e.g. -0.5 + 3 = 2.5)
+  # To override: set BOTH startOffset AND endOffset explicitly — defaultDays is then ignored
+  defaultDays: 3
+
+  # Explicit end override — uncomment to pin end independently of defaultDays
+  # endOffset: 7
+
+  # Default zoom level: "6h" | "12h" | "1d" | "3d" | "1w" | "all"
+  defaultZoom: "3d"
+
+  # Start flight board in compact mode by default
+  defaultCompact: false
+
+  # Default timezone: "UTC" | "America/New_York" (IANA string)
+  defaultTimezone: "America/New_York"
+
+# ─── Flights ─────────────────────────────────────────────────────────────────
+flights:
+  # Hide canceled work packages from all views (flight board, dashboard, capacity)
+  # When true, canceled WPs are excluded at the database query level
+  # When false, canceled WPs appear with striped/dimmed visual treatment
+  hideCanceled: true
+
+  # Grace period (hours) before the cleanup cron job permanently deletes canceled WPs
+  # Also used as the default for manual cleanup actions
+  # Range: 1-720 (1 hour to 30 days)
+  cleanupGraceHours: 6
+
+# ─── Appearance ──────────────────────────────────────────────────────────────
+appearance:
+  # Default color mode for first-time visitors (before login / localStorage)
+  # Values: "light" | "dark" | "system"
+  # "system" follows OS preference via prefers-color-scheme
+  # Hardcoded fallback (when this section is absent): "system"
+  defaultColorMode: "dark"
+
+  # Default theme preset for first-time visitors
+  # Valid: neutral, ocean, purple, black, vitepress, dusk, catppuccin, solar, emerald, ruby, aspen
+  # Hardcoded fallback (when this section is absent): "neutral"
+  defaultThemePreset: "vitepress"
+
+# ─── Password Security ──────────────────────────────────────────────────────
+passwordSecurity:
+  # Minimum password length (8-128 characters)
+  # Development default: 8 for easier testing
+  minLength: 8
+
+  # Maximum password length (8-128 characters)
+  maxLength: 128
+
+  # Character requirements (boolean)
+  requireUppercase: false
+  requireLowercase: false
+  requireDigits: false
+  requireSpecialChars: false
+
+  # Common password prevention (boolean)
+  # When true, blocks passwords from the blocklist
+  preventCommon: true
+
+  # Minimum entropy score (0-100)
+  # 0 = disabled, 30-50 = medium, 70+ = high security
+  # Development default: 30 (lower threshold for testing)
+  minEntropy: 30
+
+# ─── Cron Job Overrides ─────────────────────────────────────────────────────
+# Override built-in job settings or define custom jobs.
+# Built-in jobs: only override the fields you want to change.
+# Custom jobs: must include script + schedule at minimum.
+#
+# cron:
+#   jobs:
+#     # Override built-in job (only specify fields to change)
+#     cleanup-canceled:
+#       schedule: "0 */12 * * *"     # every 12h instead of default 6h
+#       options:
+#         graceHours: 12
+#
+#     # Custom job (must include script + schedule)
+#     nightly-backup:
+#       name: "Nightly DB Backup"
+#       description: "Runs a custom backup script at 3 AM"
+#       script: "scripts/cron/nightly-backup.ts"
+#       schedule: "0 3 * * *"
+#       enabled: true
+#       options:
+#         keepDays: 30

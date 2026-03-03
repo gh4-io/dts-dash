@@ -39,11 +39,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function UtilizationChart({
-  demand,
-  capacity,
-  utilization,
-}: UtilizationChartProps) {
+export function UtilizationChart({ demand, capacity, utilization }: UtilizationChartProps) {
   const chartData = useMemo(() => {
     const capMap = new Map(capacity.map((c) => [c.date, c]));
     const demandMap = new Map(demand.map((d) => [d.date, d]));
@@ -75,16 +71,9 @@ export function UtilizationChart({
   }
 
   return (
-    <ResponsiveContainer width="100%" height={340}>
-      <ComposedChart
-        data={chartData}
-        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-      >
-        <CartesianGrid
-          strokeDasharray="3 3"
-          stroke="hsl(var(--border))"
-          opacity={0.3}
-        />
+    <ResponsiveContainer width="100%" height={340} minWidth={0}>
+      <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
         <XAxis
           dataKey="label"
           tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
@@ -166,19 +155,9 @@ export function UtilizationChart({
             fontSize: 10,
           }}
         />
-        <Bar
-          yAxisId="mh"
-          dataKey="demandMH"
-          name="Demand"
-          radius={[2, 2, 0, 0]}
-          barSize={20}
-        >
+        <Bar yAxisId="mh" dataKey="demandMH" name="Demand" radius={[2, 2, 0, 0]} barSize={20}>
           {chartData.map((entry, idx) => (
-            <Cell
-              key={idx}
-              fill={getUtilizationColor(entry.utilization)}
-              fillOpacity={0.8}
-            />
+            <Cell key={idx} fill={getUtilizationColor(entry.utilization)} fillOpacity={0.8} />
           ))}
         </Bar>
         <Line

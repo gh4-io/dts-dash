@@ -22,7 +22,8 @@
 # ─── Build args for OCI labels ──────────────────────────────
 ARG GIT_SHA=unknown
 ARG BUILD_DATE=unknown
-ARG VERSION=0.1.1
+ARG VERSION
+ARG BUILD_NUMBER
 
 # ─── Shared base: Alpine + native build tools ───────────────
 # Used by build stages only — never used as the final image
@@ -46,6 +47,13 @@ WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# build.json is tracked in git — commit count flows through COPY above.
+# CI can override with: --build-arg BUILD_NUMBER=<n>
+ARG BUILD_NUMBER
+RUN if [ -n "$BUILD_NUMBER" ]; then \
+      node -e "const fs=require('fs'); const b=JSON.parse(fs.readFileSync('build.json','utf8')); b.build=parseInt('$BUILD_NUMBER'); fs.writeFileSync('build.json',JSON.stringify(b,null,2));"; \
+    fi
 
 # Ensure data/seed exists (may be empty if seed files aren't tracked in git)
 RUN mkdir -p data/seed
@@ -187,7 +195,7 @@ RUN chmod +x /docker-entrypoint.sh
 # ── OCI labels ────────────────────────────────────────────────
 ARG GIT_SHA=unknown
 ARG BUILD_DATE=unknown
-ARG VERSION=0.1.1
+ARG VERSION
 LABEL org.opencontainers.image.title="DTS Dashboard" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${GIT_SHA}" \

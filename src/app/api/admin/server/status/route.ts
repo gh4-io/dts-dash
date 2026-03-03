@@ -91,7 +91,7 @@ export async function GET() {
     try {
       const row = sqlite
         .prepare(
-          "SELECT imported_at, record_count, source, file_name FROM import_log ORDER BY imported_at DESC LIMIT 1",
+          "SELECT imported_at, record_count, source, file_name FROM import_log WHERE data_type = 'work-packages' ORDER BY imported_at DESC LIMIT 1",
         )
         .get() as
         | {

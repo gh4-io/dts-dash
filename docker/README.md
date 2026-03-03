@@ -179,12 +179,18 @@ docker build -t dtsd .
 # Development
 docker build --target dev -t dtsd:dev .
 
-# With OCI labels
+# With OCI labels — use npm scripts (version auto-read from package.json):
+npm run docker:build        # build, tag as 'dtsd'
+npm run docker:build:tag    # build + tag as 'dtsd:x.y.z'
+npm run docker:build:dev    # build dev target
+
+# Or manually (substitute version from package.json):
+VERSION=$(node -p "require('./package.json').version")
 docker build \
   --build-arg GIT_SHA=$(git rev-parse HEAD) \
   --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-  --build-arg VERSION=0.1.1 \
-  -t dtsd:0.1.1 .
+  --build-arg VERSION=$VERSION \
+  -t dtsd:$VERSION .
 ```
 
 ---

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,11 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useFilters } from "@/lib/hooks/use-filters";
 import {
   useActions,
@@ -30,8 +26,9 @@ import {
   type ActionColumnKey,
 } from "@/lib/hooks/use-actions";
 import { useWorkPackagesStore } from "@/lib/hooks/use-work-packages";
-import { getUniqueValues } from "@/lib/utils/data-transforms";
 import type { AircraftType } from "@/types";
+import type { Facets } from "@/lib/utils/filter-helpers";
+import { SHIFT_NAMES } from "@/lib/utils/shift-helpers";
 
 // ─── Operator sets by column type ───
 
@@ -41,9 +38,7 @@ const DATE_OPERATORS = [">", "<", ">=", "<="] as const;
 
 type FilterOperator = ColumnFilterRule["operator"];
 
-function getOperatorsForType(
-  type: "string" | "number" | "date"
-): readonly FilterOperator[] {
+function getOperatorsForType(type: "string" | "number" | "date"): readonly FilterOperator[] {
   switch (type) {
     case "string":
       return STRING_OPERATORS;
@@ -59,11 +54,7 @@ function getColumnType(key: ActionColumnKey): "string" | "number" | "date" {
 }
 
 /** API-level filter columns that bridge to useFilters */
-const API_COLUMNS = new Set<ActionColumnKey>([
-  "customer",
-  "aircraftReg",
-  "inferredType",
-]);
+const API_COLUMNS = new Set<ActionColumnKey>(["customer", "aircraftReg", "inferredType"]);
 
 let ruleIdCounter = 0;
 function nextRuleId(): string {
@@ -87,20 +78,10 @@ interface ColumnsFilterDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function ColumnsFilterDialog({
-  open,
-  onOpenChange,
-}: ColumnsFilterDialogProps) {
-  const {
-    operators,
-    aircraft,
-    types,
-    setOperators,
-    setAircraft,
-    setTypes,
-  } = useFilters();
+export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogProps) {
+  const { operators, aircraft, types, setOperators, setAircraft, setTypes } = useFilters();
   const { columnFilters, setColumnFilters } = useActions();
-  const { workPackages } = useWorkPackagesStore();
+  const { facets } = useWorkPackagesStore();
   const [draft, setDraft] = useState<ColumnFilterRule[]>([]);
 
   // ─── Hydrate draft when dialog opens ───
@@ -149,18 +130,16 @@ export function ColumnsFilterDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Memoize unique values per column used in draft
-  const uniqueValuesCache = useMemo(() => {
-    const cache = new Map<ActionColumnKey, string[]>();
-    const columnsInUse = new Set(draft.map((r) => r.column));
-    for (const col of columnsInUse) {
-      cache.set(col, getUniqueValues(workPackages, col));
-    }
-    return cache;
-  }, [workPackages, draft]);
+  /** Facet-based lookup — returns all values in the date range, not just filtered */
+  const FACET_KEYS: Record<string, keyof Facets> = {
+    customer: "customer",
+    aircraftReg: "aircraftReg",
+    inferredType: "inferredType",
+    status: "status",
+  };
 
   const getValues = (col: ActionColumnKey): string[] =>
-    uniqueValuesCache.get(col) ?? getUniqueValues(workPackages, col);
+    col === "shift" ? [...SHIFT_NAMES] : (facets[FACET_KEYS[col] as keyof Facets] ?? []);
 
   const addRule = () => {
     setDraft([...draft, makeBlankRule()]);
@@ -173,9 +152,7 @@ export function ColumnsFilterDialog({
   };
 
   const updateRule = (id: string, updates: Partial<ColumnFilterRule>) => {
-    setDraft(
-      draft.map((r) => (r.id === id ? { ...r, ...updates } : r))
-    );
+    setDraft(draft.map((r) => (r.id === id ? { ...r, ...updates } : r)));
   };
 
   const handleColumnChange = (id: string, newColumn: ActionColumnKey) => {
@@ -206,25 +183,13 @@ export function ColumnsFilterDialog({
 
     for (const rule of draft) {
       // Skip blank rules
-      if (
-        (rule.operator === "in" || rule.operator === "not in") &&
-        rule.values.length === 0
-      )
+      if ((rule.operator === "in" || rule.operator === "not in") && rule.values.length === 0)
         continue;
-      if (
-        rule.operator !== "in" &&
-        rule.operator !== "not in" &&
-        !rule.value
-      )
-        continue;
+      if (rule.operator !== "in" && rule.operator !== "not in" && !rule.value) continue;
 
-      if (
-        API_COLUMNS.has(rule.column) &&
-        (rule.operator === "=" || rule.operator === "in")
-      ) {
+      if (API_COLUMNS.has(rule.column) && (rule.operator === "=" || rule.operator === "in")) {
         // Bridge to useFilters
-        const vals =
-          rule.operator === "in" ? rule.values : [rule.value];
+        const vals = rule.operator === "in" ? rule.values : [rule.value];
         switch (rule.column) {
           case "customer":
             apiOps.push(...vals);
@@ -262,20 +227,14 @@ export function ColumnsFilterDialog({
           {draft.map((rule) => {
             const colType = getColumnType(rule.column);
             const ops = getOperatorsForType(colType);
-            const isSet =
-              rule.operator === "in" || rule.operator === "not in";
+            const isSet = rule.operator === "in" || rule.operator === "not in";
 
             return (
-              <div
-                key={rule.id}
-                className="flex items-center gap-1.5"
-              >
+              <div key={rule.id} className="flex items-center gap-1.5">
                 {/* Column — ~33% */}
                 <Select
                   value={rule.column}
-                  onValueChange={(v) =>
-                    handleColumnChange(rule.id, v as ActionColumnKey)
-                  }
+                  onValueChange={(v) => handleColumnChange(rule.id, v as ActionColumnKey)}
                 >
                   <SelectTrigger className="h-8 text-xs flex-[1_1_33%] min-w-0">
                     <SelectValue />
@@ -292,9 +251,7 @@ export function ColumnsFilterDialog({
                 {/* Operator — fixed max width */}
                 <Select
                   value={rule.operator}
-                  onValueChange={(v) =>
-                    handleOperatorChange(rule.id, v as FilterOperator)
-                  }
+                  onValueChange={(v) => handleOperatorChange(rule.id, v as FilterOperator)}
                 >
                   <SelectTrigger className="h-8 text-xs w-[80px] max-w-[80px] shrink-0">
                     <SelectValue />
@@ -314,17 +271,13 @@ export function ColumnsFilterDialog({
                     <SetValuePicker
                       values={rule.values}
                       options={getValues(rule.column)}
-                      onChange={(vals) =>
-                        updateRule(rule.id, { values: vals })
-                      }
+                      onChange={(vals) => updateRule(rule.id, { values: vals })}
                     />
                   </div>
                 ) : colType === "string" ? (
                   <Select
                     value={rule.value}
-                    onValueChange={(v) =>
-                      updateRule(rule.id, { value: v })
-                    }
+                    onValueChange={(v) => updateRule(rule.id, { value: v })}
                   >
                     <SelectTrigger className="h-8 text-xs flex-[1_1_33%] min-w-0">
                       <SelectValue placeholder="Select..." />
@@ -341,9 +294,7 @@ export function ColumnsFilterDialog({
                   <Input
                     type="number"
                     value={rule.value}
-                    onChange={(e) =>
-                      updateRule(rule.id, { value: e.target.value })
-                    }
+                    onChange={(e) => updateRule(rule.id, { value: e.target.value })}
                     placeholder="Value"
                     className="h-8 text-xs flex-[1_1_33%] min-w-0"
                   />
@@ -351,9 +302,7 @@ export function ColumnsFilterDialog({
                   <Input
                     type="datetime-local"
                     value={rule.value}
-                    onChange={(e) =>
-                      updateRule(rule.id, { value: e.target.value })
-                    }
+                    onChange={(e) => updateRule(rule.id, { value: e.target.value })}
                     className="h-8 text-xs flex-[1_1_33%] min-w-0"
                   />
                 )}
@@ -371,23 +320,14 @@ export function ColumnsFilterDialog({
             );
           })}
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs gap-1.5 mt-1"
-            onClick={addRule}
-          >
+          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 mt-1" onClick={addRule}>
             <i className="fa-solid fa-plus text-xs" />
             Add Filter
           </Button>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button size="sm" onClick={handleApply}>
@@ -411,11 +351,7 @@ function SetValuePicker({
   onChange: (values: string[]) => void;
 }) {
   const toggle = (val: string) => {
-    onChange(
-      values.includes(val)
-        ? values.filter((v) => v !== val)
-        : [...values, val]
-    );
+    onChange(values.includes(val) ? values.filter((v) => v !== val) : [...values, val]);
   };
 
   const label =
@@ -454,9 +390,7 @@ function SetValuePicker({
             </label>
           ))}
           {options.length === 0 && (
-            <p className="text-xs text-muted-foreground py-2 text-center">
-              No values
-            </p>
+            <p className="text-xs text-muted-foreground py-2 text-center">No values</p>
           )}
         </div>
       </PopoverContent>

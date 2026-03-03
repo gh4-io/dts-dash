@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,9 @@ import {
 } from "@/components/ui/select";
 import { useActions, ACTION_COLUMNS } from "@/lib/hooks/use-actions";
 import { useWorkPackagesStore } from "@/lib/hooks/use-work-packages";
-import { getUniqueValues } from "@/lib/utils/data-transforms";
-import type { HighlightRule, ActionColumnKey } from "@/lib/hooks/use-actions";
+import type { HighlightRule } from "@/lib/hooks/use-actions";
+import type { Facets } from "@/lib/utils/filter-helpers";
+import { SHIFT_NAMES } from "@/lib/utils/shift-helpers";
 
 const OPERATORS = ["=", "!=", ">", "<", ">=", "<="] as const;
 
@@ -38,6 +39,17 @@ function nextRuleId(): string {
   return `rule_${Date.now()}_${ruleIdCounter++}`;
 }
 
+function makeBlankRule(): HighlightRule {
+  return {
+    id: nextRuleId(),
+    column: "status",
+    operator: "=",
+    value: "",
+    color: PRESET_COLORS[0].value,
+    enabled: true,
+  };
+}
+
 interface HighlightDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,49 +57,31 @@ interface HighlightDialogProps {
 
 export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
   const { highlights, setHighlights } = useActions();
-  const { workPackages } = useWorkPackagesStore();
+  const { facets } = useWorkPackagesStore();
   const [draft, setDraft] = useState<HighlightRule[]>([]);
 
-  // Hydrate draft when dialog opens
+  // Hydrate draft when dialog opens — always show at least 1 row
   useEffect(() => {
     if (!open) return;
-    setDraft(highlights);
+    setDraft(highlights.length > 0 ? highlights : [makeBlankRule()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Memoize unique values for string columns used in draft
-  const uniqueValuesCache = useMemo(() => {
-    const cache = new Map<string, string[]>();
-    const cols = new Set(
-      draft
-        .map((r) => r.column)
-        .filter((c) => {
-          const col = ACTION_COLUMNS.find((ac) => ac.key === c);
-          return col?.type === "string";
-        })
-    );
-    for (const col of cols) {
-      cache.set(col, getUniqueValues(workPackages, col as ActionColumnKey));
-    }
-    return cache;
-  }, [workPackages, draft]);
+  /** Facet-based lookup for string column values */
+  const FACET_KEYS: Record<string, keyof Facets> = {
+    customer: "customer",
+    aircraftReg: "aircraftReg",
+    inferredType: "inferredType",
+    status: "status",
+  };
 
   const addRule = () => {
-    setDraft([
-      ...draft,
-      {
-        id: nextRuleId(),
-        column: "status",
-        operator: "=",
-        value: "",
-        color: PRESET_COLORS[0].value,
-        enabled: true,
-      },
-    ]);
+    setDraft([...draft, makeBlankRule()]);
   };
 
   const removeRule = (id: string) => {
-    setDraft(draft.filter((r) => r.id !== id));
+    const next = draft.filter((r) => r.id !== id);
+    setDraft(next.length > 0 ? next : [makeBlankRule()]);
   };
 
   const updateRule = (id: string, updates: Partial<HighlightRule>) => {
@@ -99,7 +93,7 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
   };
 
   const handleApply = () => {
-    setHighlights(draft);
+    setHighlights(draft.filter((r) => r.value !== ""));
     onOpenChange(false);
   };
 
@@ -114,28 +108,20 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
         </DialogHeader>
 
         <div className="space-y-2 min-h-[80px] max-h-[360px] overflow-y-auto">
-          {draft.length === 0 && (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              No highlight rules. Click &quot;Add Rule&quot; to apply
-              conditional colors.
-            </p>
-          )}
-
           {draft.map((rule) => {
             const colDef = ACTION_COLUMNS.find((c) => c.key === rule.column);
             const colType = colDef?.type ?? "string";
             const isString = colType === "string";
             const uniqueVals = isString
-              ? uniqueValuesCache.get(rule.column) ?? []
+              ? rule.column === "shift"
+                ? [...SHIFT_NAMES]
+                : (facets[FACET_KEYS[rule.column] as keyof Facets] ?? [])
               : [];
 
             return (
               <div key={rule.id} className="flex items-center gap-1.5 flex-wrap">
                 {/* Column */}
-                <Select
-                  value={rule.column}
-                  onValueChange={(v) => handleColumnChange(rule.id, v)}
-                >
+                <Select value={rule.column} onValueChange={(v) => handleColumnChange(rule.id, v)}>
                   <SelectTrigger className="h-8 text-xs w-[100px]">
                     <SelectValue />
                   </SelectTrigger>
@@ -190,9 +176,7 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
                   <Input
                     type={colType === "number" ? "number" : "datetime-local"}
                     value={rule.value}
-                    onChange={(e) =>
-                      updateRule(rule.id, { value: e.target.value })
-                    }
+                    onChange={(e) => updateRule(rule.id, { value: e.target.value })}
                     placeholder="Value"
                     className="h-8 text-xs w-[100px]"
                   />
@@ -205,9 +189,7 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
                       key={c.value}
                       onClick={() => updateRule(rule.id, { color: c.value })}
                       className={`h-6 w-6 rounded border-2 shrink-0 ${
-                        rule.color === c.value
-                          ? "border-foreground"
-                          : "border-transparent"
+                        rule.color === c.value ? "border-foreground" : "border-transparent"
                       }`}
                       style={{ backgroundColor: c.value }}
                       title={c.name}
@@ -216,9 +198,7 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
                   <input
                     type="color"
                     value={rule.color}
-                    onChange={(e) =>
-                      updateRule(rule.id, { color: e.target.value })
-                    }
+                    onChange={(e) => updateRule(rule.id, { color: e.target.value })}
                     className="h-6 w-6 rounded border border-border cursor-pointer shrink-0"
                     title="Custom color"
                   />
@@ -247,23 +227,14 @@ export function HighlightDialog({ open, onOpenChange }: HighlightDialogProps) {
             );
           })}
 
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-8 text-xs gap-1.5 mt-1"
-            onClick={addRule}
-          >
+          <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5 mt-1" onClick={addRule}>
             <i className="fa-solid fa-plus text-xs" />
             Add Rule
           </Button>
         </div>
 
         <DialogFooter>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button size="sm" onClick={handleApply}>

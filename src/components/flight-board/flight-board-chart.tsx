@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import ReactEChartsCore from "echarts-for-react/lib/core";
 import * as echarts from "echarts/core";
 import { CustomChart } from "echarts/charts";
@@ -18,6 +19,7 @@ import {
   DataZoomComponent,
   LegendComponent,
   MarkLineComponent,
+  MarkAreaComponent,
   GraphicComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
@@ -43,6 +45,7 @@ echarts.use([
   DataZoomComponent,
   LegendComponent,
   MarkLineComponent,
+  MarkAreaComponent,
   GraphicComponent,
   CanvasRenderer,
 ]);
@@ -130,10 +133,106 @@ function findFilterMidnights(
   return { first: firstMidnight, last: lastMidnight, all };
 }
 
+/** Standard shift definitions: Day 07-15, Swing 15-23, Night 23-07 */
+const SHIFT_BOUNDARIES = [
+  { hour: 7, label: "Day" },
+  { hour: 15, label: "Swing" },
+  { hour: 23, label: "Night" },
+] as const;
+
+/** Shift boundary line colors — subtle dashed separators */
+const SHIFT_LINE_COLORS = {
+  light: "rgba(120, 120, 140, 0.25)",
+  dark: "rgba(160, 160, 180, 0.2)",
+} as const;
+
+/**
+ * Compute shift boundary timestamps for each day in the filter range.
+ * Returns timestamps for each 07:00, 15:00, 23:00 boundary within [axisMin, axisMax].
+ * Also returns shift area intervals for background shading.
+ */
+function computeShiftBoundaries(
+  midnights: number[],
+  axisMin: number,
+  axisMax: number,
+  tz: string,
+): {
+  lines: { ts: number; label: string }[];
+  areas: [number, number, "Day" | "Swing" | "Night"][];
+} {
+  if (midnights.length === 0) return { lines: [], areas: [] };
+
+  const hourFmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    hourCycle: "h23",
+  });
+
+  const lines: { ts: number; label: string }[] = [];
+  const areas: [number, number, "Day" | "Swing" | "Night"][] = [];
+
+  for (const midnight of midnights) {
+    for (const boundary of SHIFT_BOUNDARIES) {
+      const ts = midnight + boundary.hour * 3600000;
+      const actualHour = parseInt(hourFmt.format(new Date(ts)));
+      if (actualHour === boundary.hour && ts >= axisMin && ts <= axisMax) {
+        lines.push({ ts, label: boundary.label });
+      }
+    }
+
+    // Day area: 07:00 → 15:00
+    const dayStart = midnight + 7 * 3600000;
+    const dayEnd = midnight + 15 * 3600000;
+    if (dayEnd > axisMin && dayStart < axisMax) {
+      areas.push([Math.max(dayStart, axisMin), Math.min(dayEnd, axisMax), "Day"]);
+    }
+
+    // Swing area: 15:00 → 23:00
+    const swingStart = midnight + 15 * 3600000;
+    const swingEnd = midnight + 23 * 3600000;
+    if (swingEnd > axisMin && swingStart < axisMax) {
+      areas.push([Math.max(swingStart, axisMin), Math.min(swingEnd, axisMax), "Swing"]);
+    }
+
+    // Night area: 23:00 → next day 07:00
+    const nightStart = midnight + 23 * 3600000;
+    const nightEnd = midnight + 31 * 3600000;
+    if (nightEnd > axisMin && nightStart < axisMax) {
+      areas.push([Math.max(nightStart, axisMin), Math.min(nightEnd, axisMax), "Night"]);
+    }
+  }
+
+  return { lines, areas };
+}
+
 export interface FlightBoardChartHandle {
   getZoomRange: () => { start: number; end: number } | null;
   dispatchZoom: (start: number, end: number) => void;
+  prepareForPrint: () => Promise<void>;
+  restoreAfterPrint: () => void;
 }
+
+/** Print-safe canvas width: 11in landscape − 1in margins @ 96 CSS ppi */
+const PRINT_WIDTH = 960;
+/** Printable height: 8.5in − 1in margins @ 96 CSS ppi */
+const PRINT_HEIGHT = 720;
+/** Reduced header height for print (no dataZoom slider) */
+const PRINT_HEADER_H = 80;
+/** Allowance for legend badges + flex gap below chart */
+const PRINT_LEGEND_GAP = 50;
+/** Max body chart height that fits one page */
+const PRINT_MAX_BODY_H = PRINT_HEIGHT - PRINT_HEADER_H - PRINT_LEGEND_GAP;
+
+/** Neutral-light resolved colors for print canvas repaint */
+const PRINT_CC = {
+  fg: "hsl(0, 0%, 3.9%)",
+  mutedFg: "hsl(0, 0%, 45.1%)",
+  border: "hsl(0, 0%, 89.8%)",
+  popover: "hsl(0, 0%, 100%)",
+  popoverFg: "hsl(0, 0%, 3.9%)",
+  primary15: "rgba(59,130,246,0.15)",
+  rowHover: "rgba(0,0,0,0.1)",
+};
 
 interface FlightBoardChartProps {
   workPackages: SerializedWorkPackage[];
@@ -155,6 +254,8 @@ interface FlightBoardChartProps {
   condensed?: boolean;
   /** Called when user drags slider or scrolls to zoom (resets preset selection) */
   onZoomChange?: () => void;
+  /** Active shift highlight rules — controls background shading */
+  shiftHighlights?: { shift: string; color: string }[];
 }
 
 // Data array format: [regIndex, arrivalTs, departureTs, customer, registration, flightId, wpIndex]
@@ -184,12 +285,16 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       panMode,
       condensed,
       onZoomChange,
+      shiftHighlights,
     },
     ref,
   ) {
     const headerChartRef = useRef<ReactEChartsCore>(null);
     const bodyChartRef = useRef<ReactEChartsCore>(null);
     const syncLock = useRef(false);
+    // Guard: prevents Date Anchor effect from calling setOption while Adaptive Ticks
+    // is mid-update with replaceMerge (which temporarily tears down the xAxis).
+    const isUpdatingAxisRef = useRef(false);
     // Track real dataZoom state (for adaptive tick interval)
     const realZoomState = useRef<{ start: number; end: number }>({ start: 0, end: 100 });
     // Track body chart container width for pixel-based tick computation
@@ -200,6 +305,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const bodyWrapperRef = useRef<HTMLDivElement>(null);
     const containerHeightRef = useRef<number>(0);
     const [containerHeight, setContainerHeight] = useState(0);
+    const [scrollbarWidth, setScrollbarWidth] = useState(0);
     // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
     const [nowTimestamp, setNowTimestamp] = useState(0);
     // ─── Row hover highlight refs (graphic-based, no React re-render) ───
@@ -208,42 +314,64 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const { getColor } = useCustomers();
     const { timeFormat } = usePreferences();
     const { resolvedTheme } = useTheme();
-    const echartsTheme = resolvedTheme === "dark" ? "dark" : undefined;
+    // Do NOT pass the ECharts built-in "dark" theme — all colors are explicitly set
+    // via CSS variable resolution (cc). Passing a theme prop causes echarts-for-react
+    // to dispose+reinit the instance on theme switch, which is heavier than needed
+    // and races with the async CSS variable resolution. By keeping theme={undefined},
+    // theme switches are handled purely through option updates via setOption/notMerge.
 
     // Resolve CSS variables to concrete colors for ECharts canvas (canvas can't parse var())
-    const cc = useMemo(() => {
-      if (typeof document === "undefined") {
-        // SSR fallback — dark defaults
-        return {
-          fg: "#e5e5e5",
-          mutedFg: "#a1a1aa",
-          border: "#27272a",
-          popover: "#18181b",
-          popoverFg: "#fafafa",
-          primary15: "rgba(59,130,246,0.15)",
-          rowHover: "rgba(255,255,255,0.1)",
+    // Uses useEffect (not useMemo) so getComputedStyle reads values AFTER the browser has
+    // flushed style recalculation from the next-themes class change on <html>.
+    const ssrFallback = useMemo(
+      () => ({
+        fg: "#e5e5e5",
+        mutedFg: "#a1a1aa",
+        border: "#27272a",
+        popover: "#18181b",
+        popoverFg: "#fafafa",
+        primary15: "rgba(59,130,246,0.15)",
+        rowHover: "rgba(255,255,255,0.1)",
+      }),
+      [],
+    );
+    const [cc, setCc] = useState(ssrFallback);
+    const prevCcRef = useRef(ssrFallback);
+    const [printMode, setPrintMode] = useState(false);
+    const prevSizeRef = useRef<{
+      chartWidth: number;
+      headerW: number;
+      headerH: number;
+      bodyW: number;
+      bodyH: number;
+      devicePixelRatio: number;
+    }>({ chartWidth: 0, headerW: 0, headerH: 0, bodyW: 0, bodyH: 0, devicePixelRatio: 1 });
+
+    useEffect(() => {
+      // Read CSS variables after paint so the browser has applied the new theme class
+      const raf = requestAnimationFrame(() => {
+        const s = getComputedStyle(document.documentElement);
+        const v = (name: string) => {
+          const raw = s.getPropertyValue(name).trim();
+          return raw ? `hsl(${raw})` : "#888";
         };
-      }
-      const s = getComputedStyle(document.documentElement);
-      const v = (name: string) => {
-        const raw = s.getPropertyValue(name).trim();
-        return raw ? `hsl(${raw})` : "#888";
-      };
-      return {
-        fg: v("--foreground"),
-        mutedFg: v("--muted-foreground"),
-        border: v("--border"),
-        popover: v("--popover"),
-        popoverFg: v("--popover-foreground"),
-        primary15: (() => {
-          const raw = s.getPropertyValue("--primary").trim();
-          return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
-        })(),
-        rowHover: resolvedTheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-      };
+        setCc({
+          fg: v("--foreground"),
+          mutedFg: v("--muted-foreground"),
+          border: v("--border"),
+          popover: v("--popover"),
+          popoverFg: v("--popover-foreground"),
+          primary15: (() => {
+            const raw = s.getPropertyValue("--primary").trim();
+            return raw ? `hsla(${raw}, 0.15)` : "rgba(59,130,246,0.15)";
+          })(),
+          rowHover: resolvedTheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+        });
+      });
+      return () => cancelAnimationFrame(raf);
     }, [resolvedTheme]);
 
-    // Expose zoom read/write for parent toolbar handlers
+    // Expose zoom read/write + print helpers for parent toolbar handlers
     useImperativeHandle(ref, () => ({
       getZoomRange: () => {
         const instance = headerChartRef.current?.getEchartsInstance();
@@ -257,6 +385,102 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         [headerChartRef, bodyChartRef].forEach((r) => {
           r.current?.getEchartsInstance()?.dispatchAction({ type: "dataZoom", start, end });
         });
+      },
+      prepareForPrint: () => {
+        prevCcRef.current = cc;
+        const hInst = headerChartRef.current?.getEchartsInstance();
+        const bInst = bodyChartRef.current?.getEchartsInstance();
+        prevSizeRef.current = {
+          chartWidth,
+          headerW: hInst?.getWidth() ?? 0,
+          headerH: hInst?.getHeight() ?? 0,
+          bodyW: bInst?.getWidth() ?? 0,
+          bodyH: bInst?.getHeight() ?? 0,
+          devicePixelRatio: typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+        };
+
+        // flushSync → synchronous render → useMemo tick recalc →
+        // ReactEChartsCore.componentDidUpdate → setOption() with correct ticks
+        flushSync(() => {
+          setCc(PRINT_CC);
+          setChartWidth(PRINT_WIDTH);
+          setPrintMode(true);
+        });
+
+        // Update ref so the async adaptive tick effect (dep: cc) reads the correct width
+        chartWidthRef.current = PRINT_WIDTH;
+
+        // Cap body height to fit one page (use saved height from ref, not useMemo value)
+        const printBodyH = Math.min(prevSizeRef.current.bodyH || 300, PRINT_MAX_BODY_H);
+
+        // Compute + apply correct tick intervals synchronously for PRINT_WIDTH.
+        // Belt-and-suspenders: the async adaptive tick effect will also run with chartWidthRef=960.
+        // Using merge mode (default setOption) updates only `interval`, preserving all
+        // formatter/color options set by the last notMerge setOption from componentDidUpdate.
+        const { start: zStart, end: zEnd } = realZoomState.current;
+        const fStartMs = new Date(filterStart).getTime();
+        const fEndMs = new Date(filterEnd).getTime();
+        const totalMs = Math.max(fEndMs - fStartMs, 86400000);
+        const visibleMs = ((zEnd - zStart) / 100) * totalMs;
+        const printIntervalMs = computeTickInterval({
+          availablePixels: Math.max(PRINT_WIDTH - GRID_PADDING, 100),
+          visibleMs,
+        });
+        const printTopIntervalMs = Math.max(printIntervalMs, 3 * 3600000);
+        hInst?.setOption({
+          xAxis: [{ interval: printIntervalMs }, { interval: printTopIntervalMs }],
+        });
+        bInst?.setOption({ xAxis: { interval: printIntervalMs } });
+
+        // resize() triggers synchronous CanvasPainter.refresh() → canvas is correctly drawn
+        // with the above tick intervals before getDataURL() is called below.
+        hInst?.resize({ width: PRINT_WIDTH, height: PRINT_HEADER_H });
+        bInst?.resize({ width: PRINT_WIDTH, height: printBodyH });
+
+        // Capture hi-res (3×) images via the official ECharts API.
+        // getDataURL({ pixelRatio: 3 }) renders the current chart state to an offscreen canvas
+        // at 960 × 3 = 2880 px → ~288 DPI when printed on letter paper (~300 DPI).
+        // Setting painter/layer dpr directly doesn't work because Zrender's Layer stores its
+        // own dpr set at construction time and Layer.resize() reads that, not the painter's.
+        const insertHiResImg = (inst: typeof hInst, w: number, h: number) => {
+          if (!inst) return;
+          const url = inst.getDataURL({ type: "png", pixelRatio: 3 });
+          const img = document.createElement("img");
+          img.src = url;
+          img.style.cssText = `display:block;width:${w}px;height:${h}px;flex-shrink:0;`;
+          img.dataset.printHires = "1";
+          const dom = inst.getDom();
+          dom.style.display = "none";
+          dom.parentElement?.insertBefore(img, dom);
+        };
+        insertHiResImg(hInst, PRINT_WIDTH, PRINT_HEADER_H);
+        insertHiResImg(bInst, PRINT_WIDTH, printBodyH);
+
+        // Single rAF ensures the img DOM insertions are rendered before react-to-print captures
+        return new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+      },
+      restoreAfterPrint: () => {
+        const s = prevSizeRef.current;
+        flushSync(() => {
+          setCc(prevCcRef.current);
+          setChartWidth(s.chartWidth);
+          setPrintMode(false);
+        });
+        // Restore ref so the adaptive effect computes correct screen-width ticks
+        chartWidthRef.current = s.chartWidth;
+        const hInstR = headerChartRef.current?.getEchartsInstance();
+        const bInstR = bodyChartRef.current?.getEchartsInstance();
+        // Remove hi-res img replacements and restore ECharts divs
+        [hInstR, bInstR].forEach((inst) => {
+          if (!inst) return;
+          const dom = inst.getDom();
+          dom.style.display = "";
+          dom.parentElement?.querySelectorAll("img[data-print-hires]").forEach((el) => el.remove());
+        });
+        hInstR?.resize({ width: s.headerW, height: s.headerH });
+        bInstR?.resize({ width: s.bodyW, height: s.bodyH });
       },
     }));
 
@@ -439,6 +663,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       };
     }, [workPackages.length, filterStart, filterEnd, timezone, zoomLevel, chartWidth]);
 
+    // ─── Shift boundary data (TZ-aware, recomputed when filter/timezone changes) ───
+    const shiftData = useMemo(() => {
+      if (midnightTimestamps.length === 0 || !timeGrid.axisMin || !timeGrid.axisMax) {
+        return { lines: [], areas: [] };
+      }
+      return computeShiftBoundaries(
+        midnightTimestamps,
+        timeGrid.axisMin,
+        timeGrid.axisMax,
+        timezone,
+      );
+    }, [midnightTimestamps, timeGrid.axisMin, timeGrid.axisMax, timezone]);
+
     // ─── Update NOW timestamp every 60s ───
     useEffect(() => {
       const tid = setTimeout(() => setNowTimestamp(Date.now()), 0);
@@ -502,122 +739,135 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       // Top axis interval: coarser than time ticks (minimum 3h) for day labels
       const topIntervalMs = Math.max(intervalMs, 3 * 3600000);
 
-      // Update header chart — 2 axes (bottom hidden for sync + top day names)
-      const headerInstance = headerChartRef.current?.getEchartsInstance();
-      if (headerInstance) {
-        try {
-          headerInstance.setOption(
-            {
-              xAxis: [
-                {
-                  // Bottom axis (hidden, for dataZoom sync) — update interval
-                  type: "value",
-                  position: "bottom",
-                  min: timeGrid.axisMin,
-                  max: timeGrid.axisMax,
-                  interval: intervalMs,
-                  axisLabel: { show: false },
-                  splitLine: { show: false },
-                  axisLine: { show: false },
-                  axisTick: { show: false },
-                },
-                {
-                  // Top axis (day labels) — coarser interval, formatter filters to day boundaries
+      // Guard: signal to the Date Anchor effect that axis is being rebuilt
+      isUpdatingAxisRef.current = true;
+      try {
+        // Update header chart — bottom axis (time labels, sticky) + top axis (day names)
+        const wideView = intervalMs >= 12 * 3600000;
+        const headerInstance = headerChartRef.current?.getEchartsInstance();
+        if (headerInstance) {
+          try {
+            headerInstance.setOption(
+              {
+                xAxis: [
+                  {
+                    // Bottom axis — time labels inside (above axis line), ticks below
+                    type: "value",
+                    position: "bottom",
+                    min: timeGrid.axisMin,
+                    max: timeGrid.axisMax,
+                    interval: intervalMs,
+                    axisLabel: {
+                      inside: true,
+                      margin: 2,
+                      interval: 0,
+                      color: cc.fg,
+                      fontSize: 12,
+                      formatter: (value: number) => {
+                        if (midnightSet.has(value)) {
+                          if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
+                          const dateStr = dateFmt.format(new Date(value));
+                          const timeStr = hourFormatter.format(new Date(value));
+                          return `{date|${dateStr}}\n{time|${timeStr}}`;
+                        }
+                        if (wideView) return "";
+                        return `{time|${hourFormatter.format(new Date(value))}}`;
+                      },
+                      rich: {
+                        date: {
+                          fontWeight: "bold" as const,
+                          fontSize: 12,
+                          lineHeight: 16,
+                          color: cc.fg,
+                        },
+                        time: { fontSize: 12, lineHeight: 16 },
+                      },
+                    },
+                    axisLine: { show: true, lineStyle: { color: cc.border } },
+                    axisTick: {
+                      show: true,
+                      alignWithLabel: true,
+                      length: 6,
+                      lineStyle: { color: cc.mutedFg },
+                    },
+                    splitLine: { show: false },
+                  },
+                  {
+                    // Top axis (day labels) — coarser interval, formatter filters to day boundaries
+                    type: "value",
+                    position: "top",
+                    min: timeGrid.axisMin,
+                    max: timeGrid.axisMax,
+                    interval: topIntervalMs,
+                    axisLabel: {
+                      interval: 0,
+                      color: cc.fg,
+                      fontSize: 12,
+                      fontWeight: "bold" as const,
+                      formatter: (value: number) => {
+                        // Show day name only at midnight OR at the first tick of a new day
+                        if (midnightSet.has(value))
+                          return dayNameFmt.format(new Date(value)).toUpperCase();
+                        const prevDay = dayNameFmt.format(new Date(value - topIntervalMs));
+                        const curDay = dayNameFmt.format(new Date(value));
+                        if (curDay !== prevDay) return curDay.toUpperCase();
+                        // Show on the very first axis tick so viewport always has a day label
+                        if (value <= timeGrid.axisMin + topIntervalMs && value >= timeGrid.axisMin)
+                          return curDay.toUpperCase();
+                        return "";
+                      },
+                    },
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                  },
+                ],
+              },
+              { replaceMerge: ["xAxis"] },
+            );
+          } catch (err) {
+            console.warn("[Adaptive Ticks] header setOption error:", err);
+          }
+        }
+
+        // Update body chart — single axis (top, no labels — time labels are in sticky header)
+        const bodyInstance = bodyChartRef.current?.getEchartsInstance();
+        if (bodyInstance) {
+          try {
+            bodyInstance.setOption(
+              {
+                xAxis: {
                   type: "value",
                   position: "top",
                   min: timeGrid.axisMin,
                   max: timeGrid.axisMax,
-                  interval: topIntervalMs,
-                  axisLabel: {
-                    interval: 0,
-                    color: cc.fg,
-                    fontSize: 12,
-                    fontWeight: "bold" as const,
-                    formatter: (value: number) => {
-                      // Show day name only at midnight OR at the first tick of a new day
-                      if (midnightSet.has(value))
-                        return dayNameFmt.format(new Date(value)).toUpperCase();
-                      const prevDay = dayNameFmt.format(new Date(value - topIntervalMs));
-                      const curDay = dayNameFmt.format(new Date(value));
-                      if (curDay !== prevDay) return curDay.toUpperCase();
-                      // Show on the very first axis tick so viewport always has a day label
-                      if (value <= timeGrid.axisMin + topIntervalMs && value >= timeGrid.axisMin)
-                        return curDay.toUpperCase();
-                      return "";
+                  interval: intervalMs,
+                  axisLabel: { show: false },
+                  axisLine: { show: true, lineStyle: { color: cc.border } },
+                  axisTick: {
+                    show: true,
+                    alignWithLabel: true,
+                    length: 6,
+                    lineStyle: { color: cc.mutedFg },
+                  },
+                  splitLine: {
+                    show: true,
+                    lineStyle: {
+                      color: "rgba(128,128,128,0.25)",
+                      width: 1,
+                      type: "dashed" as const,
                     },
-                  },
-                  axisLine: { show: false },
-                  axisTick: { show: false },
-                  splitLine: { show: false },
-                },
-              ],
-            },
-            { replaceMerge: ["xAxis"] },
-          );
-        } catch (err) {
-          console.warn("[Adaptive Ticks] header setOption error:", err);
-        }
-      }
-
-      // Update body chart — single axis (top, time labels)
-      const wideView = intervalMs >= 12 * 3600000;
-      const bodyInstance = bodyChartRef.current?.getEchartsInstance();
-      if (bodyInstance) {
-        try {
-          bodyInstance.setOption(
-            {
-              xAxis: {
-                type: "value",
-                position: "top",
-                min: timeGrid.axisMin,
-                max: timeGrid.axisMax,
-                interval: intervalMs,
-                axisLabel: {
-                  interval: 0,
-                  color: cc.fg,
-                  fontSize: 12,
-                  formatter: (value: number) => {
-                    if (midnightSet.has(value)) {
-                      if (wideView) return `{date|${dateFmt.format(new Date(value))}}`;
-                      const dateStr = dateFmt.format(new Date(value));
-                      const timeStr = hourFormatter.format(new Date(value));
-                      return `{date|${dateStr}}\n{time|${timeStr}}`;
-                    }
-                    if (wideView) return "";
-                    return `{time|${hourFormatter.format(new Date(value))}}`;
-                  },
-                  rich: {
-                    date: {
-                      fontWeight: "bold" as const,
-                      fontSize: 12,
-                      lineHeight: 16,
-                      color: cc.fg,
-                    },
-                    time: { fontSize: 12, lineHeight: 16 },
-                  },
-                },
-                axisLine: { show: true, lineStyle: { color: cc.border } },
-                axisTick: {
-                  show: true,
-                  alignWithLabel: true,
-                  length: 6,
-                  lineStyle: { color: cc.mutedFg },
-                },
-                splitLine: {
-                  show: true,
-                  lineStyle: {
-                    color: "rgba(128,128,128,0.25)",
-                    width: 1,
-                    type: "dashed" as const,
                   },
                 },
               },
-            },
-            { replaceMerge: ["xAxis"] },
-          );
-        } catch (err) {
-          console.warn("[Adaptive Ticks] body setOption error:", err);
+              { replaceMerge: ["xAxis"] },
+            );
+          } catch (err) {
+            console.warn("[Adaptive Ticks] body setOption error:", err);
+          }
         }
+      } finally {
+        isUpdatingAxisRef.current = false;
       }
     }, [
       filterStart,
@@ -653,21 +903,24 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       return () => observer.disconnect();
     }, [workPackages.length]);
 
-    // ─── Track body wrapper container height for row padding ───
+    // ─── Track body wrapper container height + scrollbar width ───
     useEffect(() => {
       const wrapper = bodyWrapperRef.current;
       if (!wrapper) return;
 
       containerHeightRef.current = wrapper.clientHeight;
       setContainerHeight(wrapper.clientHeight);
+      setScrollbarWidth(wrapper.offsetWidth - wrapper.clientWidth);
 
       const observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const newHeight = entry.contentRect.height;
+          const newSbw = wrapper.offsetWidth - wrapper.clientWidth;
           if (Math.abs(newHeight - containerHeightRef.current) > 5) {
             containerHeightRef.current = newHeight;
             setContainerHeight(newHeight);
           }
+          setScrollbarWidth(newSbw);
         }
       });
 
@@ -677,6 +930,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
 
     // ✅ STEP 3b: Update visible window start date label
     useEffect(() => {
+      // Skip if the Adaptive Ticks effect is mid-update with replaceMerge —
+      // the axis is temporarily torn down during that window, and calling
+      // setOption here would read axisBuilder on the destroyed axis.
+      if (isUpdatingAxisRef.current) return;
+
       const { start } = realZoomState.current;
       const filterStartMs = new Date(filterStart).getTime();
       const filterEndMs = new Date(filterEnd).getTime();
@@ -716,7 +974,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       if (containerHeight <= 0) return registrations;
 
       const rowH = condensed ? 20 : 36;
-      const gridVerticalPadding = 34 + 2; // grid.top + grid.bottom
+      const gridVerticalPadding = 4 + 2; // grid.top + grid.bottom
       const availableForRows = containerHeight - gridVerticalPadding;
       const totalRowsNeeded = Math.max(registrations.length, Math.floor(availableForRows / rowH));
 
@@ -732,7 +990,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     // ─── Compute body chart height (used by rendering + hover effect) ───
     const computedBodyHeight = useMemo(() => {
       const rowH = condensed ? 20 : 36;
-      const contentMin = registrations.length * rowH + 38;
+      const contentMin = registrations.length * rowH + 8; // grid.top(4) + grid.bottom(2) + slack
       if (isExpanded) return Math.max(300, contentMin);
       if (containerHeight > 0) return Math.max(300, contentMin, containerHeight);
       return Math.max(300, contentMin);
@@ -895,7 +1153,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                 y: centerY,
                 fill: "#fff",
                 fontSize: fLg,
-                fontWeight: "bold",
                 align: "center",
                 verticalAlign: "middle",
               },
@@ -924,7 +1181,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
                 y: centerY,
                 fill: "#fff",
                 fontSize: fLg,
-                fontWeight: "bold",
                 align: "center",
                 verticalAlign: "middle",
               },
@@ -952,7 +1208,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               y: centerY,
               fill: "#fff",
               fontSize: fLg,
-              fontWeight: "bold",
               align: "center",
               verticalAlign: "middle",
             },
@@ -1001,14 +1256,14 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           {
             type: "text",
             right: 25,
-            top: 6,
+            top: 4,
             style: { text: tzLabel, fill: cc.mutedFg, fontSize: 20 },
             z: 100,
           },
           {
             type: "text",
-            left: 100,
-            top: 6,
+            left: 25,
+            top: 4,
             style: {
               text: initialDateStr, // ✅ Computed on initial render
               fill: cc.mutedFg,
@@ -1020,22 +1275,48 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         ],
         grid: {
           left: 100,
-          right: 20,
-          top: 62,
-          bottom: 8,
+          right: 20 + scrollbarWidth,
+          top: 50,
+          bottom: 5,
         },
         xAxis: [
-          // Bottom axis — hidden labels, kept for dataZoom sync
+          // Bottom axis — time labels rendered inside (above axis line), ticks below
           {
             type: "value" as const,
             position: "bottom" as const,
             min: timeGrid.axisMin,
             max: timeGrid.axisMax,
             interval: timeGrid.intervalMs,
-            axisLabel: { show: false },
+            axisLabel: {
+              inside: true,
+              margin: 2,
+              interval: 0,
+              color: cc.fg,
+              fontSize: 12,
+              formatter: (value: number) => {
+                const wideViewInit = timeGrid.intervalMs >= 12 * 3600000;
+                if (midnightSet.has(value)) {
+                  if (wideViewInit) return `{date|${dateFmt.format(new Date(value))}}`;
+                  const dateStr = dateFmt.format(new Date(value));
+                  const timeStr = hourFormatter.format(new Date(value));
+                  return `{date|${dateStr}}\n{time|${timeStr}}`;
+                }
+                if (wideViewInit) return "";
+                return `{time|${hourFormatter.format(new Date(value))}}`;
+              },
+              rich: {
+                date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
+                time: { fontSize: 12, lineHeight: 16 },
+              },
+            },
+            axisLine: { show: true, lineStyle: { color: cc.border } },
+            axisTick: {
+              show: true,
+              alignWithLabel: true,
+              length: 6,
+              lineStyle: { color: cc.mutedFg },
+            },
             splitLine: { show: false },
-            axisLine: { show: false },
-            axisTick: { show: false },
           },
           // Top axis — day name labels (shown at first tick of each day in viewport)
           {
@@ -1071,10 +1352,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         dataZoom: [
           {
             type: "slider" as const,
+            show: !printMode,
             xAxisIndex: [0, 1],
             filterMode: "weakFilter" as const,
-            height: 18,
-            bottom: 14,
+            height: 16,
+            top: 52,
             start: zoomRange.start,
             end: zoomRange.end,
             handleSize: "80%",
@@ -1102,9 +1384,13 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       filterStart,
       filterEnd,
       timezone,
+      dateFmt,
+      hourFormatter,
+      scrollbarWidth,
+      printMode,
     ]);
 
-    // ─── BODY OPTION (bars + y-axis, time labels at top) ───
+    // ─── BODY OPTION (bars + y-axis, grid lines — time labels live in header) ───
     const bodyOption = useMemo(() => {
       return {
         backgroundColor: "transparent",
@@ -1131,7 +1417,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               departure: wp.departure,
               groundHours: wp.groundHours,
               status: wp.status,
-              workpackageNo: wp.workpackageNo,
+              workpackageNo: wp.workpackageNo ?? wp.title,
               effectiveMH: wp.effectiveMH,
               mhSource: wp.mhSource,
               comments: wp.calendarComments,
@@ -1143,7 +1429,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         grid: {
           left: 100,
           right: 20,
-          top: 34,
+          top: 4,
           bottom: 2,
         },
         xAxis: {
@@ -1152,28 +1438,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           min: timeGrid.axisMin,
           max: timeGrid.axisMax,
           interval: timeGrid.intervalMs,
-          axisLabel: {
-            interval: 0,
-            color: cc.fg,
-            fontSize: 12,
-            formatter: (value: number) => {
-              const wideView = timeGrid.intervalMs >= 12 * 3600000;
-              if (midnightSet.has(value)) {
-                if (wideView) {
-                  return `{date|${dateFmt.format(new Date(value))}}`;
-                }
-                const dateStr = dateFmt.format(new Date(value));
-                const timeStr = hourFormatter.format(new Date(value));
-                return `{date|${dateStr}}\n{time|${timeStr}}`;
-              }
-              if (wideView) return "";
-              return `{time|${hourFormatter.format(new Date(value))}}`;
-            },
-            rich: {
-              date: { fontWeight: "bold" as const, fontSize: 12, lineHeight: 16, color: cc.fg },
-              time: { fontSize: 12, lineHeight: 16 },
-            },
-          },
+          axisLabel: { show: false },
           axisLine: { show: true, lineStyle: { color: cc.border } },
           axisTick: {
             show: true,
@@ -1197,7 +1462,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
           axisLabel: {
             color: cc.fg,
             fontSize: condensed ? 10 : 11,
-            fontWeight: "bold" as const,
+            fontWeight: 500,
             formatter: (value: string) => {
               if (value.startsWith(BREAK_PREFIX)) return "";
               if (value.startsWith(EMPTY_ROW_PREFIX)) return "";
@@ -1244,6 +1509,12 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               z: 0,
               data: [],
             },
+            markArea: {
+              silent: true,
+              animation: false,
+              z: -1,
+              data: [],
+            },
           },
           // Bar series — rendered ON TOP (higher z)
           {
@@ -1266,9 +1537,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       timeFormat,
       zoomRange,
       cc,
-      hourFormatter,
-      dateFmt,
-      midnightSet,
       condensed,
     ]);
 
@@ -1588,7 +1856,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       [allWps, onBarClick, panMode],
     );
 
-    // ─── Live NOW line + time grid lines — merge-update on body chart ───
+    // ─── Live NOW line + shift boundaries + time grid lines — merge-update on body chart ───
     useEffect(() => {
       if (nowTimestamp === 0 || workPackages.length === 0) return;
       const instance = bodyChartRef.current?.getEchartsInstance();
@@ -1607,6 +1875,9 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         return;
       }
 
+      const isDark = resolvedTheme === "dark";
+      const themeKey = isDark ? "dark" : "light";
+
       // Midnight boundary markers — dark gray, visible but not dominant (skip axis edges)
       const midnightLines = midnightTimestamps
         .filter((ts) => ts >= timeGrid.axisMin && ts <= timeGrid.axisMax)
@@ -1617,6 +1888,42 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             label: { show: false },
           };
         });
+
+      // Shift boundary lines at 07:00, 15:00, 23:00 — subtle dashed separators
+      const shiftBoundaryLines = shiftData.lines.map(({ ts, label }) => ({
+        xAxis: ts,
+        lineStyle: {
+          type: "dashed" as const,
+          color: SHIFT_LINE_COLORS[themeKey],
+          width: 1,
+        },
+        label: {
+          show: true,
+          formatter: label,
+          position: "start" as const,
+          color: isDark ? "rgba(180,180,200,0.5)" : "rgba(80,80,100,0.5)",
+          fontSize: 9,
+          fontWeight: "normal" as const,
+        },
+      }));
+
+      // Shift area shading — only when shift highlight rules are active
+      const shiftColorMap = new Map((shiftHighlights ?? []).map((h) => [h.shift, h.color]));
+      const shiftAreas =
+        shiftColorMap.size > 0
+          ? shiftData.areas
+              .filter(([, , shiftName]) => shiftColorMap.has(shiftName))
+              .map(([start, end, shiftName]) => {
+                const hex = shiftColorMap.get(shiftName)!;
+                const alpha = isDark ? 0.08 : 0.06;
+                const n = parseInt(hex.replace("#", ""), 16);
+                const rgb = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+                return [
+                  { xAxis: start, itemStyle: { color: `rgba(${rgb},${alpha})` } },
+                  { xAxis: end },
+                ];
+              })
+          : [];
 
       // NOW line
       const nowInRange = nowTimestamp >= timeGrid.axisMin && nowTimestamp <= timeGrid.axisMax;
@@ -1641,14 +1948,20 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         instance.setOption({
           series: [
             {
-              // Update marker series (index 0) with midnight + now lines
+              // Update marker series (index 0) with midnight + shift + now lines + shift areas
               type: "custom",
               markLine: {
                 silent: true,
                 symbol: ["none", "none"],
                 animation: false,
                 z: 0,
-                data: [...midnightLines, ...nowLine],
+                data: [...midnightLines, ...shiftBoundaryLines, ...nowLine],
+              },
+              markArea: {
+                silent: true,
+                animation: false,
+                z: -1,
+                data: shiftAreas,
               },
             },
             {
@@ -1661,7 +1974,17 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         // Suppress setOption errors during chart transitions
         console.warn("[FlightBoardChart] setOption error (likely chart transition):", err);
       }
-    }, [nowTimestamp, timeGrid, midnightTimestamps, timezone, workPackages.length]);
+    }, [
+      nowTimestamp,
+      timeGrid,
+      midnightTimestamps,
+      timezone,
+      workPackages.length,
+      cc,
+      shiftData,
+      shiftHighlights,
+      resolvedTheme,
+    ]);
 
     // ─── Empty state ───
     if (workPackages.length === 0) {
@@ -1674,24 +1997,25 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       );
     }
 
-    const bodyHeight = computedBodyHeight;
+    const bodyHeight = printMode
+      ? Math.min(computedBodyHeight, PRINT_MAX_BODY_H)
+      : computedBodyHeight;
 
     return (
       <div className={cn("flex flex-col", !isExpanded && "h-full min-h-0")}>
-        {/* Time axis header — always visible (yellow zone) */}
+        {/* Sticky header — day labels, time labels, dataZoom slider (always visible) */}
         <div className="flex-shrink-0">
           <ReactEChartsCore
             ref={headerChartRef}
             echarts={echarts}
             option={headerOption}
-            style={{ height: 95, width: "100%" }}
-            theme={echartsTheme}
+            style={{ height: printMode ? PRINT_HEADER_H : 115, width: "100%" }}
             notMerge
             onEvents={{ datazoom: handleHeaderDataZoom }}
           />
         </div>
 
-        {/* Chart body — scrollable in contained mode (purple zone) */}
+        {/* Chart body — scrollable Gantt bars (no time labels — they live in sticky header) */}
         <div
           ref={bodyWrapperRef}
           className={cn("flex-1 min-h-0", !isExpanded && "overflow-y-auto")}
@@ -1701,7 +2025,6 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             echarts={echarts}
             option={bodyOption}
             style={{ height: bodyHeight, width: "100%" }}
-            theme={echartsTheme}
             notMerge
             onEvents={{ click: handleClick, datazoom: handleBodyDataZoom }}
           />

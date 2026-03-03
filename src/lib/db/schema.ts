@@ -1,4 +1,12 @@
-import { sqliteTable, text, integer, real, index, primaryKey } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  primaryKey,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 // ─── Users ──────────────────────────────────────────────────────────────────
@@ -221,6 +229,15 @@ export const importLog = sqliteTable("import_log", {
   status: text("status", { enum: ["success", "partial", "failed"] }).notNull(),
   errors: text("errors"),
   idempotencyKey: text("idempotency_key"),
+  dataType: text("data_type").notNull().default("work-packages"),
+  format: text("format", { enum: ["csv", "json"] })
+    .notNull()
+    .default("json"),
+  recordsInserted: integer("records_inserted").notNull().default(0),
+  recordsUpdated: integer("records_updated").notNull().default(0),
+  recordsSkipped: integer("records_skipped").notNull().default(0),
+  fieldMapping: text("field_mapping"),
+  warnings: text("warnings"),
 });
 
 // ─── Analytics Events ───────────────────────────────────────────────────────
@@ -270,6 +287,281 @@ export const cronJobRuns = sqliteTable("cron_job_runs", {
     .notNull()
     .$defaultFn(() => new Date().toISOString()),
 });
+
+// ─── Capacity Modeling (v0.3.0) ─────────────────────────────────────────────
+
+export const capacityShifts = sqliteTable("capacity_shifts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code").notNull().unique(), // DAY, SWING, NIGHT
+  name: text("name").notNull(),
+  startHour: integer("start_hour").notNull(), // 0-23
+  endHour: integer("end_hour").notNull(), // 0-23
+  paidHours: real("paid_hours").notNull(), // e.g. 8.0
+  timezone: text("timezone").notNull().default("UTC"), // IANA timezone
+  minHeadcount: integer("min_headcount").notNull().default(1),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+export const capacityAssumptions = sqliteTable("capacity_assumptions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  station: text("station").notNull().default("CVG"),
+  paidToAvailable: real("paid_to_available").notNull().default(0.89),
+  availableToProductive: real("available_to_productive").notNull().default(0.73),
+  defaultMhNoWp: real("default_mh_no_wp").notNull().default(3.0),
+  nightProductivityFactor: real("night_productivity_factor").notNull().default(0.85),
+  demandCurve: text("demand_curve", { enum: ["EVEN", "WEIGHTED"] })
+    .notNull()
+    .default("EVEN"),
+  arrivalWeight: real("arrival_weight").notNull().default(0.0),
+  departureWeight: real("departure_weight").notNull().default(0.0),
+  allocationMode: text("allocation_mode", { enum: ["DISTRIBUTE"] })
+    .notNull()
+    .default("DISTRIBUTE"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  effectiveFrom: text("effective_from"),
+  effectiveTo: text("effective_to"),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const headcountPlans = sqliteTable(
+  "headcount_plans",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    station: text("station").notNull().default("CVG"),
+    shiftId: integer("shift_id")
+      .notNull()
+      .references(() => capacityShifts.id),
+    headcount: integer("headcount").notNull(), // >= 0
+    effectiveFrom: text("effective_from").notNull(), // DATE (YYYY-MM-DD)
+    effectiveTo: text("effective_to"), // DATE nullable — null means open-ended
+    dayOfWeek: integer("day_of_week"), // 0=Sun..6=Sat, null=all days
+    label: text("label"),
+    notes: text("notes"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    createdBy: integer("created_by").references(() => users.id),
+    updatedBy: integer("updated_by").references(() => users.id),
+  },
+  (table) => ({
+    shiftIdx: index("idx_hcp_shift").on(table.shiftId),
+    effectiveIdx: index("idx_hcp_effective").on(table.effectiveFrom, table.effectiveTo),
+  }),
+);
+
+export const headcountExceptions = sqliteTable(
+  "headcount_exceptions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    station: text("station").notNull().default("CVG"),
+    shiftId: integer("shift_id")
+      .notNull()
+      .references(() => capacityShifts.id),
+    exceptionDate: text("exception_date").notNull(), // DATE (YYYY-MM-DD)
+    headcountDelta: integer("headcount_delta").notNull(), // can be negative
+    reason: text("reason"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    createdBy: integer("created_by").references(() => users.id),
+  },
+  (table) => ({
+    shiftDateUniq: uniqueIndex("idx_hce_shift_date").on(table.shiftId, table.exceptionDate),
+  }),
+);
+
+export const demandContracts = sqliteTable(
+  "demand_contracts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => customers.id),
+    name: text("name").notNull(),
+    mode: text("mode").notNull(), // ADDITIVE | MINIMUM_FLOOR
+    effectiveFrom: text("effective_from").notNull(), // YYYY-MM-DD
+    effectiveTo: text("effective_to"), // null = indefinite
+    contractedMh: real("contracted_mh"), // null = no sanity check
+    periodType: text("period_type"), // WEEKLY|MONTHLY|ANNUAL|TOTAL (null if no contractedMh)
+    reason: text("reason"),
+    priority: integer("priority").notNull().default(100),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    customerIdx: index("idx_dc_customer").on(table.customerId),
+    effectiveIdx: index("idx_dc_effective").on(table.effectiveFrom, table.effectiveTo),
+  }),
+);
+
+export const demandAllocationLines = sqliteTable(
+  "demand_allocation_lines",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    contractId: integer("contract_id")
+      .notNull()
+      .references(() => demandContracts.id, { onDelete: "cascade" }),
+    shiftId: integer("shift_id").references(() => capacityShifts.id),
+    dayOfWeek: integer("day_of_week"), // 0=Sun..6=Sat, null = all days
+    allocatedMh: real("allocated_mh").notNull(),
+    label: text("label"),
+  },
+  (table) => ({
+    contractIdx: index("idx_dal_contract").on(table.contractId),
+  }),
+);
+
+// ─── Flight Events (P2-1) ──────────────────────────────────────────────────
+
+export const flightEvents = sqliteTable(
+  "flight_events",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id"), // logical ref only — no FK
+    aircraftReg: text("aircraft_reg"), // nullable — tail number or flight number
+    aircraftType: text("aircraft_type"), // normalized type (e.g. "B767-300F")
+    customer: text("customer").notNull(),
+    scheduledArrival: text("scheduled_arrival"),
+    actualArrival: text("actual_arrival"),
+    scheduledDeparture: text("scheduled_departure"),
+    actualDeparture: text("actual_departure"),
+    arrivalWindowMinutes: integer("arrival_window_minutes").notNull().default(30),
+    departureWindowMinutes: integer("departure_window_minutes").notNull().default(60),
+    status: text("status").notNull(), // planned | scheduled | actual | cancelled
+    source: text("source").notNull(), // work_package | manual | import
+    notes: text("notes"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    // ── Recurrence fields ──────────────────────────────────────────────────
+    isRecurring: integer("is_recurring", { mode: "boolean" }).notNull().default(false),
+    dayPattern: text("day_pattern"), // "12345.." OASIS-style
+    recurrenceStart: text("recurrence_start"), // "YYYY-MM-DD"
+    recurrenceEnd: text("recurrence_end"), // "YYYY-MM-DD"
+    arrivalTimeUtc: text("arrival_time_utc"), // "HH:MM"
+    departureTimeUtc: text("departure_time_utc"), // "HH:MM"
+    suppressedDates: text("suppressed_dates"), // JSON array of "YYYY-MM-DD" strings
+    // ────────────────────────────────────────────────────────────────────────
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    aircraftRegIdx: index("idx_fe_aircraft_reg").on(table.aircraftReg),
+    schedArrivalIdx: index("idx_fe_scheduled_arrival").on(table.scheduledArrival),
+    schedDepartureIdx: index("idx_fe_scheduled_departure").on(table.scheduledDeparture),
+    workPackageIdx: index("idx_fe_work_package_id").on(table.workPackageId),
+    isRecurringIdx: index("idx_fe_is_recurring").on(table.isRecurring),
+  }),
+);
+
+// ─── Staffing: Rotation Patterns ────────────────────────────────────────────
+
+export const rotationPatterns = sqliteTable("rotation_patterns", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  pattern: text("pattern").notNull(), // 21-char string: x=work, o=off
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ─── Rotation Presets (reference library for quick-fill) ────────────────────
+export const rotationPresets = sqliteTable("rotation_presets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code"),
+  name: text("name").notNull(),
+  description: text("description"),
+  pattern: text("pattern").notNull(), // 21-char string: x=work, o=off
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+// ─── Staffing: Configurations ───────────────────────────────────────────────
+
+export const staffingConfigs = sqliteTable("staffing_configs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  description: text("description"),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  createdBy: integer("created_by").references(() => users.id),
+});
+
+// ─── Staffing: Shift Definitions ────────────────────────────────────────────
+
+export const staffingShifts = sqliteTable(
+  "staffing_shifts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    configId: integer("config_id")
+      .notNull()
+      .references(() => staffingConfigs.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    category: text("category", { enum: ["DAY", "SWING", "NIGHT", "OTHER"] }).notNull(),
+    rotationId: integer("rotation_id").references(() => rotationPatterns.id),
+    rotationStartDate: text("rotation_start_date").notNull(), // DATE (YYYY-MM-DD)
+    startHour: integer("start_hour").notNull(), // 0-23
+    startMinute: integer("start_minute").notNull().default(0), // 0-59
+    endHour: integer("end_hour").notNull(), // 0-23
+    endMinute: integer("end_minute").notNull().default(0), // 0-59
+    breakMinutes: integer("break_minutes").notNull().default(0),
+    lunchMinutes: integer("lunch_minutes").notNull().default(0),
+    mhOverride: real("mh_override"), // nullable — paid hours override (pre-productivity)
+    headcount: integer("headcount").notNull().default(0),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    configIdx: index("idx_ss_config").on(table.configId),
+    configCategoryIdx: index("idx_ss_config_category").on(table.configId, table.category),
+    rotationIdx: index("idx_ss_rotation").on(table.rotationId),
+  }),
+);
 
 // ─── Master Data: Manufacturers ─────────────────────────────────────────────
 
@@ -534,6 +826,7 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
     relationName: "customerUpdatedBy",
   }),
   aircraft: many(aircraft),
+  demandContracts: many(demandContracts),
 }));
 
 export const userPreferencesRelations = relations(userPreferences, ({ one }) => ({
@@ -679,3 +972,286 @@ export const inviteCodesRelations = relations(inviteCodes, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+// ─── Capacity Modeling Relations ────────────────────────────────────────────
+
+export const capacityShiftsRelations = relations(capacityShifts, ({ many }) => ({
+  headcountPlans: many(headcountPlans),
+  headcountExceptions: many(headcountExceptions),
+  demandAllocationLines: many(demandAllocationLines),
+}));
+
+export const capacityAssumptionsRelations = relations(capacityAssumptions, ({ one }) => ({
+  updatedByUser: one(users, {
+    fields: [capacityAssumptions.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const headcountPlansRelations = relations(headcountPlans, ({ one }) => ({
+  shift: one(capacityShifts, {
+    fields: [headcountPlans.shiftId],
+    references: [capacityShifts.id],
+  }),
+  createdByUser: one(users, {
+    fields: [headcountPlans.createdBy],
+    references: [users.id],
+  }),
+  updatedByUser: one(users, {
+    fields: [headcountPlans.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const headcountExceptionsRelations = relations(headcountExceptions, ({ one }) => ({
+  shift: one(capacityShifts, {
+    fields: [headcountExceptions.shiftId],
+    references: [capacityShifts.id],
+  }),
+  createdByUser: one(users, {
+    fields: [headcountExceptions.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const demandContractsRelations = relations(demandContracts, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [demandContracts.customerId],
+    references: [customers.id],
+  }),
+  createdByUser: one(users, {
+    fields: [demandContracts.createdBy],
+    references: [users.id],
+  }),
+  lines: many(demandAllocationLines),
+}));
+
+export const demandAllocationLinesRelations = relations(demandAllocationLines, ({ one }) => ({
+  contract: one(demandContracts, {
+    fields: [demandAllocationLines.contractId],
+    references: [demandContracts.id],
+  }),
+  shift: one(capacityShifts, {
+    fields: [demandAllocationLines.shiftId],
+    references: [capacityShifts.id],
+  }),
+}));
+
+export const flightEventsRelations = relations(flightEvents, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [flightEvents.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// ─── Forecast Models (P2-5) ─────────────────────────────────────────────────
+
+export const forecastModels = sqliteTable(
+  "forecast_models",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    description: text("description"),
+    method: text("method").notNull(), // moving_average | weighted_average | linear_trend
+    lookbackDays: integer("lookback_days").notNull().default(30),
+    forecastHorizonDays: integer("forecast_horizon_days").notNull().default(14),
+    granularity: text("granularity").notNull().default("shift"), // daily | shift
+    customerFilter: text("customer_filter"), // comma-separated or null
+    weightRecent: real("weight_recent").notNull().default(0.7),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    activeIdx: index("idx_fm_active").on(table.isActive),
+  }),
+);
+
+// ─── Forecast Rates (P2-5) ──────────────────────────────────────────────────
+
+export const forecastRates = sqliteTable(
+  "forecast_rates",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    modelId: integer("model_id")
+      .notNull()
+      .references(() => forecastModels.id, { onDelete: "cascade" }),
+    forecastDate: text("forecast_date").notNull(), // YYYY-MM-DD
+    shiftCode: text("shift_code"), // DAY/SWING/NIGHT or null
+    customer: text("customer"), // null = aggregate
+    forecastedMh: real("forecasted_mh").notNull(),
+    confidence: real("confidence"), // 0.0-1.0
+    isManualOverride: integer("is_manual_override", { mode: "boolean" }).notNull().default(false),
+    notes: text("notes"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    modelIdx: index("idx_fr_model").on(table.modelId),
+    dateIdx: index("idx_fr_date").on(table.forecastDate),
+    modelDateIdx: index("idx_fr_model_date").on(table.modelId, table.forecastDate),
+  }),
+);
+
+export const forecastModelsRelations = relations(forecastModels, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [forecastModels.createdBy],
+    references: [users.id],
+  }),
+  rates: many(forecastRates),
+}));
+
+export const forecastRatesRelations = relations(forecastRates, ({ one }) => ({
+  model: one(forecastModels, {
+    fields: [forecastRates.modelId],
+    references: [forecastModels.id],
+  }),
+  createdByUser: one(users, {
+    fields: [forecastRates.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// ─── Time Bookings (P2-2: Worked Hours) ─────────────────────────────────────
+
+export const timeBookings = sqliteTable(
+  "time_bookings",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id"), // logical ref, no FK
+    aircraftReg: text("aircraft_reg").notNull(),
+    customer: text("customer").notNull(),
+    bookingDate: text("booking_date").notNull(), // YYYY-MM-DD
+    shiftCode: text("shift_code").notNull(), // DAY/SWING/NIGHT
+    taskName: text("task_name"),
+    taskType: text("task_type").notNull().default("routine"), // routine|non_routine|aog|training|admin
+    workedMh: real("worked_mh").notNull(),
+    technicianCount: integer("technician_count"),
+    notes: text("notes"),
+    source: text("source").notNull().default("manual"), // manual|import
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    dateIdx: index("idx_tb_date").on(table.bookingDate),
+    customerIdx: index("idx_tb_customer").on(table.customer),
+    wpIdx: index("idx_tb_wp").on(table.workPackageId),
+  }),
+);
+
+export const timeBookingsRelations = relations(timeBookings, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [timeBookings.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// ─── Billing Entries (P2-3: Billed Hours) ─────────────────────────────────────
+
+export const billingEntries = sqliteTable(
+  "billing_entries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id"), // logical ref, no FK
+    aircraftReg: text("aircraft_reg").notNull(),
+    customer: text("customer").notNull(),
+    billingDate: text("billing_date").notNull(), // YYYY-MM-DD
+    shiftCode: text("shift_code").notNull(), // DAY/SWING/NIGHT
+    description: text("description"),
+    billedMh: real("billed_mh").notNull(),
+    invoiceRef: text("invoice_ref"),
+    notes: text("notes"),
+    source: text("source").notNull().default("manual"), // manual|import
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    dateIdx: index("idx_be_date").on(table.billingDate),
+    customerIdx: index("idx_be_customer").on(table.customer),
+    wpIdx: index("idx_be_wp").on(table.workPackageId),
+  }),
+);
+
+export const billingEntriesRelations = relations(billingEntries, ({ one }) => ({
+  createdByUser: one(users, {
+    fields: [billingEntries.createdBy],
+    references: [users.id],
+  }),
+}));
+
+// ─── Staffing Relations ─────────────────────────────────────────────────────
+
+export const rotationPatternsRelations = relations(rotationPatterns, ({ many }) => ({
+  staffingShifts: many(staffingShifts),
+}));
+
+export const staffingConfigsRelations = relations(staffingConfigs, ({ one, many }) => ({
+  createdByUser: one(users, {
+    fields: [staffingConfigs.createdBy],
+    references: [users.id],
+  }),
+  shifts: many(staffingShifts),
+}));
+
+export const staffingShiftsRelations = relations(staffingShifts, ({ one }) => ({
+  config: one(staffingConfigs, {
+    fields: [staffingShifts.configId],
+    references: [staffingConfigs.id],
+  }),
+  rotation: one(rotationPatterns, {
+    fields: [staffingShifts.rotationId],
+    references: [rotationPatterns.id],
+  }),
+}));
+
+// ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
+
+export const weeklyMhProjections = sqliteTable(
+  "weekly_mh_projections",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customer: text("customer").notNull(),
+    dayOfWeek: integer("day_of_week").notNull(), // ISO: 1=Mon ... 7=Sun
+    shiftCode: text("shift_code").notNull(), // DAY | SWING | NIGHT
+    projectedMh: real("projected_mh").notNull(),
+    notes: text("notes"),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    createdBy: integer("created_by").references(() => users.id),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    customerDayShift: uniqueIndex("idx_wmp_customer_day_shift").on(
+      table.customer,
+      table.dayOfWeek,
+      table.shiftCode,
+    ),
+  }),
+);

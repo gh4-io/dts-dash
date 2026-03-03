@@ -12,6 +12,13 @@ import type {
   ActionColumnKey,
   ColumnFilterRule,
 } from "@/lib/hooks/use-actions";
+import {
+  SHIFT_NAMES,
+  SHIFT_SORT_ORDER,
+  getPrimaryShift,
+  getOverlappingShifts,
+  type ShiftName,
+} from "@/lib/utils/shift-helpers";
 
 // ─── Helpers ───
 
@@ -21,7 +28,8 @@ export const BREAK_PREFIX = "___break___";
 /** Get a WP field value by action column key */
 function getFieldValue(
   wp: SerializedWorkPackage,
-  key: ActionColumnKey
+  key: ActionColumnKey,
+  timezone?: string,
 ): string | number | null {
   switch (key) {
     case "customer":
@@ -40,6 +48,8 @@ function getFieldValue(
       return wp.departure;
     case "effectiveMH":
       return wp.effectiveMH;
+    case "shift":
+      return timezone ? getPrimaryShift(wp.arrival, timezone) : null;
     default:
       return null;
   }
@@ -50,7 +60,7 @@ export function evaluateCondition(
   value: string | number | null,
   operator: string,
   target: string,
-  targets?: string[]
+  targets?: string[],
 ): boolean {
   if (value === null || value === undefined) return false;
 
@@ -86,41 +96,91 @@ export function evaluateCondition(
   }
 }
 
+/**
+ * Evaluate a shift condition using multi-value overlap matching.
+ * A WP matches if any of its overlapping shifts satisfies the operator.
+ */
+function evaluateShiftCondition(
+  overlaps: ShiftName[],
+  operator: string,
+  target: string,
+  targets?: string[],
+): boolean {
+  const lowerTarget = target.toLowerCase();
+
+  switch (operator) {
+    case "=":
+      return overlaps.some((s) => s.toLowerCase() === lowerTarget);
+    case "!=":
+      return !overlaps.some((s) => s.toLowerCase() === lowerTarget);
+    case "in": {
+      if (!targets || targets.length === 0) return false;
+      const set = new Set(targets.map((t) => t.toLowerCase()));
+      return overlaps.some((s) => set.has(s.toLowerCase()));
+    }
+    case "not in": {
+      if (!targets || targets.length === 0) return true;
+      const set = new Set(targets.map((t) => t.toLowerCase()));
+      return !overlaps.some((s) => set.has(s.toLowerCase()));
+    }
+    default:
+      return false;
+  }
+}
+
 // ─── Transforms ───
 
 /** Filter WPs by column filter rules (client-side) */
 export function applyColumnFilters(
   wps: SerializedWorkPackage[],
-  filters: ColumnFilterRule[]
+  filters: ColumnFilterRule[],
+  timezone?: string,
 ): SerializedWorkPackage[] {
   if (filters.length === 0) return wps;
   return wps.filter((wp) =>
     filters.every((rule) => {
-      const val = getFieldValue(wp, rule.column);
+      if (rule.column === "shift" && timezone) {
+        const overlaps = getOverlappingShifts(wp.arrival, wp.departure, timezone);
+        return evaluateShiftCondition(overlaps, rule.operator, rule.value, rule.values);
+      }
+      const val = getFieldValue(wp, rule.column, timezone);
       if (rule.operator === "in" || rule.operator === "not in") {
         return evaluateCondition(val, rule.operator, "", rule.values);
       }
       return evaluateCondition(val, rule.operator, rule.value);
-    })
+    }),
   );
 }
 
 /** Sort WPs by multiple levels (stable sort via comparator chain) */
 export function applySorts(
   wps: SerializedWorkPackage[],
-  sorts: SortLevel[]
+  sorts: SortLevel[],
+  timezone?: string,
 ): SerializedWorkPackage[] {
-  if (sorts.length === 0) return wps;
+  // Default sort: arrival ascending (hardcoded baseline for flight board)
+  if (sorts.length === 0) {
+    return [...wps].sort((a, b) => new Date(a.arrival).getTime() - new Date(b.arrival).getTime());
+  }
 
   return [...wps].sort((a, b) => {
     for (const { column, direction } of sorts) {
-      const aVal = getFieldValue(a, column as ActionColumnKey);
-      const bVal = getFieldValue(b, column as ActionColumnKey);
+      const aVal = getFieldValue(a, column as ActionColumnKey, timezone);
+      const bVal = getFieldValue(b, column as ActionColumnKey, timezone);
       const mult = direction === "asc" ? 1 : -1;
 
       if (aVal === bVal) continue;
       if (aVal === null) return 1 * mult;
       if (bVal === null) return -1 * mult;
+
+      // Shift uses custom sort order (Day=1, Swing=2, Night=3)
+      if (column === "shift") {
+        const aOrder = SHIFT_SORT_ORDER[aVal as ShiftName] ?? 99;
+        const bOrder = SHIFT_SORT_ORDER[bVal as ShiftName] ?? 99;
+        const diff = aOrder - bOrder;
+        if (diff !== 0) return diff * mult;
+        continue;
+      }
 
       if (typeof aVal === "number" && typeof bVal === "number") {
         const diff = aVal - bVal;
@@ -141,7 +201,8 @@ export function applySorts(
 export function applyControlBreaks(
   registrations: string[],
   wps: SerializedWorkPackage[],
-  breaks: ControlBreak[]
+  breaks: ControlBreak[],
+  timezone?: string,
 ): { registrations: string[]; breakLabels: Map<number, string> } {
   const activeBreaks = breaks.filter((b) => b.enabled);
   if (activeBreaks.length === 0) {
@@ -163,7 +224,7 @@ export function applyControlBreaks(
     // Use first WP's values for the break columns
     return activeBreaks
       .map((b) => {
-        const val = getFieldValue(wpList[0], b.column as ActionColumnKey);
+        const val = getFieldValue(wpList[0], b.column as ActionColumnKey, timezone);
         return val !== null ? String(val) : "";
       })
       .join(" — ");
@@ -211,7 +272,8 @@ export function applyControlBreaks(
  */
 export function applyHighlights(
   wps: SerializedWorkPackage[],
-  rules: HighlightRule[]
+  rules: HighlightRule[],
+  timezone?: string,
 ): Map<number, string> {
   const map = new Map<number, string>();
   const activeRules = rules.filter((r) => r.enabled);
@@ -219,10 +281,13 @@ export function applyHighlights(
 
   for (let i = 0; i < wps.length; i++) {
     for (const rule of activeRules) {
-      const val = getFieldValue(wps[i], rule.column as ActionColumnKey);
+      // Shift rules control chart background shading, not bar colors
+      if (rule.column === "shift") continue;
+
+      const val = getFieldValue(wps[i], rule.column as ActionColumnKey, timezone);
       if (evaluateCondition(val, rule.operator, rule.value)) {
         map.set(i, rule.color);
-        break; // first match wins
+        break;
       }
     }
   }
@@ -237,7 +302,8 @@ export function applyHighlights(
 export function applyGroupBy(
   registrations: string[],
   wps: SerializedWorkPackage[],
-  config: GroupByConfig | null
+  config: GroupByConfig | null,
+  timezone?: string,
 ): { groupedRegistrations: string[]; wpToGroupIndex: Map<number, number> } | null {
   if (!config || config.columns.length === 0) return null;
 
@@ -245,7 +311,7 @@ export function applyGroupBy(
   const wpGroupKey = (wp: SerializedWorkPackage): string =>
     config.columns
       .map((col) => {
-        const val = getFieldValue(wp, col as ActionColumnKey);
+        const val = getFieldValue(wp, col as ActionColumnKey, timezone);
         return val !== null ? String(val) : "(empty)";
       })
       .join(" — ");
@@ -274,11 +340,13 @@ export function applyGroupBy(
 /** Get sorted unique values for a column from WPs */
 export function getUniqueValues(
   wps: SerializedWorkPackage[],
-  columnKey: ActionColumnKey
+  columnKey: ActionColumnKey,
+  timezone?: string,
 ): string[] {
+  if (columnKey === "shift") return [...SHIFT_NAMES];
   const vals = new Set<string>();
   for (const wp of wps) {
-    const v = getFieldValue(wp, columnKey);
+    const v = getFieldValue(wp, columnKey, timezone);
     if (v !== null && v !== undefined) vals.add(String(v));
   }
   return Array.from(vals).sort((a, b) => a.localeCompare(b));

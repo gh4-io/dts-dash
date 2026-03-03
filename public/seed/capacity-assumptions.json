@@ -1,0 +1,13 @@
+[
+  {
+    "station": "CVG",
+    "paidToAvailable": 0.89,
+    "availableToProductive": 0.73,
+    "defaultMhNoWp": 3.0,
+    "nightProductivityFactor": 0.85,
+    "demandCurve": "EVEN",
+    "arrivalWeight": 0.0,
+    "departureWeight": 0.0,
+    "allocationMode": "DISTRIBUTE"
+  }
+]
