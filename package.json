@@ -102,6 +102,11 @@
     "typescript": "^5",
     "vitest": "^4.0.18"
   },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.0"
+    }
+  },
   "lint-staged": {
     "*.{ts,tsx}": "eslint --fix",
     "*.{ts,tsx,css,json,md}": "prettier --write"

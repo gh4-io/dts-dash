@@ -3,6 +3,10 @@ import { render } from "@testing-library/react";
 import { Sidebar } from "@/components/layout/sidebar";
 import * as deviceHook from "@/lib/hooks/use-device-type";
 
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard",
+}));
+
 describe("Sidebar Device Responsive Behavior", () => {
   it("renders nothing on phone device type", () => {
     vi.spyOn(deviceHook, "useDeviceType").mockReturnValue({
