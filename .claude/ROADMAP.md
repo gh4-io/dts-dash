@@ -19,7 +19,7 @@
 
 **All base milestones (M0–M8) complete. Project is production-ready.**
 
-**Current Focus: Phase 4 Complete** — Mobile-First UX implemented on `dev` branch.
+**Current Focus: v0.3.0 Development** — Starting v0.3.0 feature cycle. See v0.3.0 backlog below.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16

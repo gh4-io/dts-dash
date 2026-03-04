@@ -1,7 +1,7 @@
 # Versioning & Release Process
 
 > **Decision**: D-028 — Semantic Versioning with backwards compatibility rules
-> **Current version**: 0.1.0
+> **Current version**: 0.3.0
 
 ## Semantic Versioning Rules
 

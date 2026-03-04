@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-03-04
+
+> **MINOR release** — all changes are backwards-compatible; all new functionality is additive.
+
+### Added
+
+#### Capacity — Staffing Shifts
+- **Rotation end date** — `rotationEndDate` (nullable) on `staffing_shifts` provides a historical timeline of headcount changes (M022 migration)
+- **Shift auto-versioning** — editing headcount archives the current shift and creates a new version; rotation start dates auto-align to Sunday (pattern[0] = Sunday)
+- **Archive section** — collapsible archive panel in Shift Definitions grid shows expired shifts with a "Reactivate" button; no-gap safety check warns before archiving the last active shift in a category
+- New engine functions: `alignRotationStartToSunday()`, `canArchiveShift()`, `archiveStaffingShift()`, `versionStaffingShift()`
+
+#### System
+- **Sub-build tracking** (D-063) — `build.json` (git-tracked) auto-increments on every commit via a pre-commit hook; build number surfaces in `/api/health`, Admin → Server page, and git tags
+
+#### Mobile & PWA
+- **Redesigned app icons** — B777-inspired artwork across all sizes (192, 512, maskable-192, maskable-512, Apple touch icon)
+- **iOS install prompt** — A2HS banner for iOS users on first visit
+- **Floating popup menu** — replaced bottom-sheet overflow menu with a right-aligned floating popup on mobile
+
+### Fixed
+
+#### Flight Board
+- Disable `viewMode` (Gantt/List) persistence across page loads — view resets to Gantt on navigation
+- Default sort by arrival time when no user sort is active in List view
+- Fall back to `title` field for WP number display in tooltip and detail drawer when `workpackageNo` is absent
+- Superscript date separators + semibold registration labels in List card header; timezone-aware date formatting
+- Suppress ECharts `axisBuilder` race condition warnings in console
+- Date format changed to `m/d/yyyy` in filter bar; Gantt date label alignment improved
+
+#### Dashboard
+- Average Ground Time card layout now matches Aircraft & Turns card proportions
+
+#### Mobile & PWA
+- Move `themeColor` to Next.js `Viewport` export — eliminates duplicate `<meta>` tags
+- Scoped mobile CSS globals to prevent overflow into desktop layouts; removed desktop font overrides
+- Mobile phone UX polish: card layout redesign, section reorder, tab bar refinements
+
+---
+
 ## [0.2.0] - 2026-02-28
 
 > **MINOR release** — all changes are backwards-compatible; all new functionality is additive.
@@ -148,7 +188,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
 
-[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0

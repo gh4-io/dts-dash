@@ -3,27 +3,19 @@
 > Canonical operating manual for Claude Code. Read this first, every session.
 > Detailed specs live in `.claude/` — this file links to them, never duplicates.
 >
-> **Last updated:** 2026-02-20 (Universal Import Hub — v0.2.0)
+> **Last updated:** 2026-03-04 (v0.3.0 development start)
 >
-> **What changed (v0.2.0 — Universal Import Hub):**
-> - **Major Feature:** Single schema-driven Data Hub replaces 3 siloed import pipelines
->   - 6-step wizard (Select → Load → Map → Validate → Confirm → Results)
->   - 9 pluggable schemas (work-packages, customers, aircraft, aircraft-type-mappings, aircraft-models, manufacturers, engine-types, users, app-config)
->   - Visual field mapping with 3-pass auto-mapping (exact alias → case-insensitive → fuzzy)
->   - Unified import history with type filtering + pagination
->   - Export + template downloads (JSON/CSV)
->   - Contextual help panel (responsive: desktop sidebar ↔ mobile bottom sheet)
-> - 4 new API routes (schemas, parse, export, template) + 4 refactored (validate, commit, history, reset)
-> - 13 new UI components + import-stepper, help-panel, data-preview-table
-> - Admin nav consolidation: 9 → 7 items ("Data Hub" replaces Customers + Aircraft Types + Data Import)
-> - Old customer/aircraft-types pages redirect to Data Hub (for backwards compatibility)
-> - MINOR version bump: v0.1.0 → v0.2.0 (all changes backwards-compatible)
-> - See CHANGELOG.md and `.claude/SPECS/REQ_DataImport.md` for full details
+> **What changed (v0.3.0 — starting):**
+> - MINOR version bump: v0.2.0 → v0.3.0
+> - Staffing shift rotation end date + auto-versioning + archive (OI-080, M022)
+> - Sub-build tracking via `build.json` + pre-commit hook (OI-087, D-063)
+> - Various flight board, dashboard, and mobile/PWA polish fixes
+> - See CHANGELOG.md `[0.3.0]` entry for full details
+> - **Next:** v0.3.0 feature backlog — see ROADMAP.md `v0.3.0` section
 >
-> **Previous updates (UI Reconciliation Pass):**
-> - Created `REQ_Dashboard_UI.md`, `REQ_Themes.md`, `UI_REFERENCE_MAP.md`, `UI_MENUS.md`
-> - Updated `REQ_FlightBoard.md`, `REQ_Filters.md`, `UI_FILTER_PATTERNS.md`
-> - Decisions: D-022 (11 themes), D-023 (dashboard layout), D-024 (instant vs apply filtering)
+> **Previous update (v0.2.0 — Universal Import Hub):**
+> - Single schema-driven Data Hub, 6-step wizard, 9 pluggable schemas, full Capacity Suite, Phase 4 Mobile-First UX
+> - See CHANGELOG.md `[0.2.0]` and `.claude/SPECS/REQ_DataImport.md` for details
 
 ## Project Intent
 
