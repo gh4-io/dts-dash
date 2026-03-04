@@ -191,7 +191,6 @@ export interface CapacityShift {
   minHeadcount: number;
   sortOrder: number;
   isActive: boolean;
-  effectiveEndDate: string | null; // ISO "YYYY-MM-DD" or null
 }
 
 export interface CapacityAssumptions {

@@ -287,7 +287,6 @@ export function createTables() {
       min_headcount INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       is_active INTEGER NOT NULL DEFAULT 1,
-      effective_end_date TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -615,20 +614,5 @@ export function runMigrations(): MigrationResult[] {
   // v0.2.0: All migrations (M003–M021) consolidated into createTables().
   // Fresh databases get the complete schema; no incremental migrations needed.
   // Future schema changes after v0.2.0 should add new migrations here.
-  const results: MigrationResult[] = [];
-
-  // M022: Add effective_end_date to capacity_shifts
-  const m022Name = "M022_add_shift_effective_end_date";
-  const cols = sqlite.prepare("SELECT name FROM pragma_table_info('capacity_shifts')").all() as {
-    name: string;
-  }[];
-  const hasCol = cols.some((c) => c.name === "effective_end_date");
-  if (!hasCol) {
-    sqlite.exec("ALTER TABLE capacity_shifts ADD COLUMN effective_end_date TEXT");
-    results.push({ name: m022Name, applied: true });
-  } else {
-    results.push({ name: m022Name, applied: false });
-  }
-
-  return results;
+  return [];
 }

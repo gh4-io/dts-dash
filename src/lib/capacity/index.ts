@@ -28,14 +28,7 @@ export {
 export type { DemandWorkPackage } from "./demand-engine";
 
 // Data access layer (DB queries)
-export {
-  loadShifts,
-  loadAllShifts,
-  updateShiftEndDate,
-  loadAssumptions,
-  loadPlans,
-  loadExceptions,
-} from "./capacity-data";
+export { loadShifts, loadAssumptions, loadPlans, loadExceptions } from "./capacity-data";
 
 // Staffing engine (pure functions)
 export {
