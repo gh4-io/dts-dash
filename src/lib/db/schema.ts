@@ -301,6 +301,7 @@ export const capacityShifts = sqliteTable("capacity_shifts", {
   minHeadcount: integer("min_headcount").notNull().default(1),
   sortOrder: integer("sort_order").notNull().default(0),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+  effectiveEndDate: text("effective_end_date"), // nullable ISO YYYY-MM-DD
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

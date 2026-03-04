@@ -23,10 +23,16 @@ import type {
 // ─── Shifts ────────────────────────────────────────────────────────────────
 
 export function loadShifts(): CapacityShift[] {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const rows = db
     .select()
     .from(capacityShifts)
-    .where(eq(capacityShifts.isActive, true))
+    .where(
+      and(
+        eq(capacityShifts.isActive, true),
+        or(isNull(capacityShifts.effectiveEndDate), gte(capacityShifts.effectiveEndDate, today)),
+      ),
+    )
     .orderBy(capacityShifts.sortOrder)
     .all();
 
@@ -41,7 +47,62 @@ export function loadShifts(): CapacityShift[] {
     minHeadcount: r.minHeadcount,
     sortOrder: r.sortOrder,
     isActive: r.isActive,
+    effectiveEndDate: r.effectiveEndDate,
   }));
+}
+
+/**
+ * Load ALL shifts (active + archived) for admin UI.
+ * No filters applied — returns everything ordered by sortOrder.
+ */
+export function loadAllShifts(): CapacityShift[] {
+  const rows = db.select().from(capacityShifts).orderBy(capacityShifts.sortOrder).all();
+
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    startHour: r.startHour,
+    endHour: r.endHour,
+    paidHours: r.paidHours,
+    timezone: r.timezone,
+    minHeadcount: r.minHeadcount,
+    sortOrder: r.sortOrder,
+    isActive: r.isActive,
+    effectiveEndDate: r.effectiveEndDate,
+  }));
+}
+
+/**
+ * Update a single shift's effective end date.
+ * Pass null to clear (reactivate).
+ */
+export function updateShiftEndDate(
+  shiftId: number,
+  effectiveEndDate: string | null,
+): CapacityShift | null {
+  const result = db
+    .update(capacityShifts)
+    .set({ effectiveEndDate, updatedAt: new Date().toISOString() })
+    .where(eq(capacityShifts.id, shiftId))
+    .returning()
+    .get();
+
+  if (!result) return null;
+
+  return {
+    id: result.id,
+    code: result.code,
+    name: result.name,
+    startHour: result.startHour,
+    endHour: result.endHour,
+    paidHours: result.paidHours,
+    timezone: result.timezone,
+    minHeadcount: result.minHeadcount,
+    sortOrder: result.sortOrder,
+    isActive: result.isActive,
+    effectiveEndDate: result.effectiveEndDate,
+  };
 }
 
 // ─── Assumptions ───────────────────────────────────────────────────────────

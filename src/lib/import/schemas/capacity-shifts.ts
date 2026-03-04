@@ -107,6 +107,22 @@ const capacityShiftsSchema: ImportSchema = {
       defaultValue: true,
       aliases: ["is_active", "active"],
     },
+    {
+      name: "effectiveEndDate",
+      label: "Effective End Date",
+      type: "string",
+      required: false,
+      defaultValue: null,
+      aliases: ["effective_end_date", "EffectiveEndDate", "endDate", "end_date"],
+      description: "ISO date (YYYY-MM-DD) when the shift expires, or null for no end date",
+      validate: (value) => {
+        if (value == null || String(value).trim() === "") return null;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return "Must be YYYY-MM-DD format";
+        const d = new Date(String(value) + "T00:00:00Z");
+        if (isNaN(d.getTime())) return "Invalid date";
+        return null;
+      },
+    },
   ],
   formats: ["json", "csv"],
   commitStrategy: "upsert",
@@ -121,7 +137,7 @@ const capacityShiftsSchema: ImportSchema = {
     sampleSnippet: `[
   { "code": "DAY", "name": "Day", "startHour": 7, "endHour": 15, "paidHours": 8.0, "minHeadcount": 2 },
   { "code": "SWING", "name": "Swing", "startHour": 15, "endHour": 23, "paidHours": 8.0 },
-  { "code": "NIGHT", "name": "Night", "startHour": 23, "endHour": 7, "paidHours": 8.0 }
+  { "code": "NIGHT", "name": "Night", "startHour": 23, "endHour": 7, "paidHours": 8.0, "effectiveEndDate": "2026-06-30" }
 ]`,
     notes: [
       "Code must be unique (used as dedup key)",
@@ -142,14 +158,39 @@ const capacityShiftsSchema: ImportSchema = {
         minHeadcount: r.minHeadcount,
         sortOrder: r.sortOrder,
         isActive: r.isActive,
+        effectiveEndDate: r.effectiveEndDate ?? null,
       }));
     },
   },
 
   templateRecords: [
-    { code: "DAY", name: "Day", startHour: 7, endHour: 15, paidHours: 8.0, minHeadcount: 2 },
-    { code: "SWING", name: "Swing", startHour: 15, endHour: 23, paidHours: 8.0, minHeadcount: 1 },
-    { code: "NIGHT", name: "Night", startHour: 23, endHour: 7, paidHours: 8.0, minHeadcount: 1 },
+    {
+      code: "DAY",
+      name: "Day",
+      startHour: 7,
+      endHour: 15,
+      paidHours: 8.0,
+      minHeadcount: 2,
+      effectiveEndDate: null,
+    },
+    {
+      code: "SWING",
+      name: "Swing",
+      startHour: 15,
+      endHour: 23,
+      paidHours: 8.0,
+      minHeadcount: 1,
+      effectiveEndDate: null,
+    },
+    {
+      code: "NIGHT",
+      name: "Night",
+      startHour: 23,
+      endHour: 7,
+      paidHours: 8.0,
+      minHeadcount: 1,
+      effectiveEndDate: null,
+    },
   ],
 
   async commit(records, ctx: ImportContext): Promise<CommitResult> {
@@ -199,6 +240,10 @@ const capacityShiftsSchema: ImportSchema = {
         const minHeadcount = record.minHeadcount != null ? Number(record.minHeadcount) : 1;
         const sortOrder = record.sortOrder != null ? Number(record.sortOrder) : 0;
         const isActive = record.isActive !== false;
+        const effectiveEndDate =
+          record.effectiveEndDate != null && String(record.effectiveEndDate).trim() !== ""
+            ? String(record.effectiveEndDate).trim()
+            : null;
 
         if (!ex) {
           db.insert(capacityShifts)
@@ -211,6 +256,7 @@ const capacityShiftsSchema: ImportSchema = {
               minHeadcount,
               sortOrder,
               isActive,
+              effectiveEndDate,
               createdAt: now,
               updatedAt: now,
             })
@@ -226,6 +272,7 @@ const capacityShiftsSchema: ImportSchema = {
               minHeadcount,
               sortOrder,
               isActive,
+              effectiveEndDate,
               updatedAt: now,
             })
             .where(eq(capacityShifts.id, ex.id))

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { loadShifts, isValidTimezone } from "@/lib/capacity";
+import { loadShifts, loadAllShifts, isValidTimezone } from "@/lib/capacity";
 import { db } from "@/lib/db/client";
 import { capacityShifts } from "@/lib/db/schema";
 import { createChildLogger } from "@/lib/logger";
@@ -9,17 +9,18 @@ const log = createChildLogger("api/admin/capacity/shifts");
 
 /**
  * GET /api/admin/capacity/shifts
- * List active capacity shifts (read-only reference data).
+ * List capacity shifts. Pass ?includeArchived=true to include expired/disabled shifts.
  * Admin only.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const shifts = loadShifts();
+    const includeArchived = request.nextUrl.searchParams.get("includeArchived") === "true";
+    const shifts = includeArchived ? loadAllShifts() : loadShifts();
     return NextResponse.json(shifts);
   } catch (error) {
     log.error({ err: error }, "GET error");

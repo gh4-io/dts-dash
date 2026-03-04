@@ -24,6 +24,7 @@ const SHIFTS: CapacityShift[] = [
     minHeadcount: 8,
     sortOrder: 1,
     isActive: true,
+    effectiveEndDate: null,
   },
   {
     id: 2,
@@ -35,6 +36,7 @@ const SHIFTS: CapacityShift[] = [
     minHeadcount: 6,
     sortOrder: 2,
     isActive: true,
+    effectiveEndDate: null,
   },
   {
     id: 3,
@@ -46,6 +48,7 @@ const SHIFTS: CapacityShift[] = [
     minHeadcount: 4,
     sortOrder: 3,
     isActive: true,
+    effectiveEndDate: null,
   },
 ];
 
