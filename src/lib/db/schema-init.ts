@@ -412,6 +412,7 @@ export function createTables() {
       category TEXT NOT NULL,
       rotation_id INTEGER REFERENCES rotation_patterns(id),
       rotation_start_date TEXT NOT NULL,
+      rotation_end_date TEXT,
       start_hour INTEGER NOT NULL,
       start_minute INTEGER NOT NULL DEFAULT 0,
       end_hour INTEGER NOT NULL,
@@ -614,5 +615,17 @@ export function runMigrations(): MigrationResult[] {
   // v0.2.0: All migrations (M003–M021) consolidated into createTables().
   // Fresh databases get the complete schema; no incremental migrations needed.
   // Future schema changes after v0.2.0 should add new migrations here.
-  return [];
+  const results: MigrationResult[] = [];
+
+  // M022: Add rotation_end_date to staffing_shifts
+  const m022Name = "M022_staffing_shift_rotation_end_date";
+  const cols = sqlite.prepare("PRAGMA table_info(staffing_shifts)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "rotation_end_date")) {
+    results.push({ name: m022Name, applied: false });
+  } else {
+    sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN rotation_end_date TEXT");
+    results.push({ name: m022Name, applied: true });
+  }
+
+  return results;
 }

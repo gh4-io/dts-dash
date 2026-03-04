@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { loadStaffingShifts, createStaffingShift, loadRotationPattern } from "@/lib/capacity";
+import {
+  loadStaffingShifts,
+  createStaffingShift,
+  loadRotationPattern,
+  alignRotationStartToSunday,
+} from "@/lib/capacity";
 import { createChildLogger } from "@/lib/logger";
 import type { StaffingShiftCategory } from "@/types";
 
@@ -80,12 +85,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Rotation pattern not found" }, { status: 400 });
     }
 
+    // Auto-align rotation start date to Sunday
+    const alignedStartDate = alignRotationStartToSunday(body.rotationStartDate);
+
     const created = createStaffingShift({
       configId: body.configId,
       name: body.name,
       category: body.category,
       rotationId: body.rotationId,
-      rotationStartDate: body.rotationStartDate,
+      rotationStartDate: alignedStartDate,
       startHour: body.startHour,
       startMinute: body.startMinute,
       endHour: body.endHour,

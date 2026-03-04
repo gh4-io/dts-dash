@@ -539,6 +539,7 @@ export const staffingShifts = sqliteTable(
     category: text("category", { enum: ["DAY", "SWING", "NIGHT", "OTHER"] }).notNull(),
     rotationId: integer("rotation_id").references(() => rotationPatterns.id),
     rotationStartDate: text("rotation_start_date").notNull(), // DATE (YYYY-MM-DD)
+    rotationEndDate: text("rotation_end_date"), // DATE (YYYY-MM-DD) or null
     startHour: integer("start_hour").notNull(), // 0-23
     startMinute: integer("start_minute").notNull().default(0), // 0-59
     endHour: integer("end_hour").notNull(), // 0-23

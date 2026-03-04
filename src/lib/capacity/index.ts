@@ -41,7 +41,10 @@ export {
   buildPatternMap,
   validatePattern,
   countWorkingDays,
+  alignRotationStartToSunday,
+  canArchiveShift,
 } from "./staffing-engine";
+export type { ArchiveSafetyResult } from "./staffing-engine";
 
 // Staffing data access (rotation patterns, configs, shifts)
 export {
@@ -63,6 +66,8 @@ export {
   createStaffingShift,
   updateStaffingShift,
   deleteStaffingShift,
+  archiveStaffingShift,
+  versionStaffingShift,
   loadRotationPresets,
   loadRotationPresetCount,
 } from "./staffing-data";

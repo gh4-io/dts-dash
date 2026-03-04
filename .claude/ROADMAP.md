@@ -114,6 +114,15 @@
   - `loadPerEventContractMap()` resolves by lowest priority number (tiebreaker: higher MH)
   - Admin grid shows Priority column; editor has Priority input (0–9999)
 
+### Resolved: OI-080 — StaffingShift Rotation End Date + Archive (2026-03-04)
+
+- `rotationEndDate` on `staffing_shifts` (M022 migration)
+- Auto-versioning: headcount change → archive old + create new shift
+- `alignRotationStartToSunday()` ensures pattern[0] = Sunday
+- `canArchiveShift()` no-gap safety check
+- Collapsible archive section with Reactivate button
+- 12 new tests in `staffing-versioning.test.ts`
+
 ### v0.3.0 — Feature Backlog (Post-Phase 4)
 
 **Status**: Planned — Ready for roadmap sequencing.

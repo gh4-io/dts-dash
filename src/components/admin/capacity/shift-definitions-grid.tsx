@@ -31,7 +31,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RotationDots } from "./rotation-dots";
+import { alignRotationStartToSunday, canArchiveShift } from "@/lib/capacity/staffing-engine";
 import type { StaffingShift, StaffingShiftCategory, RotationPattern } from "@/types";
 
 const MAX_NAME_LEN = 32;
@@ -96,6 +98,7 @@ interface ShiftFormData {
   category: StaffingShiftCategory;
   rotationId: string;
   rotationStartDate: string;
+  rotationEndDate: string;
   startTime: Date | null;
   endTime: Date | null;
   breakMinutes: string;
@@ -109,6 +112,7 @@ const emptyForm: ShiftFormData = {
   category: "DAY",
   rotationId: "",
   rotationStartDate: new Date().toISOString().split("T")[0],
+  rotationEndDate: "",
   startTime: toTimeDate(7, 0),
   endTime: toTimeDate(15, 0),
   breakMinutes: "0",
@@ -139,6 +143,9 @@ export function ShiftDefinitionsGrid({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffingShift | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<StaffingShift | null>(null);
+  const [archiveWarning, setArchiveWarning] = useState<string | null>(null);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<StaffingShiftCategory>>(
     new Set(),
   );
@@ -193,9 +200,9 @@ export function ShiftDefinitionsGrid({
       await Promise.all(
         entries.map(([id, headcount]) =>
           fetch(`/api/admin/capacity/staffing-shifts/${id}`, {
-            method: "PUT",
+            method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ headcount }),
+            body: JSON.stringify({ action: "version", changes: { headcount } }),
           }),
         ),
       );
@@ -206,6 +213,22 @@ export function ShiftDefinitionsGrid({
     }
   }, [onRefresh]);
 
+  // Compute aligned start date for the form note
+  const alignedFormStart = form.rotationStartDate
+    ? alignRotationStartToSunday(form.rotationStartDate)
+    : null;
+  const showAlignmentNote =
+    alignedFormStart !== null && alignedFormStart !== form.rotationStartDate;
+
+  // Split into active/archived
+  const today = new Date().toISOString().slice(0, 10);
+  const activeShifts = shifts.filter(
+    (s) => s.isActive && (s.rotationEndDate === null || s.rotationEndDate >= today),
+  );
+  const archivedShifts = shifts.filter(
+    (s) => !s.isActive || (s.rotationEndDate !== null && s.rotationEndDate < today),
+  );
+
   // Group shifts by category
   const grouped: Record<StaffingShiftCategory, StaffingShift[]> = {
     DAY: [],
@@ -213,7 +236,7 @@ export function ShiftDefinitionsGrid({
     NIGHT: [],
     OTHER: [],
   };
-  for (const s of shifts) {
+  for (const s of activeShifts) {
     grouped[s.category]?.push(s);
   }
 
@@ -234,6 +257,7 @@ export function ShiftDefinitionsGrid({
       category: s.category,
       rotationId: s.rotationId.toString(),
       rotationStartDate: s.rotationStartDate,
+      rotationEndDate: s.rotationEndDate ?? "",
       startTime: toTimeDate(s.startHour, s.startMinute),
       endTime: toTimeDate(s.endHour, s.endMinute),
       breakMinutes: s.breakMinutes.toString(),
@@ -268,6 +292,7 @@ export function ShiftDefinitionsGrid({
         category: form.category,
         rotationId: parseInt(form.rotationId, 10),
         rotationStartDate: form.rotationStartDate,
+        rotationEndDate: form.rotationEndDate || null,
         startHour: form.startTime.getHours(),
         startMinute: form.startTime.getMinutes(),
         endHour: form.endTime.getHours(),
@@ -323,6 +348,33 @@ export function ShiftDefinitionsGrid({
     },
     [onRefresh],
   );
+
+  const handleArchiveClick = (s: StaffingShift) => {
+    const result = canArchiveShift(s, shifts);
+    setArchiveTarget(s);
+    setArchiveWarning(result.safe ? null : (result.message ?? null));
+  };
+
+  const handleArchiveConfirm = async () => {
+    if (!archiveTarget) return;
+    await fetch(`/api/admin/capacity/staffing-shifts/${archiveTarget.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "archive" }),
+    });
+    setArchiveTarget(null);
+    setArchiveWarning(null);
+    onRefresh();
+  };
+
+  const handleReactivate = async (s: StaffingShift) => {
+    await fetch(`/api/admin/capacity/staffing-shifts/${s.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rotationEndDate: null, isActive: true }),
+    });
+    onRefresh();
+  };
 
   const handleBulkAction = async (action: "activate" | "deactivate" | "delete") => {
     if (selectedIds.size === 0) return;
@@ -585,6 +637,7 @@ export function ShiftDefinitionsGrid({
                                   </TooltipProvider>
                                   <span className="text-[9px] text-muted-foreground/60">
                                     from {s.rotationStartDate}
+                                    {s.rotationEndDate && ` → ${s.rotationEndDate}`}
                                   </span>
                                 </div>
 
@@ -726,16 +779,16 @@ export function ShiftDefinitionsGrid({
               />
             </div>
 
-            {/* Row 2: Rotation + Start Date */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Row 2: Rotation Pattern + Start Date + End Date */}
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
               <div className="space-y-1.5">
-                <Label className="text-xs">Rotation Pattern</Label>
+                <Label className="text-xs">Rotation</Label>
                 <Select
                   value={form.rotationId}
                   onValueChange={(v) => setForm((f) => ({ ...f, rotationId: v }))}
                 >
                   <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Select rotation..." />
+                    <SelectValue placeholder="Select..." />
                   </SelectTrigger>
                   <SelectContent>
                     {patterns
@@ -749,15 +802,42 @@ export function ShiftDefinitionsGrid({
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Rotation Start Date</Label>
+                <Label className="text-xs">Start</Label>
                 <Input
                   type="date"
                   value={form.rotationStartDate}
                   onChange={(e) => setForm((f) => ({ ...f, rotationStartDate: e.target.value }))}
-                  className="h-8 text-xs"
+                  className="h-8 text-xs w-[130px]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1">
+                  End
+                  {form.rotationEndDate && (
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => setForm((f) => ({ ...f, rotationEndDate: "" }))}
+                    >
+                      <i className="fa-solid fa-xmark" />
+                    </button>
+                  )}
+                </Label>
+                <Input
+                  type="date"
+                  value={form.rotationEndDate}
+                  onChange={(e) => setForm((f) => ({ ...f, rotationEndDate: e.target.value }))}
+                  className="h-8 text-xs w-[130px]"
+                  placeholder="Open-ended"
                 />
               </div>
             </div>
+            {showAlignmentNote && (
+              <p className="text-[10px] text-muted-foreground -mt-2">
+                <i className="fa-solid fa-info-circle mr-1" />
+                Start will align to Sunday: {alignedFormStart}
+              </p>
+            )}
 
             {/* Selected rotation preview */}
             {form.rotationId && patternMap.get(parseInt(form.rotationId, 10)) && (
@@ -866,22 +946,134 @@ export function ShiftDefinitionsGrid({
             )}
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setEditDialogOpen(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button size="sm" onClick={handleSave} disabled={saving}>
-              {saving && <i className="fa-solid fa-spinner fa-spin mr-1.5" />}
-              {editingShift ? "Save Changes" : "Create Shift"}
-            </Button>
+          <DialogFooter className="flex !justify-between">
+            {editingShift ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setEditDialogOpen(false);
+                  handleArchiveClick(editingShift);
+                }}
+              >
+                <i className="fa-solid fa-box-archive mr-1.5" />
+                Archive
+              </Button>
+            ) : (
+              <div />
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditDialogOpen(false)}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving && <i className="fa-solid fa-spinner fa-spin mr-1.5" />}
+                {editingShift ? "Save Changes" : "Create Shift"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Archive section */}
+      {archivedShifts.length > 0 && (
+        <Collapsible open={archiveOpen} onOpenChange={setArchiveOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs border-t border-border hover:bg-accent/30 transition-colors"
+            >
+              <i
+                className={`fa-solid ${archiveOpen ? "fa-chevron-down" : "fa-chevron-right"} text-[8px] text-muted-foreground w-3`}
+              />
+              <i className="fa-solid fa-box-archive text-[10px] text-muted-foreground" />
+              <span className="text-muted-foreground font-semibold uppercase tracking-wider">
+                Archive ({archivedShifts.length})
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-2 py-1 space-y-1 opacity-70">
+              {archivedShifts.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border/50 bg-muted/20"
+                >
+                  <div className="w-24 flex-shrink-0 min-w-0">
+                    <span className="text-sm font-medium truncate block">{s.name}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {fmtTime(s.startHour, s.startMinute)}–{fmtTime(s.endHour, s.endMinute)}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px] px-1 py-0">
+                    {s.category}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    <i className="fa-solid fa-users mr-0.5" />
+                    {s.headcount}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {s.rotationStartDate}
+                    {s.rotationEndDate && ` → ${s.rotationEndDate}`}
+                  </span>
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                    Archived
+                  </Badge>
+                  <div className="flex-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => handleReactivate(s)}
+                  >
+                    <i className="fa-solid fa-rotate-left mr-1" />
+                    Reactivate
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+
+      {/* Archive confirm */}
+      <AlertDialog
+        open={!!archiveTarget}
+        onOpenChange={() => {
+          setArchiveTarget(null);
+          setArchiveWarning(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Shift</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archive &ldquo;{archiveTarget?.name}&rdquo;? The shift will be deactivated and given
+              an end date of today.
+              {archiveWarning && (
+                <span className="block mt-2 text-amber-500 font-medium">
+                  <i className="fa-solid fa-triangle-exclamation mr-1" />
+                  {archiveWarning}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleArchiveConfirm}
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>

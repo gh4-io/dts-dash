@@ -362,6 +362,7 @@ export function loadStaffingShifts(configId: number): StaffingShift[] {
     category: r.category as StaffingShiftCategory,
     rotationId: r.rotationId ?? 0,
     rotationStartDate: r.rotationStartDate,
+    rotationEndDate: r.rotationEndDate ?? null,
     startHour: r.startHour,
     startMinute: r.startMinute,
     endHour: r.endHour,
@@ -382,6 +383,7 @@ export function createStaffingShift(data: {
   category: StaffingShiftCategory;
   rotationId: number;
   rotationStartDate: string;
+  rotationEndDate?: string | null;
   startHour: number;
   startMinute?: number;
   endHour: number;
@@ -403,6 +405,7 @@ export function createStaffingShift(data: {
       category: data.category,
       rotationId: data.rotationId,
       rotationStartDate: data.rotationStartDate,
+      rotationEndDate: data.rotationEndDate ?? null,
       startHour: data.startHour,
       startMinute: data.startMinute ?? 0,
       endHour: data.endHour,
@@ -427,6 +430,7 @@ export function createStaffingShift(data: {
     category: result.category as StaffingShiftCategory,
     rotationId: result.rotationId ?? 0,
     rotationStartDate: result.rotationStartDate,
+    rotationEndDate: result.rotationEndDate ?? null,
     startHour: result.startHour,
     startMinute: result.startMinute,
     endHour: result.endHour,
@@ -447,6 +451,7 @@ export function updateStaffingShift(
     category: StaffingShiftCategory;
     rotationId: number;
     rotationStartDate: string;
+    rotationEndDate: string | null;
     startHour: number;
     startMinute: number;
     endHour: number;
@@ -477,6 +482,7 @@ export function updateStaffingShift(
     category: result.category as StaffingShiftCategory,
     rotationId: result.rotationId ?? 0,
     rotationStartDate: result.rotationStartDate,
+    rotationEndDate: result.rotationEndDate ?? null,
     startHour: result.startHour,
     startMinute: result.startMinute,
     endHour: result.endHour,
@@ -494,6 +500,73 @@ export function deleteStaffingShift(id: number): boolean {
   const result = db.delete(staffingShifts).where(eq(staffingShifts.id, id)).returning().get();
 
   return !!result;
+}
+
+/** Archive a staffing shift — sets rotationEndDate to today, isActive to false */
+export function archiveStaffingShift(id: number): StaffingShift | null {
+  const today = new Date().toISOString().slice(0, 10);
+  return updateStaffingShift(id, { rotationEndDate: today, isActive: false });
+}
+
+/** Version a staffing shift — archives the old, creates a new one with changes applied */
+export function versionStaffingShift(
+  id: number,
+  changes: Partial<{
+    name: string;
+    description: string | null;
+    category: StaffingShiftCategory;
+    rotationId: number;
+    rotationStartDate: string;
+    startHour: number;
+    startMinute: number;
+    endHour: number;
+    endMinute: number;
+    breakMinutes: number;
+    lunchMinutes: number;
+    mhOverride: number | null;
+    headcount: number;
+    sortOrder: number;
+  }>,
+): { archived: StaffingShift; created: StaffingShift } | null {
+  // Load existing shift
+  const rows = db.select().from(staffingShifts).where(eq(staffingShifts.id, id)).all();
+  if (rows.length === 0) return null;
+  const old = rows[0];
+
+  // Archive old shift
+  const archived = archiveStaffingShift(id);
+  if (!archived) return null;
+
+  // Import alignment function (avoid circular — inline the logic)
+  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date(today + "T00:00:00Z");
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() - dow);
+  const alignedStart = d.toISOString().slice(0, 10);
+
+  // Create new shift with changes applied
+  const created = createStaffingShift({
+    configId: old.configId,
+    name: changes.name ?? old.name,
+    description:
+      changes.description !== undefined ? changes.description : (old.description ?? null),
+    category: (changes.category ?? old.category) as StaffingShiftCategory,
+    rotationId: changes.rotationId ?? old.rotationId ?? 0,
+    rotationStartDate: alignedStart,
+    rotationEndDate: null,
+    startHour: changes.startHour ?? old.startHour,
+    startMinute: changes.startMinute ?? old.startMinute,
+    endHour: changes.endHour ?? old.endHour,
+    endMinute: changes.endMinute ?? old.endMinute,
+    breakMinutes: changes.breakMinutes ?? old.breakMinutes,
+    lunchMinutes: changes.lunchMinutes ?? old.lunchMinutes,
+    mhOverride: changes.mhOverride !== undefined ? changes.mhOverride : old.mhOverride,
+    headcount: changes.headcount ?? old.headcount,
+    isActive: true,
+    sortOrder: changes.sortOrder ?? old.sortOrder,
+  });
+
+  return { archived, created };
 }
 
 // ─── Rotation Presets (reference library) ─────────────────────────────────────

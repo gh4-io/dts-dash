@@ -681,6 +681,7 @@ export interface StaffingShift {
   category: StaffingShiftCategory;
   rotationId: number;
   rotationStartDate: string; // YYYY-MM-DD
+  rotationEndDate: string | null; // YYYY-MM-DD or null (no end)
   startHour: number;
   startMinute: number;
   endHour: number;

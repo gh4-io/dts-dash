@@ -298,21 +298,22 @@ Track AOG (Aircraft on Ground — unscheduled maintenance) separately from cance
 
 ---
 
-### OI-080 | Shift Matrix Definition Missing Effective End Date
+### OI-080 | StaffingShift Rotation End Date + Auto-Versioning + Archive
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature Request |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-26 |
+| **Resolved** | 2026-03-04 |
 
-Shift definitions have no end date — impossible to sunset or replace over time. Add nullable `effectiveEndDate` field; query logic excludes expired shifts.
+Added `rotationEndDate` (nullable) to `staffing_shifts` table for creating a historical timeline. When headcount changes, the old shift is auto-archived and a new version created. Rotation start dates auto-align to Sunday (pattern[0] = Sunday). Collapsible archive section shows expired shifts with reactivate option. No-gap safety check warns when archiving the last shift in a category.
 
-**Acceptance Criteria**: (1) Schema has `effectiveEndDate` (nullable). (2) Admin UI allows setting end date. (3) Query excludes `effectiveEndDate < today`. (4) Migration created.
+**Implementation**: M022 migration, `alignRotationStartToSunday()` + `canArchiveShift()` engine functions, `archiveStaffingShift()` + `versionStaffingShift()` data functions, PATCH endpoint for archive/version actions, collapsible archive UI.
 
-**Files**: `src/lib/db/schema.ts`, `src/components/admin/capacity/shifts-editor.tsx`
+**Files**: `src/types/index.ts`, `src/lib/db/schema.ts`, `src/lib/db/schema-init.ts`, `src/lib/capacity/staffing-data.ts`, `src/lib/capacity/staffing-engine.ts`, `src/lib/capacity/index.ts`, `src/app/api/admin/capacity/staffing-shifts/route.ts`, `src/app/api/admin/capacity/staffing-shifts/[id]/route.ts`, `src/components/admin/capacity/shift-definitions-grid.tsx`, `src/__tests__/capacity/staffing-versioning.test.ts`
 
 ---
 
@@ -573,7 +574,7 @@ The Shift action column (highlight, sort, filter, control-break, group-by) uses 
 **Considerations**: Shift names, hours, and count may differ from the hardcoded 3. Would need an API call or server-side hydration to provide shift definitions to the client. The chart boundary lines (`SHIFT_BOUNDARIES`) and the action column helpers (`SHIFTS` in `shift-helpers.ts`) would both need to read from the same dynamic source.
 
 **Files**: `src/lib/utils/shift-helpers.ts`, `src/components/flight-board/flight-board-chart.tsx`
-**Links**: OI-080 (Shift Matrix Definition Missing Effective End Date)
+**Links**: OI-080 (StaffingShift Rotation End Date — Resolved)
 
 ---
 

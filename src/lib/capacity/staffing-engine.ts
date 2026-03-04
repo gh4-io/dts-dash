@@ -381,6 +381,50 @@ export function computeCoverageGaps(
   return gaps;
 }
 
+// ─── Rotation Alignment ──────────────────────────────────────────────────────
+
+/** Align a date to the preceding Sunday (pattern[0] = Sunday) */
+export function alignRotationStartToSunday(date: string): string {
+  const d = new Date(date + "T00:00:00Z");
+  const dow = d.getUTCDay(); // 0=Sun..6=Sat
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+// ─── Archive Safety ──────────────────────────────────────────────────────────
+
+export interface ArchiveSafetyResult {
+  safe: boolean;
+  message?: string;
+}
+
+/** Check whether archiving a shift leaves a gap — another active shift must exist in same config+category */
+export function canArchiveShift(
+  shift: { id: number; configId: number; category: string },
+  allShifts: Array<{
+    id: number;
+    configId: number;
+    category: string;
+    isActive: boolean;
+    rotationEndDate: string | null;
+  }>,
+): ArchiveSafetyResult {
+  const today = new Date().toISOString().slice(0, 10);
+  const hasReplacement = allShifts.some(
+    (s) =>
+      s.id !== shift.id &&
+      s.configId === shift.configId &&
+      s.category === shift.category &&
+      s.isActive &&
+      (s.rotationEndDate === null || s.rotationEndDate >= today),
+  );
+  if (hasReplacement) return { safe: true };
+  return {
+    safe: false,
+    message: `No active ${shift.category} replacement exists. Archive anyway?`,
+  };
+}
+
 // ─── Capacity Engine Integration ────────────────────────────────────────────
 
 /**
