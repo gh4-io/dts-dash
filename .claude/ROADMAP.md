@@ -114,14 +114,6 @@
   - `loadPerEventContractMap()` resolves by lowest priority number (tiebreaker: higher MH)
   - Admin grid shows Priority column; editor has Priority input (0–9999)
 
-### Shift Effective End Date (Complete ✅ — OI-080)
-- [x] `effectiveEndDate` column + M022 migration — 2026-03-03
-- [x] Engine date filtering (loadShifts excludes expired) — 2026-03-03
-- [x] Admin ShiftMatrixSection: active table with date pickers + collapsible archive — 2026-03-03
-- [x] PATCH `/api/admin/capacity/shifts/[id]` endpoint — 2026-03-03
-- [x] Import schema updated — 2026-03-03
-- [x] 10 classification tests (671 total) — 2026-03-03
-
 ### v0.3.0 — Feature Backlog (Post-Phase 4)
 
 **Status**: Planned — Ready for roadmap sequencing.

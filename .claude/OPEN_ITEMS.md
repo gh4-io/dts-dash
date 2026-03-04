@@ -298,21 +298,21 @@ Track AOG (Aircraft on Ground — unscheduled maintenance) separately from cance
 
 ---
 
-### OI-080 | Shift Matrix Definition Missing Effective End Date — RESOLVED
+### OI-080 | Shift Matrix Definition Missing Effective End Date
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature Request |
-| **Status** | **Resolved** |
+| **Status** | **Open** |
 | **Priority** | P2 |
-| **Owner** | -- |
+| **Owner** | Unassigned |
 | **Created** | 2026-02-26 |
-| **Resolved** | 2026-03-03 |
 
-Added `effectiveEndDate` (nullable ISO date) to `capacity_shifts`. Engines filter out expired shifts (`effectiveEndDate < today`). Admin assumptions page shows active shifts with calendar date pickers + collapsible archive for expired/disabled shifts with reactivate action. M022 migration adds column to existing DBs. Import schema updated.
+Shift definitions have no end date — impossible to sunset or replace over time. Add nullable `effectiveEndDate` field; query logic excludes expired shifts.
 
-**Files**: `src/lib/db/schema.ts`, `src/lib/db/schema-init.ts`, `src/lib/capacity/capacity-data.ts`, `src/app/api/admin/capacity/shifts/[id]/route.ts`, `src/components/admin/capacity/shift-matrix-section.tsx`, `src/lib/import/schemas/capacity-shifts.ts`
-**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), OI-082
+**Acceptance Criteria**: (1) Schema has `effectiveEndDate` (nullable). (2) Admin UI allows setting end date. (3) Query excludes `effectiveEndDate < today`. (4) Migration created.
+
+**Files**: `src/lib/db/schema.ts`, `src/components/admin/capacity/shifts-editor.tsx`
 
 ---
 
