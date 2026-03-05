@@ -9,6 +9,7 @@ import {
   parseFilterParams,
 } from "@/lib/utils/filter-helpers";
 import { createChildLogger } from "@/lib/logger";
+import { sqlite } from "@/lib/db/client";
 
 const log = createChildLogger("api/work-packages/all");
 
@@ -39,9 +40,25 @@ export async function GET(request: NextRequest) {
     const facets = extractFacets(dateScoped);
     const filtered = applyFilters(workPackages, filterParams);
 
+    // Enrich with comment counts (join through sp_id since wp.id = SharePoint ID)
+    const commentCounts = sqlite
+      .prepare(
+        `SELECT wp.sp_id, COUNT(*) as cnt
+         FROM flight_comments fc
+         JOIN work_packages wp ON wp.id = fc.work_package_id
+         GROUP BY wp.sp_id`,
+      )
+      .all() as { sp_id: number; cnt: number }[];
+    const countMap = new Map(commentCounts.map((r) => [r.sp_id, r.cnt]));
+
+    const enriched = filtered.map((wp) => ({
+      ...wp,
+      _commentCount: countMap.get(wp.id) ?? 0,
+    }));
+
     return NextResponse.json({
-      data: filtered,
-      total: filtered.length,
+      data: enriched,
+      total: enriched.length,
       facets,
     });
   } catch (error) {

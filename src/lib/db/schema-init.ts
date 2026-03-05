@@ -112,7 +112,18 @@ export function createTables() {
       sp_created TEXT,
       sp_version TEXT,
       import_log_id INTEGER REFERENCES import_log(id),
-      imported_at TEXT NOT NULL
+      imported_at TEXT NOT NULL,
+      ground_event_types TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS flight_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_package_id INTEGER NOT NULL REFERENCES work_packages(id) ON DELETE CASCADE,
+      parent_id INTEGER,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS mh_overrides (
@@ -364,6 +375,8 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
     CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
+    CREATE INDEX IF NOT EXISTS idx_flight_comments_wp ON flight_comments(work_package_id);
+    CREATE INDEX IF NOT EXISTS idx_flight_comments_author ON flight_comments(author_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
     CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
@@ -626,6 +639,40 @@ export function runMigrations(): MigrationResult[] {
     sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN rotation_end_date TEXT");
     results.push({ name: m022Name, applied: true });
   }
+
+  // M023: Flight comments table + ground_event_types column
+  const m023Name = "M023_flight_comments_and_ground_events";
+  let m023Applied = false;
+
+  // 1. Create flight_comments table if missing
+  const m023Tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='flight_comments'")
+    .all();
+  if (m023Tables.length === 0) {
+    sqlite.exec(`
+      CREATE TABLE flight_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_package_id INTEGER NOT NULL REFERENCES work_packages(id) ON DELETE CASCADE,
+        parent_id INTEGER,
+        author_id INTEGER NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_flight_comments_wp ON flight_comments(work_package_id);
+      CREATE INDEX idx_flight_comments_author ON flight_comments(author_id);
+    `);
+    m023Applied = true;
+  }
+
+  // 2. Add ground_event_types column if missing (independent check)
+  const wpCols = sqlite.prepare("PRAGMA table_info(work_packages)").all() as { name: string }[];
+  if (!wpCols.some((c) => c.name === "ground_event_types")) {
+    sqlite.exec("ALTER TABLE work_packages ADD COLUMN ground_event_types TEXT");
+    m023Applied = true;
+  }
+
+  results.push({ name: m023Name, applied: m023Applied });
 
   return results;
 }

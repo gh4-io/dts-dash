@@ -37,6 +37,36 @@ export type MHSource = "workpackage" | "default" | "manual" | "contract";
 
 export type ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback";
 
+// ─── Ground Event Types ─────────────────────────────────────────────────────
+
+export type GroundEventType = "AOG" | "BTB" | "Ferry" | "Maintenance";
+
+export type MarkerRenderConfig =
+  | { mode: "symbol"; shape: "diamond"; fillColor: string; strokeColor: string; size: number }
+  | { mode: "text"; label: string; color: string; fontSize: number };
+
+export interface GroundEventMeta {
+  type: GroundEventType;
+  label: string;
+  color: string;
+  description: string;
+  marker: MarkerRenderConfig;
+}
+
+// ─── Flight Comments ────────────────────────────────────────────────────────
+
+export interface FlightComment {
+  id: number;
+  workPackageId: number;
+  parentId: number | null;
+  authorId: number;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  replies?: FlightComment[];
+}
+
 // ─── Raw SharePoint Input ───────────────────────────────────────────────────
 
 export interface SharePointWorkPackage {
@@ -72,6 +102,9 @@ export interface SharePointWorkPackage {
   Modified?: string; // SharePoint last-modified timestamp
   Created?: string; // SharePoint created timestamp
   OData__UIVersionString?: string; // SharePoint version e.g. "17.0"
+
+  // Local-only fields (not from SharePoint)
+  _groundEventTypesRaw?: string | null; // JSON array from DB
 }
 
 // ─── Normalized Work Package ────────────────────────────────────────────────
@@ -102,6 +135,9 @@ export interface WorkPackage {
   isActive: boolean;
   modified: Date | null;
   created: Date | null;
+
+  // Local-only fields (manual assignment, not from SharePoint)
+  groundEventTypes: GroundEventType[] | null;
 }
 
 // ─── Filter State ───────────────────────────────────────────────────────────

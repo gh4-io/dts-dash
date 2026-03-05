@@ -3,6 +3,7 @@ import { mhOverrides, appConfig, workPackages, aircraft } from "@/lib/db/schema"
 import { eq, isNotNull } from "drizzle-orm";
 import type { SharePointWorkPackage, WorkPackage, MHSource, AppConfig } from "@/types";
 import { createChildLogger } from "@/lib/logger";
+import { parseGroundEventTypes } from "@/lib/utils/ground-events";
 import { normalizeAircraftTypes, invalidateMappingsCache } from "@/lib/utils/aircraft-type";
 import { loadPerEventContractMap } from "@/lib/capacity/allocation-data";
 import {
@@ -255,6 +256,10 @@ export async function transformWorkPackages(
       isActive,
       modified: wp.Modified ? new Date(wp.Modified) : null,
       created: wp.Created ? new Date(wp.Created) : null,
+      groundEventTypes: (() => {
+        const parsed = parseGroundEventTypes(wp._groundEventTypesRaw);
+        return parsed.length > 0 ? parsed : null;
+      })(),
     };
   });
 }

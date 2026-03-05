@@ -27,6 +27,8 @@ export interface SerializedWorkPackage {
   manualMHOverride: number | null;
   inferredType: string;
   title: string | null;
+  groundEventTypes: string[] | null;
+  _commentCount: number;
 }
 
 interface WorkPackagesState {

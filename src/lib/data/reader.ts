@@ -66,6 +66,7 @@ export function readWorkPackages(): SharePointWorkPackage[] {
       DocumentSetID: row.documentSetId ?? undefined,
       AircraftId: row.aircraftSpId ?? undefined,
       OData__UIVersionString: row.spVersion ?? undefined,
+      _groundEventTypesRaw: row.groundEventTypes ?? null,
     }));
 
     cachedHideCanceled = hideCanceled;

@@ -163,6 +163,9 @@ export const workPackages = sqliteTable(
     importedAt: text("imported_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
+
+    // Manual-only fields (not from SharePoint)
+    groundEventTypes: text("ground_event_types"), // nullable JSON array — '["AOG","Maintenance"]'
   },
   (table) => ({
     arrivalIdx: index("idx_wp_arrival").on(table.arrival),
@@ -174,6 +177,33 @@ export const workPackages = sqliteTable(
     // Compound indexes for date range and filtered queries
     arrivalDepartureIdx: index("idx_wp_arrival_departure").on(table.arrival, table.departure),
     customerArrivalIdx: index("idx_wp_customer_arrival").on(table.customer, table.arrival),
+  }),
+);
+
+// ─── Flight Comments ────────────────────────────────────────────────────────
+
+export const flightComments = sqliteTable(
+  "flight_comments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id")
+      .notNull()
+      .references(() => workPackages.id, { onDelete: "cascade" }),
+    parentId: integer("parent_id"),
+    authorId: integer("author_id")
+      .notNull()
+      .references(() => users.id),
+    body: text("body").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    workPackageIdx: index("idx_flight_comments_wp").on(table.workPackageId),
+    authorIdx: index("idx_flight_comments_author").on(table.authorId),
   }),
 );
 

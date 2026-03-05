@@ -29,6 +29,7 @@ import { usePreferences } from "@/lib/hooks/use-preferences";
 import { formatFlightTooltip } from "./flight-tooltip";
 import { cn } from "@/lib/utils";
 import { isCanceled } from "@/lib/utils/status";
+import { GROUND_EVENTS } from "@/lib/utils/ground-events";
 import { BREAK_PREFIX } from "@/lib/hooks/use-transformed-data";
 import { computeTickInterval } from "@/lib/utils/tick-interval";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
@@ -1229,6 +1230,92 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         }
         // < 70px: no text, tooltip serves as full detail
 
+        // ─── Ground Event Markers (render for bars >= 50px) ───
+        const events = wp?.groundEventTypes;
+        if (w >= 50 && events && events.length > 0) {
+          // Compute marker start X based on text layout
+          let markerX: number;
+          if (w >= 240) {
+            // Right of center text, leaving room for departure time
+            const textLen = truncate(centerLabel, w - 100, 6.5).length;
+            markerX = x + w / 2 + (textLen * 6.5) / 2 + 6;
+          } else if (w >= 170) {
+            const textLen = truncate(centerLabel, w - 56, 6.5).length;
+            markerX = x + (w - 56) / 2 + 4 + (textLen * 6.5) / 2 + 6;
+          } else if (w >= 130) {
+            markerX = x + w / 2 + (centerLabel.length * 6.5) / 2 + 6;
+          } else if (w >= 70) {
+            const textLen = truncate(centerLabel, w - 8, 5.5).length;
+            markerX = x + w / 2 + (textLen * 5.5) / 2 + 6;
+          } else {
+            // 50-69px: markers only, start left of center
+            const totalW = events.length * 12 + (events.length - 1) * 4;
+            markerX = x + w / 2 - totalW / 2;
+          }
+
+          for (const eventType of events) {
+            const meta = GROUND_EVENTS[eventType as keyof typeof GROUND_EVENTS];
+            if (!meta) continue;
+            // Clip: don't render if marker would extend past bar right edge
+            if (markerX > x + w - 4) break;
+
+            if (meta.marker.mode === "symbol") {
+              const s = meta.marker.size;
+              children.push({
+                type: "polygon",
+                shape: {
+                  points: [
+                    [markerX, centerY - s],
+                    [markerX + s, centerY],
+                    [markerX, centerY + s],
+                    [markerX - s, centerY],
+                  ],
+                },
+                style: {
+                  fill: meta.marker.fillColor,
+                  stroke: meta.marker.strokeColor,
+                  lineWidth: 1,
+                },
+                z: 12,
+              } as RenderGroup);
+              markerX += s * 2 + 4;
+            } else {
+              children.push({
+                type: "text",
+                style: {
+                  text: meta.marker.label,
+                  x: markerX,
+                  y: centerY,
+                  fill: meta.marker.color,
+                  fontSize: meta.marker.fontSize,
+                  fontWeight: "bold",
+                  fontFamily: "system-ui",
+                  align: "left",
+                  verticalAlign: "middle",
+                },
+                z: 12,
+              } as RenderGroup);
+              markerX += meta.marker.label.length * 5.5 + 4;
+            }
+          }
+        }
+
+        // ─── Comment indicator dot (small circle with 1px border) ───
+        if (wp && wp._commentCount > 0 && w >= 50) {
+          const dotR = 3;
+          const dotX = x + w - (w >= 240 ? 50 : w >= 170 ? 40 : 12);
+          children.push({
+            type: "circle",
+            shape: { cx: dotX, cy: centerY, r: dotR },
+            style: {
+              fill: "rgba(255,255,255,0.7)",
+              stroke: "rgba(255,255,255,0.4)",
+              lineWidth: 1,
+            },
+            z: 12,
+          } as RenderGroup);
+        }
+
         return { type: "group", children } as RenderGroup;
       },
       [colorMap, timeFmt, paddedRegistrations, highlightMap, cc, condensed, allWps, resolvedTheme],
@@ -1423,6 +1510,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               comments: wp.calendarComments,
               timezone,
               timeFormat,
+              groundEventTypes: wp.groundEventTypes ?? undefined,
             });
           },
         },

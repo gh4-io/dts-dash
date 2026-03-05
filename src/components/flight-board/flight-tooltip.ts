@@ -1,4 +1,6 @@
 import { isCanceled } from "@/lib/utils/status";
+import { GROUND_EVENTS } from "@/lib/utils/ground-events";
+import type { GroundEventType } from "@/types";
 
 /**
  * HTML tooltip formatter for flight board Gantt bars
@@ -19,6 +21,7 @@ export function formatFlightTooltip(data: {
   comments: string | null;
   timezone?: string;
   timeFormat?: "12h" | "24h";
+  groundEventTypes?: string[];
 }): string {
   const groundH = Math.floor(data.groundHours);
   const groundM = Math.round((data.groundHours - groundH) * 60);
@@ -62,6 +65,18 @@ export function formatFlightTooltip(data: {
   const borderColor = "hsl(var(--border))";
   const fgColor = "hsl(var(--popover-foreground))";
 
+  const eventsHtml =
+    data.groundEventTypes && data.groundEventTypes.length > 0
+      ? `<div><span style="color:${dimColor};">Events:</span> ${data.groundEventTypes
+          .map((t) => {
+            const meta = GROUND_EVENTS[t as GroundEventType];
+            return meta
+              ? `<span style="color:${meta.color};font-weight:600;">${meta.label}</span>`
+              : t;
+          })
+          .join(", ")}</div>`
+      : "";
+
   const commentsHtml = data.comments
     ? `<div style="border-top:1px solid ${borderColor};padding-top:6px;margin-top:6px;font-style:italic;font-size:11px;color:${dimColor};">"${data.comments.slice(0, 100)}${data.comments.length > 100 ? "..." : ""}"</div>`
     : "";
@@ -88,6 +103,7 @@ export function formatFlightTooltip(data: {
     <div><span style="color:${dimColor};">Status:</span> ${isCanceled(data.status) ? `<span style="color:#ef4444;font-weight:600;">${data.status}</span>` : data.status}</div>
     <div><span style="color:${dimColor};">WP #:</span> ${data.workpackageNo ?? "—"}</div>
     <div><span style="color:${dimColor};">Man-Hours:</span> ${data.effectiveMH} MH (${mhLabel})</div>
+    ${eventsHtml}
   </div>
   ${commentsHtml}
   <div style="margin-top:6px;font-size:11px;color:${dimColor};">Click for full details →</div>

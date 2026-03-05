@@ -5,7 +5,11 @@ import dynamic from "next/dynamic";
 import { TopMenuBar } from "@/components/shared/top-menu-bar";
 import { LoadingSkeleton } from "@/components/shared/loading-skeleton";
 import { FlightDetailDrawer } from "@/components/flight-board/flight-detail-drawer";
-import { useWorkPackages, type SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
+import {
+  useWorkPackages,
+  useWorkPackagesStore,
+  type SerializedWorkPackage,
+} from "@/lib/hooks/use-work-packages";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFilters } from "@/lib/hooks/use-filters";
 import { usePreferences } from "@/lib/hooks/use-preferences";
@@ -92,7 +96,17 @@ function FlightBoardPageInner() {
 
   const { workPackages, isLoading, error } = useWorkPackages();
   const { customers } = useCustomers();
-  const { timezone, start: filterStart, end: filterEnd } = useFilters();
+  const filters = useFilters();
+  const { timezone, start: filterStart, end: filterEnd } = filters;
+  const refetchWps = useCallback(() => {
+    const params: Record<string, string> = {};
+    if (filters.start) params.start = filters.start;
+    if (filters.end) params.end = filters.end;
+    if (filters.operators.length > 0) params.operators = filters.operators.join(",");
+    if (filters.aircraft.length > 0) params.aircraft = filters.aircraft.join(",");
+    if (filters.types.length > 0) params.types = filters.types.join(",");
+    useWorkPackagesStore.getState().fetchAll(params);
+  }, [filters]);
 
   // ✅ PATCH #1: Compute filter span in hours for preset disable logic
   const filterSpanHours = useMemo(() => {
@@ -665,7 +679,12 @@ function FlightBoardPageInner() {
       )}
 
       {/* Detail Drawer */}
-      <FlightDetailDrawer wp={selectedWp} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <FlightDetailDrawer
+        wp={selectedWp}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onWpUpdated={refetchWps}
+      />
     </div>
   );
 }
