@@ -43,7 +43,7 @@ export type GroundEventType = "AOG" | "BTB" | "Ferry" | "Maintenance";
 
 export type MarkerRenderConfig =
   | { mode: "symbol"; shape: "diamond"; fillColor: string; strokeColor: string; size: number }
-  | { mode: "text"; label: string; color: string; fontSize: number };
+  | { mode: "text"; label: string; color: string; stroke: string; fontSize: number };
 
 export interface GroundEventMeta {
   type: GroundEventType;

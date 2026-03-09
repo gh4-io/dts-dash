@@ -1233,23 +1233,29 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         // ─── Ground Event Markers (render for bars >= 50px) ───
         const events = wp?.groundEventTypes;
         if (w >= 50 && events && events.length > 0) {
+          // Scale to bar height: diamond fills full bar, text nearly full bar
+          const diamondR = Math.max(7, Math.floor(barHeight / 2) - 1);
+          const textFontSize = Math.min(Math.floor(barHeight) - 1, 14);
+          const charW = textFontSize * 0.65; // approx advance per char for condensed 900
+          const markerGap = 10;
+
           // Compute marker start X based on text layout
           let markerX: number;
           if (w >= 240) {
             // Right of center text, leaving room for departure time
             const textLen = truncate(centerLabel, w - 100, 6.5).length;
-            markerX = x + w / 2 + (textLen * 6.5) / 2 + 6;
+            markerX = x + w / 2 + (textLen * 6.5) / 2 + 10;
           } else if (w >= 170) {
             const textLen = truncate(centerLabel, w - 56, 6.5).length;
-            markerX = x + (w - 56) / 2 + 4 + (textLen * 6.5) / 2 + 6;
+            markerX = x + (w - 56) / 2 + 4 + (textLen * 6.5) / 2 + 10;
           } else if (w >= 130) {
-            markerX = x + w / 2 + (centerLabel.length * 6.5) / 2 + 6;
+            markerX = x + w / 2 + (centerLabel.length * 6.5) / 2 + 10;
           } else if (w >= 70) {
             const textLen = truncate(centerLabel, w - 8, 5.5).length;
-            markerX = x + w / 2 + (textLen * 5.5) / 2 + 6;
+            markerX = x + w / 2 + (textLen * 5.5) / 2 + 10;
           } else {
-            // 50-69px: markers only, start left of center
-            const totalW = events.length * 12 + (events.length - 1) * 4;
+            // 50-69px: markers only, centered
+            const totalW = events.length * (diamondR * 2 + markerGap);
             markerX = x + w / 2 - totalW / 2;
           }
 
@@ -1260,56 +1266,57 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
             if (markerX > x + w - 4) break;
 
             if (meta.marker.mode === "symbol") {
-              const s = meta.marker.size;
               children.push({
                 type: "polygon",
                 shape: {
                   points: [
-                    [markerX, centerY - s],
-                    [markerX + s, centerY],
-                    [markerX, centerY + s],
-                    [markerX - s, centerY],
+                    [markerX, centerY - diamondR],
+                    [markerX + diamondR, centerY],
+                    [markerX, centerY + diamondR],
+                    [markerX - diamondR, centerY],
                   ],
                 },
                 style: {
                   fill: meta.marker.fillColor,
                   stroke: meta.marker.strokeColor,
-                  lineWidth: 1,
+                  lineWidth: 1.5,
                 },
                 z: 12,
               } as RenderGroup);
-              markerX += s * 2 + 4;
+              markerX += diamondR * 2 + markerGap;
             } else {
               children.push({
                 type: "text",
                 style: {
                   text: meta.marker.label,
                   x: markerX,
-                  y: centerY,
+                  y: y + barHeight / 2,
                   fill: meta.marker.color,
-                  fontSize: meta.marker.fontSize,
-                  fontWeight: "bold",
-                  fontFamily: "system-ui",
-                  align: "left",
-                  verticalAlign: "middle",
+                  stroke: meta.marker.stroke,
+                  lineWidth: 5,
+                  fontSize: textFontSize,
+                  fontWeight: 900,
+                  fontFamily: "'Arial Narrow', system-ui, sans-serif",
+                  textAlign: "left",
+                  textVerticalAlign: "middle",
                 },
                 z: 12,
               } as RenderGroup);
-              markerX += meta.marker.label.length * 5.5 + 4;
+              markerX += meta.marker.label.length * charW + markerGap;
             }
           }
         }
 
-        // ─── Comment indicator dot (small circle with 1px border) ───
+        // ─── Comment indicator dot ───
         if (wp && wp._commentCount > 0 && w >= 50) {
-          const dotR = 3;
-          const dotX = x + w - (w >= 240 ? 50 : w >= 170 ? 40 : 12);
+          const dotR = Math.max(4, Math.floor(barHeight / 4));
+          const dotX = x + w - (w >= 240 ? 50 : w >= 170 ? 40 : 14);
           children.push({
             type: "circle",
             shape: { cx: dotX, cy: centerY, r: dotR },
             style: {
-              fill: "rgba(255,255,255,0.7)",
-              stroke: "rgba(255,255,255,0.4)",
+              fill: "rgba(255,255,255,0.85)",
+              stroke: "rgba(255,255,255,0.5)",
               lineWidth: 1,
             },
             z: 12,

@@ -129,6 +129,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
       });
       if (res.ok) {
         await fetchComments();
+        onWpUpdated?.();
         if (parentId === null) {
           setCommentBody("");
         } else {
@@ -149,6 +150,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
       });
       if (res.ok) {
         await fetchComments();
+        onWpUpdated?.();
       }
     } catch {
       // ignore

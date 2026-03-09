@@ -10,7 +10,7 @@ export const GROUND_EVENTS: Record<GroundEventType, GroundEventMeta> = {
       mode: "symbol",
       shape: "diamond",
       fillColor: "#f59e0b",
-      strokeColor: "#92400e",
+      strokeColor: "#000000",
       size: 5,
     },
   },
@@ -19,21 +19,21 @@ export const GROUND_EVENTS: Record<GroundEventType, GroundEventMeta> = {
     label: "BTB",
     color: "#10b981",
     description: "Back to Blocks — departure complete",
-    marker: { mode: "text", label: "BTB", color: "#10b981", fontSize: 8 },
+    marker: { mode: "text", label: "BTB", color: "#6aa84f", stroke: "#393a3f", fontSize: 7 },
   },
   Ferry: {
     type: "Ferry",
     label: "FER",
     color: "#6b7280",
     description: "Positioning / non-revenue flight",
-    marker: { mode: "text", label: "FER", color: "#6b7280", fontSize: 8 },
+    marker: { mode: "text", label: "FER", color: "#b00b69", stroke: "#393a3f", fontSize: 7 },
   },
   Maintenance: {
     type: "Maintenance",
     label: "MX",
     color: "#f59e0b",
     description: "Scheduled heavy maintenance",
-    marker: { mode: "text", label: "MX", color: "#d97706", fontSize: 8 },
+    marker: { mode: "text", label: "MX", color: "#6a329f", stroke: "#393a3f", fontSize: 7 },
   },
 };
 
