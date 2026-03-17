@@ -10,6 +10,8 @@ interface SidebarState {
   hydrated: boolean;
   setMode: (mode: SidebarMode) => void;
   cycleMode: () => void;
+  /** Toggle between expanded and icons only (semi-collapse) */
+  toggleSemiCollapse: () => void;
   hydrate: () => void;
 }
 
@@ -31,6 +33,13 @@ export const useSidebar = create<SidebarState>((set, get) => ({
     const current = get().mode;
     const next: SidebarMode =
       current === "expanded" ? "icons" : current === "icons" ? "collapsed" : "expanded";
+    get().setMode(next);
+  },
+
+  toggleSemiCollapse: () => {
+    const current = get().mode;
+    // If collapsed, go to expanded; otherwise toggle expanded ↔ icons
+    const next: SidebarMode = current === "icons" ? "expanded" : "icons";
     get().setMode(next);
   },
 

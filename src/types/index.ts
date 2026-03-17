@@ -41,16 +41,16 @@ export type ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback";
 
 export type GroundEventType = "AOG" | "BTB" | "Ferry" | "Maintenance";
 
-export type MarkerRenderConfig =
-  | { mode: "symbol"; shape: "diamond"; fillColor: string; strokeColor: string; size: number }
-  | { mode: "text"; label: string; color: string; stroke: string; fontSize: number };
+export type MarkerConfig =
+  | { mode: "symbol"; shape: "diamond"; fill: string; stroke: string }
+  | { mode: "pill"; label: string; fill: string; stroke: string; textColor: string };
 
 export interface GroundEventMeta {
   type: GroundEventType;
   label: string;
   color: string;
   description: string;
-  marker: MarkerRenderConfig;
+  marker: MarkerConfig;
 }
 
 // ─── Flight Comments ────────────────────────────────────────────────────────

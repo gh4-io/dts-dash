@@ -481,6 +481,113 @@ Add an interactive guided tour/walkthrough that launches when users log in after
 
 ---
 
+### OI-096 | Code Splitting & Component Extraction
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-16 |
+
+Extract oversized components and page files into smaller, lazy-loadable modules to reduce bundle size and improve maintainability. Audit identified 2 critical (>1000 lines), 8 high-priority (600–1000 lines), and 25+ medium files.
+
+**Phase 1 — Critical (highest impact):**
+- `flight-board-chart.tsx` (2184 lines) → extract render utils, stripe overlay logic, tooltip formatter to separate `.ts` files
+- `admin/settings/page.tsx` (1022 lines) → split into HostnameConfigPanel, InviteCodeManager, ShiftConfigEditor sub-components
+- `shift-definitions-grid.tsx` (1133 lines) → extract column definitions to separate file
+
+**Phase 2 — High priority:**
+- `capacity-table.tsx` (869 lines) → extract column factory + cell renderers
+- `capacity-summary-chart.tsx` (832 lines) → extract chart config builders
+- `shift-drilldown-drawer.tsx` (787 lines) → extract panel components per shift view
+- `server-tab.tsx` (759 lines) → extract status cards, metrics display
+- `aircraft-type-editor.tsx` (744 lines) → extract editor modals, lazy-load mapping UI
+- `flight-events-editor.tsx` (714 lines) → extract form sections, lazy-load modal content
+
+**Phase 3 — Medium priority (lazy-load candidates):**
+- `flight-detail-drawer.tsx` (554 lines) → lazy-load tab content panels
+- `dashboard/combined-chart.tsx` (612 lines) → lazy-load if not above-fold
+- `capacity-heatmap.tsx` (660 lines) → lazy-load canvas rendering
+- `admin/data-import.tsx` (624 lines) → lazy-load multi-step wizard
+- `import-hub.tsx` (599 lines) → lazy-load each wizard step
+
+**Completed:**
+- `flight-board/page.tsx` — view controls extracted to `flight-board-view-controls.tsx` (2026-03-16)
+
+**Files**: See audit data above; all paths relative to `src/components/` or `src/app/`
+**Links**: [DEV_STANDARDS.md](DEV/DEV_STANDARDS.md)
+
+---
+
+### OI-097 | iPad / Tablet UX Enhancements
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **In Progress** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-03-16 |
+
+iPad-specific UX improvements for landscape and portrait modes.
+
+**Completed:**
+- Floating sidebar toggle (circle button on sidebar/content border, tablet only)
+- Tap-to-toggle on sidebar empty space (tablet only)
+- iPad portrait → flight board defaults to list view
+- Print button hidden on tablet (not useful)
+- `toggleSemiCollapse()` added to sidebar store (expanded ↔ icons)
+- View controls extracted to `flight-board-view-controls.tsx`
+- Two-finger pinch-to-zoom + pan on flight board Gantt (OI-098)
+
+**Remaining / Future:**
+- Filter bar overlap on tablet widths — date pickers need wrap or abbreviation
+- Vertical space optimization — combine title + filter row on tablet
+- iPad Quick Info Panel (long-press, OI-051)
+- Touch gesture polish (OI-098)
+
+**Files**: `sidebar.tsx`, `use-sidebar.ts`, `layout.tsx`, `flight-board/page.tsx`, `flight-board-view-controls.tsx`, `use-chart-gestures.ts`
+**Links**: OI-084, OI-051, OI-098, D-053
+
+---
+
+### OI-098 | Flight Board Touch Gesture Polish
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-03-16 |
+
+Two-finger pinch-to-zoom and pan implemented on flight board Gantt chart via custom pointer events (`use-chart-gestures.ts`). Working but has room for polish.
+
+**Implemented (v1):**
+- Pinch-to-zoom: finger distance ratio → dataZoom span scaling
+- Two-finger pan: center point delta → horizontal dataZoom shift
+- Dead zone (8px) to prevent jitter at gesture start
+- RAF throttling (one dispatch per frame)
+- `touch-action: pan-y` preserves single-finger vertical scroll
+- Only `pointerType === "touch"` tracked — mouse interactions unaffected
+- Code split into `use-chart-gestures.ts` (also extracted wheel zoom + drag pan)
+
+**Future refinements:**
+- Momentum/inertia after finger lift (coast to stop)
+- Zoom anchor at pinch midpoint rather than dataZoom center
+- Sensitivity tuning after real iPad testing (scale factor, pan multiplier)
+- Double-tap to reset zoom (snap to "all" preset)
+- Haptic feedback via `navigator.vibrate()` at zoom limits
+- Consider extending touch gestures to header chart slider area
+- Test with 3+ finger edge cases (currently capped at 2)
+
+**Files**: `src/components/flight-board/use-chart-gestures.ts`
+**Links**: OI-097 (iPad UX), [REQ_FlightBoard.md](SPECS/REQ_FlightBoard.md)
+
+---
+
 ## Backlog
 
 ### OI-046 | Customer SP ID in Work Packages
@@ -656,11 +763,11 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 1 | 2 | 0 | 0 | 23 |
-| P2 | 16 | 2 | 0 | 0 | 21 |
-| P3 | 6 | 0 | 0 | 2 | 5 |
-| **Total** | **23** | **4** | **0** | **2** | **65** |
+| P2 | 17 | 2 | 1 | 0 | 21 |
+| P3 | 7 | 0 | 0 | 2 | 5 |
+| **Total** | **25** | **4** | **1** | **2** | **65** |
 
-**Latest update (2026-03-01)**: Added 6 v0.3.0+ feature ideas (OI-090–OI-095): aircraft phase badges on mobile FB list, right-click graph component toggling, flight event comments system, ground event markers (AOG/BTB), one-time notification system with dismiss options, revision history walkthrough with changelog UI.
+**Latest update (2026-03-16)**: Added OI-098 (flight board touch gesture polish — pinch-to-zoom + pan working, future refinements tracked). Updated OI-097 with touch gesture completion. Interaction hooks extracted to `use-chart-gestures.ts` (code split from 2184-line chart component).
 
 ---
 

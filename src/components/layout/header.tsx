@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
+import { useSidebar } from "@/lib/hooks/use-sidebar";
 import { MobileNav } from "./mobile-nav";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
 
@@ -14,6 +15,7 @@ export function Header() {
   const { data: session } = useSession();
   const { update: updatePrefs } = usePreferences();
   const device = useDeviceType();
+  const sidebarMode = useSidebar((s) => s.mode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mounted = useSyncExternalStore(
@@ -66,13 +68,15 @@ export function Header() {
       data-print="hide"
       className="flex h-14 items-center justify-between border-b border-border bg-background px-4"
     >
-      {/* Mobile menu button — visible on md–lg only (bottom tab bar handles < md) */}
-      <button
-        className="hidden md:block lg:hidden p-2 text-muted-foreground hover:text-foreground"
-        onClick={() => setMobileNavOpen(true)}
-      >
-        <i className="fa-solid fa-bars" />
-      </button>
+      {/* Mobile menu button — only when sidebar is fully collapsed (no nav visible) */}
+      {sidebarMode === "collapsed" && (
+        <button
+          className="p-2 text-muted-foreground hover:text-foreground"
+          onClick={() => setMobileNavOpen(true)}
+        >
+          <i className="fa-solid fa-bars" />
+        </button>
+      )}
       <MobileNav open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
 
       <div className="flex-1" />

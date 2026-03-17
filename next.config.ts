@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3", "pino", "pino-pretty", "node-cron"],
   transpilePackages: ["echarts", "zrender"],
   turbopack: {},
-  allowedDevOrigins: ["http://localhost:3000"],
+  allowedDevOrigins: ["http://localhost:3000", "https://dts.gh4.io"],
   env: {
     BUILD_NUMBER: String(buildInfo.build),
     BUILD_BRANCH: buildInfo.branch,

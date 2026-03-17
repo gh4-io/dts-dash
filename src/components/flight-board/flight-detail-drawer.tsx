@@ -22,7 +22,7 @@ interface FlightDetailDrawerProps {
 
 export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDetailDrawerProps) {
   const { getColor } = useCustomers();
-  const { setOperators, setAircraft } = useFilters();
+  const { timezone, setOperators, setAircraft } = useFilters();
   const { data: session } = useSession();
 
   const [comments, setComments] = useState<FlightComment[]>([]);
@@ -67,21 +67,22 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
   const groundH = Math.floor(wp.groundHours);
   const groundM = Math.round((wp.groundHours - groundH) * 60);
 
+  const tzLabel = timezone === "UTC" ? "UTC" : "ET";
   const fmtDate = (d: Date) =>
     d.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
-      timeZone: "UTC",
+      timeZone: timezone,
     }) +
     " " +
     d.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: false,
-      timeZone: "UTC",
+      timeZone: timezone,
     }) +
-    " UTC";
+    ` ${tzLabel}`;
 
   const mhLabel =
     wp.mhSource === "manual"

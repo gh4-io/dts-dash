@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
@@ -15,29 +16,91 @@ const navItems = [
   { href: "/feedback", label: "Feedback", icon: "fa-solid fa-comments" },
 ];
 
+/**
+ * Floating toggle button that sits on the sidebar/content border.
+ * Rendered as a sibling of the sidebar in the layout to avoid overflow clipping.
+ */
+export function SidebarEdgeToggle() {
+  const { mode, toggleSemiCollapse } = useSidebar();
+  const device = useDeviceType();
+
+  // Only show on tablet (not phone, not desktop)
+  if (device.type !== "tablet") return null;
+  // Don't show when fully collapsed (use header hamburger to restore)
+  if (mode === "collapsed") return null;
+
+  const isExpanded = mode === "expanded";
+
+  return (
+    <button
+      data-print="hide"
+      onClick={toggleSemiCollapse}
+      className={cn(
+        "absolute top-11 z-30",
+        "flex h-9 w-9 items-center justify-center",
+        "rounded-full border border-border shadow-sm",
+        "bg-sidebar text-muted-foreground",
+        "hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        "transition-all duration-200",
+        // Center on the sidebar edge (offset left by half the button: width 36px / 2 = 18px)
+        isExpanded ? "left-[222px]" : "left-[38px]",
+      )}
+      title={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+    >
+      <i
+        className={cn(
+          "fa-solid text-base transition-transform duration-200",
+          isExpanded ? "fa-chevron-left" : "fa-chevron-right",
+        )}
+      />
+    </button>
+  );
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const appTitle = useAppTitle();
-  const { mode, cycleMode } = useSidebar();
+  const { mode, setMode, toggleSemiCollapse } = useSidebar();
   const device = useDeviceType();
+
+  // Auto-expand sidebar when switching to desktop (toggle not available there)
+  useEffect(() => {
+    if (device.type === "desktop" && mode !== "expanded") {
+      setMode("expanded");
+    }
+  }, [device.type]); // eslint-disable-line react-hooks/exhaustive-deps -- only react to device changes, not mode
 
   const isExpanded = mode === "expanded";
   const isIcons = mode === "icons";
   const isCollapsed = mode === "collapsed";
+  const isTablet = device.type === "tablet";
 
   // Hide sidebar on phone, show on tablet/desktop
   if (device.type === "phone") {
     return null;
   }
 
+  // On tablet, tapping empty sidebar area toggles semi-collapse
+  const handleSidebarTap = isTablet
+    ? (e: React.MouseEvent<HTMLElement>) => {
+        // Only toggle if the tap target is the aside itself or non-interactive children
+        // (not nav links, buttons, or the logo link)
+        const target = e.target as HTMLElement;
+        if (target.closest("a, button")) return;
+        toggleSemiCollapse();
+      }
+    : undefined;
+
   return (
     <aside
       data-print="hide"
+      onClick={handleSidebarTap}
       className={cn(
         "flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 ease-in-out",
         isExpanded && "w-60",
         isIcons && "w-14",
         isCollapsed && "w-0 border-r-0 overflow-hidden",
+        isTablet && !isCollapsed && "cursor-pointer",
       )}
     >
       {/* Logo / title */}
@@ -107,22 +170,6 @@ export function Sidebar() {
           return linkContent;
         })}
       </nav>
-
-      {/* Collapse toggle */}
-      <div className={cn("border-t border-sidebar-border p-2", isIcons && "flex justify-center")}>
-        <button
-          onClick={cycleMode}
-          className="flex h-9 w-full items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
-          title={isExpanded ? "Collapse sidebar" : isIcons ? "Hide sidebar" : "Expand sidebar"}
-        >
-          <i
-            className={cn(
-              "fa-solid transition-transform duration-200",
-              isExpanded ? "fa-chevron-left" : isIcons ? "fa-chevron-left" : "fa-chevron-right",
-            )}
-          />
-        </button>
-      </div>
     </aside>
   );
 }
