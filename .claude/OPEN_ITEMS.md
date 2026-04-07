@@ -706,6 +706,67 @@ In v0.1.1 and earlier, the inbound work package data field `title` is mapped dir
 
 ---
 
+### OI-099 | Unified Comments/Notifications/Feedback Table (v1.0.x)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Refactoring / Architecture |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Target Version** | v1.0.x |
+| **Created** | 2026-03-17 |
+
+Combine three separate tracking systems (`flight_comments`, `notifications`, `user_notification_dismissals`) into a single unified **messages** table. This reduces schema complexity and enables richer interactions (e.g., a notification can have replies/comments, comments can have reactions, feedback can be shared).
+
+**Current separate tables** (v0.3.0+):
+- `flight_comments` — per-WP comments, user feedback, maintenance logs (OI-092)
+- `notifications` — system-wide announcements, deprecation warnings (OI-094)
+- `user_notification_dismissals` — per-user dismissal state for notifications
+
+**Proposed unified schema (v1.0.x)**:
+```sql
+CREATE TABLE messages (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,  -- 'comment', 'notification', 'feedback', 'audit-note'
+  scope TEXT,  -- 'global', 'user', 'wp:{id}', 'customer:{id}'
+  title TEXT,
+  body TEXT NOT NULL,
+  author_id TEXT,  -- FK to users (NULL for system messages)
+  created_at TEXT NOT NULL,
+  updated_at TEXT,
+  metadata JSONB,  -- flexible fields per type (priority, severity, category, etc.)
+  active BOOLEAN DEFAULT true,
+  parent_id TEXT REFERENCES messages(id)  -- for threaded replies
+);
+
+CREATE TABLE message_reactions (
+  message_id TEXT FK,
+  user_id TEXT FK,
+  reaction TEXT,  -- emoji or label ('helpful', 'dismiss', 'acknowledge', etc.)
+  created_at TEXT
+);
+
+CREATE TABLE message_dismissals (
+  message_id TEXT FK,
+  user_id TEXT FK,
+  dismissed_at TEXT,
+  UNIQUE(message_id, user_id)
+);
+```
+
+**Benefits**:
+1. Reduces schema surface area (1 table instead of 3+)
+2. Enables comments on notifications (e.g., "I saw this announcement, here's feedback")
+3. Unified search/audit trail (all messages in one place)
+4. Flexible metadata per message type
+5. Threaded conversations (parent_id for replies)
+
+**Migration path**: (1) Create new unified schema in parallel; (2) backfill data with type/scope tags; (3) deprecate old tables (keep as views for backwards compat); (4) remove views in v1.1.x
+
+**Related OIs**: OI-092 (Comments), OI-094 (Notifications), [REQ_Logging_Audit.md](SPECS/REQ_Logging_Audit.md)
+
+---
+
 ## Acknowledged / Informational
 
 | OI | Title | Notes |
@@ -763,11 +824,11 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 1 | 2 | 0 | 0 | 23 |
-| P2 | 17 | 2 | 1 | 0 | 21 |
+| P2 | 18 | 2 | 1 | 0 | 21 |
 | P3 | 7 | 0 | 0 | 2 | 5 |
-| **Total** | **25** | **4** | **1** | **2** | **65** |
+| **Total** | **26** | **4** | **1** | **2** | **65** |
 
-**Latest update (2026-03-16)**: Added OI-098 (flight board touch gesture polish — pinch-to-zoom + pan working, future refinements tracked). Updated OI-097 with touch gesture completion. Interaction hooks extracted to `use-chart-gestures.ts` (code split from 2184-line chart component).
+**Latest update (2026-03-17)**: Added OI-099 (unified comments/notifications/feedback table for v1.0.x — refactoring for schema simplification and richer interactions). Backlog item targeting post-v0.3.0 release.
 
 ---
 

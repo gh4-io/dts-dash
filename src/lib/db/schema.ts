@@ -1258,6 +1258,34 @@ export const staffingShiftsRelations = relations(staffingShifts, ({ one }) => ({
   }),
 }));
 
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull().default("system"),
+    category: text("category").notNull().default("general"),
+    title: text("title").notNull(),
+    message: text("message"),
+    metadata: text("metadata"),
+    readAt: text("read_at"),
+    actionUrl: text("action_url"),
+    expiresAt: text("expires_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    userIdx: index("idx_notifications_user").on(table.userId),
+    userUnreadIdx: index("idx_notifications_user_unread").on(table.userId, table.readAt),
+    createdIdx: index("idx_notifications_created").on(table.createdAt),
+  }),
+);
+
 // ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
 
 export const weeklyMhProjections = sqliteTable(

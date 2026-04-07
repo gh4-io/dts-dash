@@ -4,6 +4,8 @@ import { sqlite } from "@/lib/db/client";
 import { isGroundEventType } from "@/lib/utils/ground-events";
 import { invalidateCache } from "@/lib/data/reader";
 import { createChildLogger } from "@/lib/logger";
+import { getSessionUserId } from "@/lib/utils/session-helpers";
+import { broadcastNotification } from "@/lib/notifications/create";
 
 const log = createChildLogger("api/work-packages/ground-event");
 
@@ -67,6 +69,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // Invalidate cached reader data so next API call reflects the change
     invalidateCache();
+
+    // Notify all users about the flag change
+    if (types.length > 0) {
+      try {
+        const adminUserId = getSessionUserId(session);
+        const wp = sqlite
+          .prepare("SELECT aircraft_reg FROM work_packages WHERE id = ?")
+          .get(internalId) as { aircraft_reg: string } | undefined;
+        const reg = wp?.aircraft_reg ?? "aircraft";
+
+        broadcastNotification({
+          type: "flag",
+          category: "aircraft",
+          title: `Flag updated on ${reg}`,
+          message: types.join(", "),
+          metadata: { groundEventTypes: types, workPackageId: internalId, spId },
+          actionUrl: "/flight-board",
+          excludeUserId: adminUserId,
+        });
+      } catch (notifErr) {
+        log.warn({ err: notifErr }, "Failed to create flag notifications");
+      }
+    }
 
     return NextResponse.json({ success: true, groundEventTypes: types });
   } catch (error) {

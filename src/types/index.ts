@@ -1082,3 +1082,23 @@ export interface ProjectionDayOverlay {
   /** shiftCode → customer → projectedMH */
   projectedByCustomerByShift: Record<string, Record<string, number>>;
 }
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export type NotificationType = "system" | "comment" | "flag" | "update";
+
+export type NotificationCategory = "aircraft" | "flight" | "import" | "admin" | "general";
+
+export interface AppNotification {
+  id: number;
+  userId: number;
+  type: NotificationType;
+  category: NotificationCategory;
+  title: string;
+  message: string | null;
+  metadata: Record<string, unknown> | null;
+  readAt: string | null;
+  actionUrl: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}

@@ -674,5 +674,34 @@ export function runMigrations(): MigrationResult[] {
 
   results.push({ name: m023Name, applied: m023Applied });
 
+  // M024: Notifications table
+  const m024Name = "M024_notifications";
+  const m024Tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
+    .all();
+  if (m024Tables.length === 0) {
+    sqlite.exec(`
+      CREATE TABLE notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'system',
+        category TEXT NOT NULL DEFAULT 'general',
+        title TEXT NOT NULL,
+        message TEXT,
+        metadata TEXT,
+        read_at TEXT,
+        action_url TEXT,
+        expires_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_notifications_user ON notifications(user_id);
+      CREATE INDEX idx_notifications_user_unread ON notifications(user_id, read_at);
+      CREATE INDEX idx_notifications_created ON notifications(created_at);
+    `);
+    results.push({ name: m024Name, applied: true });
+  } else {
+    results.push({ name: m024Name, applied: false });
+  }
+
   return results;
 }

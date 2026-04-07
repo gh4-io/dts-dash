@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { sqlite } from "@/lib/db/client";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
 import { createChildLogger } from "@/lib/logger";
+import { createNotification } from "@/lib/notifications/create";
 
 const log = createChildLogger("api/work-packages/comments");
 
@@ -121,6 +122,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
          WHERE fc.id = ?`,
       )
       .get(insertedId);
+
+    // Notify other thread participants
+    try {
+      const participants = sqlite
+        .prepare(
+          `SELECT DISTINCT author_id FROM flight_comments WHERE work_package_id = ? AND author_id != ?`,
+        )
+        .all(internalId, userId) as { author_id: number }[];
+
+      if (participants.length > 0) {
+        const wp = sqlite
+          .prepare("SELECT aircraft_reg FROM work_packages WHERE id = ?")
+          .get(internalId) as { aircraft_reg: string } | undefined;
+        const reg = wp?.aircraft_reg ?? "aircraft";
+
+        createNotification(
+          participants.map((p) => p.author_id),
+          {
+            type: "comment",
+            category: "flight",
+            title: `New comment on ${reg}`,
+            message: body.length > 100 ? body.slice(0, 100) + "..." : body,
+            metadata: { workPackageId: internalId, spId, commentId: Number(insertedId) },
+            actionUrl: "/flight-board",
+          },
+        );
+      }
+    } catch (notifErr) {
+      log.warn({ err: notifErr }, "Failed to create comment notifications");
+    }
 
     return NextResponse.json(comment, { status: 201 });
   } catch (error) {
