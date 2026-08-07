@@ -28,6 +28,7 @@
     "db:backup": "tsx scripts/db/backup.ts",
     "db:analytics-clear": "tsx scripts/db/analytics-clear.ts",
     "db:migrate": "tsx scripts/db/migrate.ts",
+    "db:upgrade-v1": "tsx scripts/db/upgrade-to-v1.ts",
     "db:export": "tsx scripts/db/export.ts",
     "db:import": "tsx scripts/db/import.ts",
     "db:cleanup-canceled": "tsx scripts/db/cleanup-canceled.ts",
