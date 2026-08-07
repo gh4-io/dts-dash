@@ -74,6 +74,7 @@ function makeShift(overrides: Partial<StaffingShift> & { id: number }): Staffing
     rotationId: 1,
     rotationStartDate: "2026-01-04", // a Sunday
     rotationEndDate: null,
+    patternAnchorDate: null,
     startHour: 7,
     startMinute: 0,
     endHour: 15,

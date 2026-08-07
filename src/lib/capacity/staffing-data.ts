@@ -363,6 +363,7 @@ export function loadStaffingShifts(configId: number): StaffingShift[] {
     rotationId: r.rotationId ?? 0,
     rotationStartDate: r.rotationStartDate,
     rotationEndDate: r.rotationEndDate ?? null,
+    patternAnchorDate: r.patternAnchorDate ?? null,
     startHour: r.startHour,
     startMinute: r.startMinute,
     endHour: r.endHour,
@@ -384,6 +385,7 @@ export function createStaffingShift(data: {
   rotationId: number;
   rotationStartDate: string;
   rotationEndDate?: string | null;
+  patternAnchorDate?: string | null;
   startHour: number;
   startMinute?: number;
   endHour: number;
@@ -406,6 +408,7 @@ export function createStaffingShift(data: {
       rotationId: data.rotationId,
       rotationStartDate: data.rotationStartDate,
       rotationEndDate: data.rotationEndDate ?? null,
+      patternAnchorDate: data.patternAnchorDate ?? null,
       startHour: data.startHour,
       startMinute: data.startMinute ?? 0,
       endHour: data.endHour,
@@ -431,6 +434,7 @@ export function createStaffingShift(data: {
     rotationId: result.rotationId ?? 0,
     rotationStartDate: result.rotationStartDate,
     rotationEndDate: result.rotationEndDate ?? null,
+    patternAnchorDate: result.patternAnchorDate ?? null,
     startHour: result.startHour,
     startMinute: result.startMinute,
     endHour: result.endHour,
@@ -452,6 +456,7 @@ export function updateStaffingShift(
     rotationId: number;
     rotationStartDate: string;
     rotationEndDate: string | null;
+    patternAnchorDate: string | null;
     startHour: number;
     startMinute: number;
     endHour: number;
@@ -483,6 +488,7 @@ export function updateStaffingShift(
     rotationId: result.rotationId ?? 0,
     rotationStartDate: result.rotationStartDate,
     rotationEndDate: result.rotationEndDate ?? null,
+    patternAnchorDate: result.patternAnchorDate ?? null,
     startHour: result.startHour,
     startMinute: result.startMinute,
     endHour: result.endHour,
@@ -508,7 +514,26 @@ export function archiveStaffingShift(id: number): StaffingShift | null {
   return updateStaffingShift(id, { rotationEndDate: today, isActive: false });
 }
 
-/** Version a staffing shift — archives the old, creates a new one with changes applied */
+/** Shift a YYYY-MM-DD date by whole days (UTC-safe). */
+function addDays(date: string, days: number): string {
+  const d = new Date(date + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Version a staffing shift — closes the old version and opens a new one.
+ *
+ * OI-102 boundary rule: the new version takes effect on the **save date**, and
+ * the old version is closed the day before, so the two never overlap and no
+ * past date is restated. The new version inherits the old version's pattern
+ * anchor, which keeps the rotation phase intact even though the effective start
+ * is mid-week — that separation is what M025's `patternAnchorDate` exists for.
+ *
+ * Previously both roles lived on `rotationStartDate`, so the new version had to
+ * start on the aligned Sunday to preserve the phase. That overlapped the old
+ * version from Sunday through the save date and silently restated those days.
+ */
 export function versionStaffingShift(
   id: number,
   changes: Partial<{
@@ -516,7 +541,6 @@ export function versionStaffingShift(
     description: string | null;
     category: StaffingShiftCategory;
     rotationId: number;
-    rotationStartDate: string;
     startHour: number;
     startMinute: number;
     endHour: number;
@@ -526,6 +550,8 @@ export function versionStaffingShift(
     mhOverride: number | null;
     headcount: number;
     sortOrder: number;
+    // rotationStartDate is deliberately absent — the new version's effective
+    // start is always the save date (OI-102), never caller-supplied.
   }>,
 ): { archived: StaffingShift; created: StaffingShift } | null {
   // Load existing shift
@@ -533,16 +559,27 @@ export function versionStaffingShift(
   if (rows.length === 0) return null;
   const old = rows[0];
 
-  // Archive old shift
-  const archived = archiveStaffingShift(id);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // If the current version has not yet covered a completed day — it starts today
+  // or later — there is no history to preserve. Splitting would close it the day
+  // before its own start, producing an inverted window. Amend in place instead.
+  if (today <= old.rotationStartDate) {
+    const amended = updateStaffingShift(id, changes);
+    if (!amended) return null;
+    return { archived: amended, created: amended };
+  }
+
+  // Close the old version the day BEFORE the new one opens — no overlap.
+  const archived = updateStaffingShift(id, {
+    rotationEndDate: addDays(today, -1),
+    isActive: false,
+  });
   if (!archived) return null;
 
-  // Import alignment function (avoid circular — inline the logic)
-  const today = new Date().toISOString().slice(0, 10);
-  const d = new Date(today + "T00:00:00Z");
-  const dow = d.getUTCDay();
-  d.setUTCDate(d.getUTCDate() - dow);
-  const alignedStart = d.toISOString().slice(0, 10);
+  // The new version inherits the old anchor, so the rotation phase is preserved
+  // even though the effective start is mid-week.
+  const inheritedAnchor = old.patternAnchorDate ?? old.rotationStartDate;
 
   // Create new shift with changes applied
   const created = createStaffingShift({
@@ -552,8 +589,9 @@ export function versionStaffingShift(
       changes.description !== undefined ? changes.description : (old.description ?? null),
     category: (changes.category ?? old.category) as StaffingShiftCategory,
     rotationId: changes.rotationId ?? old.rotationId ?? 0,
-    rotationStartDate: alignedStart,
+    rotationStartDate: today,
     rotationEndDate: null,
+    patternAnchorDate: inheritedAnchor,
     startHour: changes.startHour ?? old.startHour,
     startMinute: changes.startMinute ?? old.startMinute,
     endHour: changes.endHour ?? old.endHour,

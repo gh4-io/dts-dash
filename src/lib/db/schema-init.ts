@@ -426,6 +426,7 @@ export function createTables() {
       rotation_id INTEGER REFERENCES rotation_patterns(id),
       rotation_start_date TEXT NOT NULL,
       rotation_end_date TEXT,
+      pattern_anchor_date TEXT,
       start_hour INTEGER NOT NULL,
       start_minute INTEGER NOT NULL DEFAULT 0,
       end_hour INTEGER NOT NULL,
@@ -701,6 +702,24 @@ export function runMigrations(): MigrationResult[] {
     results.push({ name: m024Name, applied: true });
   } else {
     results.push({ name: m024Name, applied: false });
+  }
+
+  // M025: Add pattern_anchor_date to staffing_shifts (OI-102).
+  // rotation_start_date used to serve two roles at once: the date the version
+  // takes effect, and the anchor the 21-day pattern is indexed from
+  // (pattern[0] == that date). That forced every new version to start on a
+  // Sunday to keep the pattern phase, which made a mid-week headcount change
+  // retroactive to the start of the week. Splitting the anchor out lets a
+  // version take effect on the day it was saved while the pattern stays put.
+  // NULL means "fall back to rotation_start_date", so existing rows are
+  // unaffected and keep their current phase.
+  const m025Name = "M025_staffing_shift_pattern_anchor_date";
+  const m025Cols = sqlite.prepare("PRAGMA table_info(staffing_shifts)").all() as { name: string }[];
+  if (m025Cols.some((c) => c.name === "pattern_anchor_date")) {
+    results.push({ name: m025Name, applied: false });
+  } else {
+    sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN pattern_anchor_date TEXT");
+    results.push({ name: m025Name, applied: true });
   }
 
   return results;

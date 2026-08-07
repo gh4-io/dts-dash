@@ -716,8 +716,14 @@ export interface StaffingShift {
   description: string | null;
   category: StaffingShiftCategory;
   rotationId: number;
-  rotationStartDate: string; // YYYY-MM-DD
+  rotationStartDate: string; // YYYY-MM-DD — date this version takes effect
   rotationEndDate: string | null; // YYYY-MM-DD or null (no end)
+  /**
+   * Date the 21-day rotation pattern is indexed from (pattern[0] == this date).
+   * Null falls back to rotationStartDate. Kept separate from the effective start
+   * so a version can begin mid-week without rotating the pattern phase (OI-102).
+   */
+  patternAnchorDate: string | null; // YYYY-MM-DD or null
   startHour: number;
   startMinute: number;
   endHour: number;

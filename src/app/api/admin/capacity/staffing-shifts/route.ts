@@ -85,15 +85,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Rotation pattern not found" }, { status: 400 });
     }
 
-    // Auto-align rotation start date to Sunday
-    const alignedStartDate = alignRotationStartToSunday(body.rotationStartDate);
+    // OI-102/M025: the shift takes effect on exactly the date the user chose,
+    // while the 21-day pattern is anchored to the aligned Sunday so pattern[0]
+    // still lands on a Sunday. Before the split, aligning the start date was the
+    // only way to keep the pattern phase, which silently moved the effective date.
+    const patternAnchorDate = alignRotationStartToSunday(body.rotationStartDate);
 
     const created = createStaffingShift({
       configId: body.configId,
       name: body.name,
       category: body.category,
       rotationId: body.rotationId,
-      rotationStartDate: alignedStartDate,
+      rotationStartDate: body.rotationStartDate,
+      patternAnchorDate,
       startHour: body.startHour,
       startMinute: body.startMinute,
       endHour: body.endHour,

@@ -4,6 +4,7 @@
  * - canArchiveShift()
  * - isShiftEffectiveOn()      (OI-100)
  * - resolveStaffingDay() across a version boundary (OI-100)
+ * - getPatternAnchor() — anchor/effective-date split (OI-102)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
@@ -12,6 +13,8 @@ import {
   isShiftEffectiveOn,
   resolveStaffingDay,
   buildPatternMap,
+  getPatternAnchor,
+  isWorkingDay,
 } from "@/lib/capacity/staffing-engine";
 import type { RotationPattern, StaffingShift } from "@/types";
 
@@ -141,6 +144,7 @@ function makeShift(overrides: Partial<StaffingShift> & { id: number }): Staffing
     rotationId: 1,
     rotationStartDate: "2026-01-04", // a Sunday
     rotationEndDate: null,
+    patternAnchorDate: null,
     startHour: 7,
     startMinute: 0,
     endHour: 15,
@@ -248,5 +252,100 @@ describe("resolveStaffingDay — version boundaries (OI-100)", () => {
     const pastAfter = resolveStaffingDay("2026-02-01", withAnother, patterns).totalHeadcount;
 
     expect(pastAfter).toBe(past);
+  });
+});
+
+// ─── Pattern Anchor vs Effective Start (OI-102) ─────────────────────────────
+
+describe("getPatternAnchor", () => {
+  it("falls back to rotationStartDate when no anchor is set", () => {
+    const shift = makeShift({ id: 1, rotationStartDate: "2026-01-04", patternAnchorDate: null });
+    expect(getPatternAnchor(shift)).toBe("2026-01-04");
+  });
+
+  it("prefers an explicit anchor over the effective start", () => {
+    const shift = makeShift({
+      id: 1,
+      rotationStartDate: "2026-03-05", // Thursday — mid-week version start
+      patternAnchorDate: "2026-03-01", // Sunday — pattern phase
+    });
+    expect(getPatternAnchor(shift)).toBe("2026-03-01");
+  });
+});
+
+describe("version boundary preserves rotation phase (OI-102)", () => {
+  // "oxxxxox..." — Sunday off, Mon-Fri on, Saturday off (anchored to a Sunday)
+  const WEEKDAYS: RotationPattern = {
+    id: 2,
+    name: "5-2",
+    description: null,
+    pattern: "oxxxxoxoxxxxoxoxxxxox",
+    isActive: true,
+    sortOrder: 0,
+  };
+  const patterns = buildPatternMap([WEEKDAYS]);
+
+  // v1 anchored (and started) on Sunday 2026-01-04.
+  const v1 = makeShift({
+    id: 1,
+    rotationId: 2,
+    headcount: 20,
+    rotationStartDate: "2026-01-04",
+    patternAnchorDate: null, // falls back to the start — legacy shape
+    rotationEndDate: "2026-03-04", // closed the day before v2 opens
+    isActive: false,
+  });
+
+  // v2 takes effect Thursday 2026-03-05 but keeps v1's Sunday anchor.
+  const v2 = makeShift({
+    id: 2,
+    rotationId: 2,
+    headcount: 30,
+    rotationStartDate: "2026-03-05", // Thursday — the save date
+    patternAnchorDate: "2026-01-04", // inherited anchor
+    rotationEndDate: null,
+    isActive: true,
+  });
+
+  const shifts = [v1, v2];
+
+  it("keeps the same working days across the boundary", () => {
+    // 2026-03-05 is a Thursday — a working day under this pattern both before
+    // and after the split. Phase must not shift when the version changes.
+    expect(isWorkingDay("2026-03-05", WEEKDAYS.pattern, getPatternAnchor(v1))).toBe(true);
+    expect(isWorkingDay("2026-03-05", WEEKDAYS.pattern, getPatternAnchor(v2))).toBe(true);
+  });
+
+  it("agrees with v1's phase on every day of the changeover week", () => {
+    for (const date of [
+      "2026-03-01",
+      "2026-03-02",
+      "2026-03-03",
+      "2026-03-04",
+      "2026-03-05",
+      "2026-03-06",
+      "2026-03-07",
+    ]) {
+      expect(isWorkingDay(date, WEEKDAYS.pattern, getPatternAnchor(v2))).toBe(
+        isWorkingDay(date, WEEKDAYS.pattern, getPatternAnchor(v1)),
+      );
+    }
+  });
+
+  it("does not restate days before the save date", () => {
+    // Wed 2026-03-04 is still v1 at 20 heads
+    expect(resolveStaffingDay("2026-03-04", shifts, patterns).totalHeadcount).toBe(20);
+  });
+
+  it("applies the new headcount from the save date onward", () => {
+    // Thu 2026-03-05 is v2 at 30 heads
+    expect(resolveStaffingDay("2026-03-05", shifts, patterns).totalHeadcount).toBe(30);
+  });
+
+  it("never counts both versions on the same date", () => {
+    for (const date of ["2026-03-03", "2026-03-04", "2026-03-05", "2026-03-06"]) {
+      const result = resolveStaffingDay(date, shifts, patterns);
+      expect(result.byShift.length).toBeLessThanOrEqual(1);
+    }
   });
 });

@@ -69,6 +69,21 @@ export function isShiftEffectiveOn(
   return shift.isActive;
 }
 
+/**
+ * The date the shift's 21-day pattern is indexed from (pattern[0] == this date).
+ *
+ * OI-102: `rotationStartDate` used to serve as both the effective start and the
+ * pattern anchor, which forced every new version onto a Sunday to preserve the
+ * pattern phase — making a mid-week headcount change retroactive to the start of
+ * the week. `patternAnchorDate` splits the two; null falls back to the old
+ * behaviour so pre-M025 rows keep their phase exactly.
+ */
+export function getPatternAnchor(
+  shift: Pick<StaffingShift, "rotationStartDate" | "patternAnchorDate">,
+): string {
+  return shift.patternAnchorDate ?? shift.rotationStartDate;
+}
+
 // ─── Effective Paid Hours ───────────────────────────────────────────────────
 
 /**
@@ -129,7 +144,7 @@ export function resolveStaffingDay(
     const rotation = patterns.get(shift.rotationId);
     if (!rotation || !rotation.isActive) continue;
 
-    const working = isWorkingDay(date, rotation.pattern, shift.rotationStartDate);
+    const working = isWorkingDay(date, rotation.pattern, getPatternAnchor(shift));
     const effectivePaidHours = computeEffectivePaidHours(shift);
 
     byShift.push({
@@ -342,7 +357,7 @@ export function computeCoverageGaps(
   function isShiftWorking(shift: StaffingShift, dateStr: string): boolean {
     if (!isShiftEffectiveOn(shift, dateStr)) return false;
     const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
-    if (pat) return isWorkingDay(dateStr, pat.pattern, shift.rotationStartDate);
+    if (pat) return isWorkingDay(dateStr, pat.pattern, getPatternAnchor(shift));
     // Orphaned shift (rotationId 0 or null) — not working
     return false;
   }
