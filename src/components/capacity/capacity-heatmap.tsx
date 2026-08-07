@@ -18,6 +18,7 @@ import type {
   CapacityLensId,
   MonthlyRollupResult,
 } from "@/types";
+import { shiftIcon, shiftText } from "@/lib/utils/shift-colors";
 import type { ForecastPatternResult } from "@/lib/capacity/forecast-pattern-engine";
 
 interface CapacityHeatmapProps {
@@ -31,19 +32,6 @@ interface CapacityHeatmapProps {
   patternResult?: ForecastPatternResult | null;
   monthlyRollup?: MonthlyRollupResult | null;
 }
-
-/** Shift display config */
-const SHIFT_ICONS: Record<string, string> = {
-  DAY: "fa-sun",
-  SWING: "fa-cloud-sun",
-  NIGHT: "fa-moon",
-};
-
-const SHIFT_COLORS: Record<string, string> = {
-  DAY: "text-amber-400",
-  SWING: "text-orange-400",
-  NIGHT: "text-indigo-400",
-};
 
 /** Get background color class for utilization percentage */
 function getUtilCellClasses(util: number | null, noCoverage: boolean): string {
@@ -208,7 +196,7 @@ export function CapacityHeatmap({
                     <TableHead key={shift.code} className="text-xs text-center min-w-[100px]">
                       <span className="flex items-center justify-center gap-1.5">
                         <i
-                          className={`fa-solid ${SHIFT_ICONS[shift.code] ?? "fa-clock"} text-[10px] ${SHIFT_COLORS[shift.code] ?? ""}`}
+                          className={`fa-solid ${shiftIcon(shift.code)} text-[10px] ${shiftText(shift.code)}`}
                         />
                         {shift.name}
                       </span>
@@ -327,7 +315,7 @@ export function CapacityHeatmap({
                     <TableHead key={shift.code} className="text-xs text-center min-w-[100px]">
                       <span className="flex items-center justify-center gap-1.5">
                         <i
-                          className={`fa-solid ${SHIFT_ICONS[shift.code] ?? "fa-clock"} text-[10px] ${SHIFT_COLORS[shift.code] ?? ""}`}
+                          className={`fa-solid ${shiftIcon(shift.code)} text-[10px] ${shiftText(shift.code)}`}
                         />
                         {shift.name}
                       </span>
@@ -465,7 +453,7 @@ export function CapacityHeatmap({
                   <TableHead key={shift.code} className="text-xs text-center min-w-[100px]">
                     <span className="flex items-center justify-center gap-1.5">
                       <i
-                        className={`fa-solid ${SHIFT_ICONS[shift.code] ?? "fa-clock"} text-[10px] ${SHIFT_COLORS[shift.code] ?? ""}`}
+                        className={`fa-solid ${shiftIcon(shift.code)} text-[10px] ${shiftText(shift.code)}`}
                       />
                       {shift.name}
                     </span>

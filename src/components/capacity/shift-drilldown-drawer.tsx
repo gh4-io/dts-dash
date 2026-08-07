@@ -46,12 +46,7 @@ interface ShiftDrilldownDrawerProps {
   concurrencyBuckets?: ConcurrencyBucket[];
 }
 
-const SHIFT_ICONS: Record<string, string> = {
-  DAY: "fa-sun",
-  SWING: "fa-cloud-sun",
-  NIGHT: "fa-moon",
-};
-
+import { shiftIcon } from "@/lib/utils/shift-colors";
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", {
@@ -320,7 +315,7 @@ export function ShiftDrilldownDrawer({
 
   const title = isDailyTotal ? "Daily Overview" : `${shift?.name ?? shiftCode} Shift`;
 
-  const shiftIcon = shiftCode ? (SHIFT_ICONS[shiftCode] ?? "fa-clock") : "fa-calendar-day";
+  const shiftIconClass = shiftCode ? shiftIcon(shiftCode) : "fa-calendar-day";
 
   // Lens detail rendering
   const renderLensDetail = () => {
@@ -544,7 +539,7 @@ export function ShiftDrilldownDrawer({
       <SheetContent side="right" className="w-[420px] sm:max-w-[420px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <i className={`fa-solid ${shiftIcon} text-sm text-muted-foreground`} />
+            <i className={`fa-solid ${shiftIconClass} text-sm text-muted-foreground`} />
             {title}
           </SheetTitle>
           <SheetDescription>{formatDate(date)}</SheetDescription>
@@ -671,7 +666,7 @@ export function ShiftDrilldownDrawer({
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-sm font-medium">
                           <i
-                            className={`fa-solid ${SHIFT_ICONS[s.shiftCode] ?? "fa-clock"} text-[10px] text-muted-foreground`}
+                            className={`fa-solid ${shiftIcon(s.shiftCode)} text-[10px] text-muted-foreground`}
                           />
                           {s.shiftName}
                         </span>

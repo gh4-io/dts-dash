@@ -15,6 +15,7 @@ import type {
   MonthlyRollupResult,
 } from "@/types";
 import type { ForecastPatternResult } from "@/lib/capacity/forecast-pattern-engine";
+import { shiftHex } from "@/lib/utils/shift-colors";
 
 echarts.use([PieChart, TooltipComponent, LegendComponent, CanvasRenderer]);
 
@@ -27,12 +28,6 @@ interface CapacityPieChartsProps {
   patternResult?: ForecastPatternResult | null;
   monthlyRollup?: MonthlyRollupResult | null;
 }
-
-const SHIFT_COLORS: Record<string, string> = {
-  DAY: "#f59e0b",
-  SWING: "#f97316",
-  NIGHT: "#6366f1",
-};
 
 const CUSTOMER_PALETTE = [
   "#60a5fa",
@@ -328,7 +323,7 @@ export function CapacityPieCharts({
       .map((shift) => ({
         name: shift.name ?? shift.code,
         value: Math.round((shiftMH.get(shift.code) ?? 0) * 10) / 10,
-        itemStyle: { color: SHIFT_COLORS[shift.code] ?? "#6b7280" },
+        itemStyle: { color: shiftHex(shift.code) },
       }))
       .filter((d) => d.value > 0);
 

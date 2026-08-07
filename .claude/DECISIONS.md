@@ -900,3 +900,31 @@ Engine A had **no live consumers** — `useCapacity` was imported by nothing, an
 **Impact:** Feature removal, not a compatibility break — nothing consumed the removed keys. Existing `app_config` rows for them are left in place as harmless orphans, no longer read or seeded. Supersedes the "Real capacity: headcount × 6.5 MH/person" rule previously stated in CLAUDE.md.
 
 **Follow-on:** The productivity chain is now documented in the UI (OI-116) because `paidToAvailable × availableToProductive` multiply to 57.9% and read as a single ratio otherwise.
+
+---
+
+## D-065 | 2026-08-07 | One Shift Palette + Two-Axis Chart Legend (OI-121)
+
+**Context:** The Demand vs Capacity chart drew nine series in By Shift mode but labelled five. `legendType={i === 0 ? undefined : "none"}` collapsed three capacity lines into one "Capacity" entry and three utilization lines into one "Utilization" entry, and the legend was inert. Two near-identical orange curves therefore had no label and no way to be hidden, because:
+
+- Day `#f59e0b` and Swing `#f97316` were two almost indistinguishable oranges, and
+- within a shift, capacity and utilization used the **same** hue, differing only in dash pattern.
+
+The shift palette was also copy-pasted into six components in two forms (hex for charts, Tailwind classes for icons), so changing a hue in one chart left the heatmap, pies, drilldown drawer and admin grids behind.
+
+**Decision:**
+
+1. **One palette module** — `src/lib/utils/shift-colors.ts` owns the shift hues (chart hex, a lightened variant, Tailwind text class, icon, dot shape). Every consumer imports from it; no component defines its own. A hue change now moves everywhere at once, which is the explicit requirement.
+2. **Swing moves to pink `#ec4899`**, Day to amber `#d97706`, Night stays indigo `#6366f1`. Validated as a categorical palette against both the light and dark chart surfaces — lightness band, chroma floor, CVD separation, normal-vision floor and contrast all pass. Worst-case tritan separation sits in the 6–8 floor band, which is legal only because shift identity always carries a second channel (icon, legend label, per-shift dot shape).
+3. **Role is encoded by form, not only hue** — demand is a filled bar, capacity a dashed 2.5px line with no dots, utilization a solid 2px line in the lightened hue with a per-shift dot shape.
+4. **The legend has two axes and toggles.** A custom `ChartLegend` replaces Recharts' `<Legend>`: an entity row (Days / Swings / Nights, or customers in By Customer mode) and a series row (Capacity / Utilization plus overlays). A series draws only when neither its entity key nor its role key is hidden — so clicking **Days** removes the Day bar, the Day capacity line and the Day utilization line together, which is what a user expects from a shift label. Demand gets no separate entry when the entity row is present: those bars *are* the entity entries.
+5. `LENS_LINE_CONFIG.allocated` moves from amber to violet `#a855f7`, which collided with the Day shift.
+
+**Alternatives considered:**
+- *One legend entry per drawn series* (9 entries) — precise, but a shift label that hides only its bar contradicts what the label names
+- *Role = hue, shift = dash* — reads well when comparing roles, worse when tracking one shift across roles, which is the actual workflow
+- *Keep the collapsed legend and only re-colour* — leaves two unlabelled curves
+
+**Impact:** Visual change only; no data or API change. Applies to all three charts in the capacity panel (daily summary, weekly pattern, monthly rollup), to the dashboard's Arrivals / Departures / On Ground chart, and to every surface that shows a shift colour.
+
+`ChartLegend` lives in `src/components/shared/` — it is chart-agnostic (rows of `{key, label, color, mark}`), so a chart with no entity/role split, like the dashboard's, passes a single row. The capacity-specific row construction stays in `chart-series-style.tsx`. Any future chart gets the same interaction by building rows and passing `hide` to its series.
