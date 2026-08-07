@@ -384,9 +384,12 @@ export function createTables() {
     -- Staffing: Rotation Patterns
     CREATE TABLE IF NOT EXISTS rotation_patterns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER,
       name TEXT NOT NULL,
       description TEXT,
       pattern TEXT NOT NULL,
+      effective_from TEXT,
+      effective_to TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -720,6 +723,34 @@ export function runMigrations(): MigrationResult[] {
   } else {
     sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN pattern_anchor_date TEXT");
     results.push({ name: m025Name, applied: true });
+  }
+
+  // M026: Version rotation_patterns (OI-101).
+  // Editing a pattern in place silently rewrote which days were worked for every
+  // past date that used it. Patterns now carry an effective window like shifts do,
+  // plus a group_id giving a stable identity across versions: a shift references a
+  // pattern row, and resolution follows that row's group to find the version
+  // effective on the date being computed. Existing rows are backfilled to be their
+  // own group with an open window, so nothing changes for them.
+  const m026Name = "M026_rotation_pattern_versioning";
+  const m026Cols = sqlite.prepare("PRAGMA table_info(rotation_patterns)").all() as {
+    name: string;
+  }[];
+  if (m026Cols.some((c) => c.name === "group_id")) {
+    // Fresh databases get the columns from createTables() but never the index,
+    // since that runs before migrations — ensure it here either way.
+    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id)");
+    sqlite.exec("UPDATE rotation_patterns SET group_id = id WHERE group_id IS NULL");
+    results.push({ name: m026Name, applied: false });
+  } else {
+    sqlite.exec(`
+      ALTER TABLE rotation_patterns ADD COLUMN group_id INTEGER;
+      ALTER TABLE rotation_patterns ADD COLUMN effective_from TEXT;
+      ALTER TABLE rotation_patterns ADD COLUMN effective_to TEXT;
+      UPDATE rotation_patterns SET group_id = id WHERE group_id IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id);
+    `);
+    results.push({ name: m026Name, applied: true });
   }
 
   return results;

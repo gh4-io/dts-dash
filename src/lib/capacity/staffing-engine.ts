@@ -84,6 +84,69 @@ export function getPatternAnchor(
   return shift.patternAnchorDate ?? shift.rotationStartDate;
 }
 
+/**
+ * Does this rotation pattern version apply to the given date? (OI-101)
+ *
+ * Mirrors `isShiftEffectiveOn`: a null `effectiveFrom` means "since the
+ * beginning of time", a null `effectiveTo` means open-ended, and `isActive`
+ * gates only open-ended versions so a superseded version still describes the
+ * dates it covered.
+ */
+export function isPatternEffectiveOn(
+  pattern: Pick<RotationPattern, "effectiveFrom" | "effectiveTo" | "isActive">,
+  date: string,
+): boolean {
+  if (pattern.effectiveFrom !== null && date < pattern.effectiveFrom) return false;
+  if (pattern.effectiveTo !== null) return date <= pattern.effectiveTo;
+  return pattern.isActive;
+}
+
+/**
+ * Date-aware lookup from a shift's `rotationId` to the pattern version in force.
+ *
+ * A shift references a specific pattern row. That row names a group, and the
+ * group holds every version of the pattern over time; resolution picks the
+ * version whose window contains the date. Before OI-101 a pattern was a single
+ * mutable row, so editing it rewrote which days were worked for every past date.
+ */
+export interface PatternResolver {
+  resolve(rotationId: number, date: string): RotationPattern | null;
+  /** Every version, keyed by row id — for callers that need a specific row. */
+  byId: Map<number, RotationPattern>;
+}
+
+export function buildPatternResolver(patterns: RotationPattern[]): PatternResolver {
+  const byId = new Map<number, RotationPattern>();
+  const byGroup = new Map<number, RotationPattern[]>();
+
+  for (const p of patterns) {
+    byId.set(p.id, p);
+    const group = p.groupId ?? p.id;
+    const bucket = byGroup.get(group);
+    if (bucket) bucket.push(p);
+    else byGroup.set(group, [p]);
+  }
+
+  return {
+    byId,
+    resolve(rotationId, date) {
+      const row = byId.get(rotationId);
+      if (!row) return null;
+
+      const versions = byGroup.get(row.groupId ?? row.id);
+      if (!versions) return null;
+
+      // Windows should not overlap, but prefer the latest start if they do.
+      let best: RotationPattern | null = null;
+      for (const v of versions) {
+        if (!isPatternEffectiveOn(v, date)) continue;
+        if (best === null || (v.effectiveFrom ?? "") > (best.effectiveFrom ?? "")) best = v;
+      }
+      return best;
+    },
+  };
+}
+
 // ─── Effective Paid Hours ───────────────────────────────────────────────────
 
 /**
@@ -124,7 +187,7 @@ export function computeEffectivePaidHours(shift: StaffingShift): number {
 export function resolveStaffingDay(
   date: string,
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
 ): StaffingDayResult {
   const byCategory: Record<StaffingShiftCategory, number> = {
     DAY: 0,
@@ -141,8 +204,10 @@ export function resolveStaffingDay(
     // date — not isActive alone, which erased archived versions from history.
     if (!isShiftEffectiveOn(shift, date)) continue;
 
-    const rotation = patterns.get(shift.rotationId);
-    if (!rotation || !rotation.isActive) continue;
+    // OI-101: resolve the pattern *version* in force on this date, not the
+    // single mutable row. isPatternEffectiveOn already applied isActive.
+    const rotation = patterns.resolve(shift.rotationId, date);
+    if (!rotation) continue;
 
     const working = isWorkingDay(date, rotation.pattern, getPatternAnchor(shift));
     const effectivePaidHours = computeEffectivePaidHours(shift);
@@ -189,7 +254,7 @@ function addCells(a: WeeklyMatrixCell, b: WeeklyMatrixCell): WeeklyMatrixCell {
 export function computeWeeklyMatrix(
   weekStart: string,
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
   assumptions: CapacityAssumptions,
 ): WeeklyMatrixResult {
   const categories: StaffingShiftCategory[] = ["DAY", "SWING", "NIGHT", "OTHER"];
@@ -343,7 +408,7 @@ function findUncoveredRanges(covered: boolean[]): Array<{ startHour: number; end
 export function computeCoverageGaps(
   days: Array<{ date: string; dayOfWeek: number }>,
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
 ): CoverageGap[] {
   const gaps: CoverageGap[] = [];
 
@@ -356,7 +421,7 @@ export function computeCoverageGaps(
    */
   function isShiftWorking(shift: StaffingShift, dateStr: string): boolean {
     if (!isShiftEffectiveOn(shift, dateStr)) return false;
-    const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
+    const pat = shift.rotationId ? patterns.resolve(shift.rotationId, dateStr) : null;
     if (pat) return isWorkingDay(dateStr, pat.pattern, getPatternAnchor(shift));
     // Orphaned shift (rotationId 0 or null) — not working
     return false;
@@ -489,7 +554,7 @@ export function canArchiveShift(
 export function resolveStaffingForCapacity(
   dates: string[],
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
 ): Map<string, Map<string, { headcount: number; effectivePaidHours: number }>> {
   // Returns: Map<date, Map<shiftCode, {headcount, effectivePaidHours}>>
   const result = new Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>();
@@ -531,13 +596,15 @@ export function resolveStaffingForCapacity(
 
 // ─── Pattern Helpers ────────────────────────────────────────────────────────
 
-/** Build a Map<id, RotationPattern> for fast lookup */
-export function buildPatternMap(patterns: RotationPattern[]): Map<number, RotationPattern> {
-  const map = new Map<number, RotationPattern>();
-  for (const p of patterns) {
-    map.set(p.id, p);
-  }
-  return map;
+/**
+ * Build a date-aware pattern lookup.
+ *
+ * Named "map" for history — it returned a plain `Map<id, RotationPattern>` before
+ * OI-101 made patterns versioned. It now returns a {@link PatternResolver}; use
+ * `.resolve(rotationId, date)`, or `.byId` when you genuinely want one row.
+ */
+export function buildPatternMap(patterns: RotationPattern[]): PatternResolver {
+  return buildPatternResolver(patterns);
 }
 
 /** Validate a rotation pattern string */

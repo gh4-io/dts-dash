@@ -5,6 +5,7 @@
  * - isShiftEffectiveOn()      (OI-100)
  * - resolveStaffingDay() across a version boundary (OI-100)
  * - getPatternAnchor() — anchor/effective-date split (OI-102)
+ * - isPatternEffectiveOn() / buildPatternResolver() — pattern versioning (OI-101)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
@@ -15,6 +16,8 @@ import {
   buildPatternMap,
   getPatternAnchor,
   isWorkingDay,
+  isPatternEffectiveOn,
+  buildPatternResolver,
 } from "@/lib/capacity/staffing-engine";
 import type { RotationPattern, StaffingShift } from "@/types";
 
@@ -128,8 +131,11 @@ describe("canArchiveShift", () => {
 
 const ALWAYS_ON: RotationPattern = {
   id: 1,
+  groupId: 1,
   name: "All On",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xxxxxxxxxxxxxxxxxxxxx",
   isActive: true,
   sortOrder: 0,
@@ -277,8 +283,11 @@ describe("version boundary preserves rotation phase (OI-102)", () => {
   // "oxxxxox..." — Sunday off, Mon-Fri on, Saturday off (anchored to a Sunday)
   const WEEKDAYS: RotationPattern = {
     id: 2,
+    groupId: 2,
     name: "5-2",
     description: null,
+    effectiveFrom: null,
+    effectiveTo: null,
     pattern: "oxxxxoxoxxxxoxoxxxxox",
     isActive: true,
     sortOrder: 0,
@@ -347,5 +356,137 @@ describe("version boundary preserves rotation phase (OI-102)", () => {
       const result = resolveStaffingDay(date, shifts, patterns);
       expect(result.byShift.length).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+// ─── Rotation Pattern Versioning (OI-101) ───────────────────────────────────
+
+function makePattern(o: Partial<RotationPattern> & { id: number }): RotationPattern {
+  return {
+    groupId: o.id,
+    name: "P",
+    description: null,
+    pattern: "xxxxxxxxxxxxxxxxxxxxx",
+    effectiveFrom: null,
+    effectiveTo: null,
+    isActive: true,
+    sortOrder: 0,
+    ...o,
+  };
+}
+
+describe("isPatternEffectiveOn", () => {
+  it("treats a null effectiveFrom as since-the-beginning", () => {
+    const p = makePattern({ id: 1, effectiveFrom: null });
+    expect(isPatternEffectiveOn(p, "1999-01-01")).toBe(true);
+  });
+
+  it("excludes dates before an explicit effectiveFrom", () => {
+    const p = makePattern({ id: 1, effectiveFrom: "2026-03-01" });
+    expect(isPatternEffectiveOn(p, "2026-02-28")).toBe(false);
+    expect(isPatternEffectiveOn(p, "2026-03-01")).toBe(true);
+  });
+
+  it("includes a superseded version inside its window despite isActive=false", () => {
+    const p = makePattern({ id: 1, effectiveTo: "2026-03-01", isActive: false });
+    expect(isPatternEffectiveOn(p, "2026-02-01")).toBe(true);
+    expect(isPatternEffectiveOn(p, "2026-03-02")).toBe(false);
+  });
+
+  it("excludes an open-ended version that was deactivated", () => {
+    const p = makePattern({ id: 1, effectiveTo: null, isActive: false });
+    expect(isPatternEffectiveOn(p, "2026-06-01")).toBe(false);
+  });
+});
+
+describe("buildPatternResolver", () => {
+  // Group 1: weekdays until 2026-03-04, then all-on from 2026-03-05.
+  const v1 = makePattern({
+    id: 1,
+    groupId: 1,
+    pattern: "oxxxxoxoxxxxoxoxxxxox",
+    effectiveFrom: null,
+    effectiveTo: "2026-03-04",
+    isActive: false,
+  });
+  const v2 = makePattern({
+    id: 9,
+    groupId: 1,
+    pattern: "xxxxxxxxxxxxxxxxxxxxx",
+    effectiveFrom: "2026-03-05",
+    effectiveTo: null,
+    isActive: true,
+  });
+  const resolver = buildPatternResolver([v1, v2]);
+
+  it("resolves a past date to the superseded version", () => {
+    expect(resolver.resolve(1, "2026-02-01")?.id).toBe(1);
+  });
+
+  it("resolves a current date to the newest version", () => {
+    expect(resolver.resolve(1, "2026-06-01")?.id).toBe(9);
+  });
+
+  it("follows the group even when the shift references the OLD row id", () => {
+    // Shifts keep their original rotationId; resolution must still find v2.
+    expect(resolver.resolve(1, "2026-03-05")?.id).toBe(9);
+  });
+
+  it("resolves identically whichever version id is referenced", () => {
+    expect(resolver.resolve(9, "2026-02-01")?.id).toBe(resolver.resolve(1, "2026-02-01")?.id);
+  });
+
+  it("returns null for an unknown rotation id", () => {
+    expect(resolver.resolve(404, "2026-06-01")).toBeNull();
+  });
+
+  it("returns null when no version covers the date", () => {
+    const orphan = buildPatternResolver([
+      makePattern({ id: 2, groupId: 2, effectiveFrom: "2030-01-01" }),
+    ]);
+    expect(orphan.resolve(2, "2026-01-01")).toBeNull();
+  });
+
+  it("keeps ungrouped legacy rows working as their own group", () => {
+    const legacy = buildPatternResolver([makePattern({ id: 3 })]);
+    expect(legacy.resolve(3, "2026-01-01")?.id).toBe(3);
+  });
+});
+
+describe("pattern edits do not rewrite history (OI-101)", () => {
+  const v1 = makePattern({
+    id: 1,
+    groupId: 1,
+    pattern: "oxxxxoxoxxxxoxoxxxxox", // Sun off
+    effectiveFrom: null,
+    effectiveTo: "2026-03-04",
+    isActive: false,
+  });
+  const v2 = makePattern({
+    id: 9,
+    groupId: 1,
+    pattern: "xxxxxxxxxxxxxxxxxxxxx", // every day on
+    effectiveFrom: "2026-03-05",
+    effectiveTo: null,
+    isActive: true,
+  });
+  const resolver = buildPatternResolver([v1, v2]);
+
+  const shift = makeShift({
+    id: 1,
+    rotationId: 1,
+    headcount: 10,
+    rotationStartDate: "2026-01-04",
+    patternAnchorDate: "2026-01-04",
+  });
+
+  it("a Sunday before the edit is still a day off", () => {
+    // 2026-01-04 is a Sunday and pattern[0] === "o" under v1
+    expect(resolveStaffingDay("2026-01-04", [shift], resolver).totalHeadcount).toBe(0);
+  });
+
+  it("a Sunday after the edit is a working day", () => {
+    // 2026-03-08 is a Sunday, but v2 works every day
+    expect(resolveStaffingDay("2026-03-08", [shift], resolver).totalHeadcount).toBe(10);
   });
 });

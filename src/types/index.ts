@@ -684,9 +684,19 @@ export type StaffingShiftCategory = "DAY" | "SWING" | "NIGHT" | "OTHER";
 
 export interface RotationPattern {
   id: number;
+  /**
+   * Stable identity shared by every version of this pattern (OI-101/M026).
+   * Shifts reference a pattern by row id; resolution follows that row's group
+   * to find the version effective on a given date. Defaults to the row's own id.
+   */
+  groupId: number;
   name: string;
   description: string | null;
   pattern: string; // 21-char: x=work, o=off
+  /** YYYY-MM-DD, or null for "since the beginning of time" */
+  effectiveFrom: string | null;
+  /** YYYY-MM-DD, or null for open-ended */
+  effectiveTo: string | null;
   isActive: boolean;
   sortOrder: number;
 }

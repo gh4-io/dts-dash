@@ -510,6 +510,11 @@ export const flightEvents = sqliteTable(
 
 export const rotationPatterns = sqliteTable("rotation_patterns", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // OI-101/M026: stable identity across versions. Null is backfilled to the row's
+  // own id by the migration, so pre-M026 rows are each their own group.
+  groupId: integer("group_id"),
+  effectiveFrom: text("effective_from"), // DATE (YYYY-MM-DD) or null
+  effectiveTo: text("effective_to"), // DATE (YYYY-MM-DD) or null
   name: text("name").notNull(),
   description: text("description"),
   pattern: text("pattern").notNull(), // 21-char string: x=work, o=off

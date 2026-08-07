@@ -22,8 +22,11 @@ import type { RotationPattern, StaffingShift, CapacityAssumptions } from "@/type
 
 const PATTERN_5_2: RotationPattern = {
   id: 1,
+  groupId: 1,
   name: "Standard 5-2",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "oxxxxoxoxxxxoxoxxxxox", // Mon-Fri every week (Sun=off)
   isActive: true,
   sortOrder: 0,
@@ -31,8 +34,11 @@ const PATTERN_5_2: RotationPattern = {
 
 const PATTERN_ALL_ON: RotationPattern = {
   id: 2,
+  groupId: 2,
   name: "All On",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xxxxxxxxxxxxxxxxxxxxx",
   isActive: true,
   sortOrder: 1,
@@ -40,8 +46,11 @@ const PATTERN_ALL_ON: RotationPattern = {
 
 const PATTERN_ALL_OFF: RotationPattern = {
   id: 3,
+  groupId: 3,
   name: "All Off",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "ooooooooooooooooooooo",
   isActive: true,
   sortOrder: 2,
@@ -49,8 +58,11 @@ const PATTERN_ALL_OFF: RotationPattern = {
 
 const PATTERN_ALTERNATING: RotationPattern = {
   id: 4,
+  groupId: 4,
   name: "Alternating",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xoxoxoxoxoxoxoxoxoxox",
   isActive: true,
   sortOrder: 3,
@@ -58,8 +70,11 @@ const PATTERN_ALTERNATING: RotationPattern = {
 
 const PATTERN_INACTIVE: RotationPattern = {
   id: 5,
+  groupId: 5,
   name: "Inactive",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xxxxxxxxxxxxxxxxxxxxx",
   isActive: false,
   sortOrder: 4,

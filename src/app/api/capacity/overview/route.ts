@@ -100,7 +100,10 @@ export async function GET(request: NextRequest) {
     if (computeMode === "staffing") {
       if (activeConfig) {
         const staffingShifts = loadStaffingShifts(activeConfig.id);
-        const patterns = loadRotationPatterns(true);
+        // OI-101: load every version, not just active ones — superseded pattern
+        // versions are required to resolve historical dates correctly. The
+        // resolver applies effectiveness per date.
+        const patterns = loadRotationPatterns();
         const patternMap = buildPatternMap(patterns);
         staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
 
