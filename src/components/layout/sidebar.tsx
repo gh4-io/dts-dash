@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 import { useAppTitle } from "@/components/layout/app-config-provider";
-import { useSidebar } from "@/lib/hooks/use-sidebar";
+import { useSidebar, type SidebarMode } from "@/lib/hooks/use-sidebar";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -21,20 +21,36 @@ const navItems = [
  * Rendered as a sibling of the sidebar in the layout to avoid overflow clipping.
  */
 export function SidebarEdgeToggle() {
-  const { mode, toggleSemiCollapse } = useSidebar();
+  const { mode, toggleSemiCollapse, autoOverride, setAutoOverride } = useSidebar();
   const device = useDeviceType();
 
-  // Only show on tablet (not phone, not desktop)
-  if (device.type !== "tablet") return null;
+  const isNarrowDesktop = !device.isTouchCapable && device.type !== "phone" && device.width < 1536;
+  const autoCollapsed = isNarrowDesktop && mode === "expanded" && !autoOverride;
+
+  // Tablet has always had this. Narrow desktop needs it too, or the auto-collapse
+  // is inescapable — the header hamburger only appears when fully collapsed.
+  if (device.type !== "tablet" && !isNarrowDesktop) return null;
   // Don't show when fully collapsed (use header hamburger to restore)
   if (mode === "collapsed") return null;
 
-  const isExpanded = mode === "expanded";
+  const isExpanded = autoCollapsed ? false : mode === "expanded";
 
   return (
     <button
       data-print="hide"
-      onClick={toggleSemiCollapse}
+      onClick={() => {
+        if (autoCollapsed) {
+          // Undo the automatic collapse rather than toggling the stored mode,
+          // which is already "expanded" and would otherwise flip to icons.
+          setAutoOverride(true);
+          return;
+        }
+        if (isNarrowDesktop && autoOverride && mode === "expanded") {
+          setAutoOverride(false);
+          return;
+        }
+        toggleSemiCollapse();
+      }}
       className={cn(
         "absolute top-11 z-30",
         "flex h-9 w-9 items-center justify-center",
@@ -60,19 +76,39 @@ export function SidebarEdgeToggle() {
 export function Sidebar() {
   const pathname = usePathname();
   const appTitle = useAppTitle();
-  const { mode, setMode, toggleSemiCollapse } = useSidebar();
+  const { mode, setMode, toggleSemiCollapse, autoOverride, setAutoOverride } = useSidebar();
   const device = useDeviceType();
 
-  // Auto-expand sidebar when switching to desktop (toggle not available there)
-  useEffect(() => {
-    if (device.type === "desktop" && mode !== "expanded") {
-      setMode("expanded");
-    }
-  }, [device.type]); // eslint-disable-line react-hooks/exhaustive-deps -- only react to device changes, not mode
+  // Below this, an expanded 240px sidebar costs more than it gives back: the
+  // admin capacity page's three panels get squeezed (the centre column fell to
+  // 319px at 1366). Narrow desktops render icons-only, recovering 184px.
+  const AUTO_ICONS_BELOW = 1536; // Tailwind 2xl
+  // Keyed on "no touch" rather than device.type: a desktop window narrowed to
+  // 1024 classifies as `tablet` (width-only fallback), and that is exactly the
+  // case this is for. Genuine touch tablets keep their tap-to-toggle behaviour
+  // untouched — OI-097 owns that surface.
+  const isNarrowDesktop =
+    !device.isTouchCapable && device.type !== "phone" && device.width < AUTO_ICONS_BELOW;
 
-  const isExpanded = mode === "expanded";
-  const isIcons = mode === "icons";
-  const isCollapsed = mode === "collapsed";
+  // Auto-expand when switching to a roomy desktop (toggle not available there).
+  // Gated on width so it no longer fights the narrow-desktop icon mode below.
+  useEffect(() => {
+    if (!device.isTouchCapable && device.width >= AUTO_ICONS_BELOW) {
+      // Roomy again — drop the override so auto-collapse applies next time we narrow.
+      if (autoOverride) setAutoOverride(false);
+      if (mode !== "expanded") setMode("expanded");
+    }
+  }, [device.type, device.width]); // eslint-disable-line react-hooks/exhaustive-deps -- react to device changes, not mode
+
+  // Effective mode is presentation-only. `mode` stays the user's stored choice —
+  // auto-collapsing must not overwrite what they picked, or widening the window
+  // would not restore it.
+  const effectiveMode: SidebarMode =
+    isNarrowDesktop && mode === "expanded" && !autoOverride ? "icons" : mode;
+
+  const isExpanded = effectiveMode === "expanded";
+  const isIcons = effectiveMode === "icons";
+  const isCollapsed = effectiveMode === "collapsed";
   const isTablet = device.type === "tablet";
 
   // Hide sidebar on phone, show on tablet/desktop
