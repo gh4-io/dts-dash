@@ -3,6 +3,7 @@
  *
  * Priority: manual override > WP MH (if include) > contract PER_EVENT > default MH
  */
+import { describe, it, expect } from "vitest";
 import { computeEffectiveMH } from "@/lib/data/transformer";
 
 const DEFAULT_MH = 3.0;
