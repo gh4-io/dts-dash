@@ -112,7 +112,18 @@ export function createTables() {
       sp_created TEXT,
       sp_version TEXT,
       import_log_id INTEGER REFERENCES import_log(id),
-      imported_at TEXT NOT NULL
+      imported_at TEXT NOT NULL,
+      ground_event_types TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS flight_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_package_id INTEGER NOT NULL REFERENCES work_packages(id) ON DELETE CASCADE,
+      parent_id INTEGER,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS mh_overrides (
@@ -364,6 +375,8 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
     CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
     CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
+    CREATE INDEX IF NOT EXISTS idx_flight_comments_wp ON flight_comments(work_package_id);
+    CREATE INDEX IF NOT EXISTS idx_flight_comments_author ON flight_comments(author_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
     CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
     CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
@@ -371,9 +384,12 @@ export function createTables() {
     -- Staffing: Rotation Patterns
     CREATE TABLE IF NOT EXISTS rotation_patterns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER,
       name TEXT NOT NULL,
       description TEXT,
       pattern TEXT NOT NULL,
+      effective_from TEXT,
+      effective_to TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
@@ -413,6 +429,7 @@ export function createTables() {
       rotation_id INTEGER REFERENCES rotation_patterns(id),
       rotation_start_date TEXT NOT NULL,
       rotation_end_date TEXT,
+      pattern_anchor_date TEXT,
       start_hour INTEGER NOT NULL,
       start_minute INTEGER NOT NULL DEFAULT 0,
       end_hour INTEGER NOT NULL,
@@ -625,6 +642,115 @@ export function runMigrations(): MigrationResult[] {
   } else {
     sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN rotation_end_date TEXT");
     results.push({ name: m022Name, applied: true });
+  }
+
+  // M023: Flight comments table + ground_event_types column
+  const m023Name = "M023_flight_comments_and_ground_events";
+  let m023Applied = false;
+
+  // 1. Create flight_comments table if missing
+  const m023Tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='flight_comments'")
+    .all();
+  if (m023Tables.length === 0) {
+    sqlite.exec(`
+      CREATE TABLE flight_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_package_id INTEGER NOT NULL REFERENCES work_packages(id) ON DELETE CASCADE,
+        parent_id INTEGER,
+        author_id INTEGER NOT NULL REFERENCES users(id),
+        body TEXT NOT NULL,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+      CREATE INDEX idx_flight_comments_wp ON flight_comments(work_package_id);
+      CREATE INDEX idx_flight_comments_author ON flight_comments(author_id);
+    `);
+    m023Applied = true;
+  }
+
+  // 2. Add ground_event_types column if missing (independent check)
+  const wpCols = sqlite.prepare("PRAGMA table_info(work_packages)").all() as { name: string }[];
+  if (!wpCols.some((c) => c.name === "ground_event_types")) {
+    sqlite.exec("ALTER TABLE work_packages ADD COLUMN ground_event_types TEXT");
+    m023Applied = true;
+  }
+
+  results.push({ name: m023Name, applied: m023Applied });
+
+  // M024: Notifications table
+  const m024Name = "M024_notifications";
+  const m024Tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
+    .all();
+  if (m024Tables.length === 0) {
+    sqlite.exec(`
+      CREATE TABLE notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'system',
+        category TEXT NOT NULL DEFAULT 'general',
+        title TEXT NOT NULL,
+        message TEXT,
+        metadata TEXT,
+        read_at TEXT,
+        action_url TEXT,
+        expires_at TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_notifications_user ON notifications(user_id);
+      CREATE INDEX idx_notifications_user_unread ON notifications(user_id, read_at);
+      CREATE INDEX idx_notifications_created ON notifications(created_at);
+    `);
+    results.push({ name: m024Name, applied: true });
+  } else {
+    results.push({ name: m024Name, applied: false });
+  }
+
+  // M025: Add pattern_anchor_date to staffing_shifts (OI-102).
+  // rotation_start_date used to serve two roles at once: the date the version
+  // takes effect, and the anchor the 21-day pattern is indexed from
+  // (pattern[0] == that date). That forced every new version to start on a
+  // Sunday to keep the pattern phase, which made a mid-week headcount change
+  // retroactive to the start of the week. Splitting the anchor out lets a
+  // version take effect on the day it was saved while the pattern stays put.
+  // NULL means "fall back to rotation_start_date", so existing rows are
+  // unaffected and keep their current phase.
+  const m025Name = "M025_staffing_shift_pattern_anchor_date";
+  const m025Cols = sqlite.prepare("PRAGMA table_info(staffing_shifts)").all() as { name: string }[];
+  if (m025Cols.some((c) => c.name === "pattern_anchor_date")) {
+    results.push({ name: m025Name, applied: false });
+  } else {
+    sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN pattern_anchor_date TEXT");
+    results.push({ name: m025Name, applied: true });
+  }
+
+  // M026: Version rotation_patterns (OI-101).
+  // Editing a pattern in place silently rewrote which days were worked for every
+  // past date that used it. Patterns now carry an effective window like shifts do,
+  // plus a group_id giving a stable identity across versions: a shift references a
+  // pattern row, and resolution follows that row's group to find the version
+  // effective on the date being computed. Existing rows are backfilled to be their
+  // own group with an open window, so nothing changes for them.
+  const m026Name = "M026_rotation_pattern_versioning";
+  const m026Cols = sqlite.prepare("PRAGMA table_info(rotation_patterns)").all() as {
+    name: string;
+  }[];
+  if (m026Cols.some((c) => c.name === "group_id")) {
+    // Fresh databases get the columns from createTables() but never the index,
+    // since that runs before migrations — ensure it here either way.
+    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id)");
+    sqlite.exec("UPDATE rotation_patterns SET group_id = id WHERE group_id IS NULL");
+    results.push({ name: m026Name, applied: false });
+  } else {
+    sqlite.exec(`
+      ALTER TABLE rotation_patterns ADD COLUMN group_id INTEGER;
+      ALTER TABLE rotation_patterns ADD COLUMN effective_from TEXT;
+      ALTER TABLE rotation_patterns ADD COLUMN effective_to TEXT;
+      UPDATE rotation_patterns SET group_id = id WHERE group_id IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id);
+    `);
+    results.push({ name: m026Name, applied: true });
   }
 
   return results;

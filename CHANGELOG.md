@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> Work landed on `feat/flight-event-enhancements` after the `[0.3.0]` version bump of 2026-03-04.
+> **The `[0.3.0]` entry below is incomplete** — it predates everything in this section. Fold these
+> into `[0.3.0]`, or split them into `[0.3.1]`, when the release boundary is decided.
+
+### Added
+
+- **Productivity chain explainer** (OI-116) — `/admin/capacity/assumptions` now states the formula `HC x HOURS x ATT x PROD [x NIGHT] = Productive MH`, with a worked example on live values, each stage named (Paid → Available → Productive) and the combined efficiency spelled out. The two factors multiply (0.89 x 0.65 = 57.9%), which read as a single ratio before and made the resulting MH look wrong. A one-line form sits in the staffing weekly matrix
+- **Click-to-edit productivity percentages** (OI-116) — the three Productivity Factor values accept typed entry; Enter or blur commits, Escape cancels, values clamp to range. The 0.01 slider step was too coarse for precise entry
+- **Overlapping shift version detection** (OI-108) — `findShiftOverlaps()` flags two versions of one shift effective on the same date, which the engine silently sums into a doubled roster. Surfaced as a banner and a per-row badge
+- **Prod DB snapshot skill** — `.claude/skills/prod-db-snapshot/` pulls a consistent production snapshot (`sqlite3 .backup` over SSH, WAL included) and restores it into dev with verification, a pre-restore backup and an automatic migrate. Developer tooling, deliberately outside the application
+
+
+- **Flight event comments + ground event markers** (OI-092, OI-093) — comments per flight event; unique markers for AOG, BTB and similar ground events
+- **In-app notification system** with auto-triggers (OI-094)
+- **Rotation pattern versioning** (OI-101, M026) — patterns carry an effective window plus a `group_id` giving stable identity across versions. Editing the pattern string auto-versions instead of overwriting, so past dates keep the definition that was actually in force. Shifts need no repointing; resolution follows the group
+- **Shift pattern anchor** (OI-102, M025) — `staffing_shifts.pattern_anchor_date` separates the date a version takes effect from the date the 21-day pattern is indexed from. A headcount change now takes effect on the save date without rotating the pattern phase or restating earlier days
+
+### Fixed
+
+- **Shift edits rewrote history instead of versioning** (OI-107) — the edit dialog saved via `PUT`, mutating the current version in place, so changing a shift's hours or rotation silently restated every date that version already covered. This was the OI-100 failure returning through a different door. The dialog now routes headcount, hours, rotation, breaks, MH override and category through the versioning path; name, description and dates still amend in place
+- **Weekly matrix headcount was silently discounted** (OI-109) — the "HC" column rendered `roster x paidToAvailable` rounded to an integer, showing 59 for a roster of 66, while `totalConfigHeadcount` in the same panel was undiscounted. `WeeklyMatrixCell` now carries `rosterHeadcount` and `effectiveHeadcount` separately. The ambiguous `headcount` field is retained as a deprecated alias for API compatibility (D-028)
+- **Paid/Available/Productive MH chain was collapsed** (OI-110) — `paidToAvailable` was applied at the *paid* stage and `availableMH` was set equal to `paidMH`, understating Paid MH by that factor and making Available MH a duplicate. The three stages are now distinct. **`productiveMH` is algebraically unchanged**, so utilization, gap analysis and every capacity chart are unaffected
+- **Weekly matrix clipped values at every screen size** (OI-112) — the table sat in an `overflow-hidden` wrapper narrower than its content (277px vs 433px), cutting the Saturday and Tot columns with no way to reach them. The three-panel grid also pinned the matrix at 320px for every width from 1024px up, so a 4K display was as cramped as a laptop
+- **Responsive panel priority** (OI-114) — the sidebar auto-collapses to icons below 1536px on non-touch viewports (escapable, and it does not overwrite the stored preference), the rotations panel condenses, and the shift grid has a 420px floor with the matrix stacking beneath rather than squeezing the working surface. Editing a shift is now reachable by clicking its row, not only the hover-revealed icon buttons
+- **Cross-origin dev assets blocked from the Windows host** — `allowedDevOrigins` held origin URLs (`http://localhost:3000`) where Next.js expects bare hostnames, so every entry was inert and JS chunks 403'd for a browser reaching the dev server as `127.0.0.1`. The page rendered but never hydrated
+
+### Removed
+
+- **Legacy capacity engine and its settings** (OI-115) — the app carried two unrelated capacity models. Engine A (`headcount x realCapacityPerPerson`, ignoring shift length) had **no live consumers**, yet its `realCapacityPerPerson` / `theoreticalCapacityPerPerson` / `shifts` fields were still editable in Admin → Settings, so configuring them changed nothing. Deleted `engines/capacity.ts`, `/api/capacity`, `use-capacity.ts`, `utilization-chart.tsx`, `config-panel.tsx`, the three `app_config` keys and their **Capacity Model** and **Shift Configuration** sections, plus five orphaned types. Capacity is modelled solely by `capacity_assumptions` + `capacity_shifts`. The **Demand Model** section is retained — `defaultMH` and `wpMHMode` are live
+
+
+- **Security: 24 dependency advisories** resolved via `npm audit fix` — 27 → 3 (all criticals and highs cleared; remaining 3 are transitive and need a major bump of their parent). Lockfile-only; `package.json` unchanged. Notable: `next-auth` 5.0.0-beta.30 → beta.32, `@auth/core` 0.41.0 → 0.41.3, `next` 16.1.6 → 16.3.0, `drizzle-orm` 0.45.1 → 0.45.2, `js-yaml` 4.1.1 → 4.3.1, `undici` 7.22.0 → 7.29.0, `sharp` 0.34.5 → 0.35.3
+- **Build gate restored** — type errors in three test files had been failing `next build` and CI's `tsc --noEmit` since roughly February. Compilation succeeded and all tests passed, so the failure went unnoticed. Fixtures were missing `CapacityShift.timezone` (D-049) and `DemandContract.priority` (D-052/M019), `wpContributions` entries had a string `wpId` and were missing `aircraftReg`/`mhSource`, and `transformer-mh.test.ts` was the only test file relying on vitest globals. `npm run validate` now exits 0
+- **Historical capacity is now stable** (OI-100) — the staffing engine honours shift effective dates. Archived versions apply to the dates they covered instead of vanishing, and the current version no longer applies to all of history. **Behaviour change:** dates before a shift's `rotationStartDate` report zero headcount rather than a backwards-projected roster
+- Flight board: dismiss tooltip on tap; eliminate 60s re-render cycle
+- Flight board: fix auto-load on server restart; improve ground event markers
+- Import: infer `hasWorkpackage` from `TotalMH`/`WorkpackageNo` when the source field is absent
+
+### Known Issues
+
+- `versionStaffingShift()` and `versionRotationPattern()` — the archive-and-create transactions — remain untested (OI-103). No capacity test currently mocks the database, so this needs a new fixture pattern. `versionStaffingShift()` was since exercised end-to-end against the dev database, but that is manual verification, not coverage
+- Production currently runs `0.2.0-rc1`, which predates OI-080 entirely. Upgrading applies M022, M025 and M026
+- **Production data carries the OI-108 defect** — duplicate `13SMD` shift rows are effective simultaneously and double-count that roster. Needs correcting on upgrade
+- `staffing_shifts` has no `group_id` lineage (OI-111), so overlap detection matches on shift name; renaming a shift hides an overlap
+- Admin capacity pages collapse at phone width — the content region measures ~103px at 390px (OI-113)
+
 ---
 
 ## [0.3.0] - 2026-03-04

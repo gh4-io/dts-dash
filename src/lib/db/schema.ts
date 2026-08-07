@@ -163,6 +163,9 @@ export const workPackages = sqliteTable(
     importedAt: text("imported_at")
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
+
+    // Manual-only fields (not from SharePoint)
+    groundEventTypes: text("ground_event_types"), // nullable JSON array — '["AOG","Maintenance"]'
   },
   (table) => ({
     arrivalIdx: index("idx_wp_arrival").on(table.arrival),
@@ -174,6 +177,33 @@ export const workPackages = sqliteTable(
     // Compound indexes for date range and filtered queries
     arrivalDepartureIdx: index("idx_wp_arrival_departure").on(table.arrival, table.departure),
     customerArrivalIdx: index("idx_wp_customer_arrival").on(table.customer, table.arrival),
+  }),
+);
+
+// ─── Flight Comments ────────────────────────────────────────────────────────
+
+export const flightComments = sqliteTable(
+  "flight_comments",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id")
+      .notNull()
+      .references(() => workPackages.id, { onDelete: "cascade" }),
+    parentId: integer("parent_id"),
+    authorId: integer("author_id")
+      .notNull()
+      .references(() => users.id),
+    body: text("body").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    workPackageIdx: index("idx_flight_comments_wp").on(table.workPackageId),
+    authorIdx: index("idx_flight_comments_author").on(table.authorId),
   }),
 );
 
@@ -480,6 +510,11 @@ export const flightEvents = sqliteTable(
 
 export const rotationPatterns = sqliteTable("rotation_patterns", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // OI-101/M026: stable identity across versions. Null is backfilled to the row's
+  // own id by the migration, so pre-M026 rows are each their own group.
+  groupId: integer("group_id"),
+  effectiveFrom: text("effective_from"), // DATE (YYYY-MM-DD) or null
+  effectiveTo: text("effective_to"), // DATE (YYYY-MM-DD) or null
   name: text("name").notNull(),
   description: text("description"),
   pattern: text("pattern").notNull(), // 21-char string: x=work, o=off
@@ -538,8 +573,12 @@ export const staffingShifts = sqliteTable(
     description: text("description"),
     category: text("category", { enum: ["DAY", "SWING", "NIGHT", "OTHER"] }).notNull(),
     rotationId: integer("rotation_id").references(() => rotationPatterns.id),
-    rotationStartDate: text("rotation_start_date").notNull(), // DATE (YYYY-MM-DD)
-    rotationEndDate: text("rotation_end_date"), // DATE (YYYY-MM-DD) or null
+    rotationStartDate: text("rotation_start_date").notNull(), // DATE (YYYY-MM-DD) — version takes effect
+    rotationEndDate: text("rotation_end_date"), // DATE (YYYY-MM-DD) or null — open-ended
+    // OI-102/M025: anchor the 21-day pattern is indexed from (pattern[0] == this date).
+    // Null falls back to rotationStartDate. Kept separate so a version can take
+    // effect mid-week without rotating the pattern phase.
+    patternAnchorDate: text("pattern_anchor_date"), // DATE (YYYY-MM-DD) or null
     startHour: integer("start_hour").notNull(), // 0-23
     startMinute: integer("start_minute").notNull().default(0), // 0-59
     endHour: integer("end_hour").notNull(), // 0-23
@@ -1227,6 +1266,34 @@ export const staffingShiftsRelations = relations(staffingShifts, ({ one }) => ({
     references: [rotationPatterns.id],
   }),
 }));
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull().default("system"),
+    category: text("category").notNull().default("general"),
+    title: text("title").notNull(),
+    message: text("message"),
+    metadata: text("metadata"),
+    readAt: text("read_at"),
+    actionUrl: text("action_url"),
+    expiresAt: text("expires_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    userIdx: index("idx_notifications_user").on(table.userId),
+    userUnreadIdx: index("idx_notifications_user_unread").on(table.userId, table.readAt),
+    createdIdx: index("idx_notifications_created").on(table.createdAt),
+  }),
+);
 
 // ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
 

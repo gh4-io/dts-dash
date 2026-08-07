@@ -163,25 +163,30 @@ export function RotationPatternList({
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs"
+                  aria-label="New rotation pattern"
                   onClick={() => {
                     setEditingPattern(undefined);
                     setEditorOpen(true);
                   }}
                 >
-                  <i className="fa-solid fa-plus mr-1" />
-                  Add
+                  {/* Below 2xl the panel is narrow — drop to a bare "+" */}
+                  <i className="fa-solid fa-plus 2xl:mr-1" />
+                  <span className="hidden 2xl:inline">Add</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-[10px]">
                 New rotation pattern
               </TooltipContent>
             </Tooltip>
+            {/* Bulk select needs the room to be useful — hidden on narrow widths.
+                Kept mounted-when-active so an in-progress selection is never
+                stranded by a resize. */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant={selectMode ? "secondary" : "ghost"}
                   size="sm"
-                  className={`h-6 px-2 text-xs ${selectMode ? "bg-accent" : ""}`}
+                  className={`h-6 px-2 text-xs ${selectMode ? "bg-accent" : "hidden 2xl:inline-flex"}`}
                   onClick={toggleSelectMode}
                 >
                   Select
@@ -310,7 +315,10 @@ export function RotationPatternList({
                       {/* Dots inline (all 21 in a row, 8px outlined) */}
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="shrink-0">
+                          {/* The 21-dot strip is the widest element in the row.
+                              Below 2xl it goes; the pattern stays reachable via
+                              the tooltip and the editor. */}
+                          <span className="shrink-0 hidden 2xl:inline-block">
                             <RotationDots pattern={p.pattern} size="inline" />
                           </span>
                         </TooltipTrigger>

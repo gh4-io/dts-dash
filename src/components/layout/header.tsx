@@ -1,26 +1,20 @@
 "use client";
 
-import { useTheme } from "next-themes";
 import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
-import { useState, useRef, useEffect, useSyncExternalStore } from "react";
-import { usePreferences } from "@/lib/hooks/use-preferences";
+import { useState, useRef, useEffect } from "react";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
+import { useSidebar } from "@/lib/hooks/use-sidebar";
 import { MobileNav } from "./mobile-nav";
 import { DataFreshnessBadge } from "@/components/shared/data-freshness-badge";
+import { NotificationBell } from "./notification-bell";
 
 export function Header() {
-  const { theme, resolvedTheme, setTheme } = useTheme();
   const { data: session } = useSession();
-  const { update: updatePrefs } = usePreferences();
   const device = useDeviceType();
+  const sidebarMode = useSidebar((s) => s.mode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const mounted = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,26 +26,6 @@ export function Header() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const toggleTheme = () => {
-    let next: "dark" | "light" | "system";
-    if (theme === "dark") next = "light";
-    else if (theme === "light") next = "system";
-    else next = "dark";
-
-    setTheme(next);
-    updatePrefs({ colorMode: next });
-  };
-
-  const themeIcon = !mounted
-    ? "fa-solid fa-circle-half-stroke"
-    : theme === "system"
-      ? "fa-solid fa-circle-half-stroke"
-      : resolvedTheme === "dark"
-        ? "fa-solid fa-moon"
-        : "fa-solid fa-sun";
-
-  const themeLabel = mounted ? (theme ?? "system") : "system";
 
   const role = (session?.user as { role?: string })?.role;
   const isAdmin = role === "admin" || role === "superadmin";
@@ -66,13 +40,15 @@ export function Header() {
       data-print="hide"
       className="flex h-14 items-center justify-between border-b border-border bg-background px-4"
     >
-      {/* Mobile menu button — visible on md–lg only (bottom tab bar handles < md) */}
-      <button
-        className="hidden md:block lg:hidden p-2 text-muted-foreground hover:text-foreground"
-        onClick={() => setMobileNavOpen(true)}
-      >
-        <i className="fa-solid fa-bars" />
-      </button>
+      {/* Mobile menu button — only when sidebar is fully collapsed (no nav visible) */}
+      {sidebarMode === "collapsed" && (
+        <button
+          className="p-2 text-muted-foreground hover:text-foreground"
+          onClick={() => setMobileNavOpen(true)}
+        >
+          <i className="fa-solid fa-bars" />
+        </button>
+      )}
       <MobileNav open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
 
       <div className="flex-1" />
@@ -82,13 +58,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          onClick={toggleTheme}
-          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-          title={`Theme: ${themeLabel}`}
-        >
-          <i className={themeIcon} />
-        </button>
+        <NotificationBell />
 
         <div className="relative" ref={menuRef}>
           <button

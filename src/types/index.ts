@@ -37,6 +37,36 @@ export type MHSource = "workpackage" | "default" | "manual" | "contract";
 
 export type ConfidenceLevel = "exact" | "pattern" | "raw" | "fallback";
 
+// ─── Ground Event Types ─────────────────────────────────────────────────────
+
+export type GroundEventType = "AOG" | "BTB" | "Ferry" | "Maintenance";
+
+export type MarkerConfig =
+  | { mode: "symbol"; shape: "diamond"; fill: string; stroke: string }
+  | { mode: "pill"; label: string; fill: string; stroke: string; textColor: string };
+
+export interface GroundEventMeta {
+  type: GroundEventType;
+  label: string;
+  color: string;
+  description: string;
+  marker: MarkerConfig;
+}
+
+// ─── Flight Comments ────────────────────────────────────────────────────────
+
+export interface FlightComment {
+  id: number;
+  workPackageId: number;
+  parentId: number | null;
+  authorId: number;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  replies?: FlightComment[];
+}
+
 // ─── Raw SharePoint Input ───────────────────────────────────────────────────
 
 export interface SharePointWorkPackage {
@@ -72,6 +102,9 @@ export interface SharePointWorkPackage {
   Modified?: string; // SharePoint last-modified timestamp
   Created?: string; // SharePoint created timestamp
   OData__UIVersionString?: string; // SharePoint version e.g. "17.0"
+
+  // Local-only fields (not from SharePoint)
+  _groundEventTypesRaw?: string | null; // JSON array from DB
 }
 
 // ─── Normalized Work Package ────────────────────────────────────────────────
@@ -102,6 +135,9 @@ export interface WorkPackage {
   isActive: boolean;
   modified: Date | null;
   created: Date | null;
+
+  // Local-only fields (manual assignment, not from SharePoint)
+  groundEventTypes: GroundEventType[] | null;
 }
 
 // ─── Filter State ───────────────────────────────────────────────────────────
@@ -135,41 +171,9 @@ export interface FilterActions {
 
 // ─── Capacity & Analytics ───────────────────────────────────────────────────
 
-export interface ShiftDefinition {
-  name: string;
-  startHour: number;
-  endHour: number;
-  headcount: number;
-}
-
-export interface DailyDemand {
-  date: string;
-  totalDemandMH: number;
-  aircraftCount: number;
-  byCustomer: Record<string, number>;
-}
-
-export interface DailyCapacity {
-  date: string;
-  theoreticalCapacityMH: number;
-  realCapacityMH: number;
-  byShift: ShiftCapacity[];
-}
-
-export interface ShiftCapacity {
-  shift: string;
-  headcount: number;
-  theoreticalMH: number;
-  realMH: number;
-}
-
-export interface DailyUtilization {
-  date: string;
-  utilizationPercent: number;
-  surplusDeficitMH: number;
-  overtimeFlag: boolean;
-  criticalFlag: boolean;
-}
+// NOTE: ShiftDefinition / DailyDemand / DailyCapacity / ShiftCapacity /
+// DailyUtilization were removed with the superseded capacity engine. Capacity is
+// modelled by the V2 types below (CapacityShift, CapacityAssumptions, …).
 
 export interface HourlySnapshot {
   hour: string;
@@ -648,9 +652,19 @@ export type StaffingShiftCategory = "DAY" | "SWING" | "NIGHT" | "OTHER";
 
 export interface RotationPattern {
   id: number;
+  /**
+   * Stable identity shared by every version of this pattern (OI-101/M026).
+   * Shifts reference a pattern by row id; resolution follows that row's group
+   * to find the version effective on a given date. Defaults to the row's own id.
+   */
+  groupId: number;
   name: string;
   description: string | null;
   pattern: string; // 21-char: x=work, o=off
+  /** YYYY-MM-DD, or null for "since the beginning of time" */
+  effectiveFrom: string | null;
+  /** YYYY-MM-DD, or null for open-ended */
+  effectiveTo: string | null;
   isActive: boolean;
   sortOrder: number;
 }
@@ -680,8 +694,14 @@ export interface StaffingShift {
   description: string | null;
   category: StaffingShiftCategory;
   rotationId: number;
-  rotationStartDate: string; // YYYY-MM-DD
+  rotationStartDate: string; // YYYY-MM-DD — date this version takes effect
   rotationEndDate: string | null; // YYYY-MM-DD or null (no end)
+  /**
+   * Date the 21-day rotation pattern is indexed from (pattern[0] == this date).
+   * Null falls back to rotationStartDate. Kept separate from the effective start
+   * so a version can begin mid-week without rotating the pattern phase (OI-102).
+   */
+  patternAnchorDate: string | null; // YYYY-MM-DD or null
   startHour: number;
   startMinute: number;
   endHour: number;
@@ -717,6 +737,15 @@ export interface StaffingDayResult {
 
 /** Weekly matrix cell: headcount + MH breakdown for one day+category */
 export interface WeeklyMatrixCell {
+  /** Roster headcount — actual bodies on the schedule. Never discounted. */
+  rosterHeadcount: number;
+  /** Roster × paidToAvailable — the basis for the MH figures below. Fractional. */
+  effectiveHeadcount: number;
+  /**
+   * @deprecated Ambiguous — equals `effectiveHeadcount`, not the roster count.
+   * Retained so the staffing-matrix API stays backwards-compatible (D-028);
+   * remove on the next MAJOR. Use `rosterHeadcount` for display.
+   */
   headcount: number;
   paidMH: number;
   availableMH: number;
@@ -885,9 +914,6 @@ export interface AllowedHostname {
 export interface AppConfig {
   defaultMH: number;
   wpMHMode: "include" | "exclude";
-  theoreticalCapacityPerPerson: number;
-  realCapacityPerPerson: number;
-  shifts: ShiftDefinition[];
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;
@@ -1045,4 +1071,24 @@ export interface ProjectionDayOverlay {
   projectedByCustomer: Record<string, number>;
   /** shiftCode → customer → projectedMH */
   projectedByCustomerByShift: Record<string, Record<string, number>>;
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export type NotificationType = "system" | "comment" | "flag" | "update";
+
+export type NotificationCategory = "aircraft" | "flight" | "import" | "admin" | "general";
+
+export interface AppNotification {
+  id: number;
+  userId: number;
+  type: NotificationType;
+  category: NotificationCategory;
+  title: string;
+  message: string | null;
+  metadata: Record<string, unknown> | null;
+  readAt: string | null;
+  actionUrl: string | null;
+  expiresAt: string | null;
+  createdAt: string;
 }

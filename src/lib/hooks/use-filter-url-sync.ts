@@ -16,15 +16,7 @@ export function useFilterUrlSync() {
   const isHydrating = useRef(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const {
-    start,
-    end,
-    timezone,
-    operators,
-    aircraft,
-    types,
-    hydrate,
-  } = useFilters();
+  const { start, end, timezone, operators, aircraft, types, hydrate } = useFilters();
 
   // URL → Store (on mount / navigation)
   useEffect(() => {
@@ -41,12 +33,13 @@ export function useFilterUrlSync() {
     if (urlTz) params.timezone = urlTz;
     if (urlOp) params.operators = urlOp.split(",").filter(Boolean);
     if (urlAc) params.aircraft = urlAc.split(",").filter(Boolean);
-    if (urlType)
-      params.types = urlType.split(",").filter(Boolean) as AircraftType[];
+    if (urlType) params.types = urlType.split(",").filter(Boolean) as AircraftType[];
 
     if (Object.keys(params).length > 0) {
       hydrate(params as Record<string, never>);
     }
+    // Signal that URL → store sync is complete so data hooks can fetch
+    useFilters.getState()._markUrlSynced();
     // Brief delay before enabling store→URL sync
     setTimeout(() => {
       isHydrating.current = false;

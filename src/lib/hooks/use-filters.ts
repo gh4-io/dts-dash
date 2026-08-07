@@ -132,8 +132,17 @@ function getDefaults(): FilterState {
   };
 }
 
-export const useFilters = create<FilterState & FilterActions>()((set) => ({
+export const useFilters = create<
+  FilterState &
+    FilterActions & {
+      /** True after useFilterUrlSync has run its mount effect */
+      _urlSynced: boolean;
+      _markUrlSynced: () => void;
+    }
+>()((set) => ({
   ...getDefaults(),
+  _urlSynced: false,
+  _markUrlSynced: () => set({ _urlSynced: true }),
 
   setStart: (v: string) => set({ start: v }),
   setEnd: (v: string) => set({ end: v }),

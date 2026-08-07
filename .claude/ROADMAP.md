@@ -19,7 +19,21 @@
 
 **All base milestones (M0–M8) complete. Project is production-ready.**
 
-**Current Focus: v0.3.0 Development** — Starting v0.3.0 feature cycle. See v0.3.0 backlog below.
+**Current Focus: v0.3.0 Development** — in progress on `feat/flight-event-enhancements`. See v0.3.0 backlog below.
+
+> **Status as of 2026-08-07** — the P1 blocker is cleared; a release-boundary decision remains:
+> - **OI-100, OI-101, OI-102 resolved.** Effective dating now works end to end: the engine honours shift windows, rotation patterns are versioned (M026, `group_id` + effective window), and a version boundary lands on the save date with the pattern phase preserved (M025, `pattern_anchor_date`). Suite 673 → 705. OI-103 partially open — the archive-and-create transactions still need a DB harness.
+> - Production runs `0.2.0-rc1` (predates OI-080). Upgrading applies **M022, M025 and M026** — all additive, backfilled and idempotent, verified against the dev DB.
+> - CHANGELOG `[0.3.0]` is incomplete — five commits landed after the version bump; see the `[Unreleased]` section.
+> - **Release boundary undecided**: what ships as v0.3.0 vs. slips to v0.3.1.
+> - OI-104 (MH Override Management) and OI-105 (Cron Scheduler Admin) are now specced **in this file** — see "Specced, Not Started" below. The untracked root `roadmap.md` was folded in and deleted on 2026-08-07.
+>
+> **Update (2026-08-07, staffing session)** — evaluating shift tracking against a production data copy surfaced four more P1 defects, all now resolved: **OI-107** (the edit dialog saved via `PUT`, rewriting history instead of versioning — the OI-100 failure re-entering through a different door), **OI-108** (two versions of `13SMD` effective at once, double-counting 20 AMTs — found in *live production data*), **OI-109** (matrix "HC" column silently discounted by `paidToAvailable`, showing 59 for a roster of 66), **OI-110** (paid/available/productive chain collapsed, understating Paid MH ~11%). Plus **OI-112** (Saturday and Tot columns clipped at every screen size). Suite 705 → 714; `npm run validate` exits 0.
+> New gaps filed: **OI-111** (`staffing_shifts` lacks the `group_id` lineage `rotation_patterns` got in M026) and **OI-113** (admin capacity pages collapse at phone width).
+>
+> ⚠️ **Production carries the OI-108 data defect** — the duplicate `13SMD` rows exist in prod and need correcting on upgrade.
+>
+> Suggested order: ~~fix OI-100 → decide OI-102's boundary rule~~ ✅ → decide the release boundary → correct the prod `13SMD` duplicate → deploy → then OI-103's DB harness, OI-111, and OI-104/105.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
@@ -125,16 +139,38 @@
 
 ### v0.3.0 — Feature Backlog (Post-Phase 4)
 
-**Status**: Planned — Ready for roadmap sequencing.
+**Status**: In progress — 3 of 6 shipped (statuses corrected 2026-08-06; they had been stale since March).
 
-| WS | Feature | Type | Priority | OI |
-|----|---------|----|----------|-----|
-| v0.3-1 | Aircraft Phase Badges on Mobile Flight Board List | Enhancement | P2 | OI-090 |
-| v0.3-2 | Right-Click to Hide/Show Graph Components | Enhancement | P2 | OI-091 |
-| v0.3-3 | Comments Per Flight Event (Feedback Logging) | Feature | P2 | OI-092 |
-| v0.3-4 | Unique Ground Event Markers (AOG, BTB, etc.) | Feature | P2 | OI-093 |
-| v0.3-5 | One-Time Notification System (Close/Dismiss) | Feature | P2 | OI-094 |
-| v0.3-6 | App Version Update Walkthrough / Feature Tour | Feature | P2 | OI-095 |
+| WS | Feature | Type | Priority | OI | Status |
+|----|---------|----|----------|-----|--------|
+| v0.3-1 | Aircraft Phase Badges on Mobile Flight Board List | Enhancement | P2 | OI-090 | Open |
+| v0.3-2 | Right-Click to Hide/Show Graph Components | Enhancement | P2 | OI-091 | Open |
+| v0.3-3 | Comments Per Flight Event (Feedback Logging) | Feature | P2 | OI-092 | **Done ✅** `40b882c` |
+| v0.3-4 | Unique Ground Event Markers (AOG, BTB, etc.) | Feature | P2 | OI-093 | **Done ✅** `40b882c` |
+| v0.3-5 | One-Time Notification System (Close/Dismiss) | Feature | P2 | OI-094 | **Done ✅** `5433658` |
+| v0.3-6 | App Version Update Walkthrough / Feature Tour | Feature | P2 | OI-095 | Open |
+
+**Added to the cycle since (filed 2026-08-06):**
+
+| WS | Feature | Type | Priority | OI | Status |
+|----|---------|----|----------|-----|--------|
+| v0.3-7 | Fix capacity engine to honour shift effective dates | Bug — was P1 blocker | P1 | OI-100 | **Done ✅** `64f979b` |
+| v0.3-8 | Rotation pattern versioning (M026) | Design Gap | P2 | OI-101 | **Done ✅** `97b019c` |
+| v0.3-9 | Shift version boundary rule (M025) | Bug | P2 | OI-102 | **Done ✅** `1ab5f4b` |
+| v0.3-10 | Shift versioning test coverage | Test Gap | P2 | OI-103 | Partial — engine done, DB harness open |
+| v0.3-11 | Work-Package MH Override Management | Feature | P2 | OI-104 | Open — specced |
+| v0.3-12 | Cron Scheduler Administration + Disabled-State UX | Feature | P2 | OI-105 | Open — specced |
+| v0.3-13 | README screenshots for GitHub (Flight Board, Dashboard, Capacity, Admin, mobile) | Documentation | P3 | OI-106 | Open |
+| v0.3-14 | Shift edit dialog versions instead of rewriting history | Bug | P1 | OI-107 | **Done ✅** |
+| v0.3-15 | Overlapping shift version detection (`findShiftOverlaps`) | Bug | P1 | OI-108 | **Done ✅** |
+| v0.3-16 | Roster vs effective headcount in weekly matrix | Bug | P1 | OI-109 | **Done ✅** |
+| v0.3-17 | Paid → available → productive MH chain | Bug | P1 | OI-110 | **Done ✅** |
+| v0.3-18 | `staffing_shifts.group_id` version lineage | Design Gap | P2 | OI-111 | Open |
+| v0.3-19 | Weekly matrix clipped columns / responsive panel widths | Bug (UI) | P2 | OI-112 | **Done ✅** |
+| v0.3-20 | Admin capacity pages at phone width | Bug (UI) | P3 | OI-113 | Open |
+| v0.3-21 | Responsive panel priority (sidebar auto-collapse, rotations condense, shift-grid floor) | Enhancement (UI) | P2 | OI-114 | **Done ✅** |
+| v0.3-22 | Remove legacy capacity engine + dead Admin Settings sections | Bug (Architecture) | P1 | OI-115 | **Done ✅** |
+| v0.3-23 | Productivity-chain explainer + click-to-edit percentages | Enhancement (UX) | P2 | OI-116 | **Done ✅** |
 
 **Scope**: 6 enhancements + features spanning mobile UX, graphs, flight events, notifications, and user onboarding.
 **Sizing**: Mix of S (notifications, tour) and M (phase badges, graph toggles, comments, ground markers).
@@ -146,6 +182,69 @@
 - Comments (v0.3-3) + Ground markers (v0.3-4) enhance flight detail drawer
 - Notifications (v0.3-5) + Tour (v0.3-6) are admin-configurable system features
 - All items ready for intake into sprint planning
+
+---
+
+## Specced, Not Started
+
+> Folded in from the untracked root `roadmap.md` on 2026-08-07; that file has been deleted.
+> One roadmap, per the knowledge-base rules in `.claude/README.md`.
+
+### Work-Package Man-Hour Override Management (OI-104)
+
+Administrator-facing workflow for managing per-work-package man-hour overrides without direct database access.
+
+**Scope**
+- Editable man-hours in the work-package detail drawer for administrators.
+- Show the imported WP man-hours, current effective man-hours, and current MH source together.
+- Explicit **Save Override** and **Clear Override** actions.
+- Do not create an override when the entered value equals the imported `work_packages.total_mh`; clear an existing redundant override instead.
+- Bulk CSV workflow previewing matches, duplicate matches, invalid values, unchanged values and unmatched work-package identifiers before commit.
+- Optional minimum-hours transformation during bulk import, retaining the original supplied value in the audit output.
+- Authenticated API endpoints for creating, updating and deleting `mh_overrides` records.
+- Restrict override changes to authorised admin roles; record the user and update timestamp.
+- Invalidate work-package and transformer caches immediately after changes so flight-board and capacity results refresh without a server restart.
+- Override history/audit view with before-and-after values and export capability.
+
+**Acceptance criteria**
+- A saved override becomes the work package's `effectiveMH` and is labelled **Override** throughout the application.
+- Clearing an override restores the configured priority chain: imported WP MH, contract MH, then default MH.
+- Capacity planned-demand calculations reflect saved or cleared overrides on the next request.
+- Bulk updates are transactional and produce a downloadable error and audit report.
+- Automated tests cover permissions, create/update/clear behaviour, redundant-value handling, cache invalidation and capacity propagation.
+
+### Cron Scheduler Administration and Disabled-State UX (OI-105)
+
+Make the scheduler's global state explicit and prevent the Cron Jobs interface presenting controls that cannot take effect.
+
+**Control model**
+- Retain `features.cronEnabled` in server configuration as the deployment-level hard safety gate.
+- Do not allow the web application to modify the server configuration file directly.
+- Add a database-backed **Scheduler Active** runtime switch that administrators can use without restarting the application.
+- The runtime switch is available only when the deployment-level gate is enabled.
+
+**Disabled server gate** (`features.cronEnabled` is `false`)
+- Display a prominent **Cron scheduler disabled by server configuration** banner.
+- Present job definitions, schedules, options and run history as read-only information.
+- Lock individual enable/disable, schedule editing, option editing and **Run Now** controls.
+- Explain that an authorised server administrator must enable `features.cronEnabled` and restart the application.
+- Clearly distinguish **disabled by server configuration** from **paused by an administrator**.
+
+**Enabled server gate** (`features.cronEnabled` is `true`)
+- Allow authorised administrators to switch the scheduler between **Running** and **Paused**.
+- Preserve individual job enable/disable controls beneath the global runtime switch.
+- Display each job's next scheduled run, last run time, last result and last result message.
+- Display the last successful database backup, configured retention, and a warning when no successful backup exists within the expected interval.
+- Record global pause/resume actions with the acting user and timestamp.
+
+**Acceptance criteria**
+- No editable or executable cron controls appear active while the server-level gate is disabled.
+- Pausing through the GUI stops scheduled execution without requiring a restart and without changing server configuration.
+- Resuming through the GUI safely registers enabled jobs without duplicate schedules.
+- **Run Now** respects the server-level gate and role permissions.
+- Scheduler state and backup freshness are visible without inspecting container logs or the filesystem.
+- Automated tests cover all server-gate, runtime-state, role-permission, restart and duplicate-registration combinations.
+
 
 ## Milestones
 

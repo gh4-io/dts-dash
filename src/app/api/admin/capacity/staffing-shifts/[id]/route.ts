@@ -51,6 +51,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
       "rotationId",
       "rotationStartDate",
       "rotationEndDate",
+      "patternAnchorDate",
       "startHour",
       "startMinute",
       "endHour",

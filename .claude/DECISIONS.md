@@ -867,3 +867,36 @@ customers.sp_id                  populated from ID field in cust.json during cus
 - Approach C (git commit count injected at build): automatic but no file in repo
 
 **Impact:** No API breaking changes. New fields added to health check and server info responses (backwards-compatible MINOR addition).
+
+---
+
+## D-064 | 2026-08-07 | Single Capacity Engine — Legacy Model Removed (OI-115)
+
+**Context:** The app carried two unrelated capacity models with different settings, different formulas and different answers for the same roster.
+
+| | Engine A (legacy) | Engine B (capacity v2) |
+|---|---|---|
+| Code | `src/lib/data/engines/capacity.ts` | `src/lib/capacity/` |
+| Setting | `app_config.realCapacityPerPerson` = 6.5 | `capacity_assumptions` = 0.89 × 0.65 |
+| Formula | `headcount × 6.5` | `headcount × paidHours × 0.89 × 0.65` |
+| Shift length | ignored | scales with it |
+| 8 heads, 10h | 52 MH | 46.3 MH |
+
+Engine A had **no live consumers** — `useCapacity` was imported by nothing, and `utilization-chart.tsx` / `config-panel.tsx` were never rendered — yet its fields remained editable in Admin → Settings. A user configured "8 → 6.5" there and reasonably expected it to govern the weekly matrix; it drove nothing.
+
+**Decision:** Engine B's two-factor model is canonical and its values are correct as originally intended. Delete Engine A entirely rather than relocate or reconcile it.
+
+- Deleted: `engines/capacity.ts`, `/api/capacity`, `use-capacity.ts`, `utilization-chart.tsx`, `config-panel.tsx`
+- Removed `theoreticalCapacityPerPerson`, `realCapacityPerPerson`, `shifts` from `AppConfig`, `config-defaults.ts`, `transformer.ts`, `/api/config` (response + write whitelist) and `bootstrap.ts` seeds
+- Removed the **Capacity Model** and **Shift Configuration** sections from Admin → Settings
+- Removed five orphaned types: `ShiftDefinition`, `DailyDemand`, `DailyCapacity`, `ShiftCapacity`, `DailyUtilization`
+- **Kept** the Demand Model section — `defaultMH` and `wpMHMode` feed `computeEffectiveMH`
+
+**Alternatives considered:**
+- *Relocate the settings to the capacity pages* — would recreate the same duplicate-settings confusion in a new place
+- *Reconcile the two models* — no value; Engine A's flat MH/person cannot express shift length, which the real roster depends on (shifts are 10h and 13h, not 8h)
+- *Change Engine B to a single ratio* — rejected by the user; the two-factor split (attendance × wrench time) is intentional and the factors are correct
+
+**Impact:** Feature removal, not a compatibility break — nothing consumed the removed keys. Existing `app_config` rows for them are left in place as harmless orphans, no longer read or seeded. Supersedes the "Real capacity: headcount × 6.5 MH/person" rule previously stated in CLAUDE.md.
+
+**Follow-on:** The productivity chain is now documented in the UI (OI-116) because `paidToAvailable × availableToProductive` multiply to 57.9% and read as a single ratio otherwise.

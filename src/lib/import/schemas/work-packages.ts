@@ -177,7 +177,13 @@ function mapRecordToDb(rec: Record<string, unknown>, importedAt: string): WorkPa
         ? Boolean(rec.HasWorkpackage)
         : rec.hasWorkpackage != null
           ? Boolean(rec.hasWorkpackage)
-          : null,
+          : // Infer from available data: if TotalMH > 0 or WorkpackageNo present, it has a WP
+            (rec.TotalMH != null && Number(rec.TotalMH) > 0) ||
+              (rec.WorkpackageNo != null && String(rec.WorkpackageNo).trim() !== "") ||
+              (rec.totalMH != null && Number(rec.totalMH) > 0) ||
+              (rec.workpackageNo != null && String(rec.workpackageNo).trim() !== "")
+            ? true
+            : null,
     workpackageNo:
       rec.WorkpackageNo != null
         ? String(rec.WorkpackageNo)

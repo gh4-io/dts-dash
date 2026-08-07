@@ -16,13 +16,6 @@ import {
 import { PasswordSecurityForm } from "@/components/admin/password-security-form";
 import type { PasswordRequirements } from "@/lib/utils/password-validation";
 
-interface ShiftConfig {
-  name: string;
-  startHour: number;
-  endHour: number;
-  headcount: number;
-}
-
 interface AllowedHostname {
   id: string;
   hostname: string;
@@ -35,9 +28,6 @@ interface AllowedHostname {
 interface AppConfig {
   defaultMH: number;
   wpMHMode: string;
-  theoreticalCapacityPerPerson: number;
-  realCapacityPerPerson: number;
-  shifts: ShiftConfig[];
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;
@@ -187,13 +177,6 @@ export default function AdminSettingsPage() {
     }
   };
 
-  const updateShiftHeadcount = (index: number, headcount: number) => {
-    if (!config) return;
-    const shifts = [...config.shifts];
-    shifts[index] = { ...shifts[index], headcount };
-    setConfig({ ...config, shifts });
-  };
-
   const addHostname = () => {
     if (!config || !newHost.hostname.trim()) return;
     const entry: AllowedHostname = {
@@ -337,7 +320,8 @@ export default function AdminSettingsPage() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">
-            System-wide configuration for demand/capacity models
+            System-wide demand settings, data and integration. Capacity modelling lives under Admin
+            → Capacity.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             Individual users can override timezone, date range, and time format in their Settings.
@@ -409,89 +393,6 @@ export default function AdminSettingsPage() {
               setConfig({ ...config, wpMHMode: checked ? "include" : "exclude" })
             }
           />
-        </div>
-      </section>
-
-      {/* Capacity Model */}
-      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">
-          <i className="fa-solid fa-gauge-high mr-2 text-muted-foreground" />
-          Capacity Model
-        </h2>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Theoretical MH/Person</Label>
-            <Input
-              type="number"
-              value={config.theoreticalCapacityPerPerson}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  theoreticalCapacityPerPerson:
-                    parseFloat(e.target.value) || config.theoreticalCapacityPerPerson,
-                })
-              }
-              min={1}
-              max={24}
-              step={0.5}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Real MH/Person</Label>
-            <Input
-              type="number"
-              value={config.realCapacityPerPerson}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  realCapacityPerPerson: parseFloat(e.target.value) || config.realCapacityPerPerson,
-                })
-              }
-              min={1}
-              max={24}
-              step={0.5}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Shift Configuration */}
-      <section className="rounded-lg border border-border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold">
-          <i className="fa-solid fa-clock mr-2 text-muted-foreground" />
-          Shift Configuration
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Adjust headcount per shift. Shift times are fixed (Day 07-15, Swing 15-23, Night 23-07).
-        </p>
-
-        <div className="space-y-3">
-          {config.shifts.map((shift, i) => (
-            <div
-              key={shift.name}
-              className="flex items-center justify-between rounded-md border border-border bg-background p-3"
-            >
-              <div>
-                <span className="font-medium">{shift.name}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {String(shift.startHour).padStart(2, "0")}:00 –{" "}
-                  {String(shift.endHour).padStart(2, "0")}:00
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label className="text-xs text-muted-foreground">Headcount</Label>
-                <Input
-                  type="number"
-                  value={shift.headcount}
-                  onChange={(e) => updateShiftHeadcount(i, parseInt(e.target.value, 10) || 0)}
-                  min={0}
-                  max={50}
-                  className="w-20"
-                />
-              </div>
-            </div>
-          ))}
         </div>
       </section>
 

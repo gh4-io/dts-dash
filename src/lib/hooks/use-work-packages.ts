@@ -27,6 +27,8 @@ export interface SerializedWorkPackage {
   manualMHOverride: number | null;
   inferredType: string;
   title: string | null;
+  groundEventTypes: string[] | null;
+  _commentCount: number;
 }
 
 interface WorkPackagesState {
@@ -40,6 +42,12 @@ interface WorkPackagesState {
 
 const EMPTY_FACETS: Facets = { customer: [], aircraftReg: [], inferredType: [], status: [] };
 
+const MAX_RETRIES = 2;
+const RETRY_BASE_MS = 1000;
+
+/** Module-level abort controller — ensures only the latest fetchAll wins */
+let activeAbort: AbortController | null = null;
+
 export const useWorkPackagesStore = create<WorkPackagesState>()((set) => ({
   workPackages: [],
   facets: EMPTY_FACETS,
@@ -48,32 +56,56 @@ export const useWorkPackagesStore = create<WorkPackagesState>()((set) => ({
   total: 0,
 
   fetchAll: async (filters: Record<string, string>) => {
+    // Cancel any in-flight request (including its retries)
+    if (activeAbort) activeAbort.abort();
+    const abort = new AbortController();
+    activeAbort = abort;
+
     set({ isLoading: true, error: null });
-    try {
-      const params = new URLSearchParams(filters);
-      const res = await fetch(`/api/work-packages/all?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch work packages");
-      const json = await res.json();
-      set({
-        workPackages: json.data,
-        facets: json.facets ?? EMPTY_FACETS,
-        total: json.total,
-        isLoading: false,
-      });
-    } catch (err) {
-      set({ error: (err as Error).message, isLoading: false });
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        if (abort.signal.aborted) return;
+        const params = new URLSearchParams(filters);
+        const res = await fetch(`/api/work-packages/all?${params}`, {
+          signal: abort.signal,
+        });
+        if (!res.ok) throw new Error("Failed to fetch work packages");
+        const json = await res.json();
+        if (abort.signal.aborted) return;
+        set({
+          workPackages: json.data,
+          facets: json.facets ?? EMPTY_FACETS,
+          total: json.total,
+          isLoading: false,
+        });
+        return;
+      } catch (err) {
+        if (abort.signal.aborted || (err as Error).name === "AbortError") return;
+        if (attempt < MAX_RETRIES) {
+          await new Promise((r) => setTimeout(r, RETRY_BASE_MS * (attempt + 1)));
+          if (abort.signal.aborted) return;
+          continue;
+        }
+        set({ error: (err as Error).message, isLoading: false });
+      }
     }
   },
 }));
 
 /**
- * Hook that auto-fetches work packages when filters change
+ * Hook that auto-fetches work packages when filters change.
+ * Waits for URL → store sync before the first fetch to prevent
+ * a wasted request with computed default filters.
  */
 export function useWorkPackages() {
   const { start, end, operators, aircraft, types } = useFilters();
+  const urlSynced = useFilters((s) => s._urlSynced);
   const { workPackages, isLoading, error, total, fetchAll } = useWorkPackagesStore();
 
   useEffect(() => {
+    if (!urlSynced) return; // wait for useFilterUrlSync to finish
+
     const filters: Record<string, string> = {};
     if (start) filters.start = start;
     if (end) filters.end = end;
@@ -82,7 +114,7 @@ export function useWorkPackages() {
     if (types.length > 0) filters.types = types.join(",");
 
     fetchAll(filters);
-  }, [start, end, operators, aircraft, types, fetchAll]);
+  }, [urlSynced, start, end, operators, aircraft, types, fetchAll]);
 
   return { workPackages, isLoading, error, total };
 }

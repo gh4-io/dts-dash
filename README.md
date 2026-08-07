@@ -68,6 +68,23 @@ docker run -p 3000:3000 -v ./data:/app/data --env-file .env dtsd
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full deployment instructions including Docker Compose, PM2, reverse proxy, and environment configuration.
 
+### Development
+
+```bash
+npm run dev        # Dev server at http://localhost:3000
+npm run validate   # Full gate: typecheck -> lint -> test -> build
+npm test           # Vitest only
+npm run lint:fix   # ESLint with autofix
+npm run format     # Prettier
+```
+
+`npm run validate` is the gate to run before committing. Two things worth knowing:
+
+- **Check the exit code.** `next build` compiles first and type-checks second, so it can print `✓ Compiled successfully` and still fail with `Failed to type check` (exit 1). Piping the output to `tail` discards the exit code and makes a red build look green.
+- **Vitest does not type-check.** Every test can pass while `tsc --noEmit` fails. Test files are inside `tsconfig.json`'s `include`, so adding a required field to a shared type breaks the build via stale fixtures without breaking a test. After changing a type in `src/types/`, grep `src/__tests__/` for fixtures of that type.
+
+**WSL note** — if the repo lives on a Windows drive mount (`/mnt/c`, `/mnt/d`), `npm install` can fail with a misleading `EACCES` on a rename. It is a file lock, not a permission problem: some process (commonly a `tsserver` started from the project's own `node_modules`) is holding a package directory open. Close your editor or kill the language server, then retry. After moving the repo between drives, `rm -rf node_modules && npm install` — the `better-sqlite3` native bindings are path-sensitive.
+
 ### Database Management
 
 ```bash

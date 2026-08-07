@@ -3,15 +3,12 @@ import { mhOverrides, appConfig, workPackages, aircraft } from "@/lib/db/schema"
 import { eq, isNotNull } from "drizzle-orm";
 import type { SharePointWorkPackage, WorkPackage, MHSource, AppConfig } from "@/types";
 import { createChildLogger } from "@/lib/logger";
+import { parseGroundEventTypes } from "@/lib/utils/ground-events";
 import { normalizeAircraftTypes, invalidateMappingsCache } from "@/lib/utils/aircraft-type";
 import { loadPerEventContractMap } from "@/lib/capacity/allocation-data";
 import {
   DEFAULT_MH,
   DEFAULT_WP_MH_MODE,
-  DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
-  DEFAULT_REAL_CAPACITY_PER_PERSON,
-  DEFAULT_SHIFTS,
-  DEFAULT_SHIFTS_JSON,
   DEFAULT_INGEST_RATE_LIMIT_SECONDS,
   DEFAULT_INGEST_MAX_SIZE_MB,
 } from "@/lib/data/config-defaults";
@@ -44,13 +41,6 @@ async function loadConfig(): Promise<AppConfig> {
     cachedConfig = {
       defaultMH: parseFloat(configMap.defaultMH ?? String(DEFAULT_MH)),
       wpMHMode: (configMap.wpMHMode as "include" | "exclude") ?? DEFAULT_WP_MH_MODE,
-      theoreticalCapacityPerPerson: parseFloat(
-        configMap.theoreticalCapacityPerPerson ?? String(DEFAULT_THEORETICAL_CAPACITY_PER_PERSON),
-      ),
-      realCapacityPerPerson: parseFloat(
-        configMap.realCapacityPerPerson ?? String(DEFAULT_REAL_CAPACITY_PER_PERSON),
-      ),
-      shifts: JSON.parse(configMap.shifts ?? DEFAULT_SHIFTS_JSON),
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(
         configMap.ingestRateLimitSeconds ?? String(DEFAULT_INGEST_RATE_LIMIT_SECONDS),
@@ -72,9 +62,6 @@ async function loadConfig(): Promise<AppConfig> {
     cachedConfig = {
       defaultMH: DEFAULT_MH,
       wpMHMode: DEFAULT_WP_MH_MODE,
-      theoreticalCapacityPerPerson: DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
-      realCapacityPerPerson: DEFAULT_REAL_CAPACITY_PER_PERSON,
-      shifts: [...DEFAULT_SHIFTS],
       ingestApiKey: "",
       ingestRateLimitSeconds: DEFAULT_INGEST_RATE_LIMIT_SECONDS,
       ingestMaxSizeMB: DEFAULT_INGEST_MAX_SIZE_MB,
@@ -255,6 +242,10 @@ export async function transformWorkPackages(
       isActive,
       modified: wp.Modified ? new Date(wp.Modified) : null,
       created: wp.Created ? new Date(wp.Created) : null,
+      groundEventTypes: (() => {
+        const parsed = parseGroundEventTypes(wp._groundEventTypesRaw);
+        return parsed.length > 0 ? parsed : null;
+      })(),
     };
   });
 }

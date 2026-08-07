@@ -11,6 +11,7 @@ import {
   computeEffectivePaidHours,
   resolveStaffingDay,
   computeWeeklyMatrix,
+  findShiftOverlaps,
   resolveStaffingForCapacity,
   buildPatternMap,
   validatePattern,
@@ -22,8 +23,11 @@ import type { RotationPattern, StaffingShift, CapacityAssumptions } from "@/type
 
 const PATTERN_5_2: RotationPattern = {
   id: 1,
+  groupId: 1,
   name: "Standard 5-2",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "oxxxxoxoxxxxoxoxxxxox", // Mon-Fri every week (Sun=off)
   isActive: true,
   sortOrder: 0,
@@ -31,8 +35,11 @@ const PATTERN_5_2: RotationPattern = {
 
 const PATTERN_ALL_ON: RotationPattern = {
   id: 2,
+  groupId: 2,
   name: "All On",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xxxxxxxxxxxxxxxxxxxxx",
   isActive: true,
   sortOrder: 1,
@@ -40,8 +47,11 @@ const PATTERN_ALL_ON: RotationPattern = {
 
 const PATTERN_ALL_OFF: RotationPattern = {
   id: 3,
+  groupId: 3,
   name: "All Off",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "ooooooooooooooooooooo",
   isActive: true,
   sortOrder: 2,
@@ -49,8 +59,11 @@ const PATTERN_ALL_OFF: RotationPattern = {
 
 const PATTERN_ALTERNATING: RotationPattern = {
   id: 4,
+  groupId: 4,
   name: "Alternating",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xoxoxoxoxoxoxoxoxoxox",
   isActive: true,
   sortOrder: 3,
@@ -58,8 +71,11 @@ const PATTERN_ALTERNATING: RotationPattern = {
 
 const PATTERN_INACTIVE: RotationPattern = {
   id: 5,
+  groupId: 5,
   name: "Inactive",
   description: null,
+  effectiveFrom: null,
+  effectiveTo: null,
   pattern: "xxxxxxxxxxxxxxxxxxxxx",
   isActive: false,
   sortOrder: 4,
@@ -74,6 +90,7 @@ function makeShift(overrides: Partial<StaffingShift> & { id: number }): Staffing
     rotationId: 1,
     rotationStartDate: "2026-01-04", // a Sunday
     rotationEndDate: null,
+    patternAnchorDate: null,
     startHour: 7,
     startMinute: 0,
     endHour: 15,
@@ -327,9 +344,9 @@ describe("computeWeeklyMatrix", () => {
 
     const dayCell = result.days[0].byCategory.DAY;
     expect(dayCell.headcount).toBeCloseTo(10 * 0.89); // effective = roster * paidToAvailable
-    expect(dayCell.paidMH).toBeCloseTo(10 * 0.89 * 8); // effective * hours = 71.2
-    expect(dayCell.availableMH).toBeCloseTo(10 * 0.89 * 8); // availableMH = paidMH
-    expect(dayCell.productiveMH).toBeCloseTo(10 * 0.89 * 8 * 0.73); // paidMH * a2p = 51.976
+    expect(dayCell.paidMH).toBeCloseTo(10 * 8); // roster * hours = 80
+    expect(dayCell.availableMH).toBeCloseTo(10 * 8 * 0.89); // paid * p2a = 71.2
+    expect(dayCell.productiveMH).toBeCloseTo(10 * 8 * 0.89 * 0.73); // available * a2p
   });
 
   it("applies night factor for NIGHT category", () => {
@@ -347,7 +364,7 @@ describe("computeWeeklyMatrix", () => {
 
     const nightCell = result.days[0].byCategory.NIGHT;
     expect(nightCell.headcount).toBeCloseTo(4 * 0.89); // effective = roster * paidToAvailable
-    expect(nightCell.paidMH).toBeCloseTo(4 * 0.89 * 8); // effective * hours = 28.48
+    expect(nightCell.paidMH).toBeCloseTo(4 * 8); // roster * hours = 32
     expect(nightCell.productiveMH).toBeCloseTo(4 * 0.89 * 8 * 0.73 * 0.85);
   });
 
@@ -450,5 +467,112 @@ describe("countWorkingDays", () => {
     expect(countWorkingDays("xxxxxxxxxxxxxxxxxxxxx")).toBe(21);
     expect(countWorkingDays("ooooooooooooooooooooo")).toBe(0);
     expect(countWorkingDays("xoxoxoxoxoxoxoxoxoxox")).toBe(11);
+  });
+});
+
+// ─── Roster vs effective headcount ──────────────────────────────────────────
+
+describe("computeWeeklyMatrix — roster vs effective headcount", () => {
+  const patterns = buildPatternMap([PATTERN_5_2, PATTERN_ALL_ON]);
+
+  it("reports roster headcount undiscounted", () => {
+    const shifts = [makeShift({ id: 1, rotationId: 2, headcount: 10, category: "DAY" })];
+    const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
+
+    for (const day of result.days) {
+      // The number the user typed, not that number × paidToAvailable.
+      expect(day.byCategory.DAY.rosterHeadcount).toBe(10);
+      expect(day.byCategory.DAY.effectiveHeadcount).toBeCloseTo(8.9);
+    }
+  });
+
+  it("keeps roster consistent with totalConfigHeadcount", () => {
+    const shifts = [
+      makeShift({ id: 1, rotationId: 2, headcount: 8, category: "DAY" }),
+      makeShift({ id: 2, rotationId: 2, headcount: 6, category: "NIGHT" }),
+    ];
+    const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
+
+    // Both shifts work every day, so the daily roster must equal the config total.
+    expect(result.totalConfigHeadcount).toBe(14);
+    expect(result.days[0].total.rosterHeadcount).toBe(14);
+  });
+
+  it("bases MH on effective headcount, not roster", () => {
+    const shifts = [makeShift({ id: 1, rotationId: 2, headcount: 10, category: "DAY" })];
+    const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
+
+    const cell = result.days[0].byCategory.DAY;
+    expect(cell.paidMH).toBeCloseTo(10 * 8); // roster × 8-hour shift, undiscounted
+  });
+
+  it("keeps the deprecated headcount alias equal to effective", () => {
+    const shifts = [makeShift({ id: 1, rotationId: 2, headcount: 10, category: "DAY" })];
+    const result = computeWeeklyMatrix("2026-01-04", shifts, patterns, DEFAULT_ASSUMPTIONS);
+
+    const cell = result.days[0].byCategory.DAY;
+    expect(cell.headcount).toBeCloseTo(cell.effectiveHeadcount);
+  });
+});
+
+// ─── findShiftOverlaps ──────────────────────────────────────────────────────
+
+describe("findShiftOverlaps", () => {
+  it("returns nothing for a clean version boundary", () => {
+    const shifts = [
+      makeShift({
+        id: 1,
+        name: "13SMD",
+        rotationStartDate: "2026-01-04",
+        rotationEndDate: "2026-08-03",
+        isActive: false,
+      }),
+      makeShift({ id: 2, name: "13SMD", rotationStartDate: "2026-08-04" }),
+    ];
+    expect(findShiftOverlaps(shifts)).toEqual([]);
+  });
+
+  it("flags two open-ended versions of the same shift", () => {
+    const shifts = [
+      makeShift({ id: 3, name: "13SMD", rotationStartDate: "2025-12-01", headcount: 9 }),
+      makeShift({ id: 7, name: "13SMD", rotationStartDate: "2026-08-04", headcount: 11 }),
+    ];
+    const overlaps = findShiftOverlaps(shifts);
+
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0].name).toBe("13SMD");
+    expect(overlaps[0].shiftIds).toEqual([3, 7]);
+    expect(overlaps[0].fromDate).toBe("2026-08-04");
+    expect(overlaps[0].combinedHeadcount).toBe(20);
+  });
+
+  it("flags an archived version whose end date still covers the successor", () => {
+    const shifts = [
+      makeShift({
+        id: 1,
+        name: "DAY",
+        rotationStartDate: "2026-01-04",
+        rotationEndDate: "2026-08-04", // inclusive — still covers the 4th
+        isActive: false,
+      }),
+      makeShift({ id: 2, name: "DAY", rotationStartDate: "2026-08-04" }),
+    ];
+    expect(findShiftOverlaps(shifts)).toHaveLength(1);
+  });
+
+  it("does not flag different shifts that merely run concurrently", () => {
+    const shifts = [
+      makeShift({ id: 1, name: "10WKD", rotationStartDate: "2026-01-04" }),
+      makeShift({ id: 2, name: "13FSD", rotationStartDate: "2026-01-04" }),
+    ];
+    expect(findShiftOverlaps(shifts)).toEqual([]);
+  });
+
+  it("does not flag same-named shifts in different configs", () => {
+    const shifts = [
+      makeShift({ id: 1, name: "DAY", configId: 1 }),
+      makeShift({ id: 2, name: "DAY", configId: 2 }),
+    ];
+    expect(findShiftOverlaps(shifts)).toEqual([]);
   });
 });

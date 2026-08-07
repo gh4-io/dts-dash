@@ -310,8 +310,9 @@ describe("computeDailyCapacityV2", () => {
     expect(result[0].byShift[0].rosterHeadcount).toBe(8);
     expect(result[0].byShift[0].effectiveHeadcount).toBeCloseTo(8 * 0.89, 2);
     expect(result[0].byShift[0].paidHoursPerPerson).toBe(8.0);
-    expect(result[0].byShift[0].paidMH).toBeCloseTo(8 * 0.89 * 8.0, 1);
-    expect(result[0].byShift[0].availableMH).toBeCloseTo(result[0].byShift[0].paidMH, 4);
+    // Paid covers the whole roster — the availability discount lands on available.
+    expect(result[0].byShift[0].paidMH).toBeCloseTo(8 * 8.0, 1);
+    expect(result[0].byShift[0].availableMH).toBeCloseTo(8 * 8.0 * 0.89, 1);
     // productiveMH total unchanged: 8 × 0.89 × 8.0 × 0.73 = 41.58
     expect(result[0].byShift[0].productiveMH).toBeCloseTo(8 * 0.89 * 8.0 * 0.73, 1);
     expect(result[0].byShift[0].belowMinHeadcount).toBe(false);
@@ -397,7 +398,7 @@ describe("computeDailyCapacityV2", () => {
     expect(result[0].byShift[0].belowMinHeadcount).toBe(false);
   });
 
-  it("availableMH equals paidMH (paidToAvailable absorbed into headcount)", () => {
+  it("discounts availableMH from paidMH by paidToAvailable", () => {
     const result = computeDailyCapacityV2(
       ["2025-03-10"],
       shifts,
@@ -407,7 +408,13 @@ describe("computeDailyCapacityV2", () => {
     );
 
     for (const shiftCap of result[0].byShift) {
-      expect(shiftCap.availableMH).toBeCloseTo(shiftCap.paidMH, 4);
+      // Paid is the undiscounted payroll figure; available is what is left after
+      // PTO/training/absence. They must not be the same number.
+      expect(shiftCap.paidMH).toBeCloseTo(
+        shiftCap.rosterHeadcount * shiftCap.paidHoursPerPerson,
+        4,
+      );
+      expect(shiftCap.availableMH).toBeCloseTo(shiftCap.paidMH * 0.89, 4);
     }
   });
 });

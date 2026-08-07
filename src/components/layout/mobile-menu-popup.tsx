@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
-import { useTheme } from "next-themes";
-import { usePreferences } from "@/lib/hooks/use-preferences";
+import { useNotifications } from "@/lib/hooks/use-notifications";
 import { Separator } from "@/components/ui/separator";
 
 interface MobileMenuPopupProps {
@@ -21,18 +20,10 @@ const NAV_ITEMS = [
 export function MobileMenuPopup({ open, onOpenChange }: MobileMenuPopupProps) {
   const { data: session } = useSession();
   const pathname = usePathname();
-  const { theme, resolvedTheme, setTheme } = useTheme();
-  const { update: updatePrefs } = usePreferences();
+  const unreadCount = useNotifications((s) => s.unreadCount);
 
   // Track closing state for exit animation
   const [closing, setClosing] = useState(false);
-
-  // Hydration-safe mounted flag
-  const mounted = useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
 
   const isAdmin = session?.user?.role === "admin" || session?.user?.role === "superadmin";
 
@@ -54,32 +45,6 @@ export function MobileMenuPopup({ open, onOpenChange }: MobileMenuPopupProps) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, handleClose]);
-
-  const toggleTheme = () => {
-    let next: "dark" | "light" | "system";
-    if (theme === "dark") next = "light";
-    else if (theme === "light") next = "system";
-    else next = "dark";
-
-    setTheme(next);
-    updatePrefs({ colorMode: next });
-  };
-
-  const themeIcon = !mounted
-    ? "fa-solid fa-circle-half-stroke"
-    : theme === "system"
-      ? "fa-solid fa-circle-half-stroke"
-      : resolvedTheme === "dark"
-        ? "fa-solid fa-moon"
-        : "fa-solid fa-sun";
-
-  const themeLabel = mounted
-    ? theme === "dark"
-      ? "Dark"
-      : theme === "light"
-        ? "Light"
-        : "System"
-    : "System";
 
   if (!open && !closing) return null;
 
@@ -143,15 +108,27 @@ export function MobileMenuPopup({ open, onOpenChange }: MobileMenuPopupProps) {
 
         <Separator className="my-1" />
 
-        {/* Theme toggle */}
-        <button
+        {/* Notifications */}
+        <Link
+          href="/notifications"
           role="menuitem"
-          onClick={toggleTheme}
-          className="flex w-full items-center justify-between gap-3 rounded-md px-3 min-h-11 text-sm text-popover-foreground hover:bg-accent/50 transition-colors"
+          onClick={handleClose}
+          className={`flex items-center justify-between gap-3 rounded-md px-3 min-h-11 text-sm transition-colors ${
+            isActive("/notifications")
+              ? "bg-accent text-accent-foreground font-medium"
+              : "text-popover-foreground hover:bg-accent/50"
+          }`}
         >
-          <span>Theme: {themeLabel}</span>
-          <i className={`${themeIcon} w-5 text-center text-muted-foreground`} />
-        </button>
+          <span className="flex items-center gap-2">
+            Notifications
+            {unreadCount > 0 && (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </span>
+          <i className="fa-solid fa-bell w-5 text-center text-muted-foreground" />
+        </Link>
 
         <Separator className="my-1" />
 
