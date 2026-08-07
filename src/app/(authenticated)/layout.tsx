@@ -5,12 +5,14 @@ import { SidebarHydrator } from "@/components/layout/sidebar-hydrator";
 import { DeviceTypeHydrator } from "@/components/layout/device-type-hydrator";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { IosInstallPrompt } from "@/components/shared/ios-install-prompt";
+import { AnalyticsTracker } from "@/components/shared/analytics-tracker";
 
 export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   return (
     <TooltipProvider>
       <DeviceTypeHydrator>
         <SidebarHydrator />
+        <AnalyticsTracker />
         <div className="relative flex h-dvh overflow-hidden">
           <Sidebar />
           <SidebarEdgeToggle />

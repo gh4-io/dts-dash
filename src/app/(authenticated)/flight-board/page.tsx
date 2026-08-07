@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useSidebar } from "@/lib/hooks/use-sidebar";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
 import type { FlightBoardChartHandle } from "@/components/flight-board/flight-board-chart";
+import { trackAction } from "@/lib/analytics/track";
 import type { ActiveChip } from "@/components/shared/active-chips";
 
 // Dynamic import — ECharts requires window
@@ -128,6 +129,11 @@ function FlightBoardPageInner() {
   const handleBarClick = useCallback((wp: SerializedWorkPackage) => {
     setSelectedWp(wp);
     setDrawerOpen(true);
+    trackAction("gantt_bar_click", {
+      aircraft_reg: wp.aircraftReg,
+      customer: wp.customer,
+      ground_hours: wp.groundHours,
+    });
   }, []);
 
   const handleRefresh = useCallback(() => {

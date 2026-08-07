@@ -27,6 +27,7 @@ import { StepConfirmImport } from "./step-confirm-import";
 import { StepResults } from "./step-results";
 import { HelpPanel } from "./help-panel";
 import { ImportHistory } from "./import-history";
+import { trackAction } from "@/lib/analytics/track";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -412,6 +413,16 @@ export function ImportHub() {
       }
 
       const data: CommitResult = await res.json();
+
+      trackAction("data_import", {
+        schema_id: state.schemaId,
+        source: state.source,
+        format: state.format,
+        record_count: data.recordCount,
+        inserted: data.recordsInserted,
+        updated: data.recordsUpdated,
+        skipped: data.recordsSkipped,
+      });
 
       setState((prev) => ({
         ...prev,
