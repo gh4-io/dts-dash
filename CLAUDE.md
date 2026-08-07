@@ -3,15 +3,26 @@
 > Canonical operating manual for Claude Code. Read this first, every session.
 > Detailed specs live in `.claude/` — this file links to them, never duplicates.
 >
-> **Last updated:** 2026-03-04 (v0.3.0 development start)
+> **Last updated:** 2026-08-06 (v0.3.0 in progress)
 >
-> **What changed (v0.3.0 — starting):**
+> **🔶 CURRENT STATE — READ BEFORE PLANNING WORK:**
+> - Working branch `feat/flight-event-enhancements`, **223 commits ahead of `master`**. `package.json` is `0.3.0`.
+> - **v0.3.0 is NOT release-ready.** CHANGELOG `[0.3.0]` is dated 2026-03-04, but five commits landed after the version bump (including a `wip:` checkpoint). The entry is incomplete.
+> - **Production runs `0.2.0-rc1`** — it predates OI-080 entirely, which is why prod has no `rotation_end_date` column and no shift history.
+> - **Blocking bug before any prod upgrade:** shift effective dates are *recorded* but never *applied*. See OI-100 (engine ignores date windows), OI-101 (rotation patterns unversioned), OI-102 (version boundary overlap), OI-103 (missing tests). Deploying v0.3.0 alone will NOT stabilise historical capacity.
+> - Unfiled planning work sits in the untracked root `roadmap.md` (MH Override Management, Cron Scheduler Admin) — see OI-104/OI-105.
+>
+> **What changed (2026-08-06 session):**
+> - `npm audit fix` — 27 advisories → 3; all criticals/highs cleared (lockfile-only, PATCH per D-028)
+> - Repaired type errors in 3 test files that had been failing the build gate since ~Feb — `npm run validate` now exits 0 for the first time on this branch
+> - Filed OI-100 → OI-105 for the versioning gaps and unfiled roadmap items
+>
+> **What changed (v0.3.0 — starting, 2026-03-04):**
 > - MINOR version bump: v0.2.0 → v0.3.0
-> - Staffing shift rotation end date + auto-versioning + archive (OI-080, M022)
+> - Staffing shift rotation end date + auto-versioning + archive (OI-080, M022) — **partial, see OI-100**
 > - Sub-build tracking via `build.json` + pre-commit hook (OI-087, D-063)
 > - Various flight board, dashboard, and mobile/PWA polish fixes
-> - See CHANGELOG.md `[0.3.0]` entry for full details
-> - **Next:** v0.3.0 feature backlog — see ROADMAP.md `v0.3.0` section
+> - Flight event comments + ground event markers (OI-092, OI-093), in-app notifications (OI-094)
 >
 > **Previous update (v0.2.0 — Universal Import Hub):**
 > - Single schema-driven Data Hub, 6-step wizard, 9 pluggable schemas, full Capacity Suite, Phase 4 Mobile-First UX
@@ -258,10 +269,17 @@ docker/README.md                — Authoritative Docker + env + deployment guid
 
 ## Verification Gates
 
-- `npm run build` must pass
-- `npm run lint` must be clean
+- `npm run validate` must exit 0 — runs typecheck → lint → test → build
 - `npm run dev` must render all pages without console errors
 - See [TEST_PLAN.md](.claude/DEV/TEST_PLAN.md) for full checklist
+
+> **⚠️ Always check the real exit code.** `next build` compiles first and type-checks second, so it can print `✓ Compiled successfully` **and then fail** with `Failed to type check` (exit 1). Piping to `tail`/`head` discards the exit code and makes a red build look green. This masked a broken build gate on this branch for roughly four months. Use `npm run validate; echo $?` or redirect to a file.
+>
+> **⚠️ vitest does not type-check.** All 673 tests can pass while `tsc --noEmit` fails. Test files are inside `tsconfig.json`'s `include`, so fixture drift (a new required field on a shared type) breaks the build without breaking a single test. When you add a required field to a type in `src/types/`, grep `src/__tests__/` for fixtures of that type.
+
+### WSL / 9p note
+
+This repo lives on `/mnt/d` (a 9p drvfs mount). `npm install` renames package directories, and a rename fails with a misleading `EACCES` if any process holds `node_modules` open — commonly a `tsserver` spawned from the project's own `node_modules`. It is a file lock, not a permission problem. Kill the language server (`ps aux | grep tsserver`) and retry. After moving drives or switching branches, `rm -rf node_modules && npm install` — `better-sqlite3` bindings are path-sensitive.
 
 ## Docker & Deployment Verification
 
@@ -285,3 +303,13 @@ See [docker/README.md](docker/README.md) for full Docker usage guide.
 - `.claude/PLAN.md` — **authoritative** implementation plan (PASS 2, D-020)
 - `/plan/FINAL-PLAN.md` — prior implementation plan (retained as reference)
 - `/plan/PLAN-AMENDMENT-001-FILTER-BAR.md` — FilterBar integration plan (integrated into PLAN.md M2)
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

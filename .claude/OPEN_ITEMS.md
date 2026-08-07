@@ -8,6 +8,82 @@
 
 ## Active Bugs
 
+### OI-100 | Capacity Engine Ignores Shift Effective Dates — Historical Capacity Is Unstable
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | **P1 — blocks v0.3.0 prod upgrade** |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-06 |
+
+OI-080 added `rotationEndDate` and auto-versioning, but **nothing consumes the effective dates**. `resolveStaffingDay()` filters on `isActive` only — it never compares the target date against `rotationStartDate`/`rotationEndDate`. Worse, `isWorkingDay()` deliberately normalises negative offsets (`((diffDays % 21) + 21) % 21`), so a rotation projects infinitely backwards past its own start date.
+
+Consequences: archived versions (`isActive = false`) disappear from **every** date, including the dates they were actually true for; the current version is applied to all of history. Historical capacity numbers therefore change every time someone edits headcount — the exact problem OI-080 was meant to solve.
+
+**Fix**: filter on `rotationStartDate <= date && (rotationEndDate === null || date <= rotationEndDate)`, and stop using `isActive` to exclude archived versions from past dates.
+
+**Files**: `src/lib/capacity/staffing-engine.ts` (`resolveStaffingDay` ~L98, `isWorkingDay` ~L32)
+**Links**: OI-080 (partial), OI-101, OI-102, OI-103
+
+---
+
+### OI-101 | Rotation Patterns Have No Versioning
+
+| Field | Value |
+|-------|-------|
+| **Type** | Design Gap |
+| **Status** | **Open** — decision needed |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-06 |
+
+`rotation_patterns` has no effective dating of any kind — no end date, no version column (`id, name, description, pattern, is_active, sort_order, created_at, updated_at`). Because the 21-char pattern string determines which days are worked, editing a pattern in place silently rewrites what every past date meant. OI-080 versioned `staffing_shifts` only.
+
+**Decision needed**: either version patterns (second schema change), or accept in-place edits and lock the pattern editor down with a warning. Should be a conscious choice, not a default.
+
+**Links**: OI-080, OI-100
+
+---
+
+### OI-102 | Shift Version Boundary Overlaps
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-06 |
+
+`versionStaffingShift()` sets the archived shift's `rotationEndDate` to **today**, but backdates the new version's `rotationStartDate` to **the Sunday of the current week** (via `alignRotationStartToSunday`, since patterns are 21-day Sunday-anchored). Versioning on a Thursday leaves the two versions overlapping Sunday→Thursday.
+
+Currently harmless only because OI-100 means nothing reads the dates. Must be resolved as part of the OI-100 fix.
+
+**Decision needed**: does a headcount change take effect on the save date, or on the Sunday that starts the rotation week?
+
+**Files**: `src/lib/capacity/staffing-data.ts` (`versionStaffingShift` ~L508)
+**Links**: OI-100
+
+---
+
+### OI-103 | No Test Coverage for Shift Versioning
+
+| Field | Value |
+|-------|-------|
+| **Type** | Test Gap |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-06 |
+
+`staffing-versioning.test.ts` covers only the two pure helpers (`alignRotationStartToSunday`, `canArchiveShift`). There is no test for `versionStaffingShift()` — the actual archive-and-create transaction — and none asserting that a past date resolves to its *historical* headcount. The untested paths are precisely the broken ones in OI-100 and OI-102.
+
+**Links**: OI-100, OI-102
+
+---
+
 ### OI-043 | Chunked Upload Location Header Returns Localhost Behind Proxy
 
 | Field | Value |
@@ -120,6 +196,50 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 ---
 
 ## Open Enhancements
+
+### OI-104 | Work-Package Man-Hour Override Management
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature Request |
+| **Status** | **Open** — specced, not started |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-04 (filed 2026-08-06) |
+
+Admin-facing workflow for managing per-work-package MH overrides without direct DB access. Editable man-hours in the WP detail drawer showing imported MH / effective MH / MH source together; explicit **Save Override** and **Clear Override** actions; no override created when the entered value equals imported `work_packages.total_mh` (clear the redundant one instead); bulk CSV workflow with a preview of matches, duplicates, invalid values, unchanged values and unmatched WP identifiers before commit; optional minimum-hours transformation retaining the original supplied value in the audit output; authenticated CRUD endpoints for `mh_overrides`; admin-role gated with user + timestamp recorded; cache invalidation so flight board and capacity refresh without a server restart; override history/audit view with before/after values and export.
+
+**Acceptance criteria**: saved override becomes `effectiveMH` and is labelled **Override** app-wide; clearing restores the priority chain (imported WP MH → contract MH → default MH); capacity planned-demand reflects changes on the next request; bulk updates are transactional with a downloadable error/audit report; tests cover permissions, create/update/clear, redundant-value handling, cache invalidation, and capacity propagation.
+
+Full spec was drafted in the untracked root `roadmap.md` — **fold into ROADMAP.md and delete the root file** so there is one roadmap.
+
+**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), OI-086
+
+---
+
+### OI-105 | Cron Scheduler Administration and Disabled-State UX
+
+| Field | Value |
+|-------|-------|
+| **Type** | Feature Request |
+| **Status** | **Open** — specced, not started |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-04 (filed 2026-08-06) |
+
+Make the scheduler's global state explicit and stop the Cron Jobs UI presenting controls that cannot take effect. `features.cronEnabled` stays the deployment-level hard gate (never writable from the web app); add a **DB-backed "Scheduler Active" runtime switch** available only when the deployment gate is on.
+
+When the server gate is **off**: prominent "Cron scheduler disabled by server configuration" banner; jobs, schedules, options and run history shown read-only; enable/disable, schedule editing, option editing and **Run Now** all locked; explain that an authorised server admin must enable `features.cronEnabled` and restart. Clearly distinguish *disabled by server configuration* from *paused by an administrator*.
+
+When the gate is **on**: admins can switch between **Running** and **Paused**; per-job enable/disable preserved beneath the global switch; show each job's next run, last run, last result and message; show last successful DB backup, configured retention, and warn when no successful backup exists within the expected interval; record global pause/resume with acting user and timestamp.
+
+**Acceptance criteria**: no editable/executable cron controls appear active while the server gate is disabled; GUI pause stops execution without a restart and without changing server config; resume registers enabled jobs without duplicate schedules; **Run Now** respects the gate and role permissions; scheduler state and backup freshness are visible without inspecting container logs or the filesystem; tests cover all gate × runtime-state × role × restart × duplicate-registration combinations.
+
+Full spec was drafted in the untracked root `roadmap.md` — fold into ROADMAP.md with OI-104.
+
+**Links**: D-030 (cron management), [REQ_Admin.md](SPECS/REQ_Admin.md)
+
+---
 
 ### OI-042 | Dashboard Chart Issues — PARTIALLY RESOLVED
 
@@ -823,12 +943,14 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 | Priority | Open | Partial | In Progress | Acknowledged | Resolved |
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
-| P1 | 1 | 2 | 0 | 0 | 23 |
-| P2 | 18 | 2 | 1 | 0 | 21 |
+| P1 | 2 | 2 | 0 | 0 | 23 |
+| P2 | 23 | 2 | 1 | 0 | 21 |
 | P3 | 7 | 0 | 0 | 2 | 5 |
-| **Total** | **26** | **4** | **1** | **2** | **65** |
+| **Total** | **32** | **4** | **1** | **2** | **65** |
 
-**Latest update (2026-03-17)**: Added OI-099 (unified comments/notifications/feedback table for v1.0.x — refactoring for schema simplification and richer interactions). Backlog item targeting post-v0.3.0 release.
+**Latest update (2026-08-06)**: Added OI-100 → OI-103 (staffing shift versioning gaps — OI-100 is **P1 and blocks the v0.3.0 production upgrade**) and OI-104/OI-105 (MH override management, cron scheduler admin — both specced in the untracked root `roadmap.md`, awaiting fold-in to ROADMAP.md).
+
+**Previous update (2026-03-17)**: Added OI-099 (unified comments/notifications/feedback table for v1.0.x — refactoring for schema simplification and richer interactions). Backlog item targeting post-v0.3.0 release.
 
 ---
 

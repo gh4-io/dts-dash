@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+> Work landed on `feat/flight-event-enhancements` after the `[0.3.0]` version bump of 2026-03-04.
+> **The `[0.3.0]` entry below is incomplete** — it predates everything in this section. Fold these
+> into `[0.3.0]`, or split them into `[0.3.1]`, when the release boundary is decided.
+
+### Added
+
+- **Flight event comments + ground event markers** (OI-092, OI-093) — comments per flight event; unique markers for AOG, BTB and similar ground events
+- **In-app notification system** with auto-triggers (OI-094)
+
+### Fixed
+
+- **Security: 24 dependency advisories** resolved via `npm audit fix` — 27 → 3 (all criticals and highs cleared; remaining 3 are transitive and need a major bump of their parent). Lockfile-only; `package.json` unchanged. Notable: `next-auth` 5.0.0-beta.30 → beta.32, `@auth/core` 0.41.0 → 0.41.3, `next` 16.1.6 → 16.3.0, `drizzle-orm` 0.45.1 → 0.45.2, `js-yaml` 4.1.1 → 4.3.1, `undici` 7.22.0 → 7.29.0, `sharp` 0.34.5 → 0.35.3
+- **Build gate restored** — type errors in three test files had been failing `next build` and CI's `tsc --noEmit` since roughly February. Compilation succeeded and all tests passed, so the failure went unnoticed. Fixtures were missing `CapacityShift.timezone` (D-049) and `DemandContract.priority` (D-052/M019), `wpContributions` entries had a string `wpId` and were missing `aircraftReg`/`mhSource`, and `transformer-mh.test.ts` was the only test file relying on vitest globals. `npm run validate` now exits 0
+- Flight board: dismiss tooltip on tap; eliminate 60s re-render cycle
+- Flight board: fix auto-load on server restart; improve ground event markers
+- Import: infer `hasWorkpackage` from `TotalMH`/`WorkpackageNo` when the source field is absent
+
+### Known Issues
+
+- **Shift effective dating is recorded but never applied** (OI-100, P1) — the capacity engine ignores `rotationEndDate`, so historical capacity restates whenever headcount is edited. **Blocks the production upgrade**; see also OI-101 (rotation patterns unversioned), OI-102 (version boundary overlap), OI-103 (missing tests)
+- Production currently runs `0.2.0-rc1`, which predates OI-080 entirely
+
 ---
 
 ## [0.3.0] - 2026-03-04

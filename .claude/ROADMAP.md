@@ -19,7 +19,16 @@
 
 **All base milestones (M0–M8) complete. Project is production-ready.**
 
-**Current Focus: v0.3.0 Development** — Starting v0.3.0 feature cycle. See v0.3.0 backlog below.
+**Current Focus: v0.3.0 Development** — in progress on `feat/flight-event-enhancements`. See v0.3.0 backlog below.
+
+> **Status as of 2026-08-06** — v0.3.0 is **not** release-ready:
+> - **P1 blocker**: OI-100 — the capacity engine ignores shift effective dates, so historical capacity is unstable. Deploying v0.3.0 will not fix historical evaluations. See also OI-101, OI-102, OI-103.
+> - Production runs `0.2.0-rc1` (predates OI-080). The M022 migration will add `rotation_end_date` cleanly on upgrade.
+> - CHANGELOG `[0.3.0]` is incomplete — five commits landed after the version bump; see the `[Unreleased]` section.
+> - **Release boundary undecided**: what ships as v0.3.0 vs. slips to v0.3.1.
+> - Two specced-but-unstarted features live in the untracked root `roadmap.md` → filed as OI-104 (MH Override Management) and OI-105 (Cron Scheduler Admin). **Fold them in here and delete the root file.**
+>
+> Suggested order: fix OI-100 → decide OI-102's boundary rule → add OI-103 tests → deploy → then OI-104/105.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
@@ -125,16 +134,27 @@
 
 ### v0.3.0 — Feature Backlog (Post-Phase 4)
 
-**Status**: Planned — Ready for roadmap sequencing.
+**Status**: In progress — 3 of 6 shipped (statuses corrected 2026-08-06; they had been stale since March).
 
-| WS | Feature | Type | Priority | OI |
-|----|---------|----|----------|-----|
-| v0.3-1 | Aircraft Phase Badges on Mobile Flight Board List | Enhancement | P2 | OI-090 |
-| v0.3-2 | Right-Click to Hide/Show Graph Components | Enhancement | P2 | OI-091 |
-| v0.3-3 | Comments Per Flight Event (Feedback Logging) | Feature | P2 | OI-092 |
-| v0.3-4 | Unique Ground Event Markers (AOG, BTB, etc.) | Feature | P2 | OI-093 |
-| v0.3-5 | One-Time Notification System (Close/Dismiss) | Feature | P2 | OI-094 |
-| v0.3-6 | App Version Update Walkthrough / Feature Tour | Feature | P2 | OI-095 |
+| WS | Feature | Type | Priority | OI | Status |
+|----|---------|----|----------|-----|--------|
+| v0.3-1 | Aircraft Phase Badges on Mobile Flight Board List | Enhancement | P2 | OI-090 | Open |
+| v0.3-2 | Right-Click to Hide/Show Graph Components | Enhancement | P2 | OI-091 | Open |
+| v0.3-3 | Comments Per Flight Event (Feedback Logging) | Feature | P2 | OI-092 | **Done ✅** `40b882c` |
+| v0.3-4 | Unique Ground Event Markers (AOG, BTB, etc.) | Feature | P2 | OI-093 | **Done ✅** `40b882c` |
+| v0.3-5 | One-Time Notification System (Close/Dismiss) | Feature | P2 | OI-094 | **Done ✅** `5433658` |
+| v0.3-6 | App Version Update Walkthrough / Feature Tour | Feature | P2 | OI-095 | Open |
+
+**Added to the cycle since (filed 2026-08-06):**
+
+| WS | Feature | Type | Priority | OI | Status |
+|----|---------|----|----------|-----|--------|
+| v0.3-7 | Fix capacity engine to honour shift effective dates | **Bug — P1 blocker** | P1 | OI-100 | Open |
+| v0.3-8 | Rotation pattern versioning (decision needed) | Design Gap | P2 | OI-101 | Open |
+| v0.3-9 | Shift version boundary rule (decision needed) | Bug | P2 | OI-102 | Open |
+| v0.3-10 | Shift versioning test coverage | Test Gap | P2 | OI-103 | Open |
+| v0.3-11 | Work-Package MH Override Management | Feature | P2 | OI-104 | Open — specced |
+| v0.3-12 | Cron Scheduler Administration + Disabled-State UX | Feature | P2 | OI-105 | Open — specced |
 
 **Scope**: 6 enhancements + features spanning mobile UX, graphs, flight events, notifications, and user onboarding.
 **Sizing**: Mix of S (notifications, tour) and M (phase badges, graph toggles, comments, ground markers).
