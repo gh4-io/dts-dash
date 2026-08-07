@@ -42,6 +42,33 @@ export function isWorkingDay(
   return pattern[dayIndex] === "x";
 }
 
+// ─── Effective Dating (OI-100) ──────────────────────────────────────────────
+
+/**
+ * Does this shift version apply to the given date?
+ *
+ * A shift is effective on `date` when the date falls inside its
+ * [rotationStartDate, rotationEndDate] window. A null end date means open-ended.
+ *
+ * `isActive` gates only open-ended shifts. A shift that has been archived
+ * (end date set, isActive cleared by `archiveStaffingShift`) is a *historical
+ * fact*: it still applies to the dates it covered. Excluding archived versions
+ * outright — as this engine did before OI-100 — made the current headcount
+ * apply to all of history, so past capacity restated on every headcount edit.
+ *
+ * Note that `isWorkingDay` normalises negative offsets, so without the start
+ * bound a rotation projects infinitely backwards past its own start date.
+ */
+export function isShiftEffectiveOn(
+  shift: Pick<StaffingShift, "rotationStartDate" | "rotationEndDate" | "isActive">,
+  date: string,
+): boolean {
+  // ISO dates (YYYY-MM-DD) compare correctly as strings
+  if (date < shift.rotationStartDate) return false;
+  if (shift.rotationEndDate !== null) return date <= shift.rotationEndDate;
+  return shift.isActive;
+}
+
 // ─── Effective Paid Hours ───────────────────────────────────────────────────
 
 /**
@@ -95,7 +122,9 @@ export function resolveStaffingDay(
   let totalHeadcount = 0;
 
   for (const shift of shifts) {
-    if (!shift.isActive) continue;
+    // OI-100: the effective-date window decides which version applies to this
+    // date — not isActive alone, which erased archived versions from history.
+    if (!isShiftEffectiveOn(shift, date)) continue;
 
     const rotation = patterns.get(shift.rotationId);
     if (!rotation || !rotation.isActive) continue;
@@ -159,9 +188,11 @@ export function computeWeeklyMatrix(
   };
   let grandTotal = emptyCell();
 
-  // Total config headcount (sum of all shift headcounts, regardless of working day)
+  // Total config headcount (sum of all shift headcounts, regardless of working day).
+  // OI-100: scoped to the week being viewed, so a past week reports the headcount
+  // that was in force then rather than today's.
   const totalConfigHeadcount = shifts
-    .filter((s) => s.isActive)
+    .filter((s) => isShiftEffectiveOn(s, weekStart))
     .reduce((sum, s) => sum + s.headcount, 0);
 
   const startDate = new Date(weekStart + "T00:00:00Z");
@@ -300,10 +331,16 @@ export function computeCoverageGaps(
   patterns: Map<number, RotationPattern>,
 ): CoverageGap[] {
   const gaps: CoverageGap[] = [];
-  const activeShifts = shifts.filter((s) => s.isActive);
 
-  /** Check if a shift is working on the given date */
+  /**
+   * Check if a shift is working on the given date.
+   *
+   * OI-100: the effective-date window is evaluated per date, not once up
+   * front — an overnight shift is tested against both today and yesterday,
+   * and a version boundary can fall between them.
+   */
   function isShiftWorking(shift: StaffingShift, dateStr: string): boolean {
+    if (!isShiftEffectiveOn(shift, dateStr)) return false;
     const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
     if (pat) return isWorkingDay(dateStr, pat.pattern, shift.rotationStartDate);
     // Orphaned shift (rotationId 0 or null) — not working
@@ -328,7 +365,7 @@ export function computeCoverageGaps(
     const covered = new Array<boolean>(24).fill(false);
     const yesterday = prevDay(day.date);
 
-    for (const shift of activeShifts) {
+    for (const shift of shifts) {
       if (isOvernightShift(shift)) {
         // Overnight shift (e.g., 19:00→08:00):
         // If working TODAY: covers today's evening (19:00→23:59)

@@ -2,9 +2,18 @@
  * Tests for staffing shift versioning utilities:
  * - alignRotationStartToSunday()
  * - canArchiveShift()
+ * - isShiftEffectiveOn()      (OI-100)
+ * - resolveStaffingDay() across a version boundary (OI-100)
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { alignRotationStartToSunday, canArchiveShift } from "@/lib/capacity/staffing-engine";
+import {
+  alignRotationStartToSunday,
+  canArchiveShift,
+  isShiftEffectiveOn,
+  resolveStaffingDay,
+  buildPatternMap,
+} from "@/lib/capacity/staffing-engine";
+import type { RotationPattern, StaffingShift } from "@/types";
 
 // ─── alignRotationStartToSunday ─────────────────────────────────────────────
 
@@ -109,5 +118,135 @@ describe("canArchiveShift", () => {
     ];
     const result = canArchiveShift(target, all);
     expect(result.safe).toBe(false);
+  });
+});
+
+// ─── Effective Dating (OI-100) ──────────────────────────────────────────────
+
+const ALWAYS_ON: RotationPattern = {
+  id: 1,
+  name: "All On",
+  description: null,
+  pattern: "xxxxxxxxxxxxxxxxxxxxx",
+  isActive: true,
+  sortOrder: 0,
+};
+
+function makeShift(overrides: Partial<StaffingShift> & { id: number }): StaffingShift {
+  return {
+    configId: 1,
+    name: "Test Shift",
+    description: null,
+    category: "DAY",
+    rotationId: 1,
+    rotationStartDate: "2026-01-04", // a Sunday
+    rotationEndDate: null,
+    startHour: 7,
+    startMinute: 0,
+    endHour: 15,
+    endMinute: 0,
+    breakMinutes: 0,
+    lunchMinutes: 0,
+    mhOverride: null,
+    headcount: 10,
+    isActive: true,
+    sortOrder: 0,
+    ...overrides,
+  };
+}
+
+describe("isShiftEffectiveOn", () => {
+  it("excludes dates before the rotation start", () => {
+    const shift = makeShift({ id: 1, rotationStartDate: "2026-01-04" });
+    expect(isShiftEffectiveOn(shift, "2026-01-03")).toBe(false);
+  });
+
+  it("includes the rotation start date itself", () => {
+    const shift = makeShift({ id: 1, rotationStartDate: "2026-01-04" });
+    expect(isShiftEffectiveOn(shift, "2026-01-04")).toBe(true);
+  });
+
+  it("includes any date after an open-ended start", () => {
+    const shift = makeShift({ id: 1, rotationEndDate: null });
+    expect(isShiftEffectiveOn(shift, "2030-06-15")).toBe(true);
+  });
+
+  it("includes the end date itself (inclusive)", () => {
+    const shift = makeShift({ id: 1, rotationEndDate: "2026-03-01" });
+    expect(isShiftEffectiveOn(shift, "2026-03-01")).toBe(true);
+  });
+
+  it("excludes dates after the end date", () => {
+    const shift = makeShift({ id: 1, rotationEndDate: "2026-03-01" });
+    expect(isShiftEffectiveOn(shift, "2026-03-02")).toBe(false);
+  });
+
+  it("includes an archived version inside its window despite isActive=false", () => {
+    // archiveStaffingShift() sets both rotationEndDate and isActive=false;
+    // the version is still a historical fact for the dates it covered
+    const shift = makeShift({ id: 1, rotationEndDate: "2026-03-01", isActive: false });
+    expect(isShiftEffectiveOn(shift, "2026-02-01")).toBe(true);
+  });
+
+  it("excludes an open-ended shift that was manually deactivated", () => {
+    const shift = makeShift({ id: 1, rotationEndDate: null, isActive: false });
+    expect(isShiftEffectiveOn(shift, "2026-06-01")).toBe(false);
+  });
+});
+
+describe("resolveStaffingDay — version boundaries (OI-100)", () => {
+  const patterns = buildPatternMap([ALWAYS_ON]);
+
+  // Two versions of the same shift: 20 heads until 2026-03-01, 30 heads after.
+  const oldVersion = makeShift({
+    id: 1,
+    headcount: 20,
+    rotationStartDate: "2026-01-04",
+    rotationEndDate: "2026-03-01",
+    isActive: false, // archived
+  });
+  const newVersion = makeShift({
+    id: 2,
+    headcount: 30,
+    rotationStartDate: "2026-03-02",
+    rotationEndDate: null,
+    isActive: true,
+  });
+  const shifts = [oldVersion, newVersion];
+
+  it("resolves a past date to the historical headcount", () => {
+    const result = resolveStaffingDay("2026-02-01", shifts, patterns);
+    expect(result.totalHeadcount).toBe(20);
+    expect(result.byCategory.DAY).toBe(20);
+  });
+
+  it("resolves a current date to the current headcount", () => {
+    const result = resolveStaffingDay("2026-06-01", shifts, patterns);
+    expect(result.totalHeadcount).toBe(30);
+  });
+
+  it("does not double-count on either side of the boundary", () => {
+    expect(resolveStaffingDay("2026-03-01", shifts, patterns).totalHeadcount).toBe(20);
+    expect(resolveStaffingDay("2026-03-02", shifts, patterns).totalHeadcount).toBe(30);
+  });
+
+  it("reports zero before any version was in force", () => {
+    // Regression: isWorkingDay normalises negative offsets, so without the
+    // start bound the rotation projected infinitely backwards.
+    const result = resolveStaffingDay("2025-06-01", shifts, patterns);
+    expect(result.totalHeadcount).toBe(0);
+    expect(result.byShift).toHaveLength(0);
+  });
+
+  it("keeps history stable when a newer version is added", () => {
+    const past = resolveStaffingDay("2026-02-01", shifts, patterns).totalHeadcount;
+
+    const withAnother = [
+      ...shifts,
+      makeShift({ id: 3, headcount: 99, rotationStartDate: "2026-09-06", isActive: true }),
+    ];
+    const pastAfter = resolveStaffingDay("2026-02-01", withAnother, patterns).totalHeadcount;
+
+    expect(pastAfter).toBe(past);
   });
 });
