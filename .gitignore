@@ -71,6 +71,8 @@ data/dashboard.db-shm
 data/dashboard.db-wal
 data/backups/
 data/exports/
+# Production DB snapshots — real operational data, never commit
+data/prod-snapshots/
 
 # Uploads (if any)
 /public/uploads/
