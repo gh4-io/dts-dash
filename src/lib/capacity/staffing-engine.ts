@@ -233,11 +233,20 @@ export function resolveStaffingDay(
 // ─── Weekly Matrix ──────────────────────────────────────────────────────────
 
 function emptyCell(): WeeklyMatrixCell {
-  return { headcount: 0, paidMH: 0, availableMH: 0, productiveMH: 0 };
+  return {
+    rosterHeadcount: 0,
+    effectiveHeadcount: 0,
+    headcount: 0,
+    paidMH: 0,
+    availableMH: 0,
+    productiveMH: 0,
+  };
 }
 
 function addCells(a: WeeklyMatrixCell, b: WeeklyMatrixCell): WeeklyMatrixCell {
   return {
+    rosterHeadcount: a.rosterHeadcount + b.rosterHeadcount,
+    effectiveHeadcount: a.effectiveHeadcount + b.effectiveHeadcount,
     headcount: a.headcount + b.headcount,
     paidMH: a.paidMH + b.paidMH,
     availableMH: a.availableMH + b.availableMH,
@@ -301,13 +310,26 @@ export function computeWeeklyMatrix(
       const isNight = cat === "NIGHT";
       const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
 
+      // The three stages are distinct (see capacity-core's header):
+      //   paid      = every rostered body × their paid hours — what payroll covers
+      //   available = paid × paidToAvailable — after PTO, training, absence
+      //   productive = available × availableToProductive × nightFactor — wrench time
+      // paidToAvailable used to be folded into the headcount, which understated
+      // Paid MH by that factor and left Available MH an exact copy of it.
+      // Productive MH is unchanged, so utilization and every chart hold.
       const effectiveHC = shiftResult.headcount * assumptions.paidToAvailable;
-      const paidMH = effectiveHC * shiftResult.effectivePaidHours;
-      const availableMH = paidMH;
-      const productiveMH = paidMH * assumptions.availableToProductive * nightFactor;
+      const paidMH = shiftResult.headcount * shiftResult.effectivePaidHours;
+      const availableMH = paidMH * assumptions.paidToAvailable;
+      const productiveMH = availableMH * assumptions.availableToProductive * nightFactor;
 
       const cell: WeeklyMatrixCell = {
-        headcount: effectiveHC,
+        // Roster stays undiscounted — it is the number of people on the schedule,
+        // and it is what the "HC" column and the shift grid footer must agree on.
+        // Folding paidToAvailable in here made every displayed headcount read ~11%
+        // low against a roster the user had just typed in.
+        rosterHeadcount: shiftResult.headcount,
+        effectiveHeadcount: effectiveHC,
+        headcount: effectiveHC, // deprecated alias
         paidMH,
         availableMH,
         productiveMH,
@@ -540,6 +562,63 @@ export function canArchiveShift(
     safe: false,
     message: `No active ${shift.category} replacement exists. Archive anyway?`,
   };
+}
+
+// ─── Version Overlap Detection ───────────────────────────────────────────────
+
+export interface ShiftOverlap {
+  name: string;
+  shiftIds: number[];
+  /** First date on which every listed version is simultaneously effective. */
+  fromDate: string;
+  combinedHeadcount: number;
+}
+
+/**
+ * Find shifts that share a name within a config and are effective at the same time.
+ *
+ * Two versions of one shift must never be effective on the same date — the engine
+ * sums whatever it finds, so an overlap silently double-counts that shift's roster.
+ * `versionStaffingShift` closes the old version the day before the new one opens, but
+ * a version created any other way (Add Shift, a direct PUT, an import) leaves the
+ * predecessor open-ended, and nothing has flagged that until now.
+ *
+ * Detection is by name because that is the only lineage marker `staffing_shifts`
+ * carries — unlike `rotation_patterns`, it has no `group_id` (see OI-101).
+ */
+export function findShiftOverlaps(shifts: StaffingShift[]): ShiftOverlap[] {
+  const byKey = new Map<string, StaffingShift[]>();
+  for (const s of shifts) {
+    const key = `${s.configId} ${s.name}`;
+    const list = byKey.get(key);
+    if (list) list.push(s);
+    else byKey.set(key, [s]);
+  }
+
+  const overlaps: ShiftOverlap[] = [];
+  for (const group of byKey.values()) {
+    if (group.length < 2) continue;
+
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i];
+        const b = group[j];
+        // Windows intersect when each starts on or before the other ends.
+        const start = a.rotationStartDate > b.rotationStartDate ? a : b;
+        const overlapStart = start.rotationStartDate;
+        if (!isShiftEffectiveOn(a, overlapStart) || !isShiftEffectiveOn(b, overlapStart)) {
+          continue;
+        }
+        overlaps.push({
+          name: a.name,
+          shiftIds: [a.id, b.id],
+          fromDate: overlapStart,
+          combinedHeadcount: a.headcount + b.headcount,
+        });
+      }
+    }
+  }
+  return overlaps;
 }
 
 // ─── Capacity Engine Integration ────────────────────────────────────────────

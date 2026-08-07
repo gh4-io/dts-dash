@@ -133,10 +133,15 @@ export function computeDailyCapacityV2(
       const { headcount, hasExceptions } = resolveHeadcount(date, shift.id, plans, exceptions);
       const effectiveHeadcount = headcount * assumptions.paidToAvailable;
 
-      const productiveMHPerPerson = computeProductiveHoursPerPerson(shift, assumptions);
-      const paidMH = effectiveHeadcount * shift.paidHours;
-      const availableMH = paidMH;
-      const productiveMH = effectiveHeadcount * productiveMHPerPerson;
+      // paid → available → productive are three distinct stages (see header).
+      // paidToAvailable belongs on the paid→available step, not folded into the
+      // headcount, which made paidMH read low and availableMH a duplicate of it.
+      // productiveMH is algebraically unchanged.
+      const isNightShift = shift.code === "NIGHT";
+      const nightFactorForShift = isNightShift ? assumptions.nightProductivityFactor : 1.0;
+      const paidMH = headcount * shift.paidHours;
+      const availableMH = paidMH * assumptions.paidToAvailable;
+      const productiveMH = availableMH * assumptions.availableToProductive * nightFactorForShift;
 
       const isNonOp = headcount === 0;
 
@@ -194,12 +199,11 @@ export function computeDailyCapacityFromStaffing(
 
       const isNight = shift.code === "NIGHT";
       const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
-      const productiveMHPerPerson =
-        paidHoursPerPerson * assumptions.availableToProductive * nightFactor;
 
-      const paidMH = effectiveHeadcount * paidHoursPerPerson;
-      const availableMH = paidMH;
-      const productiveMH = effectiveHeadcount * productiveMHPerPerson;
+      // Same three-stage chain as computeDailyCapacityV2 above.
+      const paidMH = headcount * paidHoursPerPerson;
+      const availableMH = paidMH * assumptions.paidToAvailable;
+      const productiveMH = availableMH * assumptions.availableToProductive * nightFactor;
 
       const isNonOp = isShiftNonOperatingOnDate(date, shift.code, headcount, nonOperatingShifts);
 
