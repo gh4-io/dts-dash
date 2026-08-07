@@ -654,7 +654,7 @@ Admin-facing workflow for managing per-work-package MH overrides without direct 
 
 **Acceptance criteria**: saved override becomes `effectiveMH` and is labelled **Override** app-wide; clearing restores the priority chain (imported WP MH → contract MH → default MH); capacity planned-demand reflects changes on the next request; bulk updates are transactional with a downloadable error/audit report; tests cover permissions, create/update/clear, redundant-value handling, cache invalidation, and capacity propagation.
 
-Full spec was drafted in the untracked root `roadmap.md` — **fold into ROADMAP.md and delete the root file** so there is one roadmap.
+The full spec is the body of this item. (An earlier note pointed at an untracked root `roadmap.md`; that file no longer exists — the surviving spec is here.)
 
 **Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), OI-086
 
@@ -678,7 +678,7 @@ When the gate is **on**: admins can switch between **Running** and **Paused**; p
 
 **Acceptance criteria**: no editable/executable cron controls appear active while the server gate is disabled; GUI pause stops execution without a restart and without changing server config; resume registers enabled jobs without duplicate schedules; **Run Now** respects the gate and role permissions; scheduler state and backup freshness are visible without inspecting container logs or the filesystem; tests cover all gate × runtime-state × role × restart × duplicate-registration combinations.
 
-Full spec was drafted in the untracked root `roadmap.md` — fold into ROADMAP.md with OI-104.
+The full spec is the body of this item. (An earlier note pointed at an untracked root `roadmap.md`; that file no longer exists — the surviving spec is here.)
 
 **Links**: D-030 (cron management), [REQ_Admin.md](SPECS/REQ_Admin.md)
 
@@ -924,15 +924,22 @@ Add visual phase indicators for aircraft lifecycle on the mobile flight board li
 
 ---
 
-### OI-091 | Right-Click to Hide/Show Graph Components
+### OI-091 | Right-Click to Hide/Show Graph Components — SUPERSEDED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Enhancement |
-| **Status** | **Open** |
+| **Status** | **Superseded** by OI-121 |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-03-01 |
+| **Closed** | 2026-08-07 |
+
+**Superseded**: this asked for right-click series toggling and noted the fallback — "add a small eye toggle button in the chart legend instead of right-click". OI-121 delivered exactly that fallback, and better: every legend entry toggles on a plain left click, across two axes (per-shift and per-role), via `use-chart-series-visibility.ts` and the shared `ChartLegend`. Applied to all three capacity charts behind the aggregation toggle and to the dashboard combined chart.
+
+Not delivered: persistence via localStorage per page/lens. Visibility resets on navigation. Re-file if that is wanted — it is a small addition on top of the existing hook, not a reason to keep this item open.
+
+**Links**: OI-121, D-065
 
 Add right-click context menu on capacity graphs to toggle visibility of specific data series/components. E.g., right-click on Capacity Utilization chart → menu with checkboxes for lines: Baseline, Forecast, Scenario, etc. Selection persists via localStorage per page/lens.
 
@@ -943,15 +950,22 @@ Add right-click context menu on capacity graphs to toggle visibility of specific
 
 ---
 
-### OI-092 | Comments Per Flight Event
+### OI-092 | Comments Per Flight Event — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-03-01 |
+| **Resolved** | Shipped earlier; verified and closed 2026-08-07 |
+
+**Shipped.** The item was left Open in this tracker after the work landed. Verified against the code at v1.0.0 prep: `flight_comments` table exists (schema.ts, plus M023), the API is live at `/api/work-packages/[id]/comments` (GET/POST/DELETE with threading via `parent_id`), comment counts are joined into both `/api/work-packages` and `/api/work-packages/all`, and the thread renders in the flight detail drawer.
+
+**Known defect carried forward**: deletion removes only one level of replies (two flat `DELETE`s), so replies nested deeper are orphaned. Fixed as part of OI-099 Phase A, which unifies this with `feedback_comments` and adopts its recursive `deleteCommentTree`.
+
+**Links**: OI-099, OI-094
 
 Add a comments/notes system tied to individual work packages/flight events. Users can attach feedback, maintenance logs, or status updates. Comments are surfaced in:
 - Flight detail drawer (expandable section)
@@ -992,10 +1006,11 @@ Markers visible on flight board Gantt (icon overlay) and mobile list (badge). Da
 
 ---
 
-### OI-094 | One-Time Notification System with Dismiss + Close Options
+### OI-094 | One-Time Notification System with Dismiss + Close Options — RESOLVED
 
 | Field | Value |
 |-------|-------|
+| **Status** | **Resolved** — shipped; verified and closed 2026-08-07 |
 | **Type** | Feature |
 | **Status** | **Open** |
 | **Priority** | P2 |
@@ -1013,8 +1028,16 @@ New `user_notification_dismissals` table: `user_id`, `notification_key`, `dismis
 
 **Logic**: On page load, fetch active notifications; exclude those in user's dismissals table.
 
-**Files**: `src/lib/db/schema.ts`, `src/app/api/admin/notifications/route.ts`, `src/app/api/user/notification-dismissals/route.ts`, `src/components/shared/notification-toast.tsx` (new), `src/lib/hooks/use-notifications.ts` (new)
-**Links**: [REQ_Admin.md](SPECS/REQ_Admin.md)
+**Shipped, with two deviations from the spec above.** The item was left Open in this tracker after the work landed; verified against the code at v1.0.0 prep.
+
+- `notifications` table exists (M024) — but as a **per-user fan-out**: one row per recipient, keyed `user_id`, with `read_at`, `expires_at`, `action_url`, `metadata`, `type` and `category`. The spec's global-row shape (`key` slug + `active`) was not built.
+- **`user_notification_dismissals` was never created.** Dismissal is `notifications.read_at` on the recipient's own row. There is therefore no "close until next login" vs "dismiss forever" distinction — there is one read state. If the two-tier behaviour is still wanted, file it fresh.
+- Delivered surface: `/api/notifications` (list), `/unread-count`, `/mark-all-read`, `/[id]/read`, `/api/admin/notifications` (create/broadcast), `src/lib/notifications/create.ts`, and a bell + dropdown + item UI in `src/components/layout/` rather than the specced toast.
+
+**Note for OI-099**: that item's spec still names `user_notification_dismissals` as one of the tables to merge. It does not exist — corrected there.
+
+**Files**: `src/lib/db/schema.ts`, `src/lib/db/schema-init.ts` (M024), `src/app/api/notifications/**`, `src/app/api/admin/notifications/route.ts`, `src/lib/notifications/create.ts`, `src/lib/hooks/use-notifications.ts`, `src/components/layout/notification-{bell,dropdown,item}.tsx`
+**Links**: [REQ_Admin.md](SPECS/REQ_Admin.md), OI-092, OI-099
 
 ---
 
@@ -1397,7 +1420,7 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 
 **Earlier update (2026-08-07)**: Resolved **OI-100** (P1 — engine now honours shift effective dates), **OI-101** (rotation pattern versioning, M026) and **OI-102** (anchor/effective-date split, M025). OI-103 partially addressed — 32 engine tests added, but the two archive-and-create transactions still need a DB harness. **The P1 blocker on the v0.3.0 production upgrade is cleared.**
 
-**Previous update (2026-08-06)**: Added OI-100 → OI-103 (staffing shift versioning gaps) and OI-104/OI-105 (MH override management, cron scheduler admin — both specced in the untracked root `roadmap.md`, awaiting fold-in to ROADMAP.md).
+**Previous update (2026-08-06)**: Added OI-100 → OI-103 (staffing shift versioning gaps) and OI-104/OI-105 (MH override management, cron scheduler admin — both specced inline in their own entries — the root `roadmap.md` they referenced is gone).
 
 **Previous update (2026-03-17)**: Added OI-099 (unified comments/notifications/feedback table for v1.0.x — refactoring for schema simplification and richer interactions). Backlog item targeting post-v0.3.0 release.
 
