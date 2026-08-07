@@ -126,6 +126,27 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
+    -- Notifications are a per-user fan-out: one row per recipient, not one
+    -- global row plus a dismissals table (OI-094). read_at IS the dismissal
+    -- state — there is no separate user_notification_dismissals table.
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL DEFAULT 'system',
+      category TEXT NOT NULL DEFAULT 'general',
+      title TEXT NOT NULL,
+      message TEXT,
+      metadata TEXT,
+      read_at TEXT,
+      action_url TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+
     CREATE TABLE IF NOT EXISTS mh_overrides (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       work_package_id INTEGER NOT NULL UNIQUE REFERENCES work_packages(id),
@@ -396,6 +417,11 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
+    -- Versions of one pattern share a group_id (OI-101). Resolution follows the
+    -- group to the version whose effective window contains the date being
+    -- computed, so a shift never needs repointing when its pattern is edited.
+    CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id);
+
     -- Staffing: Rotation Presets (reference library)
     CREATE TABLE IF NOT EXISTS rotation_presets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -629,129 +655,20 @@ export interface MigrationResult {
 }
 
 export function runMigrations(): MigrationResult[] {
-  // v0.2.0: All migrations (M003–M021) consolidated into createTables().
-  // Fresh databases get the complete schema; no incremental migrations needed.
-  // Future schema changes after v0.2.0 should add new migrations here.
-  const results: MigrationResult[] = [];
-
-  // M022: Add rotation_end_date to staffing_shifts
-  const m022Name = "M022_staffing_shift_rotation_end_date";
-  const cols = sqlite.prepare("PRAGMA table_info(staffing_shifts)").all() as { name: string }[];
-  if (cols.some((c) => c.name === "rotation_end_date")) {
-    results.push({ name: m022Name, applied: false });
-  } else {
-    sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN rotation_end_date TEXT");
-    results.push({ name: m022Name, applied: true });
-  }
-
-  // M023: Flight comments table + ground_event_types column
-  const m023Name = "M023_flight_comments_and_ground_events";
-  let m023Applied = false;
-
-  // 1. Create flight_comments table if missing
-  const m023Tables = sqlite
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='flight_comments'")
-    .all();
-  if (m023Tables.length === 0) {
-    sqlite.exec(`
-      CREATE TABLE flight_comments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        work_package_id INTEGER NOT NULL REFERENCES work_packages(id) ON DELETE CASCADE,
-        parent_id INTEGER,
-        author_id INTEGER NOT NULL REFERENCES users(id),
-        body TEXT NOT NULL,
-        created_at TEXT DEFAULT (datetime('now')),
-        updated_at TEXT DEFAULT (datetime('now'))
-      );
-      CREATE INDEX idx_flight_comments_wp ON flight_comments(work_package_id);
-      CREATE INDEX idx_flight_comments_author ON flight_comments(author_id);
-    `);
-    m023Applied = true;
-  }
-
-  // 2. Add ground_event_types column if missing (independent check)
-  const wpCols = sqlite.prepare("PRAGMA table_info(work_packages)").all() as { name: string }[];
-  if (!wpCols.some((c) => c.name === "ground_event_types")) {
-    sqlite.exec("ALTER TABLE work_packages ADD COLUMN ground_event_types TEXT");
-    m023Applied = true;
-  }
-
-  results.push({ name: m023Name, applied: m023Applied });
-
-  // M024: Notifications table
-  const m024Name = "M024_notifications";
-  const m024Tables = sqlite
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'")
-    .all();
-  if (m024Tables.length === 0) {
-    sqlite.exec(`
-      CREATE TABLE notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        type TEXT NOT NULL DEFAULT 'system',
-        category TEXT NOT NULL DEFAULT 'general',
-        title TEXT NOT NULL,
-        message TEXT,
-        metadata TEXT,
-        read_at TEXT,
-        action_url TEXT,
-        expires_at TEXT,
-        created_at TEXT NOT NULL
-      );
-      CREATE INDEX idx_notifications_user ON notifications(user_id);
-      CREATE INDEX idx_notifications_user_unread ON notifications(user_id, read_at);
-      CREATE INDEX idx_notifications_created ON notifications(created_at);
-    `);
-    results.push({ name: m024Name, applied: true });
-  } else {
-    results.push({ name: m024Name, applied: false });
-  }
-
-  // M025: Add pattern_anchor_date to staffing_shifts (OI-102).
-  // rotation_start_date used to serve two roles at once: the date the version
-  // takes effect, and the anchor the 21-day pattern is indexed from
-  // (pattern[0] == that date). That forced every new version to start on a
-  // Sunday to keep the pattern phase, which made a mid-week headcount change
-  // retroactive to the start of the week. Splitting the anchor out lets a
-  // version take effect on the day it was saved while the pattern stays put.
-  // NULL means "fall back to rotation_start_date", so existing rows are
-  // unaffected and keep their current phase.
-  const m025Name = "M025_staffing_shift_pattern_anchor_date";
-  const m025Cols = sqlite.prepare("PRAGMA table_info(staffing_shifts)").all() as { name: string }[];
-  if (m025Cols.some((c) => c.name === "pattern_anchor_date")) {
-    results.push({ name: m025Name, applied: false });
-  } else {
-    sqlite.exec("ALTER TABLE staffing_shifts ADD COLUMN pattern_anchor_date TEXT");
-    results.push({ name: m025Name, applied: true });
-  }
-
-  // M026: Version rotation_patterns (OI-101).
-  // Editing a pattern in place silently rewrote which days were worked for every
-  // past date that used it. Patterns now carry an effective window like shifts do,
-  // plus a group_id giving a stable identity across versions: a shift references a
-  // pattern row, and resolution follows that row's group to find the version
-  // effective on the date being computed. Existing rows are backfilled to be their
-  // own group with an open window, so nothing changes for them.
-  const m026Name = "M026_rotation_pattern_versioning";
-  const m026Cols = sqlite.prepare("PRAGMA table_info(rotation_patterns)").all() as {
-    name: string;
-  }[];
-  if (m026Cols.some((c) => c.name === "group_id")) {
-    // Fresh databases get the columns from createTables() but never the index,
-    // since that runs before migrations — ensure it here either way.
-    sqlite.exec("CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id)");
-    sqlite.exec("UPDATE rotation_patterns SET group_id = id WHERE group_id IS NULL");
-    results.push({ name: m026Name, applied: false });
-  } else {
-    sqlite.exec(`
-      ALTER TABLE rotation_patterns ADD COLUMN group_id INTEGER;
-      ALTER TABLE rotation_patterns ADD COLUMN effective_from TEXT;
-      ALTER TABLE rotation_patterns ADD COLUMN effective_to TEXT;
-      UPDATE rotation_patterns SET group_id = id WHERE group_id IS NULL;
-      CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id);
-    `);
-    results.push({ name: m026Name, applied: true });
-  }
-
-  return results;
+  // v1.0.0: the migration ladder was collapsed. All migrations (M003-M026) are
+  // now declared directly in createTables(), which is the single canonical
+  // statement of the schema — a fresh database is complete after createTables()
+  // alone, with nothing left for this function to apply.
+  //
+  // Databases created before v1.0.0 do NOT catch up here. They are brought
+  // forward once, deliberately, by `npm run db:upgrade-v1`
+  // (scripts/db/upgrade-to-v1.ts), which also takes a full backup first. That
+  // separation is the point: schema declaration and one-time data movement are
+  // different jobs and should not share a code path.
+  //
+  // Schema changes made AFTER v1.0.0 go here as new migrations, in the style of
+  // the old M022-M026 blocks (see git history) — guarded by a PRAGMA
+  // table_info / sqlite_master probe so they are idempotent, and mirrored into
+  // createTables() so fresh installs never need them.
+  return [];
 }
