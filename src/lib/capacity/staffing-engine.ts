@@ -589,7 +589,7 @@ export interface ShiftOverlap {
 export function findShiftOverlaps(shifts: StaffingShift[]): ShiftOverlap[] {
   const byKey = new Map<string, StaffingShift[]>();
   for (const s of shifts) {
-    const key = `${s.configId} ${s.name}`;
+    const key = `${s.configId}\u0000${s.name}`;
     const list = byKey.get(key);
     if (list) list.push(s);
     else byKey.set(key, [s]);
