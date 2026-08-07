@@ -171,41 +171,9 @@ export interface FilterActions {
 
 // ─── Capacity & Analytics ───────────────────────────────────────────────────
 
-export interface ShiftDefinition {
-  name: string;
-  startHour: number;
-  endHour: number;
-  headcount: number;
-}
-
-export interface DailyDemand {
-  date: string;
-  totalDemandMH: number;
-  aircraftCount: number;
-  byCustomer: Record<string, number>;
-}
-
-export interface DailyCapacity {
-  date: string;
-  theoreticalCapacityMH: number;
-  realCapacityMH: number;
-  byShift: ShiftCapacity[];
-}
-
-export interface ShiftCapacity {
-  shift: string;
-  headcount: number;
-  theoreticalMH: number;
-  realMH: number;
-}
-
-export interface DailyUtilization {
-  date: string;
-  utilizationPercent: number;
-  surplusDeficitMH: number;
-  overtimeFlag: boolean;
-  criticalFlag: boolean;
-}
+// NOTE: ShiftDefinition / DailyDemand / DailyCapacity / ShiftCapacity /
+// DailyUtilization were removed with the superseded capacity engine. Capacity is
+// modelled by the V2 types below (CapacityShift, CapacityAssumptions, …).
 
 export interface HourlySnapshot {
   hour: string;
@@ -769,6 +737,15 @@ export interface StaffingDayResult {
 
 /** Weekly matrix cell: headcount + MH breakdown for one day+category */
 export interface WeeklyMatrixCell {
+  /** Roster headcount — actual bodies on the schedule. Never discounted. */
+  rosterHeadcount: number;
+  /** Roster × paidToAvailable — the basis for the MH figures below. Fractional. */
+  effectiveHeadcount: number;
+  /**
+   * @deprecated Ambiguous — equals `effectiveHeadcount`, not the roster count.
+   * Retained so the staffing-matrix API stays backwards-compatible (D-028);
+   * remove on the next MAJOR. Use `rosterHeadcount` for display.
+   */
   headcount: number;
   paidMH: number;
   availableMH: number;
@@ -937,9 +914,6 @@ export interface AllowedHostname {
 export interface AppConfig {
   defaultMH: number;
   wpMHMode: "include" | "exclude";
-  theoreticalCapacityPerPerson: number;
-  realCapacityPerPerson: number;
-  shifts: ShiftDefinition[];
   ingestApiKey: string;
   ingestRateLimitSeconds: number;
   ingestMaxSizeMB: number;

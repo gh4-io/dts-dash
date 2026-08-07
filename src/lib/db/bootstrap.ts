@@ -16,16 +16,6 @@ const log = createChildLogger("bootstrap");
 const DEFAULT_CONFIG: Array<{ key: string; value: string }> = [
   { key: "defaultMH", value: "3.0" },
   { key: "wpMHMode", value: "include" },
-  { key: "theoreticalCapacityPerPerson", value: "8.0" },
-  { key: "realCapacityPerPerson", value: "6.5" },
-  {
-    key: "shifts",
-    value: JSON.stringify([
-      { name: "Day", startHour: 7, endHour: 15, headcount: 8 },
-      { name: "Swing", startHour: 15, endHour: 23, headcount: 6 },
-      { name: "Night", startHour: 23, endHour: 7, headcount: 4 },
-    ]),
-  },
   { key: "ingestApiKey", value: "" },
   { key: "ingestRateLimitSeconds", value: "60" },
   { key: "ingestMaxSizeMB", value: "50" },

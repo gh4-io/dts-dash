@@ -9,10 +9,6 @@ import { loadPerEventContractMap } from "@/lib/capacity/allocation-data";
 import {
   DEFAULT_MH,
   DEFAULT_WP_MH_MODE,
-  DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
-  DEFAULT_REAL_CAPACITY_PER_PERSON,
-  DEFAULT_SHIFTS,
-  DEFAULT_SHIFTS_JSON,
   DEFAULT_INGEST_RATE_LIMIT_SECONDS,
   DEFAULT_INGEST_MAX_SIZE_MB,
 } from "@/lib/data/config-defaults";
@@ -45,13 +41,6 @@ async function loadConfig(): Promise<AppConfig> {
     cachedConfig = {
       defaultMH: parseFloat(configMap.defaultMH ?? String(DEFAULT_MH)),
       wpMHMode: (configMap.wpMHMode as "include" | "exclude") ?? DEFAULT_WP_MH_MODE,
-      theoreticalCapacityPerPerson: parseFloat(
-        configMap.theoreticalCapacityPerPerson ?? String(DEFAULT_THEORETICAL_CAPACITY_PER_PERSON),
-      ),
-      realCapacityPerPerson: parseFloat(
-        configMap.realCapacityPerPerson ?? String(DEFAULT_REAL_CAPACITY_PER_PERSON),
-      ),
-      shifts: JSON.parse(configMap.shifts ?? DEFAULT_SHIFTS_JSON),
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(
         configMap.ingestRateLimitSeconds ?? String(DEFAULT_INGEST_RATE_LIMIT_SECONDS),
@@ -73,9 +62,6 @@ async function loadConfig(): Promise<AppConfig> {
     cachedConfig = {
       defaultMH: DEFAULT_MH,
       wpMHMode: DEFAULT_WP_MH_MODE,
-      theoreticalCapacityPerPerson: DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
-      realCapacityPerPerson: DEFAULT_REAL_CAPACITY_PER_PERSON,
-      shifts: [...DEFAULT_SHIFTS],
       ingestApiKey: "",
       ingestRateLimitSeconds: DEFAULT_INGEST_RATE_LIMIT_SECONDS,
       ingestMaxSizeMB: DEFAULT_INGEST_MAX_SIZE_MB,

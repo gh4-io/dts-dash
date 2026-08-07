@@ -6,9 +6,6 @@ import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { createChildLogger } from "@/lib/logger";
 import {
   DEFAULT_MH,
-  DEFAULT_THEORETICAL_CAPACITY_PER_PERSON,
-  DEFAULT_REAL_CAPACITY_PER_PERSON,
-  DEFAULT_SHIFTS_JSON,
   DEFAULT_INGEST_RATE_LIMIT_SECONDS,
   DEFAULT_INGEST_MAX_SIZE_MB,
   DEFAULT_INGEST_CHUNK_TIMEOUT_SECONDS,
@@ -35,13 +32,6 @@ export async function GET() {
     const config = {
       defaultMH: parseFloat(configMap.defaultMH ?? String(DEFAULT_MH)),
       wpMHMode: configMap.wpMHMode ?? "exclude",
-      theoreticalCapacityPerPerson: parseFloat(
-        configMap.theoreticalCapacityPerPerson ?? String(DEFAULT_THEORETICAL_CAPACITY_PER_PERSON),
-      ),
-      realCapacityPerPerson: parseFloat(
-        configMap.realCapacityPerPerson ?? String(DEFAULT_REAL_CAPACITY_PER_PERSON),
-      ),
-      shifts: JSON.parse(configMap.shifts ?? DEFAULT_SHIFTS_JSON),
       ingestApiKey: configMap.ingestApiKey ?? "",
       ingestRateLimitSeconds: parseInt(
         configMap.ingestRateLimitSeconds ?? String(DEFAULT_INGEST_RATE_LIMIT_SECONDS),
@@ -96,9 +86,6 @@ export async function PUT(request: NextRequest) {
     const ALLOWED_CONFIG_KEYS = new Set([
       "defaultMH",
       "wpMHMode",
-      "theoreticalCapacityPerPerson",
-      "realCapacityPerPerson",
-      "shifts",
       "ingestApiKey",
       "ingestRateLimitSeconds",
       "ingestMaxSizeMB",
