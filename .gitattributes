@@ -1,0 +1,27 @@
+# Normalize line endings to LF in the repository.
+#
+# This repo lives on /mnt/d (a Windows drive) but is worked on from WSL, so
+# editors on either side can flip a whole file's line endings and produce a
+# diff where every line changed. .claude/DECISIONS.md did exactly that before
+# v1.0.0 — 1766 lines "changed" to carry one new entry.
+* text=auto eol=lf
+
+# Binary — never touch these.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.otf   binary
+*.pdf   binary
+*.db    binary
+*.sqlite binary
+*.sqlite3 binary
+
+# Shell scripts must stay LF or they break under bash.
+*.sh text eol=lf

@@ -114,6 +114,9 @@ out/
 # Serena MCP memories
 .serena/
 
+# Playwright MCP scratch output (screenshots, console logs, page snapshots)
+.playwright-mcp/
+
 # Server configuration (instance-specific)
 server.config.yml
 

@@ -21,3 +21,6 @@ vitest.config.ts
 coverage
 .serena
 logs
+.playwright-mcp
+data/prod-snapshots
+docs-wiki
