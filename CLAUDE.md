@@ -12,6 +12,12 @@
 > - **Effective dating now works end to end** (2026-08-07). OI-100, OI-101 and OI-102 are resolved: the engine honours shift effective dates, rotation patterns are versioned (M026), and a version boundary lands on the save date with the pattern phase preserved (M025). The P1 blocker on the prod upgrade is cleared. OI-103 remains partially open — the archive-and-create transactions need a DB harness.
 > - **Two new migrations since prod:** M025 (`staffing_shifts.pattern_anchor_date`) and M026 (rotation pattern versioning). Both are additive, backfilled, and idempotent; verified against the dev DB.
 > - Unfiled planning work sits in the untracked root `roadmap.md` (MH Override Management, Cron Scheduler Admin) — see OI-104/OI-105.
+> - **⚠️ The branch has never been pushed.** No upstream is configured and `origin` has only `dev`, `master`, `release/v0.2.0`. All 229 commits exist solely on this machine.
+> - **Unfinished on this feature:** `5e66700` is `wip: checkpoint before pill marker redesign` — that redesign was never done. `ground-events.ts` still has AOG as a diamond symbol with BTB/Ferry/MX as pills, the hybrid the checkpoint meant to replace. The commit itself parks no code. Confirm with Jason whether it is still wanted.
+>
+> **Working preferences (Jason):**
+> - **Keep a dev server running** whenever practical — he evaluates live, not from tests. Bring it up while getting oriented and drive it with Playwright. Stop it before `npm install` (it holds `node_modules` open); kill with `fuser -k 3000/tcp`.
+> - **Run against a copy of production data**, pulled from the NAS, rather than seed data — seed data is thin and hides real edge cases. Use seed data only when testing seed/import behaviour, and restore afterwards. `npm run db:backup` first, `npm run db:migrate` after (prod is on an older schema).
 >
 > **What changed (2026-08-06/07 session):**
 > - `npm audit fix` — 27 advisories → 3; all criticals/highs cleared (lockfile-only, PATCH per D-028)

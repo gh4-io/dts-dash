@@ -155,6 +155,7 @@
 | v0.3-10 | Shift versioning test coverage | Test Gap | P2 | OI-103 | Partial — engine done, DB harness open |
 | v0.3-11 | Work-Package MH Override Management | Feature | P2 | OI-104 | Open — specced |
 | v0.3-12 | Cron Scheduler Administration + Disabled-State UX | Feature | P2 | OI-105 | Open — specced |
+| v0.3-13 | README screenshots for GitHub (Flight Board, Dashboard, Capacity, Admin, mobile) | Documentation | P3 | OI-106 | Open |
 
 **Scope**: 6 enhancements + features spanning mobile UX, graphs, flight events, notifications, and user onboarding.
 **Sizing**: Mix of S (notifications, tour) and M (phase badges, graph toggles, comments, ground markers).

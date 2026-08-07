@@ -217,6 +217,31 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 
 ## Open Enhancements
 
+### OI-106 | README Screenshots for GitHub
+
+| Field | Value |
+|-------|-------|
+| **Type** | Documentation |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-07 |
+
+`README.md` is entirely text. Since the repo is on GitHub (`gh4-io/dts-dash`), the README is the project's front page and currently shows nothing of what the app looks like.
+
+**Scope**: add screenshots of the three core views — Flight Board (Gantt), Statistics Dashboard, Capacity Modeling — plus at least one Admin view and one mobile/PWA shot. Embed them in README.md near the Overview section so they render on the GitHub repo page.
+
+**Notes**:
+- Capture against a production data copy so the screenshots show realistic volume and customer mix, not thin seed data — see the working-preferences memory
+- Dark theme is the default; consider one light-theme shot to show the theme system
+- Store under a tracked path (e.g. `docs/screenshots/`) and reference with relative paths so they render both on GitHub and in local Markdown viewers
+- Watch for anything sensitive in captures — customer names are fine, but avoid live URLs, tokens, or user emails
+- Screenshots go stale; note in the README where they came from and roughly when
+
+**Links**: [README.md](../README.md), OI-095 (feature tour)
+
+---
+
 ### OI-104 | Work-Package Man-Hour Override Management
 
 | Field | Value |
@@ -965,10 +990,12 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 1 | 2 | 0 | 0 | 24 |
 | P2 | 20 | 3 | 1 | 0 | 23 |
-| P3 | 7 | 0 | 0 | 2 | 5 |
-| **Total** | **28** | **5** | **1** | **2** | **68** |
+| P3 | 8 | 0 | 0 | 2 | 5 |
+| **Total** | **29** | **5** | **1** | **2** | **68** |
 
-**Latest update (2026-08-07)**: Resolved **OI-100** (P1 — engine now honours shift effective dates), **OI-101** (rotation pattern versioning, M026) and **OI-102** (anchor/effective-date split, M025). OI-103 partially addressed — 32 engine tests added, but the two archive-and-create transactions still need a DB harness. **The P1 blocker on the v0.3.0 production upgrade is cleared.**
+**Latest update (2026-08-07, later)**: Added **OI-106** (README screenshots for GitHub).
+
+**Earlier update (2026-08-07)**: Resolved **OI-100** (P1 — engine now honours shift effective dates), **OI-101** (rotation pattern versioning, M026) and **OI-102** (anchor/effective-date split, M025). OI-103 partially addressed — 32 engine tests added, but the two archive-and-create transactions still need a DB harness. **The P1 blocker on the v0.3.0 production upgrade is cleared.**
 
 **Previous update (2026-08-06)**: Added OI-100 → OI-103 (staffing shift versioning gaps) and OI-104/OI-105 (MH override management, cron scheduler admin — both specced in the untracked root `roadmap.md`, awaiting fold-in to ROADMAP.md).
 
