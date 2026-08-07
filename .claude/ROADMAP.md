@@ -21,14 +21,14 @@
 
 **Current Focus: v0.3.0 Development** — in progress on `feat/flight-event-enhancements`. See v0.3.0 backlog below.
 
-> **Status as of 2026-08-06** — v0.3.0 is **not** release-ready:
-> - **P1 blocker**: OI-100 — the capacity engine ignores shift effective dates, so historical capacity is unstable. Deploying v0.3.0 will not fix historical evaluations. See also OI-101, OI-102, OI-103.
-> - Production runs `0.2.0-rc1` (predates OI-080). The M022 migration will add `rotation_end_date` cleanly on upgrade.
+> **Status as of 2026-08-07** — the P1 blocker is cleared; a release-boundary decision remains:
+> - **OI-100, OI-101, OI-102 resolved.** Effective dating now works end to end: the engine honours shift windows, rotation patterns are versioned (M026, `group_id` + effective window), and a version boundary lands on the save date with the pattern phase preserved (M025, `pattern_anchor_date`). Suite 673 → 705. OI-103 partially open — the archive-and-create transactions still need a DB harness.
+> - Production runs `0.2.0-rc1` (predates OI-080). Upgrading applies **M022, M025 and M026** — all additive, backfilled and idempotent, verified against the dev DB.
 > - CHANGELOG `[0.3.0]` is incomplete — five commits landed after the version bump; see the `[Unreleased]` section.
 > - **Release boundary undecided**: what ships as v0.3.0 vs. slips to v0.3.1.
 > - Two specced-but-unstarted features live in the untracked root `roadmap.md` → filed as OI-104 (MH Override Management) and OI-105 (Cron Scheduler Admin). **Fold them in here and delete the root file.**
 >
-> Suggested order: fix OI-100 → decide OI-102's boundary rule → add OI-103 tests → deploy → then OI-104/105.
+> Suggested order: ~~fix OI-100 → decide OI-102's boundary rule~~ ✅ → decide the release boundary → deploy → then OI-103's DB harness and OI-104/105.
 
 ### Post-M8 Enhancements
 - [x] Configurable allowed hostnames + trustHost (D-027, OI-037) — 2026-02-16
@@ -149,10 +149,10 @@
 
 | WS | Feature | Type | Priority | OI | Status |
 |----|---------|----|----------|-----|--------|
-| v0.3-7 | Fix capacity engine to honour shift effective dates | **Bug — P1 blocker** | P1 | OI-100 | Open |
-| v0.3-8 | Rotation pattern versioning (decision needed) | Design Gap | P2 | OI-101 | Open |
-| v0.3-9 | Shift version boundary rule (decision needed) | Bug | P2 | OI-102 | Open |
-| v0.3-10 | Shift versioning test coverage | Test Gap | P2 | OI-103 | Open |
+| v0.3-7 | Fix capacity engine to honour shift effective dates | Bug — was P1 blocker | P1 | OI-100 | **Done ✅** `64f979b` |
+| v0.3-8 | Rotation pattern versioning (M026) | Design Gap | P2 | OI-101 | **Done ✅** `97b019c` |
+| v0.3-9 | Shift version boundary rule (M025) | Bug | P2 | OI-102 | **Done ✅** `1ab5f4b` |
+| v0.3-10 | Shift versioning test coverage | Test Gap | P2 | OI-103 | Partial — engine done, DB harness open |
 | v0.3-11 | Work-Package MH Override Management | Feature | P2 | OI-104 | Open — specced |
 | v0.3-12 | Cron Scheduler Administration + Disabled-State UX | Feature | P2 | OI-105 | Open — specced |
 

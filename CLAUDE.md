@@ -9,13 +9,15 @@
 > - Working branch `feat/flight-event-enhancements`, **223 commits ahead of `master`**. `package.json` is `0.3.0`.
 > - **v0.3.0 is NOT release-ready.** CHANGELOG `[0.3.0]` is dated 2026-03-04, but five commits landed after the version bump (including a `wip:` checkpoint). The entry is incomplete.
 > - **Production runs `0.2.0-rc1`** — it predates OI-080 entirely, which is why prod has no `rotation_end_date` column and no shift history.
-> - **Blocking bug before any prod upgrade:** shift effective dates are *recorded* but never *applied*. See OI-100 (engine ignores date windows), OI-101 (rotation patterns unversioned), OI-102 (version boundary overlap), OI-103 (missing tests). Deploying v0.3.0 alone will NOT stabilise historical capacity.
+> - **Effective dating now works end to end** (2026-08-07). OI-100, OI-101 and OI-102 are resolved: the engine honours shift effective dates, rotation patterns are versioned (M026), and a version boundary lands on the save date with the pattern phase preserved (M025). The P1 blocker on the prod upgrade is cleared. OI-103 remains partially open — the archive-and-create transactions need a DB harness.
+> - **Two new migrations since prod:** M025 (`staffing_shifts.pattern_anchor_date`) and M026 (rotation pattern versioning). Both are additive, backfilled, and idempotent; verified against the dev DB.
 > - Unfiled planning work sits in the untracked root `roadmap.md` (MH Override Management, Cron Scheduler Admin) — see OI-104/OI-105.
 >
-> **What changed (2026-08-06 session):**
+> **What changed (2026-08-06/07 session):**
 > - `npm audit fix` — 27 advisories → 3; all criticals/highs cleared (lockfile-only, PATCH per D-028)
 > - Repaired type errors in 3 test files that had been failing the build gate since ~Feb — `npm run validate` now exits 0 for the first time on this branch
 > - Filed OI-100 → OI-105 for the versioning gaps and unfiled roadmap items
+> - Resolved OI-100/101/102 — effective dating applied in the engine, rotation patterns versioned, anchor split from effective date. Suite 673 → 705
 >
 > **What changed (v0.3.0 — starting, 2026-03-04):**
 > - MINOR version bump: v0.2.0 → v0.3.0

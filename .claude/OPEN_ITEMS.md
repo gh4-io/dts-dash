@@ -13,10 +13,11 @@
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
-| **Priority** | **P1 — blocks v0.3.0 prod upgrade** |
-| **Owner** | Unassigned |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
 | **Created** | 2026-08-06 |
+| **Resolved** | 2026-08-07 (`64f979b`) |
 
 OI-080 added `rotationEndDate` and auto-versioning, but **nothing consumes the effective dates**. `resolveStaffingDay()` filters on `isActive` only — it never compares the target date against `rotationStartDate`/`rotationEndDate`. Worse, `isWorkingDay()` deliberately normalises negative offsets (`((diffDays % 21) + 21) % 21`), so a rotation projects infinitely backwards past its own start date.
 
@@ -24,7 +25,11 @@ Consequences: archived versions (`isActive = false`) disappear from **every** da
 
 **Fix**: filter on `rotationStartDate <= date && (rotationEndDate === null || date <= rotationEndDate)`, and stop using `isActive` to exclude archived versions from past dates.
 
-**Files**: `src/lib/capacity/staffing-engine.ts` (`resolveStaffingDay` ~L98, `isWorkingDay` ~L32)
+**Resolution**: Added `isShiftEffectiveOn(shift, date)` — a version applies when the date falls inside `[rotationStartDate, rotationEndDate]`, null end meaning open-ended. `isActive` now gates only open-ended shifts, so an archived version still describes the dates it covered. Applied in `resolveStaffingDay()`, `computeCoverageGaps()` (per date, since an overnight shift is tested against both today and yesterday) and `computeWeeklyMatrix()` (`totalConfigHeadcount` scoped to the week viewed).
+
+**Behaviour change**: dates before a shift's `rotationStartDate` now report zero headcount instead of a backwards-projected roster. Verified against the dev DB — 2025-11-01 returns 0 with `isNonOperating=true`, 2026-02-01 unchanged at DAY 23 / NIGHT 24.
+
+**Files**: `src/lib/capacity/staffing-engine.ts`
 **Links**: OI-080 (partial), OI-101, OI-102, OI-103
 
 ---
@@ -34,16 +39,22 @@ Consequences: archived versions (`isActive = false`) disappear from **every** da
 | Field | Value |
 |-------|-------|
 | **Type** | Design Gap |
-| **Status** | **Open** — decision needed |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-08-06 |
+| **Resolved** | 2026-08-07 (`97b019c`) |
 
 `rotation_patterns` has no effective dating of any kind — no end date, no version column (`id, name, description, pattern, is_active, sort_order, created_at, updated_at`). Because the 21-char pattern string determines which days are worked, editing a pattern in place silently rewrites what every past date meant. OI-080 versioned `staffing_shifts` only.
 
-**Decision needed**: either version patterns (second schema change), or accept in-place edits and lock the pattern editor down with a warning. Should be a conscious choice, not a default.
+**Decision (user, 2026-08-07)**: full versioning, mirroring shifts.
 
-**Links**: OI-080, OI-100
+**Resolution**: M026 adds `effective_from`/`effective_to` plus `group_id` — a stable identity across versions. A shift keeps referencing a pattern *row*; resolution follows that row's group to the version whose window contains the date, so no shift needs repointing. `buildPatternResolver()` / `PatternResolver` replace the flat `Map<id, pattern>`; `buildPatternMap()` is kept as an alias returning a resolver. Editing the pattern string via PUT auto-versions; name/description/sort order/active state still edit in place. New PATCH supports `archive` and `can-archive`.
+
+Also fixed a latent bug: `/api/capacity/overview` loaded patterns with `activeOnly=true`, which would have dropped superseded versions.
+
+**Files**: `src/lib/capacity/staffing-engine.ts`, `staffing-data.ts`, `src/lib/db/schema-init.ts`, `rotation-patterns/[id]/route.ts`
+**Links**: OI-080, OI-100, OI-102
 
 ---
 
@@ -52,19 +63,24 @@ Consequences: archived versions (`isActive = false`) disappear from **every** da
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-08-06 |
+| **Resolved** | 2026-08-07 (`1ab5f4b`) |
 
 `versionStaffingShift()` sets the archived shift's `rotationEndDate` to **today**, but backdates the new version's `rotationStartDate` to **the Sunday of the current week** (via `alignRotationStartToSunday`, since patterns are 21-day Sunday-anchored). Versioning on a Thursday leaves the two versions overlapping Sunday→Thursday.
 
 Currently harmless only because OI-100 means nothing reads the dates. Must be resolved as part of the OI-100 fix.
 
-**Decision needed**: does a headcount change take effect on the save date, or on the Sunday that starts the rotation week?
+**Root cause**: `rotationStartDate` served two roles — the effective start *and* the anchor the 21-day pattern is indexed from (`pattern[0]` == that date). Moving the start rotated the pattern phase, so versions had to begin on the aligned Sunday.
 
-**Files**: `src/lib/capacity/staffing-data.ts` (`versionStaffingShift` ~L508)
-**Links**: OI-100
+**Decision (user, 2026-08-07)**: split the anchor from the effective date. New version takes effect on the **save date**; old version closes the day before.
+
+**Resolution**: M025 adds nullable `staffing_shifts.pattern_anchor_date` (null falls back to `rotationStartDate`, so pre-M025 rows keep their phase). The new version inherits the old anchor, preserving rotation phase across a mid-week boundary. A same-day edit amends in place rather than inverting the window. Creating a new shift now honours the exact chosen start date and anchors the pattern to the aligned Sunday. `versionStaffingShift()` no longer accepts `rotationStartDate` in `changes`.
+
+**Files**: `src/lib/capacity/staffing-data.ts`, `staffing-engine.ts`, `src/lib/db/schema-init.ts`
+**Links**: OI-100, OI-101
 
 ---
 
@@ -73,14 +89,18 @@ Currently harmless only because OI-100 means nothing reads the dates. Must be re
 | Field | Value |
 |-------|-------|
 | **Type** | Test Gap |
-| **Status** | **Open** |
+| **Status** | **Open** — partially addressed |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-08-06 |
 
-`staffing-versioning.test.ts` covers only the two pure helpers (`alignRotationStartToSunday`, `canArchiveShift`). There is no test for `versionStaffingShift()` — the actual archive-and-create transaction — and none asserting that a past date resolves to its *historical* headcount. The untested paths are precisely the broken ones in OI-100 and OI-102.
+`staffing-versioning.test.ts` covered only the two pure helpers (`alignRotationStartToSunday`, `canArchiveShift`).
 
-**Links**: OI-100, OI-102
+**Done (2026-08-07)**: 32 engine tests added across OI-100/101/102 — window semantics for shifts and patterns, resolution either side of a version boundary, no backward projection, phase preserved across a mid-week split, group resolution when a shift references the superseded row id, and history staying stable when a newer version lands. Suite is now 705.
+
+**Still open**: `versionStaffingShift()` and `versionRotationPattern()` — the archive-and-create transactions themselves — remain untested. Both live in `*-data.ts` and need a DB harness; no capacity test currently mocks the database (every existing test is pure-engine), so this needs a new fixture pattern. Both were instead verified manually end-to-end against the dev DB; see the commit messages for the observed rows.
+
+**Links**: OI-100, OI-101, OI-102
 
 ---
 
@@ -943,12 +963,14 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 | Priority | Open | Partial | In Progress | Acknowledged | Resolved |
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
-| P1 | 2 | 2 | 0 | 0 | 23 |
-| P2 | 23 | 2 | 1 | 0 | 21 |
+| P1 | 1 | 2 | 0 | 0 | 24 |
+| P2 | 20 | 3 | 1 | 0 | 23 |
 | P3 | 7 | 0 | 0 | 2 | 5 |
-| **Total** | **32** | **4** | **1** | **2** | **65** |
+| **Total** | **28** | **5** | **1** | **2** | **68** |
 
-**Latest update (2026-08-06)**: Added OI-100 → OI-103 (staffing shift versioning gaps — OI-100 is **P1 and blocks the v0.3.0 production upgrade**) and OI-104/OI-105 (MH override management, cron scheduler admin — both specced in the untracked root `roadmap.md`, awaiting fold-in to ROADMAP.md).
+**Latest update (2026-08-07)**: Resolved **OI-100** (P1 — engine now honours shift effective dates), **OI-101** (rotation pattern versioning, M026) and **OI-102** (anchor/effective-date split, M025). OI-103 partially addressed — 32 engine tests added, but the two archive-and-create transactions still need a DB harness. **The P1 blocker on the v0.3.0 production upgrade is cleared.**
+
+**Previous update (2026-08-06)**: Added OI-100 → OI-103 (staffing shift versioning gaps) and OI-104/OI-105 (MH override management, cron scheduler admin — both specced in the untracked root `roadmap.md`, awaiting fold-in to ROADMAP.md).
 
 **Previous update (2026-03-17)**: Added OI-099 (unified comments/notifications/feedback table for v1.0.x — refactoring for schema simplification and richer interactions). Backlog item targeting post-v0.3.0 release.
 
