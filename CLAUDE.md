@@ -3,21 +3,31 @@
 > Canonical operating manual for Claude Code. Read this first, every session.
 > Detailed specs live in `.claude/` — this file links to them, never duplicates.
 >
-> **Last updated:** 2026-08-06 (v0.3.0 in progress)
+> **Last updated:** 2026-08-07 (v0.3.0 in progress)
 >
 > **🔶 CURRENT STATE — READ BEFORE PLANNING WORK:**
-> - Working branch `feat/flight-event-enhancements`, **223 commits ahead of `master`**. `package.json` is `0.3.0`.
-> - **v0.3.0 is NOT release-ready.** CHANGELOG `[0.3.0]` is dated 2026-03-04, but five commits landed after the version bump (including a `wip:` checkpoint). The entry is incomplete.
-> - **Production runs `0.2.0-rc1`** — it predates OI-080 entirely, which is why prod has no `rotation_end_date` column and no shift history.
-> - **Effective dating now works end to end** (2026-08-07). OI-100, OI-101 and OI-102 are resolved: the engine honours shift effective dates, rotation patterns are versioned (M026), and a version boundary lands on the save date with the pattern phase preserved (M025). The P1 blocker on the prod upgrade is cleared. OI-103 remains partially open — the archive-and-create transactions need a DB harness.
-> - **Two new migrations since prod:** M025 (`staffing_shifts.pattern_anchor_date`) and M026 (rotation pattern versioning). Both are additive, backfilled, and idempotent; verified against the dev DB.
-> - Unfiled planning work sits in the untracked root `roadmap.md` (MH Override Management, Cron Scheduler Admin) — see OI-104/OI-105.
-> - **⚠️ The branch has never been pushed.** No upstream is configured and `origin` has only `dev`, `master`, `release/v0.2.0`. All 229 commits exist solely on this machine.
-> - **Unfinished on this feature:** `5e66700` is `wip: checkpoint before pill marker redesign` — that redesign was never done. `ground-events.ts` still has AOG as a diamond symbol with BTB/Ferry/MX as pills, the hybrid the checkpoint meant to replace. The commit itself parks no code. Confirm with Jason whether it is still wanted.
+> - Work merged to `dev` on 2026-08-07. `package.json` is `0.3.0`.
+> - **v0.3.0 is NOT release-ready.** The `[0.3.0]` CHANGELOG entry is dated 2026-03-04 and predates everything in `[Unreleased]`. **The release boundary is still undecided** — what ships as v0.3.0 vs v0.3.1.
+> - **Production runs `0.2.0-rc1`** — it predates OI-080 entirely, so prod has no `rotation_end_date` column and no shift history. Upgrading applies **M022, M025 and M026**; all additive, backfilled and idempotent.
+> - **Capacity has ONE engine** (D-064, OI-115). The legacy `headcount × 6.5` model and its Admin → Settings fields were deleted — they had no live consumers but were still editable, so configuring them silently did nothing. Capacity is `capacity_assumptions` (paidToAvailable × availableToProductive) + `capacity_shifts`. The old "Real capacity: headcount × 6.5 MH/person" rule is superseded.
+> - **Effective dating works end to end.** OI-100/101/102 resolved, plus OI-107 (the edit dialog was still rewriting history via `PUT`) and OI-108 (two versions of one shift effective at once, double-counting the roster).
+> - **⚠️ Nothing has ever been pushed.** No upstream on any local branch; `origin` has only `dev`, `master`, `release/v0.2.0`. All work exists solely on this machine — including `dev` after the merge.
+> - **⚠️ Production data carries the OI-108 defect** — duplicate `13SMD` rows are effective simultaneously and double-count that roster. Correct it on upgrade.
+> - **Unfinished:** `5e66700` is `wip: checkpoint before pill marker redesign` — never done. `ground-events.ts` still has AOG as a diamond with BTB/Ferry/MX as pills, the hybrid the checkpoint meant to replace. The commit parks no code. Confirm with Jason whether it is still wanted.
+>
+> **⚠️ WSL / 9p trap — Turbopack file watching does NOT fire on `/mnt/d`.** HMR silently serves stale markup; edits appear to do nothing. **Restart the dev server after every change** or you will verify the wrong build. This is separate from the `npm install` EACCES issue below.
 >
 > **Working preferences (Jason):**
 > - **Keep a dev server running** whenever practical — he evaluates live, not from tests. Bring it up while getting oriented and drive it with Playwright. Stop it before `npm install` (it holds `node_modules` open); kill with `fuser -k 3000/tcp`.
 > - **Run against a copy of production data**, pulled from the NAS, rather than seed data — seed data is thin and hides real edge cases. Use seed data only when testing seed/import behaviour, and restore afterwards. `npm run db:backup` first, `npm run db:migrate` after (prod is on an older schema).
+>
+> **What changed (2026-08-07 session):**
+> - Removed the dead legacy capacity engine + its misleading Admin → Settings fields (OI-115, D-064)
+> - Fixed four capacity defects found against production data: OI-107 (edits rewrote history), OI-108 (overlapping versions double-counted), OI-109 (matrix headcount silently discounted), OI-110 (paid/available/productive chain collapsed, understating Paid MH ~11%)
+> - Documented the productivity chain in the UI + click-to-edit percentages (OI-116)
+> - Responsive fixes: matrix clipped columns (OI-112), panel priority (OI-114)
+> - Added `.claude/skills/prod-db-snapshot/` for pulling/restoring production data
+> - Suite 705 → 714; `npm run validate` exits 0
 >
 > **What changed (2026-08-06/07 session):**
 > - `npm audit fix` — 27 advisories → 3; all criticals/highs cleared (lockfile-only, PATCH per D-028)
@@ -83,7 +93,7 @@ The app ingests SharePoint OData work package data (local JSON), computes derive
 
 - **effectiveMH**: manual override > WP MH (if include) > default MH (3.0)
 - **Capacity**: Day 07-15 (8 heads), Swing 15-23 (6 heads), Night 23-07 (4 heads)
-- **Real capacity**: headcount × 6.5 MH/person
+- **Real capacity**: ~~headcount × 6.5 MH/person~~ — **superseded by D-064**. Productive MH = `headcount × paidHours × paidToAvailable × availableToProductive [× nightFactor]`, from `capacity_assumptions`
 - **Utilization**: totalDemandMH / realCapacity × 100%
 - **Station**: always CVG (locked, D-002)
 - **Timezone:** default `UTC`. Internals support **all IANA timezones**, but the UI only enables **UTC** and **America/New_York**.
@@ -240,6 +250,7 @@ docker/README.md                — Authoritative Docker + env + deployment guid
 |------|---------|
 | [PROJECT_STEWARD.md](.claude/SKILLS/PROJECT_STEWARD.md) | Session workflow, doc authority, change discipline |
 | [AUTO_COMMIT_POLICY.md](.claude/SKILLS/AUTO_COMMIT_POLICY.md) | Commit triggers, message format, verification gates |
+| [prod-db-snapshot/](.claude/SKILLS/prod-db-snapshot/SKILL.md) | Pull a production DB snapshot and restore it into dev (invocable skill) |
 
 ## Project Steward Skill
 

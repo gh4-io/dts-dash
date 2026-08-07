@@ -98,7 +98,9 @@ Currently harmless only because OI-100 means nothing reads the dates. Must be re
 
 **Done (2026-08-07)**: 32 engine tests added across OI-100/101/102 — window semantics for shifts and patterns, resolution either side of a version boundary, no backward projection, phase preserved across a mid-week split, group resolution when a shift references the superseded row id, and history staying stable when a newer version lands. Suite is now 705.
 
-**Still open**: `versionStaffingShift()` and `versionRotationPattern()` — the archive-and-create transactions themselves — remain untested. Both live in `*-data.ts` and need a DB harness; no capacity test currently mocks the database (every existing test is pure-engine), so this needs a new fixture pattern. Both were instead verified manually end-to-end against the dev DB; see the commit messages for the observed rows.
+**Still open**: `versionStaffingShift()` and `versionRotationPattern()` — the archive-and-create transactions themselves — remain untested *in the suite*. Both live in `*-data.ts` and need a DB harness; no capacity test currently mocks the database (every existing test is pure-engine), so this needs a new fixture pattern.
+
+**Update 2026-08-07**: `versionStaffingShift()` was exercised end-to-end against the dev DB while fixing OI-107 — editing `10WKD`'s hours archived it closed 2026-08-06 and opened a new version 2026-08-07 with `patternAnchorDate` inherited, no overlap and rotation phase preserved. That is manual verification, not coverage; the harness is still needed. `versionRotationPattern()` remains manually verified only.
 
 **Links**: OI-100, OI-101, OI-102
 
@@ -216,6 +218,286 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 ---
 
 ## Open Enhancements
+
+### OI-107 | Shift Edit Dialog Rewrote History Instead of Versioning — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+OI-100/101/102 made the engine honour effective-date windows, but the shift **edit dialog** still saved via `PUT` → `updateStaffingShift`, mutating the current version's row in place. `PUT`'s allow-list accepted every field, so changing a shift's hours or rotation silently restated every date that version already covered — the exact failure OI-100 was filed to fix, re-entering through a different door. Only the inline headcount input on the shift bar versioned correctly (`PATCH {action:"version"}`).
+
+`versionStaffingShift()` already accepted every field the dialog edits, so the plumbing existed and was simply unused.
+
+**Resolution**: the dialog now splits its save. Fields that change what a date meant — `category`, `rotationId`, `startHour/Minute`, `endHour/Minute`, `breakMinutes`, `lunchMinutes`, `mhOverride`, `headcount` — go through `PATCH {action:"version"}`. Cosmetic fields — `name`, `description`, `rotationStartDate`, `rotationEndDate` — amend in place. Mirrors the split OI-101 settled for rotation patterns. `category` is versioned because it routes headcount into a capacity bucket; moving a shift to OTHER drops it from capacity entirely. A pending inline edit is cleared on dialog save so the two paths cannot disagree.
+
+**Verified**: exercised `versionStaffingShift` against the dev DB — editing `10WKD` hours archived it closed 2026-08-06 and opened a new version 2026-08-07 with `patternAnchorDate` inherited, no overlap, phase preserved.
+
+**Files**: `src/components/admin/capacity/shift-definitions-grid.tsx`
+**Links**: OI-100, OI-101, OI-102, OI-103, OI-108
+
+---
+
+### OI-108 | Overlapping Shift Versions Double-Count Headcount — RESOLVED (detection)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** — detection shipped; no schema-level lineage |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+Two versions of one shift effective on the same date are summed by the engine, silently doubling that shift's roster. Found in **live production data**: `13SMD` existed as `id=3` (9 AMTs, from 2025-12-01, open-ended) and `id=7` (11 AMTs, from 2026-08-04), both effective from 2026-08-04 — **20 AMTs for one shift**. The week of 2026-08-09 read 66 raw where the prior week read 55.
+
+`versionStaffingShift` closes the predecessor the day before the successor opens, but a version created any other way — **Add Shift**, a direct `PUT`, an import — leaves the predecessor open-ended, and nothing flagged it.
+
+**Resolution**: `findShiftOverlaps()` in the staffing engine detects same-name, same-config shifts whose effective windows intersect. Surfaced as a warning banner listing the shift, the version ids, the first overlapping date and the combined headcount, plus a per-row badge. 5 unit tests.
+
+Detection is **by name**, the only lineage marker `staffing_shifts` carries — unlike `rotation_patterns`, which got a `group_id` in OI-101 (M026). A `group_id` on `staffing_shifts` would make this exact rather than heuristic; deferred, see OI-111.
+
+**Data**: the live `13SMD` duplicate was resolved by the user before the fix landed (`id=3` end-dated 2026-08-03). **The same two rows still exist in production** and need the same correction on upgrade.
+
+**Files**: `src/lib/capacity/staffing-engine.ts`, `src/components/admin/capacity/shift-definitions-grid.tsx`
+**Links**: OI-100, OI-102, OI-107, OI-111
+
+---
+
+### OI-109 | Weekly Matrix Headcount Silently Discounted by paidToAvailable — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+`WeeklyMatrixCell.headcount` held `roster × paidToAvailable` (0.89 in production) but was rendered under a column labelled **HC**, rounded to an integer, so the discount was invisible: a raw 66 displayed as **59**. In the same panel, `totalConfigHeadcount` was raw, putting two headcount figures on different bases side by side. `capacity-core.ts` already modelled this correctly with separate `rosterHeadcount` / `effectiveHeadcount`; the weekly matrix had collapsed both into one ambiguous field.
+
+**Resolution**: `WeeklyMatrixCell` gains `rosterHeadcount` (undiscounted) and `effectiveHeadcount` (the MH basis). The HC column, avg daily, peak/min day and the category row-hiding checks use the roster; all MH math still uses effective. Peak/min dropped from 2 decimals to 0 — they were rendering "49.84" for a count of people.
+
+The ambiguous `headcount` field is **retained as a deprecated alias** equal to `effectiveHeadcount`, so the `/api/admin/capacity/staffing-matrix` response stays backwards-compatible per D-028. Remove on the next MAJOR.
+
+Also: "Config Headcount" is scoped to the week start (OI-100), so it legitimately differs from the shift grid footer when a version takes effect mid-week. Label now reads "as of &lt;weekStart&gt;" rather than leaving two unequal totals unexplained.
+
+**Files**: `src/types/index.ts`, `src/lib/capacity/staffing-engine.ts`, `src/components/admin/capacity/weekly-matrix-panel.tsx`
+**Links**: OI-100, OI-110, D-028
+
+---
+
+### OI-110 | Paid/Available/Productive MH Chain Collapsed — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+`capacity-core.ts`'s own header documents a three-stage chain — `paidHours × paidToAvailable × availableToProductive × nightFactor` — where **paid** is payroll, **available** is what remains after PTO/training/absence, and **productive** is wrench time. Both engines applied `paidToAvailable` at the *paid* stage and then set `availableMH = paidMH`, collapsing the first two stages. The tell was Paid MH and Available MH rendering the identical figure (3105.2).
+
+Consequence: **Paid MH understated by the paidToAvailable factor** (~11% at 0.89) and Available MH a meaningless duplicate.
+
+**Resolution**: `paidMH = roster × paidHours`; `availableMH = paidMH × paidToAvailable`; `productiveMH = availableMH × availableToProductive × nightFactor`. Fixed in `computeWeeklyMatrix` and both compute paths in `capacity-core.ts` (so `/capacity` had it too).
+
+**`productiveMH` is algebraically unchanged** — `roster × hours × p2a × a2p × nf` either way — so utilization, gap analysis, the heatmap and every capacity chart are untouched. `paidMH`/`availableMH` are display-only (`totalPaidMH`, shift drill-down, matrix totals). Live for Aug 2–8: Paid 3105.2 → **3399.0**, Available → **3025.1**, Productive unchanged in meaning.
+
+**Note**: a test named `"availableMH equals paidMH (paidToAvailable absorbed into headcount)"` asserted the old behaviour, so this was a conscious simplification at some point — it just contradicted both the documented chain and the labels users read. Rewritten to assert the stages are distinct.
+
+**Files**: `src/lib/capacity/capacity-core.ts`, `src/lib/capacity/staffing-engine.ts`, tests in both
+**Links**: OI-109
+
+---
+
+### OI-111 | staffing_shifts Has No Version Lineage (group_id)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Design Gap |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-07 |
+
+`rotation_patterns` got a `group_id` in M026 (OI-101) giving versions a stable identity across edits. `staffing_shifts` never did — a shift's only lineage marker is its **name**. Consequences:
+
+- `findShiftOverlaps()` (OI-108) must match on name, so renaming a shift hides an overlap and two genuinely distinct shifts sharing a name would false-positive.
+- Nothing can render a shift's version history as one timeline.
+- A rename splits the lineage silently.
+
+**Scope**: add `group_id` to `staffing_shifts` (additive migration, backfill each existing row to its own id, then group known lineages), have `versionStaffingShift` propagate it, and switch overlap detection and any history view to group rather than name.
+
+**Links**: OI-101 (the pattern precedent), OI-107, OI-108
+
+---
+
+### OI-112 | Weekly Matrix Clipped Values on Every Screen Size — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug (UI) |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+The weekly matrix table was wrapped in `overflow-hidden` (there for rounded corners) inside a panel narrower than the table's min-content width. Measured at 1440×900: wrapper **277px**, table **433px** — the entire Saturday column and the **Tot** column were clipped with no way to reach them.
+
+Worse, the three-panel grid was `lg:grid-cols-[320px_1fr_320px]`, pinning the matrix column at 320px for **every** width from 1024px up. A 4K display was as cramped as a laptop; the middle column absorbed all extra space.
+
+**Resolution**: wrapper is `overflow-x-auto` (matching the admin grids in OI-078) with `min-w-[420px]` on the table, and the grid widens the matrix column by breakpoint — `xl:400px`, `2xl:490px`.
+
+**Verified across resolutions** (all three view modes: HC / Paid MH / Prod MH):
+
+| Viewport | Matrix panel | Content | Result |
+|----------|--------------|---------|--------|
+| 3840×2160 | 462px | 462px | no scroll, Tot visible |
+| 2560×1440 | 462px | 462px | no scroll, Tot visible |
+| 1920×1080 | 447px | 447px | no scroll, Tot visible |
+| 1366×768 | 357px | 433px | scrolls, Tot reachable |
+| 820×1180 (iPad) | 489px | 489px | no scroll, Tot visible |
+
+**Known, pre-existing and out of scope**: at 390px the entire admin content region collapses to ~103px, so every panel is squeezed. Not caused by this change — only `grid-cols-1` applies at that width. Filed as OI-113.
+
+**Files**: `src/components/admin/capacity/weekly-matrix-panel.tsx`, `src/app/(authenticated)/admin/capacity/staffing/page.tsx`
+**Links**: OI-078, OI-097, OI-113
+
+---
+
+### OI-113 | Admin Capacity Pages Unusable at Phone Width
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug (UI) |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-07 |
+
+At a 390px viewport the admin content region on `/admin/capacity/staffing` measures ~**103px** wide, so every panel inside it is squeezed to near-unusable. The page-level container, not the three-panel grid, is the constraint — `grid-cols-1` is correctly applied at that width.
+
+Discovered while verifying OI-112 across resolutions. Pre-existing and unrelated to that fix. Admin capacity administration on a phone is a low-frequency case, hence P3, but the layout is currently broken rather than merely cramped.
+
+**Scope**: trace the width constraint in the authenticated admin layout, and decide whether these pages get a mobile treatment or an explicit "use a larger screen" state.
+
+**Links**: OI-112, OI-097 (iPad/tablet UX), OI-084
+
+---
+
+### OI-114 | Responsive Panel Priority on Admin Capacity Staffing — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement (UI) |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+Follow-on from OI-112. Making the weekly matrix legible was only half the problem — at reduced widths the page had no notion of which panel matters most, so the shift grid (the actual working surface) absorbed every squeeze. At 1366 it had fallen to 319px.
+
+**Changes**
+
+1. **Sidebar auto-collapses on narrow non-touch viewports.** Below 1536px the sidebar renders icons-only (240px → 56px). Keyed on `!isTouchCapable` rather than `device.type`, because a desktop window narrowed to 1024 classifies as `tablet` via the width-only fallback — exactly the case this targets. Genuine touch tablets keep their tap-to-toggle behaviour; OI-097 owns that surface.
+   - The stored `mode` is **not** overwritten — auto-collapse is presentation-only via an `effectiveMode`, so widening the window restores the user's choice.
+   - A non-persisted `autoOverride` flag plus the edge toggle (now shown on narrow desktop) makes it escapable; without it the collapse was a trap, since the header hamburger only appears when the sidebar is *fully* collapsed. Verified round-trip 56 → 240 → 56.
+
+2. **Rotations panel condenses below 2xl** — the 21-dot pattern strip hides (still on the tooltip and in the editor), the **Select** bulk-mode toggle hides (kept mounted when already active so an in-progress selection is never stranded by a resize), and **Add** drops to a bare `+`. Column narrows 320px → 180/200px.
+
+3. **Shift grid has a hard floor of 420px** (`minmax(420px, 1fr)`). At `lg` the weekly matrix leaves the side-by-side row and stacks full width beneath, so the squeeze lands on the panel that can afford it rather than the working surface.
+
+4. **Editing a shift is always reachable.** The shift row itself is now `role="button"` + click/Enter/Space → editor, guarded so the checkbox, headcount input and action buttons still win their clicks. The icon buttons are hover-gated on pointer devices and can be cramped at narrow widths; the row is the guaranteed route in.
+
+**Verified**
+
+| Viewport | Sidebar | Columns | Shift grid | Matrix |
+|----------|---------|---------|-----------|--------|
+| 1920×1080 | 240px | 340 / 778 / 490 | 778px | side-by-side, no scroll |
+| 1366×768 | 56px | 200 / 638 / 400 | 638px (was 319) | side-by-side |
+| 1100×800 | 56px | 180 / 605 | 605px | stacked, 797px |
+| 1024×768 | 56px | 180 / 713 | 713px | stacked |
+
+No horizontal page scroll at any width; 6 editable rows and row-click-to-edit confirmed at each. Clicking the headcount input does not open the dialog.
+
+**Files**: `src/lib/hooks/use-sidebar.ts`, `src/components/layout/sidebar.tsx`, `src/components/admin/capacity/rotation-pattern-list.tsx`, `src/components/admin/capacity/shift-definitions-grid.tsx`, `src/app/(authenticated)/admin/capacity/staffing/page.tsx`
+**Links**: OI-112, OI-075 (4-tier nav), OI-097, OI-113
+
+---
+
+### OI-115 | Two Capacity Engines / Dead Settings Misled Configuration — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug (Architecture) |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+The app carried **two unrelated capacity models**, with different settings, different formulas and different answers for the same roster:
+
+| | Engine A (legacy) | Engine B (capacity v2) |
+|---|---|---|
+| Code | `src/lib/data/engines/capacity.ts` | `src/lib/capacity/capacity-core.ts` + `staffing-engine.ts` |
+| Setting | `app_config.realCapacityPerPerson` = 6.5 | `capacity_assumptions` = 0.89 × 0.65 |
+| Formula | `headcount × 6.5` | `headcount × paidHours × 0.89 × 0.65` |
+| Shift length | ignored | scales with it |
+| 8 heads, 10h | 52 MH | 46.3 MH |
+
+**Impact**: the user set "8 → 6.5" in Admin → Settings and reasonably expected it to govern, but that field belonged to Engine A — which **no page consumed**. `useCapacity` had zero consumers; `utilization-chart.tsx` and `config-panel.tsx` were never rendered. A live-looking setting drove nothing.
+
+**Decision (user, 2026-08-07)**: the two-factor model in Engine B is correct as originally intended — the ratio was simply misremembered. **No formula or value changes.** Remove the dead engine and its settings.
+
+**Resolution — deleted** (all confirmed to have zero live consumers first):
+`src/lib/data/engines/capacity.ts`, `src/app/api/capacity/route.ts`, `src/lib/hooks/use-capacity.ts`, `src/components/capacity/utilization-chart.tsx`, `src/components/capacity/config-panel.tsx`.
+
+Also removed: `theoreticalCapacityPerPerson`, `realCapacityPerPerson` and `shifts` from `AppConfig`, `config-defaults.ts`, `transformer.ts`, `/api/config` (response + write whitelist) and the `bootstrap.ts` seeds; the **Capacity Model** and **Shift Configuration** sections from Admin → Settings; and the orphaned `ShiftDefinition` / `DailyDemand` / `DailyCapacity` / `ShiftCapacity` / `DailyUtilization` types.
+
+**Kept**: the **Demand Model** section — `defaultMH` and `wpMHMode` are live, feeding `computeEffectiveMH` in `transformer.ts`.
+
+Verified `/api/capacity/overview` reads `capacity_shifts` via `loadShifts()`, not `app_config.shifts`, so the live v2 hook was unaffected. Full clean rebuild (`rm -rf .next`) — `npm run validate` exits 0, 714 tests.
+
+**Note**: existing `app_config` rows for the three removed keys are left in place — harmless orphans, no longer read or seeded. Production has them too.
+
+**Files**: 5 deleted; `config-defaults.ts`, `transformer.ts`, `api/config/route.ts`, `bootstrap.ts`, `types/index.ts`, `admin/settings/page.tsx`
+**Links**: OI-109, OI-110, OI-116, D-028
+
+---
+
+### OI-116 | Productivity Chain Undocumented in the UI — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement (UX) |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+`paidToAvailable` and `availableToProductive` **multiply** — 0.89 × 0.65 = 0.5785 — but nothing in the UI said so, so the pair reads as a single ratio and the resulting MH looks wrong.
+
+**Resolution**: an explainer block under Productivity Factors on `/admin/capacity/assumptions` stating the formula `HC x HOURS x ATT x PROD [x NIGHT] = Productive MH`, a worked example using the live values (`8 heads x 10h x 0.89 x 0.65 = 46.3 MH`), a definition list naming each stage (Paid → Available → Productive) and what each factor removes, and the combined efficiency (57.9%) with an explicit note that the factors multiply rather than average. A one-line form of the same chain sits above Weekly Totals in the staffing weekly matrix, where the numbers are actually read.
+
+Also on that page (delegated): the three Productivity Factor percentages are now **click-to-edit** — click the value, type, Enter or blur commits, Escape cancels; clamped to each field's range, non-numeric restores the previous value. Opt-in `editable` prop on `SliderField`, so non-percent fields (Default MH, Arrival/Departure Weight) are unchanged.
+
+**Files**: `src/components/admin/capacity/assumptions-form.tsx`, `src/components/admin/capacity/weekly-matrix-panel.tsx`
+**Links**: OI-109, OI-110, OI-115
+
+---
 
 ### OI-106 | README Screenshots for GitHub
 
@@ -988,12 +1270,14 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 | Priority | Open | Partial | In Progress | Acknowledged | Resolved |
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
-| P1 | 1 | 2 | 0 | 0 | 24 |
-| P2 | 20 | 3 | 1 | 0 | 23 |
-| P3 | 8 | 0 | 0 | 2 | 5 |
-| **Total** | **29** | **5** | **1** | **2** | **68** |
+| P1 | 1 | 2 | 0 | 0 | 29 |
+| P2 | 21 | 3 | 1 | 0 | 26 |
+| P3 | 9 | 0 | 0 | 2 | 5 |
+| **Total** | **31** | **5** | **1** | **2** | **76** |
 
-**Latest update (2026-08-07, later)**: Added **OI-106** (README screenshots for GitHub).
+**Latest update (2026-08-07, staffing session)**: Resolved four P1 defects found while evaluating shift tracking against a production data copy — **OI-107** (edit dialog rewrote history instead of versioning), **OI-108** (overlapping shift versions double-counted headcount; found live in prod data), **OI-109** (weekly matrix headcount silently discounted by `paidToAvailable`), **OI-110** (paid/available/productive MH chain collapsed, understating Paid MH ~11%). Also **OI-112** (matrix clipped Saturday + Tot columns at every screen size). New open items: **OI-111** (`staffing_shifts` has no `group_id` lineage) and **OI-113** (admin capacity pages unusable at phone width). Suite 705 → 714; `npm run validate` exits 0. Added **OI-114** (responsive panel priority), **OI-115** (removed the dead legacy capacity engine and its misleading Admin → Settings fields) and **OI-116** (productivity-chain explainer + click-to-edit percentages).
+
+**Previous update (2026-08-07, later)**: Added **OI-106** (README screenshots for GitHub).
 
 **Earlier update (2026-08-07)**: Resolved **OI-100** (P1 — engine now honours shift effective dates), **OI-101** (rotation pattern versioning, M026) and **OI-102** (anchor/effective-date split, M025). OI-103 partially addressed — 32 engine tests added, but the two archive-and-create transactions still need a DB harness. **The P1 blocker on the v0.3.0 production upgrade is cleared.**
 
