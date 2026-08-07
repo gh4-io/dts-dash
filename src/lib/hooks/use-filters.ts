@@ -129,6 +129,9 @@ function getDefaults(): FilterState {
     operators: [],
     aircraft: [],
     types: [],
+    excludeOperators: [],
+    excludeAircraft: [],
+    excludeTypes: [],
   };
 }
 
@@ -158,6 +161,9 @@ export const useFilters = create<
   setOperators: (v: string[]) => set({ operators: v }),
   setAircraft: (v: string[]) => set({ aircraft: v }),
   setTypes: (v: string[]) => set({ types: v }),
+  setExcludeOperators: (v: string[]) => set({ excludeOperators: v }),
+  setExcludeAircraft: (v: string[]) => set({ excludeAircraft: v }),
+  setExcludeTypes: (v: string[]) => set({ excludeTypes: v }),
   reset: () => set(getDefaults()),
   hydrate: (params: Partial<FilterState>) => set(params),
   hydrateDefaults: (dateRange: string, tz: string) => {

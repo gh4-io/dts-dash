@@ -499,6 +499,122 @@ Also on that page (delegated): the three Productivity Factor percentages are now
 
 ---
 
+### OI-121 | Capacity Chart Legend Inert and Ambiguous — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement (UX) |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+Demand vs Capacity drew nine series in By Shift mode but labelled five — `legendType={i === 0 ? undefined : "none"}` collapsed three capacity lines and three utilization lines into one entry each — and nothing was clickable. Two near-identical orange curves had no label: Day `#f59e0b` and Swing `#f97316` were barely distinguishable, and within a shift the capacity and utilization lines shared a hue, differing only by dash.
+
+**Resolution** (see D-065): one shared shift palette (`shift-colors.ts`) consumed by all six previously-duplicated sites; Swing re-hued to pink; role encoded by form (bar / dashed line / solid line with a per-shift dot shape); and a custom two-row `ChartLegend` where every entry toggles. Clicking **Days** hides the Day bar, capacity line and utilization line together; clicking **Capacity** hides that role across all shifts. Applied to all three charts behind the aggregation toggle.
+
+Demand has no separate legend entry when the entity row is present — those bars are the entity entries. Shift labels read as plurals ("Days", "Swings", "Nights"), per Jason.
+
+**Extended to the dashboard** — Arrivals / Departures / On Ground on `/dashboard` had the same inert legend (it even set `pointerEvents: "none"` explicitly) and now toggles the same way. `ChartLegend` moved to `src/components/shared/` so both pages share one implementation. The print render path keeps Recharts' own legend — there is no wrapper element to place ours in — but a series hidden on screen drops out of both the plot and the printed legend (`hide` + `legendType="none"`).
+
+**Files**: `src/lib/utils/shift-colors.ts` (new), `src/components/shared/chart-legend.tsx` (new), `src/components/capacity/chart-series-style.tsx` (new), `src/lib/hooks/use-chart-series-visibility.ts` (new), `capacity-summary-chart.tsx`, `monthly-rollup-chart.tsx`, `forecast-pattern-chart.tsx`, `capacity-pie-charts.tsx`, `capacity-heatmap.tsx`, `shift-drilldown-drawer.tsx`, `admin/capacity/projection-grid.tsx`, `admin/capacity/headcount-grid.tsx`, `dashboard/combined-chart.tsx`
+**Links**: D-065, OI-117
+
+---
+
+### OI-117 | Capacity Page Ignored Every Filter — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+Filters did nothing on `/capacity`, for three independent reasons found while driving the live page:
+
+1. **No filter values to pick.** `ColumnsFilterDialog` — the only live operator/aircraft/type picker, since `FilterDropdown` and `FilterBarMobile` are dead code imported by nothing — reads its option lists from `useWorkPackagesStore().facets`, populated only by `useWorkPackages()`. The capacity page never calls that hook, so the Operator dropdown rendered "No values" and no filter could be set at all.
+2. **`!=` / `not in` never left the browser.** `handleApply` bridged only `=` and `in` on the three API columns into the filter store; negative rules fell through to `useActions().columnFilters`, applied client-side by `useTransformedData` — a hook `/capacity` does not use. `Operator != Kalitta Air` carried over from the flight board rendered a chip and changed nothing.
+3. **Server-computed demand saw only work packages.** Status, Ground Time, Arrival, Departure, Man-Hours and Shift rules never reached the API; and `/api/capacity/overview` loaded demand contracts, flight events, time bookings and billing entries unfiltered, so an operator filter could not remove that customer from the allocated/worked/billed lenses, the KPI strip or the pies.
+
+**Resolution**:
+- `?facetsOnly=1` on `/api/work-packages/all` + `fetchFacets()` in the work-packages store, called from `TopMenuBar` — which is on every page, so option lists populate everywhere without shipping ~2000 rows.
+- Exclusions became first-class filter state: `excludeOperators` / `excludeAircraft` / `excludeTypes` in `FilterState`, in the URL as `nop` / `nac` / `ntype`, applied in `applyEntityFilters` after the inclusions (an exclusion always wins). The dialog bridges `!=` / `not in` into them and hydrates them back as `not in` rows; `TopMenuBar` renders `≠ Value` chips and clears them in Clear All.
+- The remaining rules are serialized to a `cf` query param and applied server-side via `applyColumnFiltersToRecords()`, a `Date`-aware wrapper over the same `applyColumnFilters` the client uses, so both sides evaluate identically. `timezone` is now sent too, which the `shift` rule needs.
+- `makeCustomerPredicate()` filters demand contracts, flight events, time bookings and billing entries. Aircraft/type filters are deliberately NOT applied to flight events — `FlightEvent.aircraftReg` holds a flight number, not a registration.
+- `useCapacityV2` now waits for `_urlSynced` and aborts in-flight requests, matching `useWorkPackages`. Without it a deep link fired two overlapping fetches and the stale one could win — enough on its own to make a filter look ignored.
+- Work packages are now filtered on the same whole-day bounds as the capacity grid; the sub-day timestamps produced partial demand against full-day capacity.
+
+**Verified live** against production data: `Operator not in [Kalitta Air]` takes Total Demand 471 → 442 MH and Avg Utilization 55.7% → 52.1%, with Kalitta gone from the By Customer breakdown; `Man-Hours > 5` takes it to 116 MH (that chip previously did nothing).
+
+**Files**: `src/lib/utils/filter-helpers.ts`, `src/lib/utils/data-transforms.ts`, `src/lib/hooks/use-filters.ts`, `src/lib/hooks/use-filter-url-sync.ts`, `src/lib/hooks/use-work-packages.ts`, `src/lib/hooks/use-capacity-v2.ts`, `src/components/shared/top-menu-bar.tsx`, `src/components/shared/actions-menu/columns-filter-dialog.tsx`, `src/app/api/work-packages/all/route.ts`, `src/app/api/capacity/overview/route.ts`, `src/types/index.ts`
+**Links**: OI-118, OI-119, OI-120, D-065, REQ_Filters.md
+
+---
+
+### OI-118 | Date and Overnight-Shift Column Filters Matched Nothing — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+Found while writing tests for OI-117; both predate it and affect the flight board too.
+
+`evaluateCondition()` compared ordering operators numerically via `parseFloat`, which reads `"2026-08-07T12:00:00Z"` as `2026`. Every Arrival/Departure rule therefore compared 2026 against 2026 and quietly matched nothing.
+
+`getOverlappingShifts()` walked calendar days starting at the arrival day's midnight, but the Night window that contains an early-morning arrival (23:00 → 07:00) belongs to the **previous** day. A 02:00 arrival was reported as Day-only, contradicting `getPrimaryShift()`, which correctly said Night.
+
+**Resolution**: ordering comparisons require a fully numeric string before treating a value as a number and fall back to `Date.parse` otherwise; the shift walk starts one day earlier, with the early-exit suppressed on the lead-in day. 8 new tests.
+
+**Files**: `src/lib/utils/data-transforms.ts`, `src/lib/utils/shift-helpers.ts`
+**Links**: OI-117
+
+---
+
+### OI-119 | Timezone Selector Does Nothing on /capacity
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P2 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-07 |
+
+`/api/capacity/overview` builds its day grid from UTC dates (`generateDateRange`) and shift bucketing reads each shift's own stored timezone (D-049). The UI TZ selector therefore only re-interprets the start/end timestamps — every day boundary, heatmap row and rollup stays UTC. A user switching to Eastern sees no change and has no way to know the numbers are not on their clock.
+
+Changing it touches the demand engine, the heatmap, the monthly/weekly rollups and every stored shift boundary, so it is its own session. Until then the selector is misleading on this page.
+
+**Links**: OI-117, D-049
+
+---
+
+### OI-120 | Non-API Column Filters Still Inert on Some Surfaces
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-07 |
+
+OI-117 routed the full column-filter rule set to the capacity API, so `/capacity` now honours every rule the dialog can express. The same rules are still applied only client-side elsewhere (`useTransformedData`), which is correct for the flight board and dashboard but means two code paths evaluate the same rules. They share `applyColumnFilters`, so semantics match today; a future divergence would be silent.
+
+Also unresolved: the Actions → Filters → **Rows** menu item is disabled app-wide and has never been implemented.
+
+**Links**: OI-117
+
+---
+
 ### OI-106 | README Screenshots for GitHub
 
 | Field | Value |

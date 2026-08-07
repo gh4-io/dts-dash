@@ -115,7 +115,52 @@ visible = (departure > startDate)
        AND (operators.length === 0 OR customer IN operators)
        AND (aircraft.length === 0 OR aircraftReg IN aircraft)
        AND (types.length === 0 OR inferredType IN types)
+       AND customer NOT IN excludeOperators
+       AND aircraftReg NOT IN excludeAircraft
+       AND inferredType NOT IN excludeTypes
 ```
+
+### Inclusions and exclusions (OI-117)
+
+The Columns filter dialog offers `=`, `!=`, `in` and `not in` on Operator, Aircraft
+and Type. **Both halves are filter state**, not just the positive half:
+
+| Rule | Filter state field | URL param |
+|------|--------------------|-----------|
+| `=` / `in` | `operators` / `aircraft` / `types` | `op` / `ac` / `type` |
+| `!=` / `not in` | `excludeOperators` / `excludeAircraft` / `excludeTypes` | `nop` / `nac` / `ntype` |
+
+Exclusions are applied **after** inclusions, so a value in both lists is excluded.
+Before OI-117 the negative half stayed in the client-only `useActions.columnFilters`
+store and never reached any API — which is why it silently did nothing on
+`/capacity`, a page that computes its data server-side.
+
+### Rules with no filter-state field
+
+Status, Ground Time, Arrival, Departure, Man-Hours and Shift rules have no
+`FilterState` field. They live in `useActions.columnFilters` and are applied:
+
+- **client-side** on the flight board and dashboard, via `useTransformedData` → `applyColumnFilters`
+- **server-side** on `/capacity`, serialized into a `cf` query param and applied by
+  `applyColumnFiltersToRecords` — a `Date`-aware wrapper over the same
+  `applyColumnFilters`, so both paths evaluate identically. The `shift` rule needs
+  the active timezone, so `timezone` is sent with it.
+
+### Filter option lists (facets)
+
+The dialog's value lists come from `useWorkPackagesStore().facets`, populated by
+`GET /api/work-packages/all`. Pages that do not load work packages fetch
+`?facetsOnly=1` (option lists only, no rows) from `TopMenuBar`, which every page
+renders. Without this the dialog showed "No values" and no filter could be set at
+all on `/capacity`.
+
+### Non-work-package demand sources
+
+`/api/capacity/overview` also loads demand contracts, flight events, time bookings
+and billing entries. Each carries a customer, so the **operator** filter applies to
+all of them via `makeCustomerPredicate()`. Aircraft and type filters deliberately do
+**not** apply to flight events: `FlightEvent.aircraftReg` holds a flight number, not
+a registration.
 
 ## Refresh Behavior
 
@@ -123,7 +168,7 @@ visible = (departure > startDate)
 - **Mobile Sheet — Apply-on-close**: Changes batched during editing, applied when sheet closes. Prevents excessive re-renders on mobile.
 - **Debounce**: URL update debounced 300ms to prevent excessive history entries
 - **Data re-fetch**: Triggered on start/end/operator/aircraft/type change
-- **Timezone change**: Display-only; no re-fetch
+- **Timezone change**: Display-only on the flight board and dashboard; no re-fetch. **Note**: on `/capacity` the selector currently changes nothing at all — the day grid is UTC and shift bucketing uses each shift's stored timezone (D-049). See OI-119
 - **Manual refresh**: Refresh button (`fa-solid fa-arrows-rotate`) in page toolbar re-fetches data without changing filters. Derived from CargoJet "Refresh Sched" button (reference image 1).
 
 ## Active Filter Display
@@ -197,10 +242,19 @@ interface FilterQueryParams {
   start?: string;
   end?: string;
   tz?: string;
-  op?: string;   // Comma-separated
-  ac?: string;   // Comma-separated
-  type?: string; // Comma-separated
+  op?: string;    // Comma-separated
+  ac?: string;    // Comma-separated
+  type?: string;  // Comma-separated
+  nop?: string;   // Excluded operators
+  nac?: string;   // Excluded aircraft
+  ntype?: string; // Excluded types
 }
+
+// API param names differ from the URL's short names. Build them with
+// buildFilterQuery() rather than by hand — it is the single wire-format source.
+// start, end, operators, aircraft, types,
+// excludeOperators, excludeAircraft, excludeTypes,
+// plus timezone and cf (serialized column-filter rules) for /api/capacity/overview
 ```
 
 ## Files
@@ -213,4 +267,7 @@ interface FilterQueryParams {
 | `src/components/shared/multi-select.tsx` | Searchable multi-select |
 | `src/lib/hooks/use-filters.ts` | Zustand store |
 | `src/lib/hooks/use-filter-url-sync.ts` | URL ↔ Store sync |
-| `src/lib/utils/filter-helpers.ts` | Validation, defaults, serialization |
+| `src/lib/utils/filter-helpers.ts` | Validation, defaults, `buildFilterQuery`, `makeCustomerPredicate`, column-filter (de)serialization |
+| `src/components/shared/top-menu-bar.tsx` | Live filter bar (dates, TZ, Actions, chips) — `filter-bar.tsx` is not rendered |
+| `src/components/shared/actions-menu/columns-filter-dialog.tsx` | The live Operator/Aircraft/Type picker |
+| `src/lib/utils/data-transforms.ts` | `applyColumnFilters` (client) + `applyColumnFiltersToRecords` (server) |

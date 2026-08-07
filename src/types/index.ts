@@ -149,6 +149,11 @@ export interface FilterState {
   operators: string[];
   aircraft: string[];
   types: string[]; // canonical type names or raw strings (D-032)
+  // Exclusions — the `!=` / `not in` half of the Columns filter dialog.
+  // Applied after the inclusion lists, so an excluded value always loses.
+  excludeOperators: string[];
+  excludeAircraft: string[];
+  excludeTypes: string[];
 }
 
 export interface FilterActions {
@@ -158,6 +163,9 @@ export interface FilterActions {
   setOperators: (v: string[]) => void;
   setAircraft: (v: string[]) => void;
   setTypes: (v: string[]) => void;
+  setExcludeOperators: (v: string[]) => void;
+  setExcludeAircraft: (v: string[]) => void;
+  setExcludeTypes: (v: string[]) => void;
   reset: () => void;
   hydrate: (params: Partial<FilterState>) => void;
   hydrateDefaults: (dateRange: string, tz: string) => void;

@@ -79,7 +79,20 @@ interface ColumnsFilterDialogProps {
 }
 
 export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogProps) {
-  const { operators, aircraft, types, setOperators, setAircraft, setTypes } = useFilters();
+  const {
+    operators,
+    aircraft,
+    types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
+    setOperators,
+    setAircraft,
+    setTypes,
+    setExcludeOperators,
+    setExcludeAircraft,
+    setExcludeTypes,
+  } = useFilters();
   const { columnFilters, setColumnFilters } = useActions();
   const { facets } = useWorkPackagesStore();
   const [draft, setDraft] = useState<ColumnFilterRule[]>([]);
@@ -116,6 +129,24 @@ export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogP
         value: "",
         values: [...types],
       });
+    }
+
+    // Hydrate exclusions as `not in` rows
+    const exclusions: [string[], ColumnFilterRule["column"]][] = [
+      [excludeOperators, "customer"],
+      [excludeAircraft, "aircraftReg"],
+      [excludeTypes, "inferredType"],
+    ];
+    for (const [values, column] of exclusions) {
+      if (values.length > 0) {
+        rules.push({
+          id: nextRuleId(),
+          column,
+          operator: "not in",
+          value: "",
+          values: [...values],
+        });
+      }
     }
 
     // Hydrate from columnFilters (non-API rules)
@@ -179,6 +210,9 @@ export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogP
     const apiOps: string[] = [];
     const apiAircraft: string[] = [];
     const apiTypes: string[] = [];
+    const notOps: string[] = [];
+    const notAircraft: string[] = [];
+    const notTypes: string[] = [];
     const remaining: ColumnFilterRule[] = [];
 
     for (const rule of draft) {
@@ -187,18 +221,23 @@ export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogP
         continue;
       if (rule.operator !== "in" && rule.operator !== "not in" && !rule.value) continue;
 
-      if (API_COLUMNS.has(rule.column) && (rule.operator === "=" || rule.operator === "in")) {
-        // Bridge to useFilters
-        const vals = rule.operator === "in" ? rule.values : [rule.value];
+      const isInclude = rule.operator === "=" || rule.operator === "in";
+      const isExclude = rule.operator === "!=" || rule.operator === "not in";
+
+      if (API_COLUMNS.has(rule.column) && (isInclude || isExclude)) {
+        // Bridge to useFilters — both halves, so exclusions reach the server
+        // instead of staying client-side (where the capacity page never saw them)
+        const vals =
+          rule.operator === "in" || rule.operator === "not in" ? rule.values : [rule.value];
         switch (rule.column) {
           case "customer":
-            apiOps.push(...vals);
+            (isInclude ? apiOps : notOps).push(...vals);
             break;
           case "aircraftReg":
-            apiAircraft.push(...vals);
+            (isInclude ? apiAircraft : notAircraft).push(...vals);
             break;
           case "inferredType":
-            apiTypes.push(...vals);
+            (isInclude ? apiTypes : notTypes).push(...vals);
             break;
         }
       } else {
@@ -209,6 +248,9 @@ export function ColumnsFilterDialog({ open, onOpenChange }: ColumnsFilterDialogP
     setOperators(apiOps);
     setAircraft(apiAircraft);
     setTypes(apiTypes as AircraftType[]);
+    setExcludeOperators(notOps);
+    setExcludeAircraft(notAircraft);
+    setExcludeTypes(notTypes);
     setColumnFilters(remaining);
     onOpenChange(false);
   };

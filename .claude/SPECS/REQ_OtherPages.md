@@ -92,8 +92,32 @@ Additionally has a **Configuration Panel** (inline, not in FilterBar).
 ### Business Rules
 See `/CLAUDE.md` → "Key Domain Rules" for capacity formulas, or `/plan/FINAL-PLAN.md` Section 7 for full detail.
 
+### Chart legend (OI-121, D-065)
+
+The Demand vs Capacity chart — and the weekly-pattern and monthly charts behind the
+same aggregation toggle — use a custom two-row legend, not Recharts' `<Legend>`:
+
+- **Row 1 — entities**: Days / Swings / Nights (or customers in By Customer mode)
+- **Row 2 — series roles**: Capacity, Utilization, plus Forecast / lens / compare overlays
+
+Every entry toggles. A series is drawn only when **neither** its entity key nor its
+role key is hidden, so clicking *Days* hides the Day bar, the Day capacity line and
+the Day utilization line together, while clicking *Capacity* hides that role for
+every shift. Demand has no separate entry when the entity row is present — those bars
+are the entity entries.
+
+Shift hues come from `src/lib/utils/shift-colors.ts` and nowhere else. Roles are
+distinguished by **form** as well as hue: demand is a filled bar, capacity a dashed
+line with no dots, utilization a solid line in a lightened hue with a per-shift dot
+shape (circle / square / triangle).
+
 ### Key Behavior
 - Filters affect **demand** only; capacity is determined by shift config
+- Every filter the Columns dialog can express now changes the numbers, including
+  `!=` / `not in` and the rules with no filter-state field (OI-117). The operator
+  filter also applies to demand contracts, flight events, time bookings and billing
+  entries
+- The timezone selector does **not** affect this page — see OI-119
 - Changing config sliders recalculates within 500ms
 - CSV export button downloads the detail table (all rows, not just current page)
 - Detail table uses TanStack Table with pagination (D-017): default 30 rows/page, configurable via user preferences

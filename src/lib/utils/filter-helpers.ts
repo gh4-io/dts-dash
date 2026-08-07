@@ -17,9 +17,18 @@ export function parseFilterParams(query: URLSearchParams): Partial<FilterState> 
   const aircraftRaw = query.get("aircraft");
   const typesRaw = query.get("types");
 
-  const operators = operatorsRaw ? operatorsRaw.split(",").filter(Boolean) : [];
-  const aircraft = aircraftRaw ? aircraftRaw.split(",").filter(Boolean) : [];
-  const types = typesRaw ? (typesRaw.split(",").filter(Boolean) as AircraftType[]) : [];
+  const excludeOperatorsRaw = query.get("excludeOperators");
+  const excludeAircraftRaw = query.get("excludeAircraft");
+  const excludeTypesRaw = query.get("excludeTypes");
+
+  const split = (raw: string | null) => (raw ? raw.split(",").filter(Boolean) : []);
+
+  const operators = split(operatorsRaw);
+  const aircraft = split(aircraftRaw);
+  const types = split(typesRaw) as AircraftType[];
+  const excludeOperators = split(excludeOperatorsRaw);
+  const excludeAircraft = split(excludeAircraftRaw);
+  const excludeTypes = split(excludeTypesRaw);
 
   return {
     ...(start && { start }),
@@ -28,6 +37,48 @@ export function parseFilterParams(query: URLSearchParams): Partial<FilterState> 
     ...(operators.length > 0 && { operators }),
     ...(aircraft.length > 0 && { aircraft }),
     ...(types.length > 0 && { types }),
+    ...(excludeOperators.length > 0 && { excludeOperators }),
+    ...(excludeAircraft.length > 0 && { excludeAircraft }),
+    ...(excludeTypes.length > 0 && { excludeTypes }),
+  };
+}
+
+/**
+ * Assemble the query params the data APIs expect from filter state.
+ * Shared by every data hook so the wire format cannot drift between pages.
+ */
+export function buildFilterQuery(f: Partial<FilterState>): Record<string, string> {
+  const q: Record<string, string> = {};
+  if (f.start) q.start = f.start;
+  if (f.end) q.end = f.end;
+  if (f.operators?.length) q.operators = f.operators.join(",");
+  if (f.aircraft?.length) q.aircraft = f.aircraft.join(",");
+  if (f.types?.length) q.types = f.types.join(",");
+  if (f.excludeOperators?.length) q.excludeOperators = f.excludeOperators.join(",");
+  if (f.excludeAircraft?.length) q.excludeAircraft = f.excludeAircraft.join(",");
+  if (f.excludeTypes?.length) q.excludeTypes = f.excludeTypes.join(",");
+  return q;
+}
+
+/**
+ * Predicate for "does this customer survive the operator filter?".
+ * Reused for the non-work-package demand sources (contracts, flight events,
+ * time bookings, billing entries), which carry a customer but are not work
+ * packages and so cannot go through applyFilters.
+ */
+export function makeCustomerPredicate(
+  filters: Partial<FilterState>,
+): (customer: string | null | undefined) => boolean {
+  const include = filters.operators ?? [];
+  const exclude = filters.excludeOperators ?? [];
+  if (include.length === 0 && exclude.length === 0) return () => true;
+
+  const includeSet = new Set(include);
+  const excludeSet = new Set(exclude);
+  return (customer) => {
+    if (!customer) return include.length === 0; // unattributed rows survive only when nothing is required
+    if (include.length > 0 && !includeSet.has(customer)) return false;
+    return !excludeSet.has(customer);
   };
 }
 
@@ -112,6 +163,18 @@ function applyEntityFilters(
     filtered = filtered.filter((wp) => filters.types!.includes(wp.inferredType));
   }
 
+  // Exclusions run last — an excluded value always loses, even if it also
+  // appears in the inclusion list.
+  if (filters.excludeOperators && filters.excludeOperators.length > 0) {
+    filtered = filtered.filter((wp) => !filters.excludeOperators!.includes(wp.customer));
+  }
+  if (filters.excludeAircraft && filters.excludeAircraft.length > 0) {
+    filtered = filtered.filter((wp) => !filters.excludeAircraft!.includes(wp.aircraftReg));
+  }
+  if (filters.excludeTypes && filters.excludeTypes.length > 0) {
+    filtered = filtered.filter((wp) => !filters.excludeTypes!.includes(wp.inferredType));
+  }
+
   return filtered;
 }
 
@@ -163,6 +226,65 @@ export function extractFacets(workPackages: WorkPackage[]): Facets {
 }
 
 /**
+ * Column filter rules over the wire.
+ *
+ * The Columns dialog can express rules the filter store has no field for
+ * (status, ground time, arrival/departure, man-hours, shift). Those used to be
+ * client-side only, which is why they had no effect on the capacity page — it
+ * computes demand on the server. Serializing the whole rule set lets the
+ * capacity API apply exactly what the user sees in the chips.
+ *
+ * Kept deliberately loose (`unknown[]` in, validated out) so this module does
+ * not depend on the client-only use-actions store.
+ */
+export interface SerializableColumnFilter {
+  id: string;
+  column: string;
+  operator: string;
+  value: string;
+  values: string[];
+}
+
+export function serializeColumnFilters(rules: SerializableColumnFilter[]): string {
+  return JSON.stringify(
+    rules.map((r) => ({
+      id: r.id,
+      column: r.column,
+      operator: r.operator,
+      value: r.value,
+      values: r.values,
+    })),
+  );
+}
+
+/** Parse the `cf` query param. Returns [] for missing or malformed input. */
+export function parseColumnFilters(raw: string | null): SerializableColumnFilter[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((r) => {
+      if (typeof r !== "object" || r === null) return [];
+      const rule = r as Record<string, unknown>;
+      if (typeof rule.column !== "string" || typeof rule.operator !== "string") return [];
+      return [
+        {
+          id: typeof rule.id === "string" ? rule.id : "",
+          column: rule.column,
+          operator: rule.operator,
+          value: typeof rule.value === "string" ? rule.value : "",
+          values: Array.isArray(rule.values)
+            ? rule.values.filter((v) => typeof v === "string")
+            : [],
+        },
+      ];
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Get default filter state
  */
 export function getDefaultFilterState(): FilterState {
@@ -179,5 +301,8 @@ export function getDefaultFilterState(): FilterState {
     operators: [],
     aircraft: [],
     types: [],
+    excludeOperators: [],
+    excludeAircraft: [],
+    excludeTypes: [],
   };
 }

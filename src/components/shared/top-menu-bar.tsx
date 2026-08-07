@@ -5,6 +5,7 @@ import { useFilterUrlSync } from "@/lib/hooks/use-filter-url-sync";
 import { useFilters } from "@/lib/hooks/use-filters";
 import { useActions, ACTION_COLUMNS, type ColumnFilterRule } from "@/lib/hooks/use-actions";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { useWorkPackagesStore } from "@/lib/hooks/use-work-packages";
 import { getTimelineFromWindow } from "@/lib/utils/timeline-defaults";
 import { DateTimePicker } from "./datetime-picker";
 import { ActionsMenu } from "./actions-menu";
@@ -50,12 +51,18 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
     operators,
     aircraft,
     types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
     setStart,
     setEnd,
     setTimezone,
     setOperators,
     setAircraft,
     setTypes,
+    setExcludeOperators,
+    setExcludeAircraft,
+    setExcludeTypes,
   } = useFilters();
 
   const {
@@ -73,11 +80,19 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
   } = useActions();
 
   const { customers, fetch: fetchCustomers } = useCustomers();
+  const fetchFacets = useWorkPackagesStore((s) => s.fetchFacets);
 
   // Ensure customers are loaded (previously handled by FilterDropdown)
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
+
+  // Load the filter option lists. The TopMenuBar is on every page, so doing it
+  // here is what makes the Columns filter dialog usable outside the two pages
+  // that fetch work packages — the capacity page had no operator values at all.
+  useEffect(() => {
+    fetchFacets({ ...(start && { start }), ...(end && { end }) });
+  }, [fetchFacets, start, end]);
 
   // Build a lookup for operator colors
   const customerColorMap = useMemo(() => {
@@ -127,6 +142,17 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
       });
     }
 
+    // Operator exclusion chips
+    for (const op of excludeOperators) {
+      result.push({
+        id: `nop-${op}`,
+        label: `\u2260 ${customerDisplayMap.get(op) ?? op}`,
+        icon: "fa-solid fa-building",
+        color: customerColorMap.get(op),
+        onRemove: () => setExcludeOperators(excludeOperators.filter((o) => o !== op)),
+      });
+    }
+
     // Aircraft chips
     for (const ac of aircraft) {
       result.push({
@@ -137,6 +163,16 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
       });
     }
 
+    // Aircraft exclusion chips
+    for (const ac of excludeAircraft) {
+      result.push({
+        id: `nac-${ac}`,
+        label: `\u2260 ${ac}`,
+        icon: "fa-solid fa-plane",
+        onRemove: () => setExcludeAircraft(excludeAircraft.filter((a) => a !== ac)),
+      });
+    }
+
     // Type chips
     for (const t of types) {
       result.push({
@@ -144,6 +180,16 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
         label: t,
         icon: "fa-solid fa-plane-circle-check",
         onRemove: () => setTypes(types.filter((ty) => ty !== t) as AircraftType[]),
+      });
+    }
+
+    // Type exclusion chips
+    for (const t of excludeTypes) {
+      result.push({
+        id: `ntype-${t}`,
+        label: `\u2260 ${t}`,
+        icon: "fa-solid fa-plane-circle-check",
+        onRemove: () => setExcludeTypes(excludeTypes.filter((ty) => ty !== t)),
       });
     }
 
@@ -210,6 +256,9 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
     operators,
     aircraft,
     types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
     columnFilters,
     sorts,
     controlBreaks,
@@ -221,6 +270,9 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
     setOperators,
     setAircraft,
     setTypes,
+    setExcludeOperators,
+    setExcludeAircraft,
+    setExcludeTypes,
     removeSortLevel,
     disableBreak,
     disableHighlight,
@@ -232,6 +284,9 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
     setOperators([]);
     setAircraft([]);
     setTypes([]);
+    setExcludeOperators([]);
+    setExcludeAircraft([]);
+    setExcludeTypes([]);
     setTimezone(defaultTz);
     resetAll();
   };

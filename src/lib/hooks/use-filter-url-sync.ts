@@ -16,7 +16,18 @@ export function useFilterUrlSync() {
   const isHydrating = useRef(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { start, end, timezone, operators, aircraft, types, hydrate } = useFilters();
+  const {
+    start,
+    end,
+    timezone,
+    operators,
+    aircraft,
+    types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
+    hydrate,
+  } = useFilters();
 
   // URL → Store (on mount / navigation)
   useEffect(() => {
@@ -26,6 +37,10 @@ export function useFilterUrlSync() {
     const urlOp = searchParams.get("op");
     const urlAc = searchParams.get("ac");
     const urlType = searchParams.get("type");
+    // Exclusions — `n` prefix for "not"
+    const urlNotOp = searchParams.get("nop");
+    const urlNotAc = searchParams.get("nac");
+    const urlNotType = searchParams.get("ntype");
 
     const params: Record<string, unknown> = {};
     if (urlStart) params.start = urlStart;
@@ -34,6 +49,9 @@ export function useFilterUrlSync() {
     if (urlOp) params.operators = urlOp.split(",").filter(Boolean);
     if (urlAc) params.aircraft = urlAc.split(",").filter(Boolean);
     if (urlType) params.types = urlType.split(",").filter(Boolean) as AircraftType[];
+    if (urlNotOp) params.excludeOperators = urlNotOp.split(",").filter(Boolean);
+    if (urlNotAc) params.excludeAircraft = urlNotAc.split(",").filter(Boolean);
+    if (urlNotType) params.excludeTypes = urlNotType.split(",").filter(Boolean);
 
     if (Object.keys(params).length > 0) {
       hydrate(params as Record<string, never>);
@@ -63,6 +81,9 @@ export function useFilterUrlSync() {
       if (operators.length > 0) params.set("op", operators.join(","));
       if (aircraft.length > 0) params.set("ac", aircraft.join(","));
       if (types.length > 0) params.set("type", types.join(","));
+      if (excludeOperators.length > 0) params.set("nop", excludeOperators.join(","));
+      if (excludeAircraft.length > 0) params.set("nac", excludeAircraft.join(","));
+      if (excludeTypes.length > 0) params.set("ntype", excludeTypes.join(","));
 
       const qs = params.toString();
       const url = qs ? `${pathname}?${qs}` : pathname;
@@ -73,5 +94,17 @@ export function useFilterUrlSync() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [start, end, timezone, operators, aircraft, types, pathname, router]);
+  }, [
+    start,
+    end,
+    timezone,
+    operators,
+    aircraft,
+    types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
+    pathname,
+    router,
+  ]);
 }
