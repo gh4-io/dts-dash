@@ -934,15 +934,26 @@ Added `rotationEndDate` (nullable) to `staffing_shifts` table for creating a his
 
 ---
 
-### OI-084 | iPad Sidebar Collapse — No Way to Expand
+### OI-084 | Sidebar Collapse — No Way to Expand — RESOLVED
 
 | Field | Value |
 |-------|-------|
-| **Type** | Enhancement |
-| **Status** | **Open** |
+| **Type** | Bug |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-02-26 |
+| **Resolved** | 2026-08-07 |
+
+**Worse than filed, and not iPad-specific.** When `mode === "collapsed"` the sidebar renders at width 0, so its own edge toggle unmounts with it. The header did show a hamburger in that state, but it opened the **mobile nav sheet** — it never restored the sidebar. Since the mode is persisted to `localStorage`, a reload restored the collapse too, so there was genuinely no route back short of clearing site data.
+
+Partially masked: an effect auto-expands whenever `device.width >= AUTO_ICONS_BELOW` (1536), so a roomy desktop self-heals on load. **Every width from 768 to 1535 stayed stuck** — laptops and tablets, i.e. exactly where the sidebar is the only navigation.
+
+**Resolution**: the header's collapsed-state button now branches on width. Below `md` the sidebar is not the navigation (D-053) and the sheet remains correct; at `md` and above the button reads **Show sidebar** and calls `setMode("expanded")`.
+
+**Verified** at 1280x800 with a stale `sidebar-mode: "collapsed"`: sidebar width 0 and no nav before, then 56px icons-mode with 5 nav links after one click, surviving a reload, with the edge toggle available to widen further.
+
+**Noted, not changed**: `cycleMode()` in `use-sidebar.ts` is dead — nothing calls it, and it is the only code path that could ever set `"collapsed"`. The state is therefore only reachable from storage written by an older build. It is now escapable either way; removing the dead function is separate cleanup.
 
 When sidebar is fully collapsed on iPad (lg breakpoint), the toggle button is hidden because it's inside the sidebar itself (`width: 0`). User has no way to expand it back without refreshing the page. The hamburger button in the header handles tablet (md-lg), but iPad specifically needs a sidebar toggle button that's always visible.
 

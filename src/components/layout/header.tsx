@@ -13,6 +13,7 @@ export function Header() {
   const { data: session } = useSession();
   const device = useDeviceType();
   const sidebarMode = useSidebar((s) => s.mode);
+  const setSidebarMode = useSidebar((s) => s.setMode);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -40,14 +41,33 @@ export function Header() {
       data-print="hide"
       className="flex h-14 items-center justify-between border-b border-border bg-background px-4"
     >
-      {/* Mobile menu button — only when sidebar is fully collapsed (no nav visible) */}
+      {/* Sidebar is fully collapsed, so no nav is visible and the sidebar's own
+          edge toggle has unmounted with it. This is the only way back.
+
+          It has to branch on width. Below md the sidebar is not the navigation
+          (D-053) and the sheet is correct. At md and above the sidebar IS the
+          navigation, and opening a sheet left it collapsed — with the mode
+          persisted to localStorage, a reload restored the collapse too, so
+          there was genuinely no route back short of clearing storage. */}
       {sidebarMode === "collapsed" && (
-        <button
-          className="p-2 text-muted-foreground hover:text-foreground"
-          onClick={() => setMobileNavOpen(true)}
-        >
-          <i className="fa-solid fa-bars" />
-        </button>
+        <>
+          <button
+            className="md:hidden p-2 text-muted-foreground hover:text-foreground"
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open navigation menu"
+            title="Menu"
+          >
+            <i className="fa-solid fa-bars" />
+          </button>
+          <button
+            className="hidden md:block p-2 text-muted-foreground hover:text-foreground"
+            onClick={() => setSidebarMode("expanded")}
+            aria-label="Show sidebar"
+            title="Show sidebar"
+          >
+            <i className="fa-solid fa-bars" />
+          </button>
+        </>
       )}
       <MobileNav open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
 
