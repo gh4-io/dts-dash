@@ -1271,24 +1271,24 @@ The Shift action column (highlight, sort, filter, control-break, group-by) uses 
 
 ---
 
-### OI-086 | work_packages.title Mapped to Wrong Field
+### OI-086 | work_packages.title Mapped to Wrong Field — RESOLVED (v1.0.0)
 
 | Field | Value |
 |-------|-------|
 | **Type** | Data Model Issue |
-| **Status** | **Open** |
+| **Status** | **Resolved** — 2026-08-07 (v1.0.0, BREAKING) |
 | **Priority** | P2 |
 | **Created** | 2026-02-26 |
 
 In v0.1.1 and earlier, the inbound work package data field `title` is mapped directly to the database `work_packages.title` column. This should have been mapped to `workpackage_no` instead, as the inbound `title` contains the work package number/identifier. The current `title` mapping may conflate display labels with actual work package identifiers.
 
-**Impact**: Breaking change for v0.3.0+. Will require:
-1. Schema migration to rename or reinterpret the column
-2. Data backfill to preserve existing values
-3. Import logic update to map inbound `title` → `workpackage_no`
-4. UI/API audit to ensure no code depends on `work_packages.title` for display
+**Confirmed against production data** (10,080 rows): `title` holds identifiers — `AALA/L-201125-2`, `782CK-DAILY-TS-11-20-2025`, `9V-DHA-TRANSIT-CHECK-11-2025` — with 8,015 distinct values. `workpackage_no` was **NULL on every single row**, because it was fed only from an inbound `WorkpackageNo` that no SharePoint export sends. The two columns were the same concept under two names, and the flight board already papered over it with `wp.workpackageNo ?? wp.title`.
 
-**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md)
+**Resolution** (v1.0.0 MAJOR, D-028): the columns are collapsed into `workpackage_no`. No `title` column, no `WorkPackage.title` field. Import maps `WorkpackageNo ?? Title`; `Title` is now an alias on the `workpackageNo` import field. No migration was added — `runMigrations()` stays empty; the data move lives in `scripts/db/upgrade-to-v1.ts` Step 3 (copy into empty `workpackage_no`, then `DROP COLUMN title`; a rename is impossible because both columns have coexisted since v0.1.1).
+
+Nothing was displaying the value as a human-readable label — the only two render sites were headed "WP" and "WP Number", i.e. already identifier semantics.
+
+**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), D-028, CHANGELOG `[Unreleased]`
 
 ---
 

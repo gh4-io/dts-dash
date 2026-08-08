@@ -88,7 +88,6 @@ export function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       guid TEXT NOT NULL UNIQUE,
       sp_id INTEGER UNIQUE,
-      title TEXT,
       aircraft_reg TEXT NOT NULL,
       aircraft_type TEXT,
       customer TEXT NOT NULL,
@@ -102,6 +101,8 @@ export function createTables() {
       description TEXT,
       parent_id TEXT,
       has_workpackage INTEGER,
+      -- OI-086: the inbound SharePoint Title is the work package identifier,
+      -- not a display label, so it lands here. There is no title column.
       workpackage_no TEXT,
       calendar_comments TEXT,
       is_not_closed_or_canceled TEXT,

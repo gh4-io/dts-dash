@@ -233,11 +233,12 @@ export async function transformWorkPackages(
       mhSource,
       manualMHOverride: manualOverride,
       inferredType: normalizedTypes[idx]?.canonical ?? "Unknown",
-      title: wp.Title ?? null,
       description: wp.Description ?? null,
       customerReference: wp.CustomerReference ?? null,
       hasWorkpackage: hasWP,
-      workpackageNo: wp.WorkpackageNo ?? null,
+      // OI-086: inbound `Title` is the WP identifier, not a label. Prefer the
+      // explicit field when a source supplies it; otherwise `Title` is it.
+      workpackageNo: wp.WorkpackageNo ?? wp.Title ?? null,
       calendarComments: wp.CalendarComments ?? null,
       isActive,
       modified: wp.Modified ? new Date(wp.Modified) : null,

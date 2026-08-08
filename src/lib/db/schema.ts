@@ -128,7 +128,6 @@ export const workPackages = sqliteTable(
     spId: integer("sp_id").unique(),
 
     // Core fields
-    title: text("title"),
     aircraftReg: text("aircraft_reg").notNull(),
     aircraftType: text("aircraft_type"),
     customer: text("customer").notNull(),
@@ -144,6 +143,8 @@ export const workPackages = sqliteTable(
 
     // Optional fields (present in some SP exports)
     hasWorkpackage: integer("has_workpackage", { mode: "boolean" }),
+    /** Work package number. Inbound SharePoint `Title` maps here (OI-086) —
+     *  it carries the WP identifier, never a display label. */
     workpackageNo: text("workpackage_no"),
     calendarComments: text("calendar_comments"),
     isNotClosedOrCanceled: text("is_not_closed_or_canceled"),

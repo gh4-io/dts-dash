@@ -31,7 +31,6 @@ function wp(overrides: Partial<WorkPackage>): WorkPackage {
     mhSource: "wp",
     manualMHOverride: null,
     inferredType: "B767",
-    title: null,
     groundEventTypes: null,
     ...overrides,
   } as WorkPackage;

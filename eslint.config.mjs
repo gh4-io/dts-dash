@@ -39,6 +39,10 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "vitest.config.ts",
+    // Agent worktrees are full checkouts living inside the repo. Linting them
+    // means linting a second copy of everything — and failing the gate on code
+    // that is not part of this tree.
+    ".claude/worktrees/**",
   ]),
 ]);
 

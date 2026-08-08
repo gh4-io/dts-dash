@@ -251,6 +251,21 @@ function applyAdditiveCatchUp(
     if (!DRY_RUN) live.exec(ddl);
     record("schema", `index ${name} created`);
   }
+
+  // Objects the live database has and the v1.0.0 schema does not. These are
+  // leftovers from migrations consolidated away in earlier releases — e.g.
+  // idx_customers_guid, made redundant by the UNIQUE constraint on that column.
+  //
+  // Reported, never dropped. They are harmless, and an upgrade script that
+  // deletes structures it did not create is a far worse failure mode than one
+  // that leaves a stale index behind. Drop them by hand if you want the schema
+  // to match a fresh install exactly.
+  const extras = [...liveIndexes].filter(
+    (name) => !ref.indexDDL.has(name) && !name.startsWith("sqlite_"),
+  );
+  if (extras.length > 0) {
+    log(`  ${c.dim}Not in the v1.0.0 schema (left as-is): ${extras.join(", ")}${c.reset}`);
+  }
 }
 
 // ─── Step 3: Data corrections ────────────────────────────────────────────────
@@ -366,6 +381,75 @@ function purgeOrphanedConfig(live: Database.Database): void {
   record("data", `app_config: removed ${found.map((f) => f.key).join(", ")} (D-064 orphans)`);
 }
 
+/**
+ * OI-086. Since v0.1.1 the inbound SharePoint `Title` — which carries the work
+ * package number, not a display label — was written to `work_packages.title`,
+ * while the column actually meant for it, `workpackage_no`, was fed from an
+ * inbound `WorkpackageNo` that no export ever sends. Result: `title` holds
+ * every identifier (`AALA/L-201125-2`, `782CK-DAILY-TS-11-20-2025`) and
+ * `workpackage_no` is NULL on every row. v1.0.0 collapses the two.
+ *
+ * Copy-then-drop rather than ALTER TABLE ... RENAME COLUMN:
+ *
+ * - A rename would fail outright. Both columns have existed side by side since
+ *   v0.1.1, and SQLite refuses to rename onto a name already in use.
+ * - Copying lets the move be conditional. Any row that somehow *did* receive a
+ *   real `workpackage_no` keeps it; only NULL/blank targets are filled. A
+ *   rename cannot express that.
+ * - Idempotence falls out of the column probe: once `title` is dropped there is
+ *   nothing to detect, so a second run is a no-op. Step 2 does not put it back,
+ *   because it only ever adds what the reference schema declares and the
+ *   reference schema no longer has a `title`.
+ *
+ * Ordering is safe: Step 2 runs first and adds nothing here (`workpackage_no`
+ * already exists on every affected database), so the copy always has a target.
+ * `title` carries no index, so DROP COLUMN is unobstructed.
+ */
+function remapTitleToWorkpackageNo(live: Database.Database): void {
+  const cols = live.prepare(`PRAGMA table_info("work_packages")`).all() as ColumnInfo[];
+  const names = new Set(cols.map((col) => col.name));
+  if (!names.has("title")) return; // already remapped
+  if (!names.has("workpackage_no")) {
+    warn("work_packages.workpackage_no is missing — skipping the OI-086 remap");
+    return;
+  }
+
+  const pending = live
+    .prepare(
+      `SELECT COUNT(*) AS n FROM work_packages
+       WHERE title IS NOT NULL AND TRIM(title) <> ''
+         AND (workpackage_no IS NULL OR TRIM(workpackage_no) = '')`,
+    )
+    .get() as { n: number };
+
+  // Values that would be lost — a row holding two different identifiers. None
+  // exist in any observed database, but say so rather than discard silently.
+  const conflicts = live
+    .prepare(
+      `SELECT COUNT(*) AS n FROM work_packages
+       WHERE title IS NOT NULL AND TRIM(title) <> ''
+         AND workpackage_no IS NOT NULL AND TRIM(workpackage_no) <> ''
+         AND title <> workpackage_no`,
+    )
+    .get() as { n: number };
+  if (conflicts.n > 0) {
+    warn(
+      `${conflicts.n} work package(s) have a title differing from their existing ` +
+        `workpackage_no — keeping workpackage_no, discarding title.`,
+    );
+  }
+
+  if (!DRY_RUN) {
+    live.exec(
+      `UPDATE work_packages SET workpackage_no = TRIM(title)
+       WHERE title IS NOT NULL AND TRIM(title) <> ''
+         AND (workpackage_no IS NULL OR TRIM(workpackage_no) = '')`,
+    );
+    live.exec(`ALTER TABLE work_packages DROP COLUMN title`);
+  }
+  record("data", `work_packages: ${pending.n} title(s) copied to workpackage_no, title dropped`);
+}
+
 /** Record that this database has been through the v1.0.0 upgrade. */
 function stampSchemaVersion(live: Database.Database): void {
   if (DRY_RUN) return;
@@ -437,6 +521,7 @@ async function main() {
     const applyDataSteps = live.transaction(() => {
       backfillPatternGroups(live);
       closeOverlappingShiftVersions(live);
+      remapTitleToWorkpackageNo(live);
       purgeOrphanedConfig(live);
       stampSchemaVersion(live);
     });

@@ -117,6 +117,9 @@ out/
 # Playwright MCP scratch output (screenshots, console logs, page snapshots)
 .playwright-mcp/
 
+# Agent worktrees — full checkouts created inside the repo by isolated subagents
+.claude/worktrees/
+
 # Server configuration (instance-specific)
 server.config.yml
 

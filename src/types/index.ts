@@ -126,10 +126,11 @@ export interface WorkPackage {
   inferredType: string; // canonical type name or raw type string (D-032)
 
   // Optional fields (present in some SP exports)
-  title: string | null;
   description: string | null;
   customerReference: string | null;
   hasWorkpackage: boolean;
+  /** Work package number. Sourced from inbound `WorkpackageNo`, falling back to
+   *  inbound `Title` — which carries the WP identifier, not a label (OI-086). */
   workpackageNo: string | null;
   calendarComments: string | null;
   isActive: boolean;

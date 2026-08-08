@@ -241,7 +241,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
               Work Package
             </h3>
             <div className="space-y-1.5 text-sm">
-              <Row label="WP Number" value={wp.workpackageNo ?? wp.title ?? "—"} />
+              <Row label="WP Number" value={wp.workpackageNo ?? "—"} />
               <Row label="Has WP">
                 <Badge variant={wp.hasWorkpackage ? "default" : "secondary"} className="text-xs">
                   {wp.hasWorkpackage ? "Yes" : "No"}

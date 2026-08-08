@@ -224,7 +224,7 @@ export function FlightBoardListCards({
                   )}
                 >
                   <span className="font-semibold">WP:</span>{" "}
-                  {wp.workpackageNo ?? wp.title ?? (wp.hasWorkpackage ? "✓" : "—")}
+                  {wp.workpackageNo ?? (wp.hasWorkpackage ? "✓" : "—")}
                 </span>
               </div>
 

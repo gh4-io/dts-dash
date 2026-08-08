@@ -108,10 +108,12 @@ export function FlightBoardListTable({
         size: 90,
       },
       {
-        accessorKey: "title",
+        accessorKey: "workpackageNo",
         header: "WP",
         cell: ({ row }) => (
-          <span className="text-xs truncate max-w-[120px] block">{row.original.title ?? "—"}</span>
+          <span className="text-xs truncate max-w-[120px] block">
+            {row.original.workpackageNo ?? "—"}
+          </span>
         ),
         size: 120,
       },

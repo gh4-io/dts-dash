@@ -20,8 +20,9 @@ interface SharePointWorkPackage {
   TotalMH: number | null;             // ⚠️ null for 66/86 records
   TotalGroundHours: string;           // ⚠️ STRING, must parseFloat()
   Workpackage_x0020_Status: "New" | "Approved";
+  Title: string;                       // ⚠️ the WP NUMBER, not a label — see below
   HasWorkpackage: boolean;
-  WorkpackageNo: string | null;
+  WorkpackageNo: string | null;         // ⚠️ absent from every observed export
   CalendarComments: string | null;     // HTML
   IsNotClosedOrCanceled: "1" | "0";   // ⚠️ STRING, not boolean
   Modified: string;
@@ -57,6 +58,30 @@ interface WorkPackage {
   inferredType: AircraftType;
 }
 ```
+
+### `Title` → `workpackageNo` (OI-086, BREAKING in v1.0.0)
+
+Inbound `Title` carries the **work package number/identifier** — `AALA/L-201125-2`,
+`782CK-DAILY-TS-11-20-2025`, `9V-DHA-TRANSIT-CHECK-11-2025` — never a human-readable
+label. From v0.1.1 to v0.3.x it was written straight into a `work_packages.title`
+column, while `workpackage_no` was fed only from an inbound `WorkpackageNo` that no
+SharePoint export actually sends. Every production row therefore had the identifier
+in `title` and `NULL` in `workpackage_no`.
+
+**v1.0.0 collapses the two.** There is no `title` column and no `WorkPackage.title`
+field. The mapping is:
+
+| Inbound | DB column | Domain field |
+|---------|-----------|--------------|
+| `WorkpackageNo` (if present), else `Title` | `work_packages.workpackage_no` | `workpackageNo` |
+
+The explicit field wins so a future source that sends both is not misread; `Title`
+is the fallback that carries all existing data. Existing databases are migrated by
+`npm run db:upgrade-v1` (Step 3), which copies `title` into any empty
+`workpackage_no` and then drops the column.
+
+**Do not treat `workpackageNo` as a display label.** It is an identifier; render it
+under a "WP" / "WP Number" heading.
 
 ### Supporting Types
 ```typescript

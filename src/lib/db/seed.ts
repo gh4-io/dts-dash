@@ -318,7 +318,6 @@ export async function seedData(options: SeedOptions = {}) {
           .values({
             guid: wp.GUID,
             spId: wp.ID ?? null,
-            title: wp.Title ?? null,
             aircraftReg: wp.Aircraft.Title,
             aircraftType: wp.Aircraft.field_5 ?? null,
             customer: wp.Customer,
@@ -332,7 +331,8 @@ export async function seedData(options: SeedOptions = {}) {
             description: wp.Description ?? null,
             parentId: wp.ParentID ?? null,
             hasWorkpackage: wp.HasWorkpackage ?? null,
-            workpackageNo: wp.WorkpackageNo ?? null,
+            // OI-086 — inbound `Title` is the WP identifier, not a label.
+            workpackageNo: wp.WorkpackageNo ?? wp.Title ?? null,
             calendarComments: wp.CalendarComments ?? null,
             isNotClosedOrCanceled: wp.IsNotClosedOrCanceled ?? null,
             documentSetId: wp.DocumentSetID ?? null,

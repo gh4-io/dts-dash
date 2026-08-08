@@ -52,7 +52,6 @@ export function readWorkPackages(): SharePointWorkPackage[] {
       TotalMH: row.totalMH,
       TotalGroundHours: row.totalGroundHours ?? "0",
       Workpackage_x0020_Status: (row.status ?? "New") as WpStatus,
-      Title: row.title ?? undefined,
       CustomerReference: row.customerRef ?? undefined,
       Description: row.description ?? undefined,
       FlightId: row.flightId,

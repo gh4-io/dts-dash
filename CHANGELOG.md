@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > **The `[0.3.0]` entry below is incomplete** — it predates everything in this section. Fold these
 > into `[0.3.0]`, or split them into `[0.3.1]`, when the release boundary is decided.
 
+### Changed — BREAKING
+
+- **`work_packages.title` remapped to `workpackage_no`** (OI-086) — inbound SharePoint `Title` carries the work package *number* (`AALA/L-201125-2`, `782CK-DAILY-TS-11-20-2025`), not a display label, but since v0.1.1 it was written to a column called `title` while `workpackage_no` was fed from an inbound `WorkpackageNo` no export ever sends — leaving the identifier under the wrong name and `workpackage_no` NULL on all 10,080 production rows. The two are now one column. **The `title` column and the `WorkPackage.title` / `SerializedWorkPackage.title` fields are gone**; consumers read `workpackageNo`. Import maps `WorkpackageNo ?? Title`, so the explicit field still wins if a source ever supplies it, and `Title` is now an alias on the `workpackageNo` import field. Existing databases are carried over by `npm run db:upgrade-v1` (Step 3): the value is copied into any empty `workpackage_no`, then `title` is dropped. Copy-then-drop rather than `RENAME COLUMN` because both columns have coexisted since v0.1.1 and SQLite cannot rename onto an occupied name. Allowed only because v1.0.0 is a MAJOR (D-028)
+
 ### Added
 
 - **Click-to-hide chart legend** (OI-121, D-065) — the capacity charts' legend is now interactive and has two rows: shifts (or customers) above, series roles below. Clicking **Days** hides the Day bar, its capacity line and its utilization line together; clicking **Capacity** hides that role across every shift. Applies to the daily, weekly-pattern and monthly charts. Previously the legend was inert and, worse, labelled five entries for nine drawn series. The dashboard's **Arrivals / Departures / On Ground** chart toggles the same way; hiding a series there also removes it from the printed chart
