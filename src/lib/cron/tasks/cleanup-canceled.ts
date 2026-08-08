@@ -1,4 +1,5 @@
 import { db, sqlite } from "@/lib/db/client";
+import { deleteFlightCommentsForWorkPackages } from "@/lib/messages/repository";
 import { invalidateCache } from "@/lib/data/reader";
 import { invalidateTransformerCache } from "@/lib/data/transformer";
 import { createChildLogger } from "@/lib/logger";
@@ -30,6 +31,7 @@ export async function cleanupCanceledWPs(
 
   const wpIds = canceledRows.map((r) => r.id);
   let overridesDeleted = 0;
+  let commentsDeleted = 0;
 
   // Delete in a transaction for atomicity
   db.transaction(() => {
@@ -38,6 +40,13 @@ export async function cleanupCanceledWPs(
       const result = sqlite.prepare("DELETE FROM mh_overrides WHERE work_package_id = ?").run(wpId);
       overridesDeleted += result.changes;
     }
+
+    // Flight comments must be deleted explicitly since v1.0.0 (OI-099). They used
+    // to be flight_comments rows whose work_package_id was a real FK with ON
+    // DELETE CASCADE; they are now messages rows whose subject_id is polymorphic
+    // and therefore cannot carry a foreign key at all. Without this call the rows
+    // would survive their work package as unreachable orphans.
+    commentsDeleted = deleteFlightCommentsForWorkPackages(wpIds);
 
     // Delete the canceled WPs
     const placeholders = wpIds.map(() => "?").join(",");
@@ -48,8 +57,11 @@ export async function cleanupCanceledWPs(
   invalidateCache();
   invalidateTransformerCache();
 
-  const message = `Deleted ${wpIds.length} canceled WP(s), ${overridesDeleted} override(s)`;
-  log.info({ deletedCount: wpIds.length, overridesDeleted, graceHours, cutoff }, message);
+  const message = `Deleted ${wpIds.length} canceled WP(s), ${overridesDeleted} override(s), ${commentsDeleted} comment(s)`;
+  log.info(
+    { deletedCount: wpIds.length, overridesDeleted, commentsDeleted, graceHours, cutoff },
+    message,
+  );
 
   return { message };
 }

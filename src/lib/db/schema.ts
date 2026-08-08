@@ -181,30 +181,126 @@ export const workPackages = sqliteTable(
   }),
 );
 
-// ─── Flight Comments ────────────────────────────────────────────────────────
+// ─── Messages (OI-099, v1.0.0 BREAKING) ─────────────────────────────────────
+//
+// Single table for flight comments, notifications, feedback posts and feedback
+// comments — see the extended rationale in schema-init.ts, which holds the
+// canonical DDL including the CHECK constraints and the partial per-kind indexes.
+//
+// The four tables this replaced (flight_comments, notifications, feedback_posts,
+// feedback_comments) plus feedback_labels and feedback_post_labels no longer have
+// exports here. That deletion is deliberate: it turns every stale reference into
+// a compile error, which is the main safety net for this migration. Raw SQL
+// against the old names would have been invisible to tsc.
+//
+// ⚠️ Indexes are NOT declared on this Drizzle table. The partial `WHERE kind = …`
+// indexes cannot be expressed here, and schema-init.ts is the single source of
+// DDL truth for this project (there is no drizzle-kit migration step). Declaring
+// a non-partial subset here would misrepresent what actually exists.
 
-export const flightComments = sqliteTable(
-  "flight_comments",
+/** The four message kinds. Every query must filter on one of these. */
+export const MESSAGE_KINDS = [
+  "flight_comment",
+  "notification",
+  "feedback_post",
+  "feedback_comment",
+] as const;
+
+export type MessageKind = (typeof MESSAGE_KINDS)[number];
+
+export const messages = sqliteTable("messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+
+  kind: text("kind", { enum: MESSAGE_KINDS }).notNull(),
+
+  // Threading: parent_id is the direct reply target, root_id the thread
+  // container. A feedback_post is its own root, so all messages in a thread are
+  // one `WHERE root_id = ?`.
+  parentId: integer("parent_id"),
+  rootId: integer("root_id"),
+
+  // Polymorphic external subject ('work_package' + work_packages.id). No FK is
+  // possible, therefore no ON DELETE CASCADE — deleting a subject must delete
+  // its messages explicitly (see lib/cron/tasks/cleanup-canceled.ts).
+  subjectType: text("subject_type"),
+  subjectId: integer("subject_id"),
+
+  // ⚠️ NO cascade on authorId — and never add one. A cascade here would wipe out
+  // every comment and post a user ever wrote the first time an account is
+  // deleted, silently. Authorship is a historical fact about the message, not a
+  // reason for the message to cease to exist. To anonymise, NULL this column.
+  authorId: integer("author_id").references(() => users.id),
+
+  // Notifications only, and this one DOES cascade: a notification exists purely
+  // to be delivered to that user. Keeping authorId and recipientId as separate
+  // columns is precisely what lets both delete policies coexist.
+  recipientId: integer("recipient_id").references(() => users.id, { onDelete: "cascade" }),
+
+  title: text("title"),
+  body: text("body"),
+
+  // Notification taxonomy (was notifications.type/.category). `msgType` rather
+  // than `type` to keep it clearly distinct from `kind`.
+  msgType: text("msg_type"),
+  category: text("category"),
+  readAt: text("read_at"),
+  actionUrl: text("action_url"),
+  expiresAt: text("expires_at"),
+
+  // Feedback post workflow.
+  status: text("status", {
+    enum: ["open", "under_review", "planned", "in_progress", "done", "wont_fix"],
+  }),
+  isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
+
+  metadata: text("metadata"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+
+  // Provenance + backfill idempotency key (UNIQUE partial index in schema-init).
+  legacySource: text("legacy_source"),
+  legacyId: integer("legacy_id"),
+  legacyParentId: integer("legacy_parent_id"),
+});
+
+// ─── Labels ─────────────────────────────────────────────────────────────────
+//
+// Kept SEPARATE from messages on purpose (OI-099): `name` is NOT NULL UNIQUE and
+// that constraint has nowhere to live inside a table whose every column is
+// nullable; the join row has no id/author/body/timestamps so it cannot be a
+// message; and a label is a dimension, not an utterance — folding it in would
+// make every messages query carry `AND kind != 'label'` forever.
+
+export const labels = sqliteTable("labels", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  color: text("color").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  legacySource: text("legacy_source"),
+  legacyId: integer("legacy_id"),
+});
+
+export const messageLabels = sqliteTable(
+  "message_labels",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    workPackageId: integer("work_package_id")
+    messageId: integer("message_id")
       .notNull()
-      .references(() => workPackages.id, { onDelete: "cascade" }),
-    parentId: integer("parent_id"),
-    authorId: integer("author_id")
+      .references(() => messages.id, { onDelete: "cascade" }),
+    labelId: integer("label_id")
       .notNull()
-      .references(() => users.id),
-    body: text("body").notNull(),
-    createdAt: text("created_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
-    updatedAt: text("updated_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
+      .references(() => labels.id, { onDelete: "cascade" }),
   },
   (table) => ({
-    workPackageIdx: index("idx_flight_comments_wp").on(table.workPackageId),
-    authorIdx: index("idx_flight_comments_author").on(table.authorId),
+    pk: primaryKey({ columns: [table.messageId, table.labelId] }),
+    messageIdx: index("idx_message_labels_message").on(table.messageId),
+    labelIdx: index("idx_message_labels_label").on(table.labelId),
   }),
 );
 
@@ -761,88 +857,17 @@ export const masterDataImportLog = sqliteTable("master_data_import_log", {
 });
 
 // ─── Feedback Board ──────────────────────────────────────────────────────────
-
-export const feedbackPosts = sqliteTable(
-  "feedback_posts",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    authorId: integer("author_id")
-      .notNull()
-      .references(() => users.id),
-    title: text("title").notNull(),
-    body: text("body").notNull(),
-    status: text("status", {
-      enum: ["open", "under_review", "planned", "in_progress", "done", "wont_fix"],
-    })
-      .notNull()
-      .default("open"),
-    isPinned: integer("is_pinned", { mode: "boolean" }).notNull().default(false),
-    createdAt: text("created_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
-    updatedAt: text("updated_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
-  },
-  (table) => ({
-    authorIdx: index("idx_feedback_posts_author").on(table.authorId),
-    statusIdx: index("idx_feedback_posts_status").on(table.status),
-    createdIdx: index("idx_feedback_posts_created").on(table.createdAt),
-  }),
-);
-
-export const feedbackComments = sqliteTable(
-  "feedback_comments",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    postId: integer("post_id")
-      .notNull()
-      .references(() => feedbackPosts.id, { onDelete: "cascade" }),
-    parentId: integer("parent_id"),
-    authorId: integer("author_id")
-      .notNull()
-      .references(() => users.id),
-    body: text("body").notNull(),
-    createdAt: text("created_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
-    updatedAt: text("updated_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
-  },
-  (table) => ({
-    postIdx: index("idx_feedback_comments_post").on(table.postId),
-  }),
-);
-
-export const feedbackLabels = sqliteTable("feedback_labels", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull().unique(),
-  color: text("color").notNull(),
-  sortOrder: integer("sort_order").notNull().default(0),
-  createdAt: text("created_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-});
-
-export const feedbackPostLabels = sqliteTable(
-  "feedback_post_labels",
-  {
-    postId: integer("post_id")
-      .notNull()
-      .references(() => feedbackPosts.id, { onDelete: "cascade" }),
-    labelId: integer("label_id")
-      .notNull()
-      .references(() => feedbackLabels.id, { onDelete: "cascade" }),
-  },
-  (table) => ({
-    pk: primaryKey({ columns: [table.postId, table.labelId] }),
-    postIdx: index("idx_feedback_post_labels_post").on(table.postId),
-    labelIdx: index("idx_feedback_post_labels_label").on(table.labelId),
-  }),
-);
-
-// ─── End Feedback Board ──────────────────────────────────────────────────────
+//
+// feedback_posts, feedback_comments, feedback_labels and feedback_post_labels
+// were folded into `messages` / `labels` / `message_labels` in v1.0.0 (OI-099).
+// Their Drizzle exports are deliberately deleted rather than deprecated — a
+// stale reference is now a compile error instead of a query against a table that
+// fresh installs do not have.
+//
+// Existing databases keep the old tables read-only for one release as the only
+// rollback for a bad remap; they are dropped in v1.1.0. Nothing outside
+// src/lib/db/backfill/messages-backfill.ts may name them (enforced by
+// src/__tests__/db/no-legacy-message-refs.test.ts).
 
 // ─── Invite Codes ───────────────────────────────────────────────────────────
 
@@ -880,8 +905,10 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   analyticsEvents: many(analyticsEvents),
   importLogs: many(importLog),
   masterDataImportLogs: many(masterDataImportLog),
-  feedbackPosts: many(feedbackPosts),
-  feedbackComments: many(feedbackComments),
+  // Messages this user wrote (OI-099). Note there is intentionally no cascade
+  // from users to messages.author_id — see the schema comment.
+  authoredMessages: many(messages, { relationName: "messageAuthor" }),
+  receivedMessages: many(messages, { relationName: "messageRecipient" }),
   mhOverrides: many(mhOverrides),
   inviteCodesCreated: many(inviteCodes),
   customersCreated: many(customers, { relationName: "customerCreatedBy" }),
@@ -1017,46 +1044,44 @@ export const masterDataImportLogRelations = relations(masterDataImportLog, ({ on
   }),
 }));
 
-export const feedbackPostsRelations = relations(feedbackPosts, ({ one, many }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   author: one(users, {
-    fields: [feedbackPosts.authorId],
+    fields: [messages.authorId],
     references: [users.id],
+    relationName: "messageAuthor",
   }),
-  comments: many(feedbackComments),
-  postLabels: many(feedbackPostLabels),
-}));
-
-export const feedbackCommentsRelations = relations(feedbackComments, ({ one, many }) => ({
-  post: one(feedbackPosts, {
-    fields: [feedbackComments.postId],
-    references: [feedbackPosts.id],
-  }),
-  parent: one(feedbackComments, {
-    fields: [feedbackComments.parentId],
-    references: [feedbackComments.id],
-    relationName: "commentReplies",
-  }),
-  replies: many(feedbackComments, {
-    relationName: "commentReplies",
-  }),
-  author: one(users, {
-    fields: [feedbackComments.authorId],
+  recipient: one(users, {
+    fields: [messages.recipientId],
     references: [users.id],
+    relationName: "messageRecipient",
   }),
+  parent: one(messages, {
+    fields: [messages.parentId],
+    references: [messages.id],
+    relationName: "messageReplies",
+  }),
+  replies: many(messages, { relationName: "messageReplies" }),
+  root: one(messages, {
+    fields: [messages.rootId],
+    references: [messages.id],
+    relationName: "messageThread",
+  }),
+  thread: many(messages, { relationName: "messageThread" }),
+  messageLabels: many(messageLabels),
 }));
 
-export const feedbackLabelsRelations = relations(feedbackLabels, ({ many }) => ({
-  postLabels: many(feedbackPostLabels),
+export const labelsRelations = relations(labels, ({ many }) => ({
+  messageLabels: many(messageLabels),
 }));
 
-export const feedbackPostLabelsRelations = relations(feedbackPostLabels, ({ one }) => ({
-  post: one(feedbackPosts, {
-    fields: [feedbackPostLabels.postId],
-    references: [feedbackPosts.id],
+export const messageLabelsRelations = relations(messageLabels, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageLabels.messageId],
+    references: [messages.id],
   }),
-  label: one(feedbackLabels, {
-    fields: [feedbackPostLabels.labelId],
-    references: [feedbackLabels.id],
+  label: one(labels, {
+    fields: [messageLabels.labelId],
+    references: [labels.id],
   }),
 }));
 
@@ -1322,32 +1347,10 @@ export const staffingShiftsRelations = relations(staffingShifts, ({ one }) => ({
 }));
 
 // ─── Notifications ──────────────────────────────────────────────────────────
-
-export const notifications = sqliteTable(
-  "notifications",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    userId: integer("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    type: text("type").notNull().default("system"),
-    category: text("category").notNull().default("general"),
-    title: text("title").notNull(),
-    message: text("message"),
-    metadata: text("metadata"),
-    readAt: text("read_at"),
-    actionUrl: text("action_url"),
-    expiresAt: text("expires_at"),
-    createdAt: text("created_at")
-      .notNull()
-      .$defaultFn(() => new Date().toISOString()),
-  },
-  (table) => ({
-    userIdx: index("idx_notifications_user").on(table.userId),
-    userUnreadIdx: index("idx_notifications_user_unread").on(table.userId, table.readAt),
-    createdIdx: index("idx_notifications_created").on(table.createdAt),
-  }),
-);
+//
+// The `notifications` table was folded into `messages` (kind = 'notification')
+// in v1.0.0 — OI-099. See the note on the Feedback Board block above for why the
+// export is deleted outright.
 
 // ─── Weekly MH Projections (TEMPORARY — OI-067) ────────────────────────────
 

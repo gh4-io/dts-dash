@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import {
-  feedbackPosts,
-  feedbackComments,
-  feedbackPostLabels,
-  feedbackLabels,
-  users,
-} from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import type { FeedbackStatus } from "@/types/feedback";
 import { parseIntParam } from "@/lib/utils/route-helpers";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
+import {
+  getFeedbackPostDetail,
+  getFeedbackPostOwner,
+  updateFeedbackPost,
+  deleteFeedbackPostThread,
+  setFeedbackPostLabels,
+} from "@/lib/messages/repository";
 
 const log = createChildLogger("api/feedback/[id]");
 
@@ -30,6 +28,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 /**
  * GET /api/feedback/[id]
  * Get post detail with comments and labels.
+ *
+ * ⚠️ v1.0.0 BREAKING: post ids were remapped when the tables merged (OI-099), so
+ * bookmarked /feedback/[id] URLs from v0.3.0 point at a different post or at
+ * nothing. The pre-merge id survives on messages.legacy_id if a lookup is needed.
  */
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
@@ -44,78 +46,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
     }
 
-    const post = db
-      .select({
-        id: feedbackPosts.id,
-        authorId: feedbackPosts.authorId,
-        authorName: users.displayName,
-        title: feedbackPosts.title,
-        body: feedbackPosts.body,
-        status: feedbackPosts.status,
-        isPinned: feedbackPosts.isPinned,
-        createdAt: feedbackPosts.createdAt,
-        updatedAt: feedbackPosts.updatedAt,
-      })
-      .from(feedbackPosts)
-      .innerJoin(users, eq(feedbackPosts.authorId, users.id))
-      .where(eq(feedbackPosts.id, id))
-      .get();
-
-    if (!post) {
+    const detail = getFeedbackPostDetail(id);
+    if (!detail) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    // Labels
-    const labels = db
-      .select({
-        id: feedbackLabels.id,
-        name: feedbackLabels.name,
-        color: feedbackLabels.color,
-        sortOrder: feedbackLabels.sortOrder,
-        createdAt: feedbackLabels.createdAt,
-      })
-      .from(feedbackPostLabels)
-      .innerJoin(feedbackLabels, eq(feedbackPostLabels.labelId, feedbackLabels.id))
-      .where(eq(feedbackPostLabels.postId, id))
-      .all();
-
-    // Comments (flat, ordered by creation time)
-    const rawComments = db
-      .select({
-        id: feedbackComments.id,
-        postId: feedbackComments.postId,
-        parentId: feedbackComments.parentId,
-        authorId: feedbackComments.authorId,
-        authorName: users.displayName,
-        body: feedbackComments.body,
-        createdAt: feedbackComments.createdAt,
-        updatedAt: feedbackComments.updatedAt,
-      })
-      .from(feedbackComments)
-      .innerJoin(users, eq(feedbackComments.authorId, users.id))
-      .where(eq(feedbackComments.postId, id))
-      .orderBy(asc(feedbackComments.createdAt))
-      .all();
-
-    // Build tree: top-level comments get replies[] arrays
-    type CommentNode = (typeof rawComments)[0] & { replies: CommentNode[] };
-    const nodeMap = new Map<number, CommentNode>();
-    for (const c of rawComments) nodeMap.set(c.id, { ...c, replies: [] });
-    const topLevel: CommentNode[] = [];
-    for (const c of rawComments) {
-      if (c.parentId && nodeMap.has(c.parentId)) {
-        nodeMap.get(c.parentId)!.replies.push(nodeMap.get(c.id)!);
-      } else {
-        topLevel.push(nodeMap.get(c.id)!);
-      }
-    }
-
-    return NextResponse.json({
-      ...post,
-      labels,
-      comments: topLevel,
-      commentCount: rawComments.length,
-    });
+    return NextResponse.json(detail);
   } catch (error) {
     log.error({ err: error }, "GET error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -124,7 +60,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
 /**
  * PATCH /api/feedback/[id]
- * Edit body (author), or status/labels/pin (admin).
+ * Edit title/body (author), or status/labels/pin (admin).
  */
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
@@ -141,8 +77,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const role = (session.user as unknown as { role: string }).role;
     const isAdmin = role === "admin" || role === "superadmin";
 
-    const post = db.select().from(feedbackPosts).where(eq(feedbackPosts.id, id)).get();
-
+    const post = getFeedbackPostOwner(id);
     if (!post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
@@ -154,8 +89,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const body = await request.json();
-    const now = new Date().toISOString();
-    const updates: Record<string, unknown> = { updatedAt: now };
+    const updates: { title?: string; body?: string; status?: FeedbackStatus; isPinned?: boolean } =
+      {};
 
     // Author can edit title and body
     if (isAuthor) {
@@ -190,15 +125,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         if (!Array.isArray(body.labelIds)) {
           return NextResponse.json({ error: "labelIds must be an array" }, { status: 400 });
         }
-        // Replace all labels
-        db.delete(feedbackPostLabels).where(eq(feedbackPostLabels.postId, id)).run();
-        for (const labelId of body.labelIds) {
-          db.insert(feedbackPostLabels).values({ postId: id, labelId }).run();
-        }
+        setFeedbackPostLabels(id, body.labelIds);
       }
     }
 
-    db.update(feedbackPosts).set(updates).where(eq(feedbackPosts.id, id)).run();
+    updateFeedbackPost(id, updates);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -209,7 +140,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 /**
  * DELETE /api/feedback/[id]
- * Delete post (author or admin). CASCADE deletes comments + label associations.
+ * Delete post (author or admin), together with its whole comment thread.
+ *
+ * v0.3.0 relied on ON DELETE CASCADE from feedback_posts. Under the unified
+ * self-referential FKs that becomes a cascade chain whose depth follows the reply
+ * tree and whose behaviour depends on a per-connection pragma, so the repository
+ * deletes explicitly by root_id instead (OI-099). Label links go with the post via
+ * message_labels' own cascade.
  */
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
@@ -226,8 +163,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     const role = (session.user as unknown as { role: string }).role;
     const isAdmin = role === "admin" || role === "superadmin";
 
-    const post = db.select().from(feedbackPosts).where(eq(feedbackPosts.id, id)).get();
-
+    const post = getFeedbackPostOwner(id);
     if (!post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
@@ -238,7 +174,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    db.delete(feedbackPosts).where(eq(feedbackPosts.id, id)).run();
+    deleteFeedbackPostThread(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

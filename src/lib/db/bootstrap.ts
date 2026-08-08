@@ -7,6 +7,7 @@
 
 import { sqlite } from "./client";
 import { createTables, runMigrations } from "./schema-init";
+import { backfillMessages, assertMessagesReconciled } from "./backfill/messages-backfill";
 import { SYSTEM_AUTH_ID, SYSTEM_USER_EMAIL, SYSTEM_USER_DISPLAY_NAME } from "@/lib/constants";
 import { createChildLogger } from "@/lib/logger";
 
@@ -215,14 +216,64 @@ function ensureDefaultStaffingData(): void {
 }
 
 /**
+ * Move the six pre-v1.0.0 messaging tables into messages/labels/message_labels,
+ * then refuse to continue if the counts do not reconcile (OI-099).
+ *
+ * ── Why this runs at boot rather than in a script ────────────────────────────
+ *
+ * `createTables()` above has just created `messages` EMPTY on a database whose
+ * old tables still hold every comment, notification and feedback post. In that
+ * window the app is fully functional and shows zero of all three. No error, no
+ * exception, no log line — an empty thread looks exactly like a migrated one.
+ *
+ * Had this been a standalone script, any operator who forgot to run it would
+ * have that as the permanent state of their installation and no way to notice.
+ * The same class of failure already bit this release once: after OI-086 renamed
+ * a column, the dev database went un-upgraded and the app happily rendered blank
+ * work-package identifiers.
+ *
+ * The reconciliation guard therefore THROWS, which stops startup. That is the
+ * intent: a crash with a message is the only failure mode anyone will see, and
+ * the legacy tables are still intact for a rollback.
+ *
+ * On a fresh install none of the legacy tables exist and this is a no-op.
+ */
+function ensureMessagesBackfilled(): void {
+  const result = backfillMessages({ db: sqlite });
+  if (!result.ran) return;
+
+  for (const warning of result.warnings) {
+    log.warn({ warning }, "Messages backfill warning");
+  }
+
+  // Throws on any mismatch — see the comment above.
+  assertMessagesReconciled(result);
+
+  if (result.inserted > 0 || result.parentsRemapped > 0 || result.metadataRemapped > 0) {
+    log.info(
+      {
+        inserted: result.inserted,
+        alreadyPresent: result.alreadyPresent,
+        orphansSkipped: result.orphansSkipped,
+        parentsRemapped: result.parentsRemapped,
+        metadataRemapped: result.metadataRemapped,
+        sourceCounts: result.sourceCounts,
+      },
+      "Messages backfill complete (OI-099)",
+    );
+  }
+}
+
+/**
  * Main bootstrap entry point. Called from instrumentation.ts on server startup.
  *
  * 1. Create tables (IF NOT EXISTS)
- * 2. Run migrations (idempotent)
- * 3. Ensure system user exists
- * 4. Ensure default config keys exist
- * 5. Ensure default capacity data exists
- * 6. Ensure default staffing data exists
+ * 2. Run migrations (idempotent — returns [] since v1.0.0)
+ * 3. Backfill messages + reconcile (OI-099) — THROWS on mismatch
+ * 4. Ensure system user exists
+ * 5. Ensure default config keys exist
+ * 6. Ensure default capacity data exists
+ * 7. Ensure default staffing data exists
  */
 export function bootstrapDatabase(): void {
   try {
@@ -232,6 +283,10 @@ export function bootstrapDatabase(): void {
     if (applied.length > 0) {
       log.info(`Applied ${applied.length} migration(s): ${applied.map((m) => m.name).join(", ")}`);
     }
+
+    // Must come immediately after the schema exists and before anything reads
+    // messages — see ensureMessagesBackfilled for why this is not a script.
+    ensureMessagesBackfilled();
 
     ensureSystemUser();
     ensureDefaultConfig();

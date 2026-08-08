@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import { notifications } from "@/lib/db/schema";
-import { eq, sql, and, isNull, or, gt } from "drizzle-orm";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
+import { unreadNotificationCount } from "@/lib/messages/repository";
 
 /**
  * GET /api/notifications/unread-count
  * Lightweight endpoint for badge polling — returns just the unread count.
+ *
+ * This is the hottest query in the app: notification-bell.tsx polls it on an
+ * interval for every logged-in client. The repository query is written to resolve
+ * through the partial index idx_messages_notif_unread ON
+ * messages(recipient_id, read_at) WHERE kind = 'notification' (OI-099).
  */
 export async function GET() {
   try {
@@ -16,22 +19,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = getSessionUserId(session);
-    const now = new Date().toISOString();
-
-    const result = db
-      .select({ count: sql<number>`count(*)` })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, userId),
-          isNull(notifications.readAt),
-          or(isNull(notifications.expiresAt), gt(notifications.expiresAt, now)),
-        ),
-      )
-      .get();
-
-    return NextResponse.json({ count: result?.count ?? 0 });
+    return NextResponse.json({ count: unreadNotificationCount(getSessionUserId(session)) });
   } catch {
     return NextResponse.json({ count: 0 });
   }

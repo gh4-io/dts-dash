@@ -15,6 +15,20 @@ import { banner, log, formatBytes, padRight, c } from "./_cli-utils";
 
 const PROJECT_ROOT = process.cwd();
 
+/**
+ * Pre-v1.0.0 messaging tables, folded into messages/labels/message_labels by
+ * OI-099. Listed here as plain strings because they intentionally have no Drizzle
+ * exports — deleting those is what turns a stale reference into a compile error.
+ */
+const LEGACY_MESSAGE_TABLES = [
+  "flight_comments",
+  "notifications",
+  "feedback_posts",
+  "feedback_comments",
+  "feedback_labels",
+  "feedback_post_labels",
+] as const;
+
 function main() {
   banner("Database Status");
 
@@ -62,6 +76,9 @@ function main() {
     analytics_events: schema.analyticsEvents,
     app_config: schema.appConfig,
     cron_job_runs: schema.cronJobRuns,
+    messages: schema.messages,
+    labels: schema.labels,
+    message_labels: schema.messageLabels,
   };
 
   let totalRows = 0;
@@ -75,6 +92,28 @@ function main() {
   }
   log(`  ${"─".repeat(26)} ──`);
   log(`  ${padRight("total", 26)} ${totalRows}`);
+
+  // ─── Legacy messaging tables (OI-099) ──────────────────────────────────────
+  //
+  // Retained read-only for one release as the only rollback for a bad remap, and
+  // dropped in v1.1.0. They have no Drizzle exports and no code may reference
+  // them, so they are counted with raw SQL and probed for existence first —
+  // fresh installs do not have them at all.
+  const legacyTables = LEGACY_MESSAGE_TABLES.filter(
+    (t) =>
+      sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?").get(t) !==
+      undefined,
+  );
+
+  if (legacyTables.length > 0) {
+    log("");
+    log("Legacy Messaging Tables:", "blue");
+    for (const name of legacyTables) {
+      const row = sqlite.prepare(`SELECT COUNT(*) AS n FROM "${name}"`).get() as { n: number };
+      const countStr = row.n > 0 ? `${c.yellow}${row.n}${c.reset}` : `${c.dim}0${c.reset}`;
+      log(`  ${padRight(name, 26)} ${countStr} ${c.dim}(legacy — drop in v1.1.0)${c.reset}`);
+    }
+  }
 
   // ─── Last Import ───────────────────────────────────────────────────────────
 

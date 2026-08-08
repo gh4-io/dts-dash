@@ -5,7 +5,7 @@ import { transformWorkPackages } from "@/lib/data/transformer";
 import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
 import { paginate, parsePaginationParams } from "@/lib/utils/pagination";
 import { createChildLogger } from "@/lib/logger";
-import { sqlite } from "@/lib/db/client";
+import { flightCommentCountsBySpId } from "@/lib/messages/repository";
 
 const log = createChildLogger("api/work-packages");
 
@@ -35,15 +35,10 @@ export async function GET(request: NextRequest) {
     const filtered = applyFilters(workPackages, filterParams);
 
     // Enrich with comment counts (join through sp_id since wp.id = SharePoint ID)
-    const commentCounts = sqlite
-      .prepare(
-        `SELECT wp.sp_id, COUNT(*) as cnt
-         FROM flight_comments fc
-         JOIN work_packages wp ON wp.id = fc.work_package_id
-         GROUP BY wp.sp_id`,
-      )
-      .all() as { sp_id: number; cnt: number }[];
-    const countMap = new Map(commentCounts.map((r) => [r.sp_id, r.cnt]));
+    // One repository call, shared with /api/work-packages/all — both routes used
+    // to carry their own copy of this subquery, which is a second place to forget
+    // the `kind` filter (OI-099).
+    const countMap = flightCommentCountsBySpId();
 
     const enriched = filtered.map((wp) => ({
       ...wp,

@@ -44,7 +44,8 @@
     "version": "node scripts/db/sync-version.mjs && git add -A",
     "docker:build": "docker build --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd .",
     "docker:build:tag": "docker build --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:$(node -p \"require('./package.json').version\") .",
-    "docker:build:dev": "docker build --target dev --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:dev ."
+    "docker:build:dev": "docker build --target dev --build-arg VERSION=$(node -p \"require('./package.json').version\") -t dtsd:dev .",
+    "db:backfill-messages": "tsx scripts/db/backfill-messages.ts"
   },
   "dependencies": {
     "@tanstack/react-table": "^8.21.3",

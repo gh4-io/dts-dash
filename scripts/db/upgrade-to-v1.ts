@@ -43,6 +43,10 @@ import os from "os";
 import path from "path";
 import Database from "better-sqlite3";
 import {
+  backfillMessages,
+  assertMessagesReconciled,
+} from "../../src/lib/db/backfill/messages-backfill";
+import {
   banner,
   log,
   success,
@@ -450,6 +454,82 @@ function remapTitleToWorkpackageNo(live: Database.Database): void {
   record("data", `work_packages: ${pending.n} title(s) copied to workpackage_no, title dropped`);
 }
 
+/**
+ * OI-099. v1.0.0 folds flight_comments, notifications and the four feedback_*
+ * tables into messages / labels / message_labels.
+ *
+ * Step 2 above has already created the three new tables from the reference
+ * schema — EMPTY, on a database where the six old tables still hold every row.
+ * That window is the dangerous part of this whole migration: the app runs
+ * perfectly and shows zero comments, zero notifications and zero feedback, with
+ * no error, no exception and no log line. An empty thread is indistinguishable
+ * from a migrated one.
+ *
+ * So the move happens here, and `assertMessagesReconciled` throws if the counts
+ * do not add up — which aborts the enclosing transaction and rolls the whole
+ * upgrade back. The same call runs at every server boot, so a database that
+ * skipped this script still gets migrated rather than silently emptied.
+ *
+ * The legacy tables are left in place, read-only: they are the only rollback for
+ * a bad remap. They are dropped in v1.1.0.
+ */
+function backfillMessagesStep(live: Database.Database): void {
+  // On a --dry-run against a pre-v1.0.0 database, Step 2 did not actually create
+  // `messages`, so there is nothing to migrate into. Report the intent instead of
+  // failing: the point of a dry run is to describe the upgrade, not to perform
+  // half of it.
+  const hasMessages =
+    live.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages'`).get() !==
+    undefined;
+
+  if (!hasMessages) {
+    if (DRY_RUN) {
+      const legacyPresent = [
+        "flight_comments",
+        "notifications",
+        "feedback_posts",
+        "feedback_comments",
+        "feedback_labels",
+        "feedback_post_labels",
+      ].filter(
+        (t) =>
+          live.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(t) !==
+          undefined,
+      );
+      if (legacyPresent.length > 0) {
+        record(
+          "data",
+          `messages: would migrate ${legacyPresent.join(", ")} once the table exists (OI-099)`,
+        );
+      }
+      return;
+    }
+    throw new Error("messages table was not created in Step 2 — cannot backfill (OI-099)");
+  }
+
+  // dryRun is handled by the module itself, which rolls its own work back.
+  const result = backfillMessages({ db: live, dryRun: DRY_RUN, onOrphan: "skip" });
+  if (!result.ran) return;
+
+  for (const w of result.warnings) warn(w);
+
+  assertMessagesReconciled(result);
+
+  for (const [source, sc] of Object.entries(result.sourceCounts)) {
+    if (sc.inserted === 0) continue;
+    record("data", `${source}: ${sc.inserted} row(s) moved into messages/labels`);
+  }
+  if (result.parentsRemapped > 0) {
+    record("data", `messages: ${result.parentsRemapped} parent pointer(s) remapped to new ids`);
+  }
+  if (result.metadataRemapped > 0) {
+    record(
+      "data",
+      `messages: ${result.metadataRemapped} notification metadata.commentId value(s) remapped`,
+    );
+  }
+}
+
 /** Record that this database has been through the v1.0.0 upgrade. */
 function stampSchemaVersion(live: Database.Database): void {
   if (DRY_RUN) return;
@@ -523,6 +603,7 @@ async function main() {
       closeOverlappingShiftVersions(live);
       remapTitleToWorkpackageNo(live);
       purgeOrphanedConfig(live);
+      backfillMessagesStep(live);
       stampSchemaVersion(live);
     });
     applyDataSteps();

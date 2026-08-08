@@ -957,3 +957,38 @@ The shift palette was also copy-pasted into six components in two forms (hex for
 **Impact:** Additive. New table, new admin page (`/admin/mh-overrides`), new import schema, new endpoints under `/api/admin/mh-overrides`. `computeEffectiveMH` is unchanged — this is management for a chain that already worked.
 
 **Links:** D-013 (mh_overrides storage), [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-104, OI-086 (workpackage_no)
+
+---
+
+## D-067 | 2026-08-08 | Unified Messages — Split FK Delete Policies, and Deletion by Thread Rather Than Cascade (OI-099)
+
+**Context:** OI-099 folded six tables into `messages` / `labels` / `message_labels`. The six had *four different* foreign-key delete policies between them, and collapsing them into one table forced a single explicit decision about each — a merge is exactly the moment those policies get flattened by accident.
+
+Before the merge: `flight_comments.author_id` and `feedback_posts.author_id` had **no** cascade; `notifications.user_id` cascaded from `users`; `flight_comments.work_package_id` cascaded from `work_packages`; `feedback_comments.post_id` and `feedback_post_labels.*` cascaded from their parents.
+
+**Decision:**
+
+1. **`author_id` and `recipient_id` are SEPARATE columns, precisely so both delete policies can survive.** Merging them into one "user" column would have forced a single policy on two incompatible meanings. `author_id` carries **no** `ON DELETE CASCADE`; `recipient_id` carries one.
+
+2. **`author_id` must never be given a cascade.** A cascade there would erase every comment and every post a user ever wrote, the first time an account is deleted — silently, unrecoverably, and in one statement nobody would review closely. Authorship is a *historical fact about the message*; it is not a reason for the message to stop existing. If account deletion ever needs to anonymise, the correct move is to NULL the column, not to cascade. The rule is stated in a comment on the column in both `schema-init.ts` and `schema.ts`, and asserted by `schema-consolidation.test.ts` — because the destructive change is a one-word edit that reads as a tidy-up.
+
+3. **`recipient_id` does cascade.** A notification exists solely to be delivered to that user; when the account goes, so does the delivery. This preserves the pre-merge behaviour of `notifications.user_id`.
+
+4. **`subject_type` / `subject_id` are polymorphic and therefore carry no FK — so deleting a subject must delete its messages explicitly.** This is a real capability loss: `flight_comments.work_package_id` was a genuine FK with `ON DELETE CASCADE`, and comments were removed with their work package for free. `cleanup-canceled` now calls `deleteFlightCommentsForWorkPackages()` inside its existing transaction. Any future code path that deletes work packages must do the same. Accepted deliberately: a polymorphic subject is what lets one table serve four kinds, and the alternative — a nullable `work_package_id` column beside `subject_id` — would have meant two ways to express the same relationship, with nothing keeping them in agreement.
+
+5. **Deletion semantics change, in two ways, both intentional:**
+
+   - **Flight comment deletion now removes the full subtree.** v0.3.0 ran two flat `DELETE`s and so removed only ONE level of replies, orphaning anything deeper. This was a known defect carried on OI-092. Unified with the recursive walk that feedback comments always used (`deleteMessageSubtree` in the repository). **This fixes a bug**; it is recorded here because it is nevertheless a behaviour change in a MAJOR release.
+   - **Feedback post deletion deletes by `root_id` instead of trusting cascade.** Under self-referential FKs, cascade becomes a chain whose depth follows the reply tree and whose behaviour depends on `PRAGMA foreign_keys`, which is per-connection. `DELETE FROM messages WHERE root_id = ?` is one statement, covers the post (its root is itself) and every descendant at any depth, and does not care whether foreign keys are enforced.
+
+6. **Subtree deletes walk the tree in application code even though `parent_id` cascades.** The FK is kept as a backstop, but relying on it alone would mean a subtree delete silently degrading to a single-row delete on any connection that forgot the pragma.
+
+**Alternatives considered:**
+- *One `user_id` column with a `role` discriminator* — collapses the two policies into one and makes the destructive option the default
+- *Cascade `author_id` and accept the loss* — would delete history as a side effect of user administration; not a trade-off worth having
+- *Keep `work_package_id` as a real FK alongside `subject_id`* — two representations of one relationship, with nothing enforcing agreement
+- *Trust `ON DELETE CASCADE` for subtrees* — correctness would depend on a per-connection pragma
+
+**Impact:** BREAKING (v1.0.0, D-028). Schema-level; the API contract types are unchanged, so no UI changed. Callers that delete work packages must delete flight comments explicitly. Flight comment deletion removes more than it used to — which is the point.
+
+**Links:** [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-099, OI-092, OI-094, OI-123, D-028 (semver)

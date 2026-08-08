@@ -1,46 +1,25 @@
 import { db } from "@/lib/db/client";
-import { notifications, users } from "@/lib/db/schema";
+import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
-import type { NotificationType, NotificationCategory } from "@/types";
+import { insertNotifications, type CreateNotificationOpts } from "@/lib/messages/repository";
 
 const log = createChildLogger("notifications");
 
-interface NotificationOpts {
-  type: NotificationType;
-  category: NotificationCategory;
-  title: string;
-  message?: string | null;
-  metadata?: Record<string, unknown> | null;
-  actionUrl?: string | null;
-  expiresAt?: string | null;
-}
+export type NotificationOpts = CreateNotificationOpts;
 
 /**
  * Create notifications for specific users.
  * Inserts one row per user ID. Silently skips if userIds is empty.
+ *
+ * Since v1.0.0 the rows land in `messages` with kind = 'notification' and
+ * recipient_id set (OI-099). The fan-out is unchanged — one row per recipient,
+ * because read_at on the recipient's own row is the dismissal state.
  */
 export function createNotification(userIds: number[], opts: NotificationOpts): void {
   if (userIds.length === 0) return;
 
-  const now = new Date().toISOString();
-  const metadataStr = opts.metadata ? JSON.stringify(opts.metadata) : null;
-
-  for (const uid of userIds) {
-    db.insert(notifications)
-      .values({
-        userId: uid,
-        type: opts.type,
-        category: opts.category,
-        title: opts.title,
-        message: opts.message?.trim() || null,
-        metadata: metadataStr,
-        actionUrl: opts.actionUrl || null,
-        expiresAt: opts.expiresAt || null,
-        createdAt: now,
-      })
-      .run();
-  }
+  insertNotifications(userIds, opts);
 
   log.info(
     { type: opts.type, category: opts.category, targetCount: userIds.length },

@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import { notifications } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
 import { parseIntParam } from "@/lib/utils/route-helpers";
+import { markNotificationRead } from "@/lib/messages/repository";
 
 const log = createChildLogger("api/notifications/read");
 
 /**
  * PATCH /api/notifications/[id]/read
  * Mark a single notification as read.
+ *
+ * The repository scopes the update by kind AND recipient, so neither another
+ * user's notification nor a message of a different kind can be marked through
+ * this route (OI-099).
  */
 export async function PATCH(
   _request: NextRequest,
@@ -29,24 +31,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
-    const userId = getSessionUserId(session);
-    const now = new Date().toISOString();
-
-    const updated = db
-      .update(notifications)
-      .set({ readAt: now })
-      .where(and(eq(notifications.id, numId), eq(notifications.userId, userId)))
-      .returning()
-      .get();
-
+    const updated = markNotificationRead(numId, getSessionUserId(session));
     if (!updated) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json({
-      ...updated,
-      metadata: updated.metadata ? JSON.parse(updated.metadata) : null,
-    });
+    return NextResponse.json(updated);
   } catch (error) {
     log.error({ err: error }, "PATCH error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

@@ -38,6 +38,13 @@ function main() {
     master_data_import_log: schema.masterDataImportLog,
     analytics_events: schema.analyticsEvents,
     app_config: schema.appConfig,
+    // OI-099. Note the list above previously omitted flight_comments,
+    // notifications and all four feedback_* tables, so `npm run db:export` was
+    // never a backup of comments, notifications or feedback. Use `npm run
+    // db:backup` (file-level) for anything you intend to restore from.
+    messages: schema.messages,
+    labels: schema.labels,
+    message_labels: schema.messageLabels,
   };
 
   log("Exporting tables:", "blue");

@@ -1,17 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { sqlite } from "@/lib/db/client";
+import { db } from "@/lib/db/client";
+import { workPackages } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
 import { createChildLogger } from "@/lib/logger";
 import { createNotification } from "@/lib/notifications/create";
+import {
+  listFlightComments,
+  getFlightComment,
+  createFlightComment,
+  deleteMessageSubtree,
+  flightCommentParticipants,
+} from "@/lib/messages/repository";
 
 const log = createChildLogger("api/work-packages/comments");
 
-/** Resolve sp_id (client-facing) to internal auto-increment id */
+/**
+ * Resolve sp_id (client-facing) to internal auto-increment id.
+ *
+ * Kept as-is through the OI-099 rewrite: [id] in this route is the SharePoint ID,
+ * and the messages table stores the internal work_packages.id in subject_id.
+ * Conflating the two would attach comments to the wrong aircraft.
+ *
+ * Moved from raw SQL to Drizzle along with the rest of this route — raw SQL is
+ * exactly what let the old table name stay invisible to tsc.
+ */
 function resolveWpId(spId: number): number | null {
-  const row = sqlite.prepare("SELECT id FROM work_packages WHERE sp_id = ?").get(spId) as
-    | { id: number }
-    | undefined;
+  const row = db
+    .select({ id: workPackages.id })
+    .from(workPackages)
+    .where(eq(workPackages.spId, spId))
+    .get();
   return row?.id ?? null;
 }
 
@@ -40,19 +60,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Work package not found" }, { status: 404 });
     }
 
-    const comments = sqlite
-      .prepare(
-        `SELECT fc.id, fc.work_package_id AS workPackageId, fc.parent_id AS parentId,
-                fc.author_id AS authorId, u.display_name AS authorName,
-                fc.body, fc.created_at AS createdAt, fc.updated_at AS updatedAt
-         FROM flight_comments fc
-         JOIN users u ON u.id = fc.author_id
-         WHERE fc.work_package_id = ?
-         ORDER BY fc.created_at ASC`,
-      )
-      .all(internalId);
-
-    return NextResponse.json(comments);
+    return NextResponse.json(listFlightComments(internalId));
   } catch (error) {
     log.error({ err: error }, "GET error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -91,63 +99,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const parentId = json.parentId != null ? Number(json.parentId) : null;
 
-    // Validate parentId belongs to same WP if provided
-    if (parentId != null) {
-      const parent = sqlite
-        .prepare("SELECT id FROM flight_comments WHERE id = ? AND work_package_id = ?")
-        .get(parentId, internalId) as { id: number } | undefined;
-      if (!parent) {
-        return NextResponse.json({ error: "Parent comment not found" }, { status: 400 });
-      }
+    // Validate parentId belongs to the same WP if provided. The repository scopes
+    // this by kind and subject, so a notification id or a feedback comment id
+    // cannot be smuggled in as a parent.
+    if (parentId != null && !getFlightComment(parentId, internalId)) {
+      return NextResponse.json({ error: "Parent comment not found" }, { status: 400 });
     }
 
-    const now = new Date().toISOString();
-    const result = sqlite
-      .prepare(
-        `INSERT INTO flight_comments (work_package_id, parent_id, author_id, body, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run(internalId, parentId, userId, body, now, now);
+    const comment = createFlightComment({
+      workPackageId: internalId,
+      authorId: userId,
+      body,
+      parentId,
+    });
 
-    const insertedId = result.lastInsertRowid;
-
-    // Return the new comment with author name
-    const comment = sqlite
-      .prepare(
-        `SELECT fc.id, fc.work_package_id AS workPackageId, fc.parent_id AS parentId,
-                fc.author_id AS authorId, u.display_name AS authorName,
-                fc.body, fc.created_at AS createdAt, fc.updated_at AS updatedAt
-         FROM flight_comments fc
-         JOIN users u ON u.id = fc.author_id
-         WHERE fc.id = ?`,
-      )
-      .get(insertedId);
+    if (!comment) {
+      return NextResponse.json({ error: "Failed to create comment" }, { status: 500 });
+    }
 
     // Notify other thread participants
     try {
-      const participants = sqlite
-        .prepare(
-          `SELECT DISTINCT author_id FROM flight_comments WHERE work_package_id = ? AND author_id != ?`,
-        )
-        .all(internalId, userId) as { author_id: number }[];
+      const participants = flightCommentParticipants(internalId, userId);
 
       if (participants.length > 0) {
-        const wp = sqlite
-          .prepare("SELECT aircraft_reg FROM work_packages WHERE id = ?")
-          .get(internalId) as { aircraft_reg: string } | undefined;
-        const reg = wp?.aircraft_reg ?? "aircraft";
+        const wp = db
+          .select({ aircraftReg: workPackages.aircraftReg })
+          .from(workPackages)
+          .where(eq(workPackages.id, internalId))
+          .get();
+        const reg = wp?.aircraftReg ?? "aircraft";
 
-        createNotification(
-          participants.map((p) => p.author_id),
-          {
-            type: "comment",
-            category: "flight",
-            title: `New comment on ${reg}`,
-            message: body.length > 100 ? body.slice(0, 100) + "..." : body,
-            metadata: { workPackageId: internalId, spId, commentId: Number(insertedId) },
-            actionUrl: "/flight-board",
-          },
-        );
+        createNotification(participants, {
+          type: "comment",
+          category: "flight",
+          title: `New comment on ${reg}`,
+          message: body.length > 100 ? body.slice(0, 100) + "..." : body,
+          metadata: { workPackageId: internalId, spId, commentId: comment.id },
+          actionUrl: "/flight-board",
+        });
       }
     } catch (notifErr) {
       log.warn({ err: notifErr }, "Failed to create comment notifications");
@@ -163,6 +152,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 /**
  * DELETE /api/work-packages/[id]/comments?commentId=123
  * Delete a comment. Only the author or admin/superadmin can delete.
+ *
+ * ⚠️ Behaviour change in v1.0.0 (OI-099), deliberate: this used to run two flat
+ * DELETEs and so removed only ONE level of replies, orphaning anything nested
+ * deeper. It now removes the full subtree, matching what feedback comments always
+ * did. That fixes the orphaning defect recorded on OI-092.
  */
 export async function DELETE(
   request: NextRequest,
@@ -194,21 +188,17 @@ export async function DELETE(
     const userId = getSessionUserId(session);
     const isAdmin = ["admin", "superadmin"].includes(session.user.role);
 
-    const comment = sqlite
-      .prepare("SELECT author_id FROM flight_comments WHERE id = ? AND work_package_id = ?")
-      .get(commentId, internalId) as { author_id: number } | undefined;
+    const comment = getFlightComment(commentId, internalId);
 
     if (!comment) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
     }
 
-    if (comment.author_id !== userId && !isAdmin) {
+    if (comment.authorId !== userId && !isAdmin) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Delete the comment and any replies to it
-    sqlite.prepare("DELETE FROM flight_comments WHERE parent_id = ?").run(commentId);
-    sqlite.prepare("DELETE FROM flight_comments WHERE id = ?").run(commentId);
+    deleteMessageSubtree(commentId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

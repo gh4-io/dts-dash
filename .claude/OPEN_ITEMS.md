@@ -1028,7 +1028,7 @@ Add right-click context menu on capacity graphs to toggle visibility of specific
 
 **Shipped.** The item was left Open in this tracker after the work landed. Verified against the code at v1.0.0 prep: `flight_comments` table exists (schema.ts, plus M023), the API is live at `/api/work-packages/[id]/comments` (GET/POST/DELETE with threading via `parent_id`), comment counts are joined into both `/api/work-packages` and `/api/work-packages/all`, and the thread renders in the flight detail drawer.
 
-**Known defect carried forward**: deletion removes only one level of replies (two flat `DELETE`s), so replies nested deeper are orphaned. Fixed as part of OI-099 Phase A, which unifies this with `feedback_comments` and adopts its recursive `deleteCommentTree`.
+**Known defect — RESOLVED in v1.0.0**: deletion removed only one level of replies (two flat `DELETE`s), orphaning anything nested deeper. Fixed by OI-099, which unified flight comments with `feedback_comments` and adopted its recursive subtree walk (`deleteMessageSubtree` in `src/lib/messages/repository.ts`). Done in a single pass, not the phased approach originally sketched. Recorded as an intended behaviour change in the CHANGELOG (D-067).
 
 **Links**: OI-099, OI-094
 
@@ -1357,64 +1357,198 @@ Nothing was displaying the value as a human-readable label — the only two rend
 
 ---
 
-### OI-099 | Unified Comments/Notifications/Feedback Table (v1.0.x)
+### OI-099 | Unified Messages Table — RESOLVED (v1.0.0, BREAKING)
 
 | Field | Value |
 |-------|-------|
 | **Type** | Refactoring / Architecture |
+| **Status** | **Resolved** — shipped 2026-08-08 |
+| **Priority** | P2 |
+| **Target Version** | v1.0.0 (BREAKING, D-028) |
+| **Created** | 2026-03-17 |
+| **Resolved** | 2026-08-08 |
+
+Six tables folded into three: `messages`, `labels`, `message_labels`.
+
+#### ⚠️ Corrections to the original spec
+
+The spec as originally written was wrong in three ways. Recorded here so nobody
+reintroduces them:
+
+1. **`user_notification_dismissals` never existed.** The original spec named it as
+   one of the tables to merge, and proposed a `message_dismissals` table to
+   replace it. Notifications are a **per-recipient fan-out** — one row per
+   recipient — and `read_at` on the recipient's own row **is** the dismissal
+   state. There was never a separate dismissals table to merge, and no
+   `message_dismissals` table was created. (Already flagged on OI-094.)
+2. **The four `feedback_*` tables were omitted entirely.** The spec listed three
+   tables (two of which were really one, per the above). The actual footprint was
+   six: `flight_comments`, `notifications`, `feedback_posts`,
+   `feedback_comments`, `feedback_labels`, `feedback_post_labels`.
+3. **There is no voting on feedback posts.** The spec implied vote/reaction
+   support and proposed a `message_reactions` table. No vote column, no vote
+   table and no vote code has ever existed. Nothing was designed for it and no
+   reactions table was created — adding one speculatively would have been schema
+   surface with no consumer, which is what D-064 had just finished removing.
+
+#### What shipped
+
+| Legacy table | Rows at migration | Becomes |
+|---|---|---|
+| `flight_comments` | 0 | `messages`, `kind = 'flight_comment'` |
+| `notifications` | 48 | `messages`, `kind = 'notification'` |
+| `feedback_posts` | 3 | `messages`, `kind = 'feedback_post'` |
+| `feedback_comments` | 0 | `messages`, `kind = 'feedback_comment'` |
+| `feedback_labels` | 5 | `labels` |
+| `feedback_post_labels` | 2 | `message_labels` |
+
+58 rows total, no threading anywhere (`parent_id` NULL on every row of both
+comment tables). Done in one pass rather than phased: at this volume, phasing
+would have forced feedback comments through an external-subject shape and then
+converted them to `root_id` later — an intermediate schema existing only to be
+undone.
+
+#### Decision: labels stay a SEPARATE table
+
+Folding labels into `messages` as a `kind` was considered and **rejected**:
+
+1. `feedback_labels.name` is `NOT NULL UNIQUE`. Inside `messages` — where every
+   column is nullable because four shapes share it — that constraint degrades
+   from a declaration into a convention enforced only by application code.
+2. `feedback_post_labels` is a composite-PK join with no `id`, no author, no body
+   and no timestamps. It cannot be a message row under any reading.
+3. A label is a **dimension**, not an utterance. Every `messages` query would
+   have had to carry `AND kind != 'label'` forever.
+
+#### Decision: legacy tables RETAINED for one release
+
+They are kept read-only rather than dropped, because they are the only rollback
+for a bad remap. Non-readability is enforced three ways: removed from
+`createTables()` (so fresh installs never have them), removed from `schema.ts` (so
+any stale reference is a **compile error** — the main safety net), and a grep test
+(`src/__tests__/db/no-legacy-message-refs.test.ts`) that catches raw SQL, which
+`tsc` cannot see. `npm run db:status` lists them with a `(legacy — drop in
+v1.1.0)` suffix. **Drop tracked as OI-123.**
+
+#### The empty-boot window — why the backfill runs at startup
+
+`createTables()` creates `messages` **empty** on a database whose six old tables
+still hold every row. In that window the app is fully functional and shows **zero**
+comments, **zero** notifications and **zero** feedback — no error, no exception, no
+log line. An empty thread is indistinguishable from a successfully migrated one.
+
+Had the backfill been a script, that would be the permanent state of any
+installation whose operator forgot to run it. The same class of failure already
+occurred in this release: after OI-086 renamed a column, the dev database was not
+upgraded and the app displayed blank work-package identifiers.
+
+So `backfillMessages()` is wired into `bootstrapDatabase()` immediately after
+`runMigrations()`, and `assertMessagesReconciled()` **throws** on any count
+mismatch. Crashing at boot is the only failure mode anyone will notice. A
+consequence worth knowing: because the backfill is idempotent and runs every
+start, a database that somehow loses its `messages` rows **re-migrates them** on
+the next boot rather than silently showing empty (verified).
+
+#### Notable implementation traps
+
+- **ID collision across sources.** All four legacy tables used independent
+  `AUTOINCREMENT` sequences, so legacy id 3 names four different rows. Confirmed
+  live: feedback posts 4/5/6 became messages 49/50/51 while notifications
+  occupied 1–48.
+- **Ordering.** A feedback comment's `parent_id` points at `feedback_comments`
+  while its `root_id` points at `feedback_posts`. A single generic self-join on
+  matching `legacy_source` builds silently wrong trees that violate no
+  constraint. Handled with explicit per-source remap statements, each guarded
+  with `AND parent_id IS NULL` so pass 2 is independently re-runnable.
+- **`notifications.metadata.commentId`** held a `flight_comments.id` and breaks
+  under remapping. Rewritten, with the original preserved as `legacyCommentId` —
+  which doubles as the guard against double-remapping on a re-run.
+- **Partial per-kind indexes** are what keep the merge performance-neutral.
+  `/api/notifications/unread-count` is polled on an interval by every logged-in
+  client and resolves through
+  `idx_messages_notif_unread ON messages(recipient_id, read_at) WHERE kind = 'notification'`.
+  A partial index only applies when the query repeats its `WHERE` clause, so
+  every repository query must carry its literal `kind` filter — correctness and
+  performance therefore fail together rather than performance degrading quietly.
+- **`author_id` must never cascade** (D-067). See DECISIONS.
+
+#### Files
+
+**Schema:** `src/lib/db/schema-init.ts` (canonical DDL; `runMigrations()` still
+returns `[]`), `src/lib/db/schema.ts` (legacy exports deleted)
+**Backfill:** `src/lib/db/backfill/messages-backfill.ts`, `src/lib/db/bootstrap.ts`
+**Repository:** `src/lib/messages/repository.ts` — every `eq(messages.kind, …)`
+filter lives here; routes are thin callers
+**Routes:** `api/work-packages/[id]/comments` (rewritten to Drizzle),
+`api/work-packages{,/all}` (duplicate comment-count subqueries folded into one
+repository call), all four `api/notifications/*`, `api/admin/notifications`,
+`lib/notifications/create.ts`, all six `api/feedback/*`
+**Scripts:** `scripts/db/backfill-messages.ts` (new, `--dry-run` / `--strict`),
+`scripts/db/upgrade-to-v1.ts` (Step 3), `scripts/db/status.ts`,
+`scripts/db/export.ts` (⚠️ its table list omitted all six legacy tables, so
+`npm run db:export` was **never** a backup of comments, notifications or feedback)
+**Tests:** `src/__tests__/db/messages-backfill.test.ts` (25),
+`src/__tests__/db/no-legacy-message-refs.test.ts` (5),
+`src/__tests__/db/schema-consolidation.test.ts` (updated)
+
+**UI is untouched.** `FlightComment` and `AppNotification` in `src/types/index.ts`
+and everything in `src/types/feedback.ts` kept their shape; the repository maps at
+the boundary so the DB shape never reaches the client.
+
+**Links**: OI-092, OI-094, OI-123, D-067, [REQ_Logging_Audit.md](SPECS/REQ_Logging_Audit.md)
+
+---
+
+### OI-123 | Drop the six legacy messaging tables (v1.1.0)
+
+| Field | Value |
+|-------|-------|
+| **Type** | Cleanup / Schema |
 | **Status** | **Open** |
 | **Priority** | P2 |
-| **Target Version** | v1.0.x |
-| **Created** | 2026-03-17 |
+| **Target Version** | v1.1.0 |
+| **Owner** | Unassigned |
+| **Created** | 2026-08-08 |
 
-Combine three separate tracking systems (`flight_comments`, `notifications`, `user_notification_dismissals`) into a single unified **messages** table. This reduces schema complexity and enables richer interactions (e.g., a notification can have replies/comments, comments can have reactions, feedback can be shared).
+OI-099 folded six tables into `messages` / `labels` / `message_labels` and
+**retained** the originals read-only, because they are the only rollback for a bad
+remap. This item drops them once v1.0.0 has been in production long enough to
+trust the remap.
 
-**Current separate tables** (v0.3.0+):
-- `flight_comments` — per-WP comments, user feedback, maintenance logs (OI-092)
-- `notifications` — system-wide announcements, deprecation warnings (OI-094)
-- `user_notification_dismissals` — per-user dismissal state for notifications
+**Tables**: `flight_comments`, `notifications`, `feedback_posts`,
+`feedback_comments`, `feedback_labels`, `feedback_post_labels`
 
-**Proposed unified schema (v1.0.x)**:
-```sql
-CREATE TABLE messages (
-  id TEXT PRIMARY KEY,
-  type TEXT NOT NULL,  -- 'comment', 'notification', 'feedback', 'audit-note'
-  scope TEXT,  -- 'global', 'user', 'wp:{id}', 'customer:{id}'
-  title TEXT,
-  body TEXT NOT NULL,
-  author_id TEXT,  -- FK to users (NULL for system messages)
-  created_at TEXT NOT NULL,
-  updated_at TEXT,
-  metadata JSONB,  -- flexible fields per type (priority, severity, category, etc.)
-  active BOOLEAN DEFAULT true,
-  parent_id TEXT REFERENCES messages(id)  -- for threaded replies
-);
+**Preconditions before dropping**:
+1. v1.0.0 has run in production for at least one release cycle with no reported
+   loss of comments, notifications or feedback.
+2. `npm run db:backfill-messages -- --dry-run` reports every source `balanced`
+   with `inserted: 0` (i.e. everything already migrated).
+3. A file-level backup exists — `npm run db:backup`, **not** `npm run db:export`,
+   which enumerates a table subset.
 
-CREATE TABLE message_reactions (
-  message_id TEXT FK,
-  user_id TEXT FK,
-  reaction TEXT,  -- emoji or label ('helpful', 'dismiss', 'acknowledge', etc.)
-  created_at TEXT
-);
+**Work**:
+- Add a drop step to a `db:upgrade-v1_1` script (idempotent; probe `sqlite_master`
+  first). Do **not** put `DROP TABLE` in `createTables()` — that function is
+  declarative and runs on every boot.
+- Drop the stale indexes left behind with them, which `db:upgrade-v1` currently
+  reports and deliberately does not remove: `idx_flight_comments_wp`,
+  `idx_flight_comments_author`, `idx_notifications_user`,
+  `idx_notifications_user_unread`, `idx_notifications_created`,
+  `idx_feedback_posts_author`, `idx_feedback_posts_status`,
+  `idx_feedback_posts_created`, `idx_feedback_comments_post`,
+  `idx_feedback_post_labels_post`, `idx_feedback_post_labels_label`.
+- Remove the legacy section from `scripts/db/status.ts` and `LEGACY_MESSAGE_TABLES`.
+- Decide the fate of `messages.legacy_source` / `legacy_id` / `legacy_parent_id`.
+  **Recommend keeping them**: they are the only remaining record of pre-v1.0.0
+  ids, and `/feedback/[id]` bookmarks from v0.3.0 can still be resolved through
+  `legacy_id`. They also remain the backfill's idempotency key.
+- Once dropped, `backfillMessages()` returns `{ ran: false }` on every boot and
+  `messages-backfill.test.ts` becomes the only place the old shape is described.
+  Consider whether the module should then be deleted or kept for one more release.
 
-CREATE TABLE message_dismissals (
-  message_id TEXT FK,
-  user_id TEXT FK,
-  dismissed_at TEXT,
-  UNIQUE(message_id, user_id)
-);
-```
-
-**Benefits**:
-1. Reduces schema surface area (1 table instead of 3+)
-2. Enables comments on notifications (e.g., "I saw this announcement, here's feedback")
-3. Unified search/audit trail (all messages in one place)
-4. Flexible metadata per message type
-5. Threaded conversations (parent_id for replies)
-
-**Migration path**: (1) Create new unified schema in parallel; (2) backfill data with type/scope tags; (3) deprecate old tables (keep as views for backwards compat); (4) remove views in v1.1.x
-
-**Related OIs**: OI-092 (Comments), OI-094 (Notifications), [REQ_Logging_Audit.md](SPECS/REQ_Logging_Audit.md)
+**Files**: `scripts/db/`, `src/lib/db/backfill/messages-backfill.ts`,
+`src/__tests__/db/no-legacy-message-refs.test.ts`
+**Links**: OI-099, D-067
 
 ---
 

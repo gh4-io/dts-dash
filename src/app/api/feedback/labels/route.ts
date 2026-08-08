@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import { feedbackLabels } from "@/lib/db/schema";
-import { asc } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { isValidHex } from "@/lib/utils/contrast";
+import { listLabels, createLabel } from "@/lib/messages/repository";
 
 const log = createChildLogger("api/feedback/labels");
 
 /**
  * GET /api/feedback/labels
  * List all labels.
+ *
+ * Labels live in their own `labels` table, deliberately NOT folded into
+ * `messages` (OI-099) — `name` is NOT NULL UNIQUE, the join row has no identity
+ * of its own, and a label is a dimension rather than an utterance.
  */
 export async function GET() {
   try {
@@ -19,13 +21,7 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const labels = db
-      .select()
-      .from(feedbackLabels)
-      .orderBy(asc(feedbackLabels.sortOrder), asc(feedbackLabels.name))
-      .all();
-
-    return NextResponse.json(labels);
+    return NextResponse.json(listLabels());
   } catch (error) {
     log.error({ err: error }, "GET error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -66,18 +62,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newLabel = db
-      .insert(feedbackLabels)
-      .values({
-        name,
-        color,
-        sortOrder: body.sortOrder ?? 0,
-        createdAt: new Date().toISOString(),
-      })
-      .returning({ id: feedbackLabels.id })
-      .get();
+    const id = createLabel({ name, color, sortOrder: body.sortOrder ?? 0 });
 
-    return NextResponse.json({ id: newLabel.id }, { status: 201 });
+    return NextResponse.json({ id }, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

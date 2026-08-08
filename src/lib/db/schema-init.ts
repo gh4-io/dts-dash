@@ -117,36 +117,171 @@ export function createTables() {
       ground_event_types TEXT
     );
 
-    CREATE TABLE IF NOT EXISTS flight_comments (
+    -- ═════════════════════════════════════════════════════════════════════════
+    -- Messages (OI-099, v1.0.0 BREAKING)
+    -- ═════════════════════════════════════════════════════════════════════════
+    --
+    -- One table for every utterance in the app. Replaces four tables that were
+    -- the same shape wearing different column names:
+    --
+    --   flight_comments   → kind = 'flight_comment'
+    --   notifications     → kind = 'notification'
+    --   feedback_posts    → kind = 'feedback_post'
+    --   feedback_comments → kind = 'feedback_comment'
+    --
+    -- Two things the original OI-099 sketch got wrong, recorded here so nobody
+    -- reintroduces them:
+    --
+    --   * There was never a user_notification_dismissals table. Notifications
+    --     are a per-recipient fan-out — one row per recipient — and read_at on
+    --     the recipient's own row IS the dismissal state.
+    --   * There is no voting on feedback posts. No vote column, no vote table,
+    --     no vote code ever existed. Do not design for it.
+    --
+    -- Labels are deliberately NOT folded in here — see the labels table below.
+    CREATE TABLE IF NOT EXISTS messages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      work_package_id INTEGER NOT NULL REFERENCES work_packages(id) ON DELETE CASCADE,
-      parent_id INTEGER,
-      author_id INTEGER NOT NULL REFERENCES users(id),
-      body TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
 
-    -- Notifications are a per-user fan-out: one row per recipient, not one
-    -- global row plus a dismissals table (OI-094). read_at IS the dismissal
-    -- state — there is no separate user_notification_dismissals table.
-    CREATE TABLE IF NOT EXISTS notifications (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      type TEXT NOT NULL DEFAULT 'system',
-      category TEXT NOT NULL DEFAULT 'general',
-      title TEXT NOT NULL,
-      message TEXT,
-      metadata TEXT,
+      kind TEXT NOT NULL
+        CHECK (kind IN ('flight_comment', 'notification', 'feedback_post', 'feedback_comment')),
+
+      -- Threading. parent_id is the direct reply target; root_id is the thread
+      -- container, so "everything in this thread" is one WHERE root_id = ?
+      -- instead of a recursive CTE. A feedback_post is its own root.
+      parent_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+      root_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+
+      -- External subject, for messages attached to a non-message entity.
+      -- Polymorphic, so it cannot carry a real FK: subject_type names the table
+      -- ('work_package') and subject_id the row. Because there is no FK there is
+      -- also no ON DELETE CASCADE — deleting the subject must delete its
+      -- messages explicitly (see cleanup-canceled).
+      subject_type TEXT,
+      subject_id INTEGER,
+
+      -- ⚠️ author_id has NO ON DELETE CASCADE, and must never be given one.
+      -- Adding a cascade here would destroy comment history — every post and
+      -- every comment a user ever wrote — the first time an account is deleted,
+      -- silently and unrecoverably. Authorship is a historical fact about the
+      -- message; it is not a reason for the message to stop existing. If user
+      -- deletion needs to anonymise instead, NULL this column, do not cascade.
+      author_id INTEGER REFERENCES users(id),
+
+      -- Notifications only: the recipient of this copy. This one DOES cascade —
+      -- a notification exists solely to be delivered to that user, so when the
+      -- account goes, so does the delivery. Keeping author_id and recipient_id
+      -- as separate columns is exactly what lets the two delete policies coexist.
+      recipient_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+
+      title TEXT,
+      body TEXT,
+
+      -- Notification taxonomy (was notifications.type / .category). Named
+      -- msg_type because type is too easily confused with kind.
+      msg_type TEXT,
+      category TEXT,
       read_at TEXT,
       action_url TEXT,
       expires_at TEXT,
-      created_at TEXT NOT NULL
+
+      -- Feedback post workflow.
+      status TEXT,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+
+      metadata TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+
+      -- Provenance + the backfill's idempotency key. legacy_parent_id keeps the
+      -- pre-merge parent so pass 2 of the backfill can remap trees after every
+      -- row has its new id.
+      legacy_source TEXT,
+      legacy_id INTEGER,
+      legacy_parent_id INTEGER,
+
+      -- Per-kind invariants. The old tables stated these with NOT NULL; folding
+      -- four shapes into one makes every column nullable, so the rules move here
+      -- rather than degrading into a convention enforced only by application code.
+      CHECK (kind <> 'notification' OR recipient_id IS NOT NULL),
+      CHECK (kind = 'notification' OR (author_id IS NOT NULL AND body IS NOT NULL)),
+      CHECK (kind <> 'flight_comment'
+             OR (subject_type = 'work_package' AND subject_id IS NOT NULL)),
+      CHECK (kind <> 'feedback_comment' OR root_id IS NOT NULL)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
-    CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, read_at);
-    CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+    -- Indexes are PARTIAL and per-kind. This is the whole reason the merge is
+    -- performance-neutral: a plain index on (recipient_id, read_at) would span
+    -- all four kinds and force every notification lookup to wade through comment
+    -- and feedback rows. Each index below covers exactly the kind that queries it.
+    --
+    -- ⚠️ A partial index is only usable when the query repeats its WHERE clause
+    -- literally. Every repository query MUST carry its kind = '...' filter or
+    -- these indexes silently stop being used — and the results silently start
+    -- including other kinds. See src/lib/messages/repository.ts.
+
+    -- /api/notifications/unread-count is polled on an interval by the
+    -- notification bell for every logged-in client. It is the hottest query in
+    -- the app and this is the index it must hit.
+    CREATE INDEX IF NOT EXISTS idx_messages_notif_unread
+      ON messages(recipient_id, read_at) WHERE kind = 'notification';
+    CREATE INDEX IF NOT EXISTS idx_messages_notif_created
+      ON messages(recipient_id, created_at) WHERE kind = 'notification';
+
+    CREATE INDEX IF NOT EXISTS idx_messages_flight_subject
+      ON messages(subject_id, created_at) WHERE kind = 'flight_comment';
+
+    CREATE INDEX IF NOT EXISTS idx_messages_feedback_post
+      ON messages(status, created_at) WHERE kind = 'feedback_post';
+    CREATE INDEX IF NOT EXISTS idx_messages_feedback_comment
+      ON messages(root_id, created_at) WHERE kind = 'feedback_comment';
+
+    -- Thread walking and subtree deletes, all kinds.
+    CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_root ON messages(root_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author_id);
+
+    -- The backfill's idempotency key: a second run finds every row already
+    -- present instead of duplicating it. UNIQUE is what makes that a guarantee
+    -- rather than a hope.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_legacy
+      ON messages(legacy_source, legacy_id) WHERE legacy_source IS NOT NULL;
+
+    -- ─── Labels ───────────────────────────────────────────────────────────────
+    --
+    -- Labels stay a SEPARATE table. They are not messages and folding them in
+    -- was rejected deliberately (OI-099):
+    --
+    --   1. name is NOT NULL UNIQUE. Inside messages that constraint has
+    --      nowhere to live — every column there is nullable because four shapes
+    --      share it — so a hard declaration would degrade into a convention.
+    --   2. The join table is a composite-PK pair with no id, author, body or
+    --      timestamps. It cannot be a message row under any reading.
+    --   3. A label is a dimension, not an utterance. Folding it in would make
+    --      every single messages query carry AND kind != 'label' forever.
+    CREATE TABLE IF NOT EXISTS labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      legacy_source TEXT,
+      legacy_id INTEGER
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_legacy
+      ON labels(legacy_source, legacy_id) WHERE legacy_source IS NOT NULL;
+
+    -- Many-to-many between messages and labels. Composite PK makes re-inserting
+    -- an existing pair a no-op under INSERT OR IGNORE, which is the backfill's
+    -- idempotency story for this table.
+    CREATE TABLE IF NOT EXISTS message_labels (
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+      PRIMARY KEY (message_id, label_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_message_labels_message ON message_labels(message_id);
+    CREATE INDEX IF NOT EXISTS idx_message_labels_label ON message_labels(label_id);
 
     CREATE TABLE IF NOT EXISTS mh_overrides (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -282,41 +417,15 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
-    -- Feedback Board
-    CREATE TABLE IF NOT EXISTS feedback_posts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      author_id INTEGER NOT NULL REFERENCES users(id),
-      title TEXT NOT NULL,
-      body TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'open',
-      is_pinned INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_comments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      post_id INTEGER NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-      parent_id INTEGER REFERENCES feedback_comments(id) ON DELETE CASCADE,
-      author_id INTEGER NOT NULL REFERENCES users(id),
-      body TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_labels (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      color TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_post_labels (
-      post_id INTEGER NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-      label_id INTEGER NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
-      PRIMARY KEY (post_id, label_id)
-    );
+    -- The Feedback Board tables (feedback_posts, feedback_comments,
+    -- feedback_labels, feedback_post_labels) were folded into messages / labels /
+    -- message_labels in v1.0.0 (OI-099) and are deliberately NOT declared here.
+    --
+    -- Existing installations keep their old tables — read-only, as the only
+    -- rollback for a bad remap — until they are dropped in v1.1.0. Their absence
+    -- from createTables() is what makes them unreachable on fresh installs, and
+    -- their absence from schema.ts is what turns any stale reference into a
+    -- compile error rather than a silent empty result.
 
     -- Invite Codes
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -416,14 +525,9 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
     CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
     CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_posts_author ON feedback_posts(author_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
-    CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
-    CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
-    CREATE INDEX IF NOT EXISTS idx_flight_comments_wp ON flight_comments(work_package_id);
-    CREATE INDEX IF NOT EXISTS idx_flight_comments_author ON flight_comments(author_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
+    -- (The feedback_* and flight_comments indexes that lived here were removed
+    -- with their tables in v1.0.0 — OI-099. The messages/labels indexes are
+    -- declared alongside their tables above.)
     CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
 
     -- Staffing: Rotation Patterns
