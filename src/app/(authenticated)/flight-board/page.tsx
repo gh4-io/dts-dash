@@ -136,6 +136,14 @@ function FlightBoardPageInner() {
     });
   }, []);
 
+  // `selectedWp` is the snapshot taken when the bar was clicked. Edits made from
+  // inside the drawer (MH override, ground events) refetch the store, so re-read
+  // the live row by id — otherwise the drawer keeps showing pre-edit values.
+  const drawerWp = useMemo(
+    () => (selectedWp ? (workPackages.find((w) => w.id === selectedWp.id) ?? selectedWp) : null),
+    [selectedWp, workPackages],
+  );
+
   const handleRefresh = useCallback(() => {
     window.location.reload();
   }, []);
@@ -359,7 +367,7 @@ function FlightBoardPageInner() {
 
       {/* Detail Drawer */}
       <FlightDetailDrawer
-        wp={selectedWp}
+        wp={drawerWp}
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onWpUpdated={refetchWps}

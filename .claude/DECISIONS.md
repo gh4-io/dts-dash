@@ -928,3 +928,32 @@ The shift palette was also copy-pasted into six components in two forms (hex for
 **Impact:** Visual change only; no data or API change. Applies to all three charts in the capacity panel (daily summary, weekly pattern, monthly rollup), to the dashboard's Arrivals / Departures / On Ground chart, and to every surface that shows a shift colour.
 
 `ChartLegend` lives in `src/components/shared/` — it is chart-agnostic (rows of `{key, label, color, mark}`), so a chart with no entity/role split, like the dashboard's, passes a single row. The capacity-specific row construction stays in `chart-series-style.tsx`. Any future chart gets the same interaction by building rows and passing `hide` to its series.
+
+---
+
+## D-066 | 2026-08-08 | MH Overrides — Redundant Values Are Never Stored; Bulk Rides the Import Hub (OI-104)
+
+**Context:** `mh_overrides` has existed since D-013 but had no UI at all — the only way to set one was direct SQL against `data/dashboard.db`. Production carries 722 of them, all written by the API ingest, with no record of who set them or what they replaced.
+
+**Decision:**
+
+1. **A value equal to the imported `work_packages.total_mh` is not an override.** Saving one clears any existing override instead of storing it, from every entry point (drawer, API, CSV). An override that restates its source looks like a decision and behaves like a pin: when the source data is later corrected, the stale copy silently wins and nobody remembers setting it. Encoded in `resolveSave()` in `src/lib/mh-overrides/rules.ts`, which is pure and has no DB imports.
+
+2. **The minimum-hours floor is applied before the redundancy check**, and the pre-floor value is persisted as `mh_override_history.supplied_mh`. A floor that happens to land on the imported value is therefore still redundant, and the audit trail always shows the number a human actually supplied.
+
+3. **Bulk CSV reuses the Universal Import Hub** (`src/lib/import/schemas/mh-overrides.ts`) rather than a parallel CSV path. It inherits the 6-step wizard, field mapping, the pre-commit preview, `import_log` and the export/template machinery. The preview counts (matched / unchanged / redundant / unmatched / duplicate / invalid) come from `classifyRows()`, which runs identically in `summarize()` and in `commit()`, so the numbers a user approves are the numbers applied. The batch commits inside one `sqlite.transaction()`; nothing is written if any row faults.
+
+4. **Bulk matching accepts `workpackageNo`, then `spId`, then `guid`.** `workpackage_no` is the documented identifier (OI-086), but it is optional in the source data — the current production database has 10,080 work packages and **zero** populated values. A `workpackageNo`-only matcher would have been correct and unusable.
+
+5. **A new `mh_override_history` table**, declared in `createTables()` only. `mh_overrides` is UNIQUE per work package, so a clear destroys the previous value; the append-only history is the only place before/after survives. `runMigrations()` still returns `[]`; `db:upgrade-v1` picks the table up automatically because it diffs the live database against a reference built from `createTables()`.
+
+6. **Cache invalidation is the transformer's, not the reader's.** Overrides are resolved in `transformWorkPackages()` (`cachedOverrides`, GUID → MH); the reader caches raw `work_packages` rows, which an override never touches. `invalidateMHOverrideCaches()` calls `invalidateTransformerCache()` alone — enough for the flight board and `/capacity` to reflect a change on their next request without a restart, and it avoids re-reading 10,080 rows for nothing. The bulk import defers it and invalidates once per batch in `postCommit`.
+
+**Alternatives considered:**
+- *Store the redundant value anyway and flag it in the UI* — pushes a data-integrity problem onto whoever is reading the screen months later
+- *A bespoke CSV upload page* — would have duplicated parsing, mapping, preview and logging that the Data Hub already does well
+- *Version rows in `mh_overrides` itself instead of a history table* — breaks the UNIQUE key the whole feature relies on to survive re-imports (D-013)
+
+**Impact:** Additive. New table, new admin page (`/admin/mh-overrides`), new import schema, new endpoints under `/api/admin/mh-overrides`. `computeEffectiveMH` is unchanged — this is management for a chain that already worked.
+
+**Links:** D-013 (mh_overrides storage), [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-104, OI-086 (workpackage_no)

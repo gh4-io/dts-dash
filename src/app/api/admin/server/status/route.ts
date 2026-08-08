@@ -15,6 +15,7 @@ const TABLE_NAMES = [
   "user_preferences",
   "work_packages",
   "mh_overrides",
+  "mh_override_history",
   "aircraft_type_mappings",
   "manufacturers",
   "aircraft_models",

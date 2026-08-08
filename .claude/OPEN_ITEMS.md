@@ -671,12 +671,12 @@ Also unresolved: the Actions → Filters → **Rows** menu item is disabled app-
 
 ---
 
-### OI-104 | Work-Package Man-Hour Override Management
+### OI-104 | Work-Package Man-Hour Override Management — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature Request |
-| **Status** | **Open** — specced, not started |
+| **Status** | **Resolved** — 2026-08-08 |
 | **Priority** | P2 |
 | **Owner** | Unassigned |
 | **Created** | 2026-08-04 (filed 2026-08-06) |
@@ -687,7 +687,20 @@ Admin-facing workflow for managing per-work-package MH overrides without direct 
 
 The full spec is the body of this item. (An earlier note pointed at an untracked root `roadmap.md`; that file no longer exists — the surviving spec is here.)
 
-**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), OI-086
+**Resolution (2026-08-08)**: `mh_overrides` had existed since D-013 with no UI whatsoever — the only way to set one was direct SQL. Production carries **722** of them, all written by the API ingest, with no record of who set them or what they replaced.
+
+- **Rules are pure** — `src/lib/mh-overrides/rules.ts` (no DB imports): parsing, range checks, the minimum-hours floor and the create/update/clear/unchanged/noop decision. DB access is isolated in `src/lib/mh-overrides/data.ts`.
+- **Redundant values are never stored** (D-066) — a value equal to the imported `work_packages.total_mh` clears any existing override instead of writing one, from the drawer, the API and the CSV alike. The floor is applied *before* that check, and the pre-floor value is kept as `mh_override_history.supplied_mh`.
+- **Drawer** — `flight-detail-drawer.tsx` shows Imported MH / Effective MH / MH Source together with **Save Override** and **Clear**, admin-gated. The flight board now re-reads the drawer's work package from the store after a write (`drawerWp`), so the drawer reflects its own edits instead of the click-time snapshot.
+- **Endpoints** — `GET/POST/DELETE /api/admin/mh-overrides`, `GET/PUT/DELETE /api/admin/mh-overrides/[spId]`, `GET /api/admin/mh-overrides/history` (`?format=csv`). All `["admin","superadmin"]`; every mutation records the acting user and timestamp.
+- **Bulk CSV rides the Universal Import Hub** — `src/lib/import/schemas/mh-overrides.ts`, not a parallel path. Preview counts (matched / unchanged / redundant / unmatched / duplicate / invalid) come from `classifyRows()`, which runs identically in `summarize()` and `commit()`. The batch commits in one `sqlite.transaction()`. **Matching accepts `workpackageNo`, then `spId`, then `guid`** — `workpackage_no` is the documented identifier (OI-086) but is populated on **zero** of the 10,080 production rows, so a `workpackageNo`-only matcher would have been correct and unusable.
+- **Downloadable report** — `step-results.tsx` gained a **Download Report** button (CSV: stats + errors + per-row warnings) for every import type, not just this one.
+- **History/audit** — new `mh_override_history` table declared in `createTables()` only (`runMigrations()` still returns `[]`; `db:upgrade-v1` picks it up by diffing against a reference schema). `mh_overrides` is UNIQUE per WP, so a clear destroys the old value — the append-only history is the only place before/after survives. Surfaced at `/admin/mh-overrides` (Active + History tabs, filter, both CSV exports).
+- **Cache invalidation** — `invalidateMHOverrideCaches()` calls `invalidateTransformerCache()` alone. Overrides live in the transformer's `cachedOverrides`; the reader caches raw `work_packages` rows an override never touches, so invalidating it would re-read 10,080 rows for nothing. The bulk import defers per-row invalidation and fires once in `postCommit`.
+- **Tests** — `src/__tests__/mh-overrides/` (4 files, 65 cases): pure rules, DB lifecycle + audit trail + cache propagation, route permission matrix and CRUD, and the bulk preview/commit/rollback path. Suite 804 → 869.
+- **Verified live** against the production copy (10,080 WPs): an override took `effectiveMH` 3 → 25 with `mhSource: manual`, and `/capacity` `totalDemandMH` moved 332.35 → 354.35 on the next request with no restart; re-entering the imported value cleared it and both figures returned exactly. A mixed CSV previewed and committed with the expected counts.
+
+**Links**: [REQ_DataModel.md](SPECS/REQ_DataModel.md), D-013, D-066, OI-086
 
 ---
 

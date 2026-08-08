@@ -156,6 +156,29 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
+    -- Append-only audit trail for mh_overrides (OI-104). mh_overrides itself
+    -- holds only the current value (one row per WP, UNIQUE), so a clear erases
+    -- the previous value entirely — this table is where before/after lives.
+    -- supplied_mh keeps the value as the user or CSV supplied it, before the
+    -- optional minimum-hours transform raised it.
+    CREATE TABLE IF NOT EXISTS mh_override_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_package_id INTEGER NOT NULL REFERENCES work_packages(id),
+      action TEXT NOT NULL,
+      previous_mh REAL,
+      new_mh REAL,
+      imported_mh REAL,
+      supplied_mh REAL,
+      min_hours REAL,
+      source TEXT NOT NULL DEFAULT 'api',
+      note TEXT,
+      changed_by INTEGER NOT NULL REFERENCES users(id),
+      changed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_mh_override_history_wp ON mh_override_history(work_package_id);
+    CREATE INDEX IF NOT EXISTS idx_mh_override_history_changed ON mh_override_history(changed_at);
+
     CREATE TABLE IF NOT EXISTS aircraft_type_mappings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       pattern TEXT NOT NULL,

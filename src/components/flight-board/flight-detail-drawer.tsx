@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import { useFilters } from "@/lib/hooks/use-filters";
 import { useSession } from "next-auth/react";
@@ -33,6 +34,12 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
   const [groundEvents, setGroundEvents] = useState<GroundEventType[]>([]);
   const [savingEvents, setSavingEvents] = useState(false);
 
+  // MH override editing (OI-104)
+  const [overrideInput, setOverrideInput] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [overrideMessage, setOverrideMessage] = useState<string | null>(null);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
+
   const isAdmin = session?.user?.role === "admin" || session?.user?.role === "superadmin";
   const userId = session?.user?.id ? Number(session.user.id) : null;
 
@@ -50,14 +57,28 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
     }
   }, [wp]);
 
+  // Reset local edit state when a *different* work package is shown, not on
+  // every re-render of the same one. The parent re-reads `wp` from the store
+  // after each save, so keying off object identity would wipe the confirmation
+  // message the save just produced.
+  const shownWpId = useRef<number | null>(null);
+
   useEffect(() => {
-    if (open && wp) {
-      fetchComments();
-      setGroundEvents((wp.groundEventTypes as GroundEventType[]) ?? []);
-      setCommentBody("");
-      setReplyingTo(null);
-      setReplyBody("");
+    if (!open || !wp) {
+      shownWpId.current = null;
+      return;
     }
+    if (shownWpId.current === wp.id) return;
+    shownWpId.current = wp.id;
+
+    fetchComments();
+    setGroundEvents((wp.groundEventTypes as GroundEventType[]) ?? []);
+    setCommentBody("");
+    setReplyingTo(null);
+    setReplyBody("");
+    setOverrideInput(wp.manualMHOverride !== null ? String(wp.manualMHOverride) : "");
+    setOverrideMessage(null);
+    setOverrideError(null);
   }, [open, wp, fetchComments]);
 
   if (!wp) return null;
@@ -91,7 +112,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
         ? "WP MH"
         : wp.mhSource === "contract"
           ? "Contract"
-          : `Default (TotalMH ${wp.totalMH === null ? "null" : wp.totalMH})`;
+          : "Default";
 
   const color = getColor(wp.customer);
 
@@ -115,6 +136,46 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
       }
     } finally {
       setSavingEvents(false);
+    }
+  };
+
+  // Save or clear the manual MH override (OI-104).
+  // The server owns the redundancy rule — a value equal to the imported WP MH
+  // clears the override instead of storing it — so the response tells us what
+  // actually happened rather than the client assuming.
+  const submitOverride = async (mode: "save" | "clear") => {
+    if (!isAdmin || savingOverride) return;
+    setSavingOverride(true);
+    setOverrideMessage(null);
+    setOverrideError(null);
+
+    try {
+      const res = await fetch(
+        `/api/admin/mh-overrides/${wp.id}`,
+        mode === "clear"
+          ? { method: "DELETE" }
+          : {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ overrideMH: overrideInput }),
+            },
+      );
+
+      const data = await res.json();
+      if (!res.ok) {
+        setOverrideError(data.error ?? "Failed to update override");
+        return;
+      }
+
+      setOverrideMessage(data.decision?.reason ?? "Saved");
+      if (data.detail?.overrideMH === null || data.detail?.overrideMH === undefined) {
+        setOverrideInput("");
+      }
+      onWpUpdated?.();
+    } catch {
+      setOverrideError("Failed to update override");
+    } finally {
+      setSavingOverride(false);
     }
   };
 
@@ -247,9 +308,75 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
                   {wp.hasWorkpackage ? "Yes" : "No"}
                 </Badge>
               </Row>
-              <Row label="Man-Hours" value={`${wp.effectiveMH} MH`} />
-              <Row label="MH Source" value={mhLabel} />
+              <Row label="Imported MH" value={wp.totalMH === null ? "—" : `${wp.totalMH} MH`} />
+              <Row label="Effective MH" value={`${wp.effectiveMH} MH`} bold />
+              <Row label="MH Source">
+                <Badge
+                  variant={wp.mhSource === "manual" ? "default" : "secondary"}
+                  className="text-xs"
+                >
+                  {mhLabel}
+                </Badge>
+              </Row>
             </div>
+
+            {/* Manual override editor (OI-104) — admin only */}
+            {isAdmin && (
+              <div className="mt-3 rounded-md border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium">Manual Override</span>
+                  {wp.manualMHOverride !== null && (
+                    <span className="text-[10px] text-muted-foreground">
+                      active — {wp.manualMHOverride} MH
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <Input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    inputMode="decimal"
+                    placeholder="MH"
+                    value={overrideInput}
+                    onChange={(e) => setOverrideInput(e.target.value)}
+                    className="h-8 w-24 text-sm"
+                    disabled={savingOverride}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={savingOverride || overrideInput.trim() === ""}
+                    onClick={() => submitOverride("save")}
+                  >
+                    Save Override
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    disabled={savingOverride || wp.manualMHOverride === null}
+                    onClick={() => submitOverride("clear")}
+                  >
+                    Clear
+                  </Button>
+                </div>
+
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Override beats WP MH, contract MH and the default. Entering the imported value (
+                  {wp.totalMH === null ? "none" : `${wp.totalMH} MH`}) clears the override instead
+                  of storing a copy of it.
+                </p>
+
+                {overrideMessage && (
+                  <p className="mt-1 text-[10px] text-emerald-500">{overrideMessage}</p>
+                )}
+                {overrideError && (
+                  <p className="mt-1 text-[10px] text-destructive">{overrideError}</p>
+                )}
+              </div>
+            )}
           </section>
 
           <Separator />

@@ -28,6 +28,7 @@ function main() {
     user_preferences: schema.userPreferences,
     work_packages: schema.workPackages,
     mh_overrides: schema.mhOverrides,
+    mh_override_history: schema.mhOverrideHistory,
     aircraft_type_mappings: schema.aircraftTypeMappings,
     manufacturers: schema.manufacturers,
     aircraft_models: schema.aircraftModels,

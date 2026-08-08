@@ -12,6 +12,7 @@ const NAV_ITEMS = [
     href: "/admin/aircraft-types",
     icon: "fa-solid fa-plane-circle-check",
   },
+  { label: "MH Overrides", href: "/admin/mh-overrides", icon: "fa-solid fa-pen-to-square" },
   { label: "Users", href: "/admin/users", icon: "fa-solid fa-users-gear" },
   { label: "Settings", href: "/admin/settings", icon: "fa-solid fa-cogs" },
   { label: "Server", href: "/admin/server", icon: "fa-solid fa-server" },

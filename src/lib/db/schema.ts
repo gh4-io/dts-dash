@@ -225,6 +225,48 @@ export const mhOverrides = sqliteTable("mh_overrides", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
+/**
+ * Append-only audit trail for MH overrides (OI-104).
+ *
+ * `mh_overrides` is keyed UNIQUE per work package and therefore only ever holds
+ * the *current* value — clearing an override destroys the old one. Every
+ * create/update/clear writes a row here so the before/after pair survives.
+ */
+export const mhOverrideHistory = sqliteTable(
+  "mh_override_history",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workPackageId: integer("work_package_id")
+      .notNull()
+      .references(() => workPackages.id),
+    /** create | update | clear */
+    action: text("action", { enum: ["create", "update", "clear"] }).notNull(),
+    /** Override value before the change; null when none existed. */
+    previousMH: real("previous_mh"),
+    /** Override value after the change; null on clear. */
+    newMH: real("new_mh"),
+    /** `work_packages.total_mh` at the time of the change, for context. */
+    importedMH: real("imported_mh"),
+    /** Value as supplied, before the optional minimum-hours transform. */
+    suppliedMH: real("supplied_mh"),
+    /** Minimum-hours floor applied to this change, if any. */
+    minHours: real("min_hours"),
+    /** drawer | import | api */
+    source: text("source").notNull().default("api"),
+    note: text("note"),
+    changedBy: integer("changed_by")
+      .notNull()
+      .references(() => users.id),
+    changedAt: text("changed_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => ({
+    workPackageIdx: index("idx_mh_override_history_wp").on(table.workPackageId),
+    changedAtIdx: index("idx_mh_override_history_changed").on(table.changedAt),
+  }),
+);
+
 // ─── Aircraft Type Mappings (D-015) ─────────────────────────────────────────
 
 export const aircraftTypeMappings = sqliteTable("aircraft_type_mappings", {
@@ -900,6 +942,17 @@ export const mhOverridesRelations = relations(mhOverrides, ({ one }) => ({
   }),
   updatedByUser: one(users, {
     fields: [mhOverrides.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+export const mhOverrideHistoryRelations = relations(mhOverrideHistory, ({ one }) => ({
+  workPackage: one(workPackages, {
+    fields: [mhOverrideHistory.workPackageId],
+    references: [workPackages.id],
+  }),
+  changedByUser: one(users, {
+    fields: [mhOverrideHistory.changedBy],
     references: [users.id],
   }),
 }));
