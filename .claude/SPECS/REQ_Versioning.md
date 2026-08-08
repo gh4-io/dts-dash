@@ -172,6 +172,36 @@ Same as patch, but:
 - Commit message: `feat: <description> (v0.2.0)`
 - Review all changes for backwards compatibility before creating PR
 
+### Branch source — hotfix vs large release (added v1.0.0)
+
+The branch-from-`master`-and-cherry-pick pattern above is the **hotfix** pattern. It assumes a handful of commits to move.
+
+It does not scale. At v1.0.0, `dev` was ~255 commits ahead of `master`; cherry-picking that is not review, it is an opportunity to silently drop a schema change.
+
+**For a release of more than a few commits, branch the release from `dev`:**
+
+```bash
+git checkout dev && git pull
+git checkout -b release/v1.0.0
+npm version major --no-git-tag-version   # version bumped HERE, never on dev
+npm run validate                          # must exit 0
+git push origin release/v1.0.0
+gh pr create --base master --title "release: v1.0.0"
+# after merge:
+git checkout master && git pull
+git tag -a v1.0.0 -m "v1.0.0: ..."
+git push origin v1.0.0
+gh release create v1.0.0 --title "v1.0.0" --notes-file RELEASE_NOTES.md
+git checkout dev && git merge master      # realign dev with the released version
+git push origin --delete release/v1.0.0   # do not leave release branches on origin
+```
+
+Both invariants the original procedure exists to protect are preserved: the version is bumped on a release branch and never on `dev`, and `master` is only reached through a reviewed PR. What changes is the *source* of the branch — `dev`, which is the actual source of truth for a large release.
+
+**Branch hygiene**: `origin` carries only `dev` and `master`. Delete the release branch after merge — `release/v0.2.0` sat on origin for six months with content identical to the `v0.2.0` tag. Tags, not branches, are what preserve released history.
+
+---
+
 ### Major Release (e.g., 1.0.0)
 
 Same as minor, but:
