@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getCronStatus, restartCron } from "@/lib/cron/index";
+import { requireCronGate } from "@/lib/cron/api-guard";
 import { getCronJobOverrides, updateCronJobOverrides } from "@/lib/config/loader";
 import { validateCronExpression } from "@/lib/utils/cron-helpers";
 import { createChildLogger } from "@/lib/logger";
@@ -38,6 +39,11 @@ export async function POST(request: NextRequest) {
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Refuse while the deployment gate is off — a job created now would never
+    // be registered, and the UI would show it as if it were live.
+    const gated = requireCronGate();
+    if (gated) return gated;
 
     const body = await request.json();
     const { key, name, description, script, schedule, enabled, options } = body;

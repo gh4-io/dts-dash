@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { CronJobTable, type CronJobRow } from "@/components/admin/cron-job-table";
 import { CronJobForm } from "@/components/admin/cron-job-form";
+import { CronSchedulerPanel } from "@/components/admin/cron-scheduler-panel";
+import type { BackupHealth, SchedulerState } from "@/lib/cron/scheduler-status";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +38,9 @@ interface BuiltinDef {
 export default function CronJobsPage() {
   const [jobs, setJobs] = useState<CronJobRow[]>([]);
   const [builtins, setBuiltins] = useState<BuiltinDef[]>([]);
+  const [scheduler, setScheduler] = useState<SchedulerState | null>(null);
+  const [backup, setBackup] = useState<BackupHealth | null>(null);
+  const [schedulerBusy, setSchedulerBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -60,6 +65,19 @@ export default function CronJobsPage() {
     }
   }, []);
 
+  const fetchScheduler = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/cron/scheduler");
+      if (res.ok) {
+        const body = await res.json();
+        setScheduler(body.scheduler);
+        setBackup(body.backup);
+      }
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   const fetchBuiltins = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/cron/builtins");
@@ -74,13 +92,45 @@ export default function CronJobsPage() {
   useEffect(() => {
     fetchJobs();
     fetchBuiltins();
-  }, [fetchJobs, fetchBuiltins]);
+    fetchScheduler();
+  }, [fetchJobs, fetchBuiltins, fetchScheduler]);
 
   // Auto-refresh every 30s
   useEffect(() => {
-    const interval = window.setInterval(fetchJobs, 30000);
+    const interval = window.setInterval(() => {
+      fetchJobs();
+      fetchScheduler();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [fetchJobs]);
+  }, [fetchJobs, fetchScheduler]);
+
+  const handleSetPaused = async (paused: boolean) => {
+    setMessage(null);
+    setSchedulerBusy(true);
+    try {
+      const res = await fetch("/api/admin/cron/scheduler", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setMessage({ type: "error", text: body.error ?? "Failed to change scheduler state" });
+      } else {
+        setScheduler(body.scheduler);
+        setBackup(body.backup);
+        setMessage({
+          type: "success",
+          text: paused ? "Scheduler paused" : "Scheduler resumed",
+        });
+        await fetchJobs();
+      }
+    } catch {
+      setMessage({ type: "error", text: "Network error" });
+    } finally {
+      setSchedulerBusy(false);
+    }
+  };
 
   const handleCreate = () => {
     setEditingJob(null);
@@ -147,6 +197,7 @@ export default function CronJobsPage() {
           text: `${job.name} ${job.enabled ? "suspended" : "resumed"}`,
         });
         await fetchJobs();
+        await fetchScheduler();
       }
     } catch {
       setMessage({ type: "error", text: "Network error" });
@@ -232,17 +283,34 @@ export default function CronJobsPage() {
     );
   }
 
+  // The deployment gate — not the pause switch — is what locks the controls.
+  // Until the scheduler state has loaded, assume locked rather than editable.
+  const readOnly = scheduler === null || !scheduler.gateEnabled;
+  const schedulerStatus = scheduler?.status ?? "disabled-by-config";
+
   return (
     <div className="space-y-4">
+      {scheduler && backup && (
+        <CronSchedulerPanel
+          scheduler={scheduler}
+          backup={backup}
+          scheduledJobCount={jobs.filter((j) => j.scheduled).length}
+          busy={schedulerBusy}
+          onSetPaused={handleSetPaused}
+        />
+      )}
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {jobs.length} job{jobs.length !== 1 ? "s" : ""} ({jobs.filter((j) => j.builtin).length}{" "}
           built-in, {jobs.filter((j) => !j.builtin).length} custom)
         </p>
-        <Button size="sm" onClick={handleCreate}>
-          <i className="fa-solid fa-plus mr-2" />
-          Add Custom Job
-        </Button>
+        {!readOnly && (
+          <Button size="sm" onClick={handleCreate}>
+            <i className="fa-solid fa-plus mr-2" />
+            Add Custom Job
+          </Button>
+        )}
       </div>
 
       {message && (
@@ -265,6 +333,8 @@ export default function CronJobsPage() {
         onDelete={handleDelete}
         onReset={handleReset}
         runningKey={runningKey}
+        schedulerStatus={schedulerStatus}
+        readOnly={readOnly}
       />
 
       {/* Create/Edit dialog */}
@@ -276,6 +346,7 @@ export default function CronJobsPage() {
         builtinDefs={builtins}
         onSubmit={handleFormSubmit}
         onReset={editingJob?.builtin ? handleFormReset : undefined}
+        readOnly={readOnly}
       />
 
       {/* Delete confirmation */}

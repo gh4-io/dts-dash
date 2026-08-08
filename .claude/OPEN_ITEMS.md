@@ -660,12 +660,12 @@ The full spec is the body of this item. (An earlier note pointed at an untracked
 
 ---
 
-### OI-105 | Cron Scheduler Administration and Disabled-State UX
+### OI-105 | Cron Scheduler Administration and Disabled-State UX — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Feature Request |
-| **Status** | **Open** — specced, not started |
+| **Status** | **Resolved** — 2026-08-07 |
 | **Priority** | P2 |
 | **Owner** | Unassigned |
 | **Created** | 2026-08-04 (filed 2026-08-06) |
@@ -679,6 +679,16 @@ When the gate is **on**: admins can switch between **Running** and **Paused**; p
 **Acceptance criteria**: no editable/executable cron controls appear active while the server gate is disabled; GUI pause stops execution without a restart and without changing server config; resume registers enabled jobs without duplicate schedules; **Run Now** respects the gate and role permissions; scheduler state and backup freshness are visible without inspecting container logs or the filesystem; tests cover all gate × runtime-state × role × restart × duplicate-registration combinations.
 
 The full spec is the body of this item. (An earlier note pointed at an untracked root `roadmap.md`; that file no longer exists — the surviving spec is here.)
+
+**Resolution (2026-08-07)**: `features.cronEnabled` was previously read in exactly two places — `config/loader.ts` and `startCron()` — and in none of the UI or admin API, so a gated-off deployment still rendered a fully live Cron Jobs page whose every control was a silent no-op, database backup included.
+
+- Runtime switch stored as one JSON row in the existing `app_config` table (`cronSchedulerState`) — `src/lib/cron/scheduler-state.ts`. No new table; `runMigrations()` still returns `[]`.
+- `src/lib/cron/scheduler-status.ts` — pure, client-safe resolution of gate × runtime state into `disabled-by-config | paused | running`, plus backup-freshness evaluation.
+- `src/lib/cron/api-guard.ts` — `requireCronGate()` returns 409 from every mutating/executing route (create, update, delete, reset, run, pause/resume), so the gate is enforced server-side and not merely rendered.
+- `startCron()` also honours the runtime pause, so a config edit calling `restartCron()` cannot silently resume a paused scheduler; `runJob()` re-checks at fire time.
+- `GET/POST /api/admin/cron/scheduler` — state + backup health; pause/resume recorded with acting user and timestamp.
+- UI: `cron-scheduler-panel.tsx` (three visually distinct states), read-only table and form, next-run column, backup freshness card with retention.
+- Tests: `src/__tests__/cron/` — 58 cases across gate × runtime state × role, duplicate registration on resume, next-run calculation and `app_config` persistence.
 
 **Links**: D-030 (cron management), [REQ_Admin.md](SPECS/REQ_Admin.md)
 

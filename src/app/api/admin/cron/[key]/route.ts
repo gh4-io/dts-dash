@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEffectiveJobs, restartCron, getBuiltinJobs } from "@/lib/cron/index";
+import { requireCronGate } from "@/lib/cron/api-guard";
 import { getCronJobOverrides, updateCronJobOverrides } from "@/lib/config/loader";
 import { validateCronExpression } from "@/lib/utils/cron-helpers";
 import { createChildLogger } from "@/lib/logger";
@@ -19,6 +20,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Schedules, options and enable/disable are all locked while the
+    // deployment gate is off — nothing edited here could take effect.
+    const gated = requireCronGate();
+    if (gated) return gated;
 
     const { key } = await params;
     const jobs = getEffectiveJobs();
@@ -95,6 +101,9 @@ export async function DELETE(
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    const gated = requireCronGate();
+    if (gated) return gated;
 
     const { key } = await params;
 

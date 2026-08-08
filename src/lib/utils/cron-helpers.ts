@@ -138,6 +138,133 @@ export function cronToHuman(expression: string): string {
   return expression;
 }
 
+// ─── Next Run Calculation ────────────────────────────────────────────────────
+
+/**
+ * Expand a single cron field into the set of values it matches.
+ * Returns null if the field cannot be parsed (caller should treat as no match).
+ */
+function expandField(field: string, min: number, max: number): Set<number> | null {
+  const out = new Set<number>();
+
+  for (const chunk of field.split(",")) {
+    const [base, stepRaw] = chunk.split("/");
+    const step = stepRaw === undefined ? 1 : Number(stepRaw);
+    if (!Number.isInteger(step) || step < 1) return null;
+
+    let lo: number;
+    let hi: number;
+
+    if (base === "*") {
+      lo = min;
+      hi = max;
+    } else if (base.includes("-")) {
+      const [a, b] = base.split("-").map(Number);
+      if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
+      lo = a;
+      hi = b;
+    } else {
+      const n = Number(base);
+      if (!Number.isInteger(n)) return null;
+      lo = n;
+      // A bare value with a step (e.g. 5/10) runs from that value to the max
+      hi = stepRaw === undefined ? n : max;
+    }
+
+    if (lo < min || hi > max || lo > hi) return null;
+    for (let v = lo; v <= hi; v += step) out.add(v);
+  }
+
+  return out.size > 0 ? out : null;
+}
+
+/** Day-of-week is 0-7 in cron with both 0 and 7 meaning Sunday — normalize to 0-6. */
+function normalizeDow(values: Set<number>): Set<number> {
+  const out = new Set<number>();
+  for (const v of values) out.add(v % 7);
+  return out;
+}
+
+/**
+ * Compute the next fire time for a 5-field cron expression, searching forward
+ * from `from` (exclusive). Evaluated in the server's local timezone, matching
+ * node-cron's default behaviour.
+ *
+ * Returns null for an invalid expression, or if no match exists within a year
+ * (e.g. `0 0 30 2 *` — 30 February).
+ */
+export function nextCronRun(expression: string, from: Date = new Date()): Date | null {
+  if (validateCronExpression(expression) !== null) return null;
+
+  const [minF, hourF, domF, monthF, dowF] = expression.trim().split(/\s+/);
+  const minutes = expandField(minF, 0, 59);
+  const hours = expandField(hourF, 0, 23);
+  const doms = expandField(domF, 1, 31);
+  const months = expandField(monthF, 1, 12);
+  const dowsRaw = expandField(dowF, 0, 7);
+  if (!minutes || !hours || !doms || !months || !dowsRaw) return null;
+  const dows = normalizeDow(dowsRaw);
+
+  // Standard cron: when BOTH day-of-month and day-of-week are restricted the
+  // job fires when either matches; when only one is restricted, only it applies.
+  const domRestricted = domF !== "*";
+  const dowRestricted = dowF !== "*";
+
+  const cursor = new Date(from.getTime());
+  cursor.setSeconds(0, 0);
+  cursor.setMinutes(cursor.getMinutes() + 1);
+
+  // 366 days covers every expression that can ever fire, including 29 February.
+  const limit = new Date(cursor.getTime() + 367 * 24 * 60 * 60 * 1000);
+
+  while (cursor < limit) {
+    if (!months.has(cursor.getMonth() + 1)) {
+      // Jump to the 1st of the next month
+      cursor.setMonth(cursor.getMonth() + 1, 1);
+      cursor.setHours(0, 0, 0, 0);
+      continue;
+    }
+
+    const domMatch = doms.has(cursor.getDate());
+    const dowMatch = dows.has(cursor.getDay());
+    const dayMatch =
+      domRestricted && dowRestricted ? domMatch || dowMatch : domRestricted ? domMatch : dowMatch;
+
+    if (!dayMatch) {
+      cursor.setDate(cursor.getDate() + 1);
+      cursor.setHours(0, 0, 0, 0);
+      continue;
+    }
+
+    if (!hours.has(cursor.getHours())) {
+      cursor.setHours(cursor.getHours() + 1, 0, 0, 0);
+      continue;
+    }
+
+    if (!minutes.has(cursor.getMinutes())) {
+      cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
+      continue;
+    }
+
+    return new Date(cursor.getTime());
+  }
+
+  return null;
+}
+
+/**
+ * Approximate the interval between consecutive fires, in milliseconds, by
+ * measuring the gap between the next two runs. Used to judge whether a
+ * scheduled job (notably the database backup) is overdue.
+ */
+export function cronIntervalMs(expression: string, from: Date = new Date()): number | null {
+  const first = nextCronRun(expression, from);
+  if (!first) return null;
+  const second = nextCronRun(expression, first);
+  if (!second) return null;
+  return second.getTime() - first.getTime();
+}
+
 // ─── Preset Builder ──────────────────────────────────────────────────────────
 
 export type CronPresetFrequency = "minutes" | "hours" | "daily" | "weekly" | "monthly";
