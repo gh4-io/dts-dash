@@ -752,12 +752,6 @@ export interface WeeklyMatrixCell {
   rosterHeadcount: number;
   /** Roster × paidToAvailable — the basis for the MH figures below. Fractional. */
   effectiveHeadcount: number;
-  /**
-   * @deprecated Ambiguous — equals `effectiveHeadcount`, not the roster count.
-   * Retained so the staffing-matrix API stays backwards-compatible (D-028);
-   * remove on the next MAJOR. Use `rosterHeadcount` for display.
-   */
-  headcount: number;
   paidMH: number;
   availableMH: number;
   productiveMH: number;

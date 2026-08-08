@@ -236,7 +236,6 @@ function emptyCell(): WeeklyMatrixCell {
   return {
     rosterHeadcount: 0,
     effectiveHeadcount: 0,
-    headcount: 0,
     paidMH: 0,
     availableMH: 0,
     productiveMH: 0,
@@ -247,7 +246,6 @@ function addCells(a: WeeklyMatrixCell, b: WeeklyMatrixCell): WeeklyMatrixCell {
   return {
     rosterHeadcount: a.rosterHeadcount + b.rosterHeadcount,
     effectiveHeadcount: a.effectiveHeadcount + b.effectiveHeadcount,
-    headcount: a.headcount + b.headcount,
     paidMH: a.paidMH + b.paidMH,
     availableMH: a.availableMH + b.availableMH,
     productiveMH: a.productiveMH + b.productiveMH,
@@ -329,7 +327,6 @@ export function computeWeeklyMatrix(
         // low against a roster the user had just typed in.
         rosterHeadcount: shiftResult.headcount,
         effectiveHeadcount: effectiveHC,
-        headcount: effectiveHC, // deprecated alias
         paidMH,
         availableMH,
         productiveMH,

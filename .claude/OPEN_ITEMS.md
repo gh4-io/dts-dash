@@ -284,7 +284,9 @@ Detection is **by name**, the only lineage marker `staffing_shifts` carries — 
 
 **Resolution**: `WeeklyMatrixCell` gains `rosterHeadcount` (undiscounted) and `effectiveHeadcount` (the MH basis). The HC column, avg daily, peak/min day and the category row-hiding checks use the roster; all MH math still uses effective. Peak/min dropped from 2 decimals to 0 — they were rendering "49.84" for a count of people.
 
-The ambiguous `headcount` field is **retained as a deprecated alias** equal to `effectiveHeadcount`, so the `/api/admin/capacity/staffing-matrix` response stays backwards-compatible per D-028. Remove on the next MAJOR.
+The ambiguous `headcount` field was **retained as a deprecated alias** equal to `effectiveHeadcount`, so the `/api/admin/capacity/staffing-matrix` response stayed backwards-compatible per D-028, to be removed on the next MAJOR.
+
+**Removed 2026-08-07 in v1.0.0 — that MAJOR.** `WeeklyMatrixCell` now carries only `rosterHeadcount` and `effectiveHeadcount`. No runtime consumer read the alias: the `peakDay`/`minDay` reducers in `weekly-matrix-panel.tsx` build their own accumulator objects from `rosterHeadcount` and merely happen to name the field `headcount`. The only references were six assertions in `staffing-engine.test.ts`, all already describing effective headcount in their comments, plus one test whose sole purpose was asserting the alias equalled `effectiveHeadcount` — tautological once the alias is gone, so it was deleted with it. A clean illustration of the vitest-does-not-type-check trap: those tests passed while the build broke.
 
 Also: "Config Headcount" is scoped to the week start (OI-100), so it legitimately differs from the shift grid footer when a version takes effect mid-week. Label now reads "as of &lt;weekStart&gt;" rather than leaving two unequal totals unexplained.
 
