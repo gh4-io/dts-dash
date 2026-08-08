@@ -12,6 +12,35 @@ DTS Dashboard (DTSD) provides three core operational views for line maintenance 
 
 The application ingests work package data, computes derived metrics (utilization, capacity, demand), and renders interactive visualizations — all running locally with no cloud dependencies.
 
+## Screenshots
+
+> Captured 2026-08-08 against a copy of production data (dark theme, the default).
+> Operator names are real; no live URLs, tokens or user details appear.
+
+### Flight Board
+
+Gantt timeline of aircraft ground windows, one row per registration, coloured by customer. Ctrl+scroll to zoom, shift+scroll to pan, click a bar for detail.
+
+![Flight Board — Gantt timeline of aircraft on-ground windows](docs/screenshots/flight-board.png)
+
+### Statistics Dashboard
+
+KPI cards, arrivals/departures/on-ground over time, and operator performance. Clicking an operator anywhere isolates it across every panel.
+
+![Statistics Dashboard — KPI cards, hourly chart and operator performance table](docs/screenshots/dashboard.png)
+
+### Capacity Modeling
+
+Demand against available capacity, with utilization heatmap by shift, gap analysis and six lenses (planned, allocated, events, forecast, worked, billed).
+
+![Capacity Modeling — demand vs capacity chart and shift utilization heatmap](docs/screenshots/capacity.png)
+
+### Administration
+
+Staffing configuration — rotation patterns, effective-dated shift definitions and the weekly headcount matrix, showing the paid → available → productive man-hour chain.
+
+![Admin staffing — rotations, shift definitions and weekly headcount matrix](docs/screenshots/admin-staffing.png)
+
 ## Key Features
 
 - **Local-First Architecture** — Runs entirely on your infrastructure, no external services required

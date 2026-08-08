@@ -646,10 +646,36 @@ Also unresolved: the Actions → Filters → **Rows** menu item is disabled app-
 
 ---
 
-### OI-106 | README Screenshots for GitHub
+### OI-124 | Dashboard Hourly Chart Ignored the Filter Date Range — RESOLVED
 
 | Field | Value |
 |-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+Found while capturing README screenshots (OI-106). The dashboard's **Arrivals / Departures / On Ground** chart — the largest element on the page — drew the same window around *now* no matter what date range was selected. With the filter set to **Feb 28 – Mar 9 2025**, every other panel updated correctly (57 aircraft, 141 turns, operator table, KPI cards) while the chart still rendered **Aug 8–10 2026** with identical data. Any range that did not happen to include today showed the wrong data, silently.
+
+**Root cause**: `useHourlySnapshots` was the only data hook lacking both halves of the OI-117 fix — it had no `_urlSynced` gate and no abort controller. The filter store starts on defaults and is hydrated from the URL a moment later, so every load fired two fetches: one for the default (roughly *now*) range and one for the URL's range. With nothing cancelling the first, whichever resolved last won, and it was usually the default.
+
+`useCapacityV2` and `useWorkPackages` both received this treatment under OI-117; this hook was missed because `/dashboard` was not the page being debugged at the time.
+
+**Resolution**: mirrored the established pattern — module-level `AbortController` so only the latest fetch can commit, an early return until `_urlSynced`, and `isLoading` reported until hydration completes so the chart shows its skeleton rather than a wrong window.
+
+**Verified** at Feb 28 – Mar 9 2025: the chart now spans Mar 1–9 with the NOW marker correctly absent, and matches the operator table beside it.
+
+**Links**: OI-117 (same defect class), OI-042, OI-106
+
+---
+
+### OI-106 | README Screenshots for GitHub — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Status** | **Resolved** 2026-08-08 — four screenshots in `docs/screenshots/`, embedded in README.md under Overview. Captured against a copy of production data at 1600x900, dark theme. **No mobile shot**: Playwright's viewport is not touch-capable, so device detection classifies a 390px window as narrow desktop and renders the desktop layout squeezed rather than the phone surface (bottom tab bar + list cards). A shot labelled "mobile" showing that would misrepresent it, so it was omitted rather than faked. Capturing one needs real touch emulation. Also note the capture surfaced OI-124, a P1 defect in the dashboard chart. |
 | **Type** | Documentation |
 | **Status** | **Open** |
 | **Priority** | P3 |
