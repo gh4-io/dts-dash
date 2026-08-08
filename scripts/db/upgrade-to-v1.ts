@@ -252,8 +252,19 @@ function applyAdditiveCatchUp(
 
   for (const [name, ddl] of ref.indexDDL) {
     if (liveIndexes.has(name)) continue;
-    if (!DRY_RUN) live.exec(ddl);
-    record("schema", `index ${name} created`);
+    try {
+      if (!DRY_RUN) live.exec(ddl);
+      record("schema", `index ${name} created`);
+    } catch (err) {
+      // A UNIQUE index fails if the live data already violates it. Report it and
+      // keep going: aborting the whole upgrade over one index would strand the
+      // database mid-way, and the operator needs to see WHICH constraint the
+      // data breaks — not a stack trace from step 2 of 3.
+      warn(
+        `Could not create index ${name}: ${err instanceof Error ? err.message : String(err)}. ` +
+          `Existing data violates it — resolve the duplicates and re-run.`,
+      );
+    }
   }
 
   // Objects the live database has and the v1.0.0 schema does not. These are
@@ -302,16 +313,128 @@ function backfillPatternGroups(live: Database.Database): void {
  * Lineage is matched on (config_id, name), which is all `staffing_shifts`
  * carries; it has no group_id (OI-111).
  */
+/**
+ * OI-111. `staffing_shifts` gained a `group_id` giving versions of one shift a
+ * stable identity, as `rotation_patterns` got in M026.
+ *
+ * The DDL is additive, but this backfill is not repeatable later, which is why
+ * it belongs in the v1.0.0 upgrade rather than a future release. Lineage is
+ * currently reconstructible because every version of a shift still shares a
+ * name within its config. The first rename after this point destroys that
+ * evidence permanently — nothing would distinguish "10WKD renamed to 10WKD-A"
+ * from two unrelated shifts, and no later migration could recover it.
+ *
+ * Each row defaults to its own lineage; rows sharing (config_id, name) then
+ * collapse onto the lowest id among them.
+ */
+/**
+ * Drop the foreign key from `mh_override_history.work_package_id`.
+ *
+ * The table shipped with `REFERENCES work_packages(id)` and no ON DELETE, which
+ * made the cleanup-canceled cron throw "FOREIGN KEY constraint failed" and roll
+ * back its entire transaction the first time a canceled work package had
+ * override history — that job deletes `mh_overrides` explicitly but never these
+ * rows. The audit trail is meant to outlive its work package, so the reference
+ * becomes logical, matching flight_events / time_bookings / billing_entries.
+ *
+ * SQLite cannot ALTER a constraint away, so this rebuilds the table. Only
+ * databases created by the original OI-104 schema need it; anything built from
+ * the current createTables() already has the right shape and is skipped.
+ */
+function dropOverrideHistoryFk(live: Database.Database): void {
+  const exists = live
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='mh_override_history'`)
+    .get();
+  if (!exists) return;
+
+  const fks = live.prepare(`PRAGMA foreign_key_list("mh_override_history")`).all() as {
+    table: string;
+    from: string;
+  }[];
+  if (!fks.some((f) => f.table === "work_packages" && f.from === "work_package_id")) return;
+
+  const rows = live.prepare(`SELECT COUNT(*) AS n FROM mh_override_history`).get() as { n: number };
+  if (DRY_RUN) {
+    record(
+      "data",
+      `mh_override_history: would rebuild without the work_packages FK (${rows.n} row(s) preserved)`,
+    );
+    return;
+  }
+
+  // Foreign keys must be off for the rename, and the pragma is a no-op inside a
+  // transaction — so this runs outside the caller's transaction, immediately
+  // before it. Idempotent either way: the FK probe above short-circuits.
+  live.exec(`
+    CREATE TABLE mh_override_history_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_package_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      previous_mh REAL,
+      new_mh REAL,
+      imported_mh REAL,
+      supplied_mh REAL,
+      min_hours REAL,
+      source TEXT NOT NULL DEFAULT 'api',
+      note TEXT,
+      changed_by INTEGER NOT NULL REFERENCES users(id),
+      changed_at TEXT NOT NULL
+    );
+    INSERT INTO mh_override_history_new
+      SELECT id, work_package_id, action, previous_mh, new_mh, imported_mh,
+             supplied_mh, min_hours, source, note, changed_by, changed_at
+      FROM mh_override_history;
+    DROP TABLE mh_override_history;
+    ALTER TABLE mh_override_history_new RENAME TO mh_override_history;
+    CREATE INDEX IF NOT EXISTS idx_mh_override_history_wp ON mh_override_history(work_package_id);
+    CREATE INDEX IF NOT EXISTS idx_mh_override_history_changed ON mh_override_history(changed_at);
+  `);
+
+  record(
+    "data",
+    `mh_override_history: rebuilt without the work_packages FK (${rows.n} row(s) preserved)`,
+  );
+}
+
+function backfillShiftGroups(live: Database.Database): void {
+  const cols = live.prepare(`PRAGMA table_info("staffing_shifts")`).all() as ColumnInfo[];
+  if (!cols.some((c) => c.name === "group_id")) return; // pre-OI-111 schema
+
+  const pending = live
+    .prepare(`SELECT COUNT(*) AS n FROM staffing_shifts WHERE group_id IS NULL`)
+    .get() as { n: number };
+  if (pending.n === 0) return;
+
+  if (!DRY_RUN) {
+    live.exec(`UPDATE staffing_shifts SET group_id = id WHERE group_id IS NULL`);
+    live.exec(
+      `UPDATE staffing_shifts SET group_id = (
+         SELECT MIN(s2.id) FROM staffing_shifts s2
+         WHERE s2.config_id = staffing_shifts.config_id AND s2.name = staffing_shifts.name
+       )`,
+    );
+  }
+
+  const lineages = live
+    .prepare(`SELECT COUNT(DISTINCT config_id || '/' || name) AS n FROM staffing_shifts`)
+    .get() as { n: number };
+  record(
+    "data",
+    `staffing_shifts: ${pending.n} row(s) assigned to ${lineages.n} version lineage(s)`,
+  );
+}
+
 function closeOverlappingShiftVersions(live: Database.Database): void {
   const rows = live
     .prepare(
-      `SELECT id, config_id, name, rotation_start_date, rotation_end_date, headcount
+      `SELECT id, config_id, group_id, name, rotation_start_date, rotation_end_date, headcount
        FROM staffing_shifts
        ORDER BY config_id, name, rotation_start_date, id`,
     )
     .all() as {
     id: number;
     config_id: number;
+    group_id: number | null;
     name: string;
     rotation_start_date: string;
     rotation_end_date: string | null;
@@ -320,7 +443,10 @@ function closeOverlappingShiftVersions(live: Database.Database): void {
 
   const groups = new Map<string, typeof rows>();
   for (const r of rows) {
-    const key = `${r.config_id} ${r.name}`;
+    // Group by lineage once group_id exists (OI-111); fall back to the name,
+    // which is all a pre-v1.0.0 row carries.
+    const key =
+      r.group_id != null ? `g\u0000${r.group_id}` : `n\u0000${r.config_id}\u0000${r.name}`;
     const list = groups.get(key);
     if (list) list.push(r);
     else groups.set(key, [r]);
@@ -598,8 +724,16 @@ async function main() {
 
     // Step 3 — data corrections, all inside one transaction.
     log("Step 3 — Data corrections", "blue");
+    // Outside the transaction: rebuilding a table requires foreign_keys off,
+    // and that pragma is ignored inside an open transaction.
+    live.pragma("foreign_keys = OFF");
+    dropOverrideHistoryFk(live);
+    live.pragma("foreign_keys = ON");
+
     const applyDataSteps = live.transaction(() => {
       backfillPatternGroups(live);
+      // Must precede the overlap check, which now keys on the lineage it sets.
+      backfillShiftGroups(live);
       closeOverlappingShiftVersions(live);
       remapTitleToWorkpackageNo(live);
       purgeOrphanedConfig(live);

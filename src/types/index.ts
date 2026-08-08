@@ -701,6 +701,15 @@ export interface StaffingConfig {
 export interface StaffingShift {
   id: number;
   configId: number;
+  /**
+   * Stable identity across versions of this shift (OI-111), mirroring
+   * `RotationPattern.groupId`. Every version of one shift shares it.
+   *
+   * Null only on rows written before v1.0.0 that have not been through
+   * `db:upgrade-v1`. Never identify a lineage by `name` — a rename splits it
+   * silently, which is exactly how OI-108's double-counted roster hid.
+   */
+  groupId: number | null;
   name: string;
   description: string | null;
   category: StaffingShiftCategory;

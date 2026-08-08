@@ -580,13 +580,22 @@ export interface ShiftOverlap {
  * a version created any other way (Add Shift, a direct PUT, an import) leaves the
  * predecessor open-ended, and nothing has flagged that until now.
  *
- * Detection is by name because that is the only lineage marker `staffing_shifts`
- * carries — unlike `rotation_patterns`, it has no `group_id` (see OI-101).
+ * Lineage comes from `groupId` (OI-111), matching how `rotation_patterns`
+ * resolves versions. It used to match on `name`, the only marker the table
+ * carried, which was wrong in both directions: renaming a shift split its
+ * lineage so a genuine overlap went unreported, and two unrelated shifts that
+ * happened to share a name were reported as overlapping when they were not.
+ *
+ * `groupId` is null only on rows written before v1.0.0 that have not been
+ * through `db:upgrade-v1`. Those fall back to the old name-based key, so
+ * detection still works on an un-upgraded database rather than silently
+ * reporting nothing — which, for a check whose whole job is catching a
+ * double-counted roster, would be the worst possible failure mode.
  */
 export function findShiftOverlaps(shifts: StaffingShift[]): ShiftOverlap[] {
   const byKey = new Map<string, StaffingShift[]>();
   for (const s of shifts) {
-    const key = `${s.configId}\u0000${s.name}`;
+    const key = s.groupId != null ? `g\u0000${s.groupId}` : `n\u0000${s.configId}\u0000${s.name}`;
     const list = byKey.get(key);
     if (list) list.push(s);
     else byKey.set(key, [s]);

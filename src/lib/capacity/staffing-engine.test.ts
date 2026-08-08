@@ -84,6 +84,9 @@ const PATTERN_INACTIVE: RotationPattern = {
 function makeShift(overrides: Partial<StaffingShift> & { id: number }): StaffingShift {
   return {
     configId: 1,
+    // Default each fixture to its own lineage (OI-111); tests that exercise
+    // versioning pass an explicit shared groupId.
+    groupId: overrides.id,
     name: "Test Shift",
     description: null,
     category: "DAY",
@@ -519,15 +522,29 @@ describe("findShiftOverlaps", () => {
         rotationEndDate: "2026-08-03",
         isActive: false,
       }),
-      makeShift({ id: 2, name: "13SMD", rotationStartDate: "2026-08-04" }),
+      makeShift({ id: 2, groupId: 1, name: "13SMD", rotationStartDate: "2026-08-04" }),
     ];
     expect(findShiftOverlaps(shifts)).toEqual([]);
   });
 
   it("flags two open-ended versions of the same shift", () => {
+    // Same lineage — this is the live production defect (OI-108): 13SMD existed
+    // as id=3 and id=7 with both windows open, doubling the roster to 20.
     const shifts = [
-      makeShift({ id: 3, name: "13SMD", rotationStartDate: "2025-12-01", headcount: 9 }),
-      makeShift({ id: 7, name: "13SMD", rotationStartDate: "2026-08-04", headcount: 11 }),
+      makeShift({
+        id: 3,
+        groupId: 3,
+        name: "13SMD",
+        rotationStartDate: "2025-12-01",
+        headcount: 9,
+      }),
+      makeShift({
+        id: 7,
+        groupId: 3,
+        name: "13SMD",
+        rotationStartDate: "2026-08-04",
+        headcount: 11,
+      }),
     ];
     const overlaps = findShiftOverlaps(shifts);
 
@@ -542,12 +559,13 @@ describe("findShiftOverlaps", () => {
     const shifts = [
       makeShift({
         id: 1,
+        groupId: 1,
         name: "DAY",
         rotationStartDate: "2026-01-04",
         rotationEndDate: "2026-08-04", // inclusive — still covers the 4th
         isActive: false,
       }),
-      makeShift({ id: 2, name: "DAY", rotationStartDate: "2026-08-04" }),
+      makeShift({ id: 2, groupId: 1, name: "DAY", rotationStartDate: "2026-08-04" }),
     ];
     expect(findShiftOverlaps(shifts)).toHaveLength(1);
   });
@@ -564,6 +582,64 @@ describe("findShiftOverlaps", () => {
     const shifts = [
       makeShift({ id: 1, name: "DAY", configId: 1 }),
       makeShift({ id: 2, name: "DAY", configId: 2 }),
+    ];
+    expect(findShiftOverlaps(shifts)).toEqual([]);
+  });
+
+  // ── Lineage by groupId, not name (OI-111) ────────────────────────────────
+
+  it("still flags an overlap after a version was renamed", () => {
+    // The case name-matching could not see. Both rows are the same shift; the
+    // newer version was renamed, so the old detector filed them under different
+    // keys and reported nothing while the roster quietly counted twice.
+    const shifts = [
+      makeShift({
+        id: 1,
+        groupId: 1,
+        name: "13SMD",
+        rotationStartDate: "2025-12-01",
+        headcount: 9,
+      }),
+      makeShift({
+        id: 2,
+        groupId: 1,
+        name: "13SMD-A",
+        rotationStartDate: "2026-08-04",
+        headcount: 11,
+      }),
+    ];
+    const overlaps = findShiftOverlaps(shifts);
+
+    expect(overlaps).toHaveLength(1);
+    expect(overlaps[0].shiftIds).toEqual([1, 2]);
+    expect(overlaps[0].combinedHeadcount).toBe(20);
+  });
+
+  it("does not flag two distinct shifts that happen to share a name", () => {
+    // The opposite error: name-matching reported these as one shift versioned
+    // twice. Different lineages, both legitimately effective at once.
+    const shifts = [
+      makeShift({ id: 1, groupId: 1, name: "DAY", rotationStartDate: "2026-01-04" }),
+      makeShift({ id: 2, groupId: 2, name: "DAY", rotationStartDate: "2026-01-04" }),
+    ];
+    expect(findShiftOverlaps(shifts)).toEqual([]);
+  });
+
+  it("falls back to name matching when groupId is absent", () => {
+    // A database that has not been through db:upgrade-v1. Reporting nothing
+    // here would be the worst failure for a check that exists to catch a
+    // double-counted roster, so the old key is kept as a fallback.
+    const shifts = [
+      makeShift({ id: 3, groupId: null, name: "13SMD", rotationStartDate: "2025-12-01" }),
+      makeShift({ id: 7, groupId: null, name: "13SMD", rotationStartDate: "2026-08-04" }),
+    ];
+    expect(findShiftOverlaps(shifts)).toHaveLength(1);
+  });
+
+  it("does not group a null-groupId row with a grouped one", () => {
+    const shifts = [
+      makeShift({ id: 1, groupId: null, name: "DAY", rotationStartDate: "2026-01-04" }),
+      makeShift({ id: 2, groupId: 5, name: "DAY", rotationStartDate: "2026-01-04" }),
     ];
     expect(findShiftOverlaps(shifts)).toEqual([]);
   });

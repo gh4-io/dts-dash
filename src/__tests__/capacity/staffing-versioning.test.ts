@@ -144,6 +144,9 @@ const ALWAYS_ON: RotationPattern = {
 function makeShift(overrides: Partial<StaffingShift> & { id: number }): StaffingShift {
   return {
     configId: 1,
+    // Default each fixture to its own lineage (OI-111); tests that exercise
+    // versioning pass an explicit shared groupId.
+    groupId: overrides.id,
     name: "Test Shift",
     description: null,
     category: "DAY",

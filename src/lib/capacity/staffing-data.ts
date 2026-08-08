@@ -456,6 +456,7 @@ export function loadStaffingShifts(configId: number): StaffingShift[] {
   return rows.map((r) => ({
     id: r.id,
     configId: r.configId,
+    groupId: r.groupId ?? null,
     name: r.name,
     description: r.description ?? null,
     category: r.category as StaffingShiftCategory,
@@ -478,6 +479,13 @@ export function loadStaffingShifts(configId: number): StaffingShift[] {
 
 export function createStaffingShift(data: {
   configId: number;
+  /**
+   * Lineage this shift belongs to (OI-111). Omit when creating a genuinely new
+   * shift — it then becomes its own lineage, seeded from the new row's id.
+   * `versionStaffingShift` passes the predecessor's group so every version of
+   * one shift shares it.
+   */
+  groupId?: number | null;
   name: string;
   description?: string | null;
   category: StaffingShiftCategory;
@@ -501,6 +509,7 @@ export function createStaffingShift(data: {
     .insert(staffingShifts)
     .values({
       configId: data.configId,
+      groupId: data.groupId ?? null,
       name: data.name,
       description: data.description ?? null,
       category: data.category,
@@ -524,9 +533,22 @@ export function createStaffingShift(data: {
     .returning()
     .get();
 
+  // A new shift is its own lineage. The id is only known after the insert, so
+  // seed group_id from it in a second write rather than leaving it null and
+  // relying on the name fallback (OI-111).
+  let groupId = result.groupId ?? null;
+  if (groupId === null) {
+    db.update(staffingShifts)
+      .set({ groupId: result.id })
+      .where(eq(staffingShifts.id, result.id))
+      .run();
+    groupId = result.id;
+  }
+
   return {
     id: result.id,
     configId: result.configId,
+    groupId,
     name: result.name,
     description: result.description ?? null,
     category: result.category as StaffingShiftCategory,
@@ -581,6 +603,7 @@ export function updateStaffingShift(
   return {
     id: result.id,
     configId: result.configId,
+    groupId: result.groupId ?? null,
     name: result.name,
     description: result.description ?? null,
     category: result.category as StaffingShiftCategory,
@@ -683,6 +706,10 @@ export function versionStaffingShift(
   // Create new shift with changes applied
   const created = createStaffingShift({
     configId: old.configId,
+    // Inherit the lineage so every version of this shift stays one group, and a
+    // rename in `changes` cannot split its history (OI-111). Falls back to the
+    // predecessor's own id when it predates the group column.
+    groupId: old.groupId ?? old.id,
     name: changes.name ?? old.name,
     description:
       changes.description !== undefined ? changes.description : (old.description ?? null),

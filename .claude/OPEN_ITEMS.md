@@ -321,15 +321,74 @@ Consequence: **Paid MH understated by the paidToAvailable factor** (~11% at 0.89
 
 ---
 
-### OI-111 | staffing_shifts Has No Version Lineage (group_id)
+### OI-111 | staffing_shifts Has No Version Lineage (group_id) — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Design Gap |
-| **Status** | **Open** |
+| **Status** | **Resolved** |
 | **Priority** | P2 |
-| **Owner** | Unassigned |
+| **Owner** | Claude |
 | **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-08 |
+
+**Done in v1.0.0 specifically because the DDL is additive but the backfill is not repeatable later.** Lineage was still reconstructible at the tag: every version of a shift shared a `name` within its `config_id`. The first rename after that point destroys the evidence permanently — nothing distinguishes "10WKD renamed to 10WKD-A" from two unrelated shifts, and no future migration can recover it. Deferring would not have meant "ship it in v1.1.0"; it would have meant shipping it against data that had been quietly corrupting itself since the tag.
+
+**Resolution**: `group_id` + `idx_ss_group` on `staffing_shifts`, mirroring what `rotation_patterns` got in M026. `createStaffingShift()` seeds a new shift's group from its own id; `versionStaffingShift()` propagates the predecessor's, so a rename in `changes` can no longer split a lineage. `findShiftOverlaps()` keys on `groupId`, which fixes the detector in **both** directions — a renamed version's overlap was previously invisible, and two unrelated shifts sharing a name were previously reported as overlapping when they were not. Rows with a null `groupId` (a database not yet through `db:upgrade-v1`) fall back to the old name key, because reporting nothing is the worst possible outcome for a check whose job is catching a double-counted roster.
+
+Backfilled in `db:upgrade-v1`: each row becomes its own lineage, then rows sharing `(config_id, name)` collapse onto the lowest id. Verified on the dev database — the `13SMD` pair (ids 3 and 7, the live OI-108 defect) collapsed to one lineage, the other five shifts each became their own, and a second run is a no-op.
+
+**Not changed**: the bulk importer's `dedupKey: ["name", "configId"]` (`src/lib/import/schemas/staffing-shifts.ts`). A CSV cannot carry a `groupId`, and name is the legitimate way a user identifies a shift in an import; the null fallback keeps those rows working. Revisit only if imports start creating versions rather than upserting.
+
+**Links**: OI-101 (the pattern precedent), OI-107, OI-108, OI-125, OI-126
+
+---
+
+### OI-125 | mh_override_history FK Aborted the cleanup-canceled Cron — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P1 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+Found in the pre-release DB future-proofing review. `mh_override_history.work_package_id` shipped (OI-104, one day earlier) as `NOT NULL REFERENCES work_packages(id)` with no `ON DELETE`, and `foreign_keys` is `ON` (`client.ts`). `cleanup-canceled` deletes `mh_overrides` and flight comments explicitly but **nothing anywhere deletes history rows** — so `DELETE FROM work_packages` threw `FOREIGN KEY constraint failed` and rolled back the entire job the first time a canceled work package had override history. Production carries 722 overrides, so history rows would have appeared immediately.
+
+**Reproduced** before fixing: seeded one history row, deleted the override, attempted the work-package delete — `FOREIGN KEY constraint failed`.
+
+**Resolution**: the reference is now logical, with no FK, matching `flight_events` / `time_bookings` / `billing_entries`. `ON DELETE CASCADE` was rejected deliberately — it would have traded a loud failure for a routine scheduled job silently erasing the append-only audit trail the table exists to preserve. History outlives its work package; a row pointing at a deleted WP is expected, not corruption.
+
+SQLite cannot `ALTER` a constraint away, so `db:upgrade-v1` rebuilds the table, guarded on detecting the old FK and therefore idempotent. Verified: FK to `work_packages` gone, `users` FK retained, rows and both indexes preserved, the work-package delete now succeeds, the history row survives it, `integrity_check` clean.
+
+**Links**: OI-104, D-067
+
+---
+
+### OI-126 | No UNIQUE Guard on the Single-Active-Row Tables — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Design Gap |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+`capacity_assumptions` and `staffing_configs` are both documented as having exactly one active row and enforced it nowhere. `loadActiveAssumptions()` selects on `is_active` with no ordering and `loadActiveStaffingConfig()` takes `LIMIT 1`, so a second active row would not fail — it would silently return an arbitrary one, changing every capacity number in the app based on row order. That is the same shape as OI-108's double-counted roster, and just as invisible.
+
+Done now rather than later because a UNIQUE index that passes today may not pass in six months, and adding it to already-dirty data fails outright.
+
+**Resolution**: partial unique indexes `WHERE is_active = 1` on both. Verified the constraint rejects a duplicate active row on each table, and that `activateStaffingConfig()` still works — it deactivates all before activating one, so the constraint is never transiently violated. `capacity_assumptions` is only ever updated in place by id, so it has no such flow.
+
+Also made index creation in `db:upgrade-v1` report-and-continue rather than abort: a UNIQUE index failing on pre-existing duplicates should name the constraint the data breaks, not strand the upgrade halfway with a stack trace.
+
+**Links**: OI-108, OI-111
+
+---
 
 `rotation_patterns` got a `group_id` in M026 (OI-101) giving versions a stable identity across edits. `staffing_shifts` never did — a shift's only lineage marker is its **name**. Consequences:
 

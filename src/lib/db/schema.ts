@@ -332,9 +332,16 @@ export const mhOverrideHistory = sqliteTable(
   "mh_override_history",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    workPackageId: integer("work_package_id")
-      .notNull()
-      .references(() => workPackages.id),
+    /**
+     * Logical reference only — deliberately NOT a foreign key, matching
+     * flight_events / time_bookings / billing_entries.
+     *
+     * An FK here broke the cleanup-canceled cron (it deletes mh_overrides but
+     * never history), and a cascade would have let a routine job erase the very
+     * audit trail this table exists for. History outlives its work package; a
+     * row pointing at a deleted WP is expected.
+     */
+    workPackageId: integer("work_package_id").notNull(),
     /** create | update | clear */
     action: text("action", { enum: ["create", "update", "clear"] }).notNull(),
     /** Override value before the change; null when none existed. */
@@ -708,6 +715,13 @@ export const staffingShifts = sqliteTable(
     configId: integer("config_id")
       .notNull()
       .references(() => staffingConfigs.id, { onDelete: "cascade" }),
+    /**
+     * Stable identity across versions of the same shift (OI-111), mirroring
+     * `rotationPatterns.groupId`. Nullable only so existing rows can be
+     * backfilled; treat it as required in new code. Do NOT identify a shift's
+     * lineage by `name` — a rename splits it silently.
+     */
+    groupId: integer("group_id"),
     name: text("name").notNull(),
     description: text("description"),
     category: text("category", { enum: ["DAY", "SWING", "NIGHT", "OTHER"] }).notNull(),

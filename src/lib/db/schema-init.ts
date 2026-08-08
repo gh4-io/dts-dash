@@ -296,9 +296,18 @@ export function createTables() {
     -- the previous value entirely — this table is where before/after lives.
     -- supplied_mh keeps the value as the user or CSV supplied it, before the
     -- optional minimum-hours transform raised it.
+    -- work_package_id is a logical reference with NO foreign key, deliberately,
+    -- matching flight_events / time_bookings / billing_entries. With an FK and
+    -- no ON DELETE, the cleanup-canceled cron threw "FOREIGN KEY constraint
+    -- failed" and rolled back its whole transaction the first time a canceled
+    -- work package had override history — it deletes mh_overrides explicitly
+    -- but never these rows. ON DELETE CASCADE would have traded that for
+    -- something worse: a routine scheduled job silently erasing the audit trail
+    -- it exists to preserve. History outlives the work package, so a row
+    -- pointing at a deleted WP is expected, not corruption.
     CREATE TABLE IF NOT EXISTS mh_override_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      work_package_id INTEGER NOT NULL REFERENCES work_packages(id),
+      work_package_id INTEGER NOT NULL,
       action TEXT NOT NULL,
       previous_mh REAL,
       new_mh REAL,
@@ -474,6 +483,13 @@ export function createTables() {
       updated_by INTEGER REFERENCES users(id)
     );
 
+    -- Exactly one active row. loadActiveAssumptions() selects on is_active with
+    -- no ordering, so a second active row would silently change every capacity
+    -- number in the app depending on row order — the same shape of defect as
+    -- OI-108's double-counted roster, and just as invisible.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_capacity_assumptions_active
+      ON capacity_assumptions(is_active) WHERE is_active = 1;
+
     CREATE TABLE IF NOT EXISTS headcount_plans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       station TEXT NOT NULL DEFAULT 'CVG',
@@ -573,10 +589,23 @@ export function createTables() {
       created_by INTEGER REFERENCES users(id)
     );
 
+    -- Exactly one active config. loadActiveStaffingConfig() takes LIMIT 1 with
+    -- no ordering, so a second active config would silently pick an arbitrary
+    -- roster. activateStaffingConfig() deactivates all before activating one,
+    -- so this constraint is never transiently violated.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_staffing_configs_active
+      ON staffing_configs(is_active) WHERE is_active = 1;
+
     -- Staffing: Shift Definitions
     CREATE TABLE IF NOT EXISTS staffing_shifts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       config_id INTEGER NOT NULL REFERENCES staffing_configs(id) ON DELETE CASCADE,
+      -- Versions of one shift share a group_id (OI-111), mirroring the lineage
+      -- rotation_patterns got in M026. Before this the only lineage marker was
+      -- the shift's name, so renaming a shift silently split its history and two
+      -- unrelated shifts sharing a name looked like one. Backfilled to the id of
+      -- the earliest version in each (config_id, name) lineage.
+      group_id INTEGER,
       name TEXT NOT NULL,
       description TEXT,
       category TEXT NOT NULL,
@@ -600,6 +629,7 @@ export function createTables() {
 
     CREATE INDEX IF NOT EXISTS idx_ss_config ON staffing_shifts(config_id);
     CREATE INDEX IF NOT EXISTS idx_ss_config_category ON staffing_shifts(config_id, category);
+    CREATE INDEX IF NOT EXISTS idx_ss_group ON staffing_shifts(group_id);
     CREATE INDEX IF NOT EXISTS idx_ss_rotation ON staffing_shifts(rotation_id);
 
     -- Demand Contracts (hierarchical)
