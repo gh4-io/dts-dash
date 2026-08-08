@@ -607,6 +607,8 @@ export interface CapacityOverviewResponse {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions;
+  /** IANA zone every day bucket, heatmap row and rollup was computed on (OI-119) */
+  operationalTimezone?: string;
   contracts?: DemandContract[];
   flightEvents?: FlightEvent[];
   coverageWindows?: EventCoverageWindow[];

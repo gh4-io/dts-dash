@@ -44,6 +44,7 @@ function CapacityPageInner() {
     warnings,
     shifts,
     assumptions,
+    operationalTimezone,
     contracts,
     flightEvents,
     coverageWindows,
@@ -167,6 +168,21 @@ function CapacityPageInner() {
     return buildCustomerCoverageMap(aggregates);
   }, [coverageWindows, shifts]);
 
+  // OI-119: capacity is bucketed on the shift rows' own clock (D-049), so the
+  // global display timezone cannot move these numbers. Show it locked rather
+  // than let it look like it applies.
+  const timezoneLock = useMemo(() => {
+    if (!operationalTimezone) return null;
+    const label = operationalTimezone === "UTC" ? "UTC" : "Eastern";
+    return {
+      timezone: operationalTimezone,
+      reason:
+        `Capacity days, heatmap rows and rollups are bucketed on the operational shift ` +
+        `timezone (${label}), set in Admin → Capacity → Shift Timezone. ` +
+        `The display timezone does not apply on this page.`,
+    };
+  }, [operationalTimezone]);
+
   if (error) {
     return (
       <div className="space-y-3">
@@ -188,6 +204,7 @@ function CapacityPageInner() {
       <TopMenuBar
         title="Capacity Modeling"
         icon="fa-solid fa-gauge-high"
+        timezoneLock={timezoneLock}
         actions={
           <div className="flex items-center gap-4">
             {/* Warning bell — only shown when warnings exist */}

@@ -46,6 +46,8 @@ import {
   applyBilledHours,
   computeEffectivePaidHours,
   deriveNonOperatingFromStaffing,
+  buildDayGrid,
+  toLocalDateStr,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import type { ResolvedShiftInfo, CapacityComputeMode } from "@/types";
@@ -73,7 +75,6 @@ export async function GET(request: NextRequest) {
     // time, arrival/departure, man-hours, shift). Before this they were
     // client-side only and so had no effect on server-computed demand.
     const columnFilters = parseColumnFilters(searchParams.get("cf"));
-    const filterTimezone = filterParams.timezone ?? "UTC";
     // Operator include/exclude, reused for every customer-bearing source below
     const keepCustomer = makeCustomerPredicate(filterParams);
 
@@ -88,14 +89,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // OI-119: the operational clock. Every engine buckets by the timezone
+    // stored on the shift rows (D-049) — Admin → Capacity → Shift Timezone —
+    // so the day grid, the date-bounded DB queries and the column-filter rules
+    // must all resolve on that same clock. The FilterBar timezone is a display
+    // preference and deliberately has no say here; re-slicing a roster's days
+    // onto a viewer's clock would split every shift across two buckets.
+    const operationalTimezone = shifts[0]?.timezone ?? "UTC";
+
     // Determine date range from filters or default to 30 days
     // Filter store sends full ISO datetimes (e.g. "2026-02-20T15:00:00.000Z")
     // but date-range/plan queries need YYYY-MM-DD only.
-    const startDate = toDateOnly(filterParams.start ?? getDefaultStartDate());
-    const endDate = toDateOnly(filterParams.end ?? getDefaultEndDate());
-
-    // Generate date array
-    const dates = generateDateRange(startDate, endDate);
+    const rangeStart = filterParams.start ?? getDefaultStartDate();
+    const rangeEnd = filterParams.end ?? getDefaultEndDate();
+    const dates = buildDayGrid(rangeStart, rangeEnd, operationalTimezone);
+    // An inverted range yields an empty grid; the date-bounded queries below
+    // still need well-formed bounds.
+    const startDate = dates[0] ?? toLocalDateStr(rangeStart, operationalTimezone);
+    const endDate = dates[dates.length - 1] ?? toLocalDateStr(rangeEnd, operationalTimezone);
 
     // Compute capacity: detect auto mode from DB, then apply override if requested.
     const activeConfig = loadActiveStaffingConfig();
@@ -225,7 +236,9 @@ export async function GET(request: NextRequest) {
         end: `${endDate}T23:59:59.999Z`,
       }),
       columnFilters,
-      filterTimezone,
+      // The `shift`, arrival and departure rules resolve against real shift
+      // windows, so they read the operational clock — not the viewer's.
+      operationalTimezone,
     );
 
     // Convert to DemandWorkPackage format
@@ -375,6 +388,7 @@ export async function GET(request: NextRequest) {
       warnings,
       shifts,
       assumptions,
+      operationalTimezone,
       contracts: contracts.length > 0 ? contracts : undefined,
       flightEvents: flightEvents.length > 0 ? flightEvents : undefined,
       coverageWindows: coverageWindows && coverageWindows.length > 0 ? coverageWindows : undefined,
@@ -413,24 +427,4 @@ function getDefaultEndDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 23);
   return d.toISOString().split("T")[0];
-}
-
-/** Extract YYYY-MM-DD from an ISO datetime or date-only string. */
-function toDateOnly(s: string): string {
-  return s.split("T")[0].split(" ")[0];
-}
-
-function generateDateRange(start: string, end: string): string[] {
-  const dates: string[] = [];
-  const startStr = toDateOnly(start);
-  const endStr = toDateOnly(end);
-  const current = new Date(startStr + "T00:00:00Z");
-  const endDate = new Date(endStr + "T00:00:00Z");
-
-  while (current <= endDate) {
-    dates.push(current.toISOString().split("T")[0]);
-    current.setUTCDate(current.getUTCDate() + 1);
-  }
-
-  return dates;
 }

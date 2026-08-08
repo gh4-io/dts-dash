@@ -579,21 +579,50 @@ Found while writing tests for OI-117; both predate it and affect the flight boar
 
 ---
 
-### OI-119 | Timezone Selector Does Nothing on /capacity
+### OI-119 | Timezone Selector Does Nothing on /capacity — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-07 |
+| **Resolved** | 2026-08-07 |
+
+`/api/capacity/overview` builds its day grid from UTC dates (`generateDateRange`) and shift bucketing reads each shift's own stored timezone (D-049). The UI TZ selector therefore only re-interprets the start/end timestamps — every day boundary, heatmap row and rollup stays UTC. A user switching to Eastern sees no change and has no way to know the numbers are not on their clock.
+
+**Investigation corrected the premise.** Capacity is *not* computed on UTC. `enumerateGroundSlots` (`demand-engine.ts:109`), `aggregateConcurrencyByShift` (`concurrency-engine.ts:87`) and `computeAllEventWindows` (`flight-events-engine.ts:125`) all bucket on `shifts[0].timezone` — the operational clock set in Admin → Capacity → Shift Timezone, which is `America/New_York` in production. Only the *day grid* was UTC, and it was the odd one out.
+
+That makes the selector's promise unimplementable rather than merely unimplemented: honouring a display timezone would mean re-slicing the roster's own days onto the viewer's clock, splitting every 07:00–15:00 Eastern shift across two buckets. So the day grid was moved onto the operational clock (a real correctness fix), and the selector is locked rather than made to work.
+
+**Resolution**:
+- New pure helpers `toLocalDateStr()` / `buildDayGrid()` in `tz-helpers.ts`; the route builds its grid with `buildDayGrid(start, end, operationalTimezone)`. This also fixed a silent data loss — with a UTC grid and Eastern buckets, demand landing on the operational day before the grid's first date was clamped away by the `dateSet` filter.
+- Column-filter rules on this route (`shift`, arrival, departure) now evaluate on the operational clock, not `filterParams.timezone`; the client stopped sending `timezone` for this endpoint.
+- `TopMenuBar` gained an optional `timezoneLock` prop. `/capacity` passes the operational timezone, which renders the TZ selector disabled with a lock icon and a tooltip naming the zone and where to change it, and points the date pickers at the same clock so the typed window matches the computed one.
+
+**Follow-up filed**: OI-122 — `aggregateConcurrencyByDay` still groups on UTC dates and its result is joined to operational-clock demand dates.
+
+**Files**: `src/lib/capacity/tz-helpers.ts`, `src/lib/capacity/index.ts`, `src/app/api/capacity/overview/route.ts`, `src/lib/hooks/use-capacity-v2.ts`, `src/components/shared/top-menu-bar.tsx`, `src/app/(authenticated)/capacity/page.tsx`, `src/types/index.ts`, `src/__tests__/capacity/tz-helpers.test.ts`
+**Links**: OI-117, OI-122, D-049
+
+---
+
+### OI-122 | Daily Concurrency Aggregates on UTC Days, Joined to Operational Days
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
 | **Status** | **Open** |
-| **Priority** | P2 |
+| **Priority** | P3 |
 | **Owner** | Unassigned |
 | **Created** | 2026-08-07 |
 
-`/api/capacity/overview` builds its day grid from UTC dates (`generateDateRange`) and shift bucketing reads each shift's own stored timezone (D-049). The UI TZ selector therefore only re-interprets the start/end timestamps — every day boundary, heatmap row and rollup stays UTC. A user switching to Eastern sees no change and has no way to know the numbers are not on their clock.
+Found during OI-119. `aggregateConcurrencyByDay()` (`src/lib/capacity/concurrency-engine.ts:26-41`) groups hourly buckets by `b.hour.split("T")[0]` — the UTC date — and documents itself as UTC-only because it has no shift context. `applyConcurrencyPressure()` then looks that map up by `day.date`, which is an *operational-clock* date produced by the demand engine. Under the production `America/New_York` shift timezone the two disagree by 4–5 hours, so each day's `peakConcurrency` / `avgConcurrency` carries the wrong tail hours. Its sibling `aggregateConcurrencyByShift()` already resolves the shift timezone correctly, so only the daily rollup is affected.
 
-Changing it touches the demand engine, the heatmap, the monthly/weekly rollups and every stored shift boundary, so it is its own session. Until then the selector is misleading on this page.
+Informational only — concurrency does not feed utilization (D-045). The fix is to give the daily aggregate the same shift context its sibling has, which changes its documented UTC contract; left alone in OI-119 to keep that change from riding along untested.
 
-**Links**: OI-117, D-049
+**Links**: OI-119, D-045
 
 ---
 

@@ -20,11 +20,25 @@ import {
 import type { ReactNode } from "react";
 import type { AircraftType } from "@/types";
 
+/**
+ * Pins the timezone on pages whose data is computed on a fixed clock rather
+ * than the viewer's display preference (OI-119). The selector is shown locked
+ * with `reason` as its tooltip, and the date pickers follow `timezone` so the
+ * window you type matches the window that is computed.
+ */
+export interface TimezoneLock {
+  /** IANA zone the page's data is actually bucketed on */
+  timezone: string;
+  /** Why the display selector does not apply on this page */
+  reason: string;
+}
+
 interface TopMenuBarProps {
   title: string;
   icon: string;
   actions?: ReactNode;
   formatChips?: ActiveChip[];
+  timezoneLock?: TimezoneLock | null;
 }
 
 /** Get a column label by key */
@@ -41,7 +55,13 @@ function formatColumnFilterChip(cf: ColumnFilterRule): string {
   return `${col} ${cf.operator} ${cf.value}`;
 }
 
-export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBarProps) {
+export function TopMenuBar({
+  title,
+  icon,
+  actions,
+  formatChips = [],
+  timezoneLock = null,
+}: TopMenuBarProps) {
   useFilterUrlSync();
 
   const {
@@ -81,6 +101,10 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
 
   const { customers, fetch: fetchCustomers } = useCustomers();
   const fetchFacets = useWorkPackagesStore((s) => s.fetchFacets);
+
+  // A locked page ignores the stored display preference outright — showing one
+  // zone in the pickers while computing another is the defect OI-119 filed.
+  const shownTimezone = timezoneLock?.timezone ?? timezone;
 
   // Ensure customers are loaded (previously handled by FilterDropdown)
   useEffect(() => {
@@ -313,14 +337,14 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
             onChange={setStart}
             label="Start"
             icon="fa-solid fa-calendar"
-            timezone={timezone}
+            timezone={shownTimezone}
           />
           <DateTimePicker
             value={end}
             onChange={setEnd}
             label="End"
             icon="fa-solid fa-calendar-check"
-            timezone={timezone}
+            timezone={shownTimezone}
           />
         </div>
 
@@ -328,10 +352,14 @@ export function TopMenuBar({ title, icon, actions, formatChips = [] }: TopMenuBa
         <ActionsMenu />
 
         {/* Timezone select — desktop only */}
-        <div className="hidden md:block">
-          <Select value={timezone} onValueChange={setTimezone}>
+        <div className="hidden md:block" title={timezoneLock?.reason}>
+          <Select value={shownTimezone} onValueChange={setTimezone} disabled={!!timezoneLock}>
             <SelectTrigger className="h-9 w-auto min-w-[130px] text-xs">
-              <i className="fa-solid fa-clock mr-1.5 text-muted-foreground" />
+              <i
+                className={`fa-solid mr-1.5 text-muted-foreground ${
+                  timezoneLock ? "fa-lock" : "fa-clock"
+                }`}
+              />
               <span className="mr-1 text-muted-foreground">TZ:</span>
               <SelectValue />
             </SelectTrigger>

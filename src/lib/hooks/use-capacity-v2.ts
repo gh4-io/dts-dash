@@ -35,6 +35,8 @@ interface CapacityV2State {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
+  /** Clock the server bucketed every day/heatmap row/rollup on (OI-119) */
+  operationalTimezone: string | null;
   // Compute metadata
   computeMode: CapacityComputeMode;
   autoMode: CapacityComputeMode;
@@ -71,6 +73,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   warnings: [],
   shifts: [],
   assumptions: null,
+  operationalTimezone: null,
   // Compute metadata
   computeMode: "headcount" as CapacityComputeMode,
   autoMode: "headcount" as CapacityComputeMode,
@@ -120,6 +123,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         warnings: json.warnings,
         shifts: json.shifts,
         assumptions: json.assumptions,
+        operationalTimezone: json.operationalTimezone ?? null,
         computeMode: json.computeMode ?? "headcount",
         autoMode: json.autoMode ?? "headcount",
         modeWarning: json.modeWarning ?? null,
@@ -153,7 +157,6 @@ export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
   const {
     start,
     end,
-    timezone,
     operators,
     aircraft,
     types,
@@ -163,7 +166,9 @@ export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
   } = useFilters();
   const urlSynced = useFilters((s) => s._urlSynced);
   // Column-filter rules the filter store has no field for (status, ground
-  // time, arrival/departure, man-hours, shift) are applied server-side.
+  // time, arrival/departure, man-hours, shift) are applied server-side. They
+  // resolve on the operational shift clock the server reads from the shift
+  // rows, so the FilterBar timezone is deliberately not sent (OI-119).
   const columnFilters = useActions((s) => s.columnFilters);
   const store = useCapacityV2Store();
 
@@ -178,14 +183,12 @@ export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
       excludeAircraft,
       excludeTypes,
     });
-    if (timezone) q.timezone = timezone; // the `shift` column rule needs it
     if (columnFilters.length > 0) q.cf = serializeColumnFilters(columnFilters);
     if (modeOverride) q.mode = modeOverride;
     return q;
   }, [
     start,
     end,
-    timezone,
     operators,
     aircraft,
     types,
@@ -210,6 +213,7 @@ export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
     warnings: store.warnings,
     shifts: store.shifts,
     assumptions: store.assumptions,
+    operationalTimezone: store.operationalTimezone,
     computeMode: store.computeMode,
     autoMode: store.autoMode,
     modeWarning: store.modeWarning,
