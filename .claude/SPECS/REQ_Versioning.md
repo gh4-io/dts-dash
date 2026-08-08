@@ -193,12 +193,21 @@ git tag -a v1.0.0 -m "v1.0.0: ..."
 git push origin v1.0.0
 gh release create v1.0.0 --title "v1.0.0" --notes-file RELEASE_NOTES.md
 git checkout dev && git merge master      # realign dev with the released version
-git push origin --delete release/v1.0.0   # do not leave release branches on origin
 ```
 
 Both invariants the original procedure exists to protect are preserved: the version is bumped on a release branch and never on `dev`, and `master` is only reached through a reviewed PR. What changes is the *source* of the branch — `dev`, which is the actual source of truth for a large release.
 
-**Branch hygiene**: `origin` carries only `dev` and `master`. Delete the release branch after merge — `release/v0.2.0` sat on origin for six months with content identical to the `v0.2.0` tag. Tags, not branches, are what preserve released history.
+### Branch and tag hygiene
+
+**A release tag points at `master`.** The tag marks the merged, reviewed result — not the tip of the branch that produced it. Verified across the existing tags: `v0.1.0`, `v0.1.1` and `v0.2.0` all resolve to commits on `master`.
+
+**Pre-release tags are the exception.** `v0.1.0-rc2` and `v0.2.0-rc1` point at release-branch commits, which is correct — an RC exists precisely to be tagged before it reaches `master`.
+
+**A release branch may be retained when a tag points into it** — an RC tag being the usual reason. Keeping it is what makes that tag's history reachable by branch as well as by tag.
+
+**Prune a release branch once nothing references it.** `release/v0.2.0` sat on `origin` for six months holding a tip (`0218568`) that no tag pointed at, and whose tree was byte-identical to the `v0.2.0` tag on `master`. That is a leftover, not history.
+
+Steady state on `origin`: `dev`, `master`, and any release branch still carrying a tag.
 
 ---
 
