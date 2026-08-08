@@ -206,6 +206,7 @@ function DashboardPageInner() {
               <AvgGroundTimeCard workPackages={displayWps} />
               <MhByOperatorCard
                 workPackages={displayWps}
+                focusedOperator={focusedOperator}
                 onOperatorClick={handleOperatorFromCard}
               />
               <TotalAircraftCard
@@ -249,6 +250,7 @@ function DashboardPageInner() {
                 </div>
                 <MhByOperatorCard
                   workPackages={displayWps}
+                  focusedOperator={focusedOperator}
                   onOperatorClick={handleOperatorFromCard}
                   className="flex-[2]"
                 />
