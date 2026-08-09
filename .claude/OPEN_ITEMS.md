@@ -264,12 +264,12 @@ Needs a product call on whether these should be reconciled or just labelled more
 
 ---
 
-### OI-133 | Customer Donut Percentages Can Exceed 100%
+### OI-133 | Customer Donut Percentages Can Exceed 100% — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | Open (latent) |
+| **Status** | **RESOLVED** (2026-08-08, v1.0.0) |
 | **Priority** | P4 |
 | **Owner** | Claude |
 | **Created** | 2026-08-08 |
@@ -279,6 +279,8 @@ Needs a product call on whether these should be reconciled or just labelled more
 **Latent today**: the production snapshot has **0 registrations appearing under more than one customer** (152 unique regs, slices sum to exactly 152). It becomes visible the first time an aircraft changes operator inside a filter window, which is plausible for leased tails.
 
 **Fix**: divide by the sum of the slice values rather than the global unique count, or count `(customer, reg)` pairs in the denominator.
+
+**Resolution (2026-08-08)**: took the first option — the denominator is now `sum(slice.size)`, which is by construction the same quantity Recharts uses to lay out the arcs, so label and geometry cannot diverge again. No visible change against current data (the sums are equal while no tail is shared); the fix is pre-emptive.
 
 **Files**: `src/components/dashboard/customer-donut.tsx`
 
@@ -385,12 +387,12 @@ The flight detail drawer's links were not links. Each was a `<button>` that wrot
 
 ---
 
-### OI-138 | End Date Picker Displays a Different Instant Than the One Queried
+### OI-138 | End Date Picker Displays a Different Instant Than the One Queried — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | Open |
+| **Status** | **RESOLVED** (2026-08-08, v1.0.0) |
 | **Priority** | P2 |
 | **Owner** | — |
 | **Created** | 2026-08-09 |
@@ -407,7 +409,16 @@ It corrects itself after a client-side navigation: arriving back on the board vi
 
 **Confirmed pre-existing**, not introduced by OI-137: reproduced with that work stashed, on `dev` at `c916d37`. It surfaced only because the Focus view's href carries the raw store value, making the discrepancy visible.
 
-**Files**: `src/components/shared/datetime-picker.tsx`, `src/lib/hooks/use-filters.ts`, `src/components/layout/preferences-loader.tsx`
+**Root cause (2026-08-08)** — a hydration defect, not a timezone one. `reinterpretDate` and the picker's own wall-clock maths were never involved:
+
+1. `getDefaults()` reads its offsets from `getTimelineFromWindow()`, which needs `window.__TIMELINE_DEFAULTS__`. During SSR that global does not exist, so it returns the hardcoded `FALLBACK` in `timeline-defaults.ts` — `endOffset: 2.5`. The live `server.config.yml` sets `startOffset: -0.5` / `defaultDays: 2.5`, from which the loader derives `endOffset: 2.0`. **The server therefore computes an end 0.5 days — 12 hours — later than the client does.** `startOffset` agrees in both, which is why only End was wrong.
+2. The display `<span>` carried `suppressHydrationWarning`. That does more than silence the warning: React *skips patching* mismatched text on such nodes. The server's label survived hydration and stayed on screen until some unrelated re-render — hence "it corrects itself after a client-side navigation".
+
+**Fix**: keep `suppressHydrationWarning` (the text is genuinely time-dependent) but swap the span's `key` on mount, so the post-hydration render is a remount that commits the client's value exactly once. Fixing only the fallback constant would not have been enough — SSR and client also read `Date.now()` at different moments, and any user preference override reintroduces the divergence.
+
+**Verified** on `/flight-board`, TZ Eastern, fresh load: SSR HTML still contains `8/11/2026 11:00`; store, rendered label and `/api/work-packages/all?...end=` now all agree on `2026-08-11T03:00Z` = `8/10 23:00` ET.
+
+**Files**: `src/components/shared/datetime-picker.tsx`
 **Links**: OI-137, OI-124 (the other filter-window defect), D-049
 
 ---
@@ -1949,12 +1960,12 @@ Theme switching was twitchy in Docker production (class toggled but `color-schem
 
 ---
 
-### OI-089 | update() Revert Does Not Call setTheme
+### OI-089 | update() Revert Does Not Call setTheme — RESOLVED
 
 | Field | Value |
 |-------|-------|
 | **Type** | Bug |
-| **Status** | **Open** |
+| **Status** | **RESOLVED** (2026-08-08, v1.0.0) |
 | **Priority** | P3 |
 | **Owner** | Unassigned |
 | **Created** | 2026-03-01 |
@@ -1963,7 +1974,13 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 
 **Fix**: Add `setTheme(prev.colorMode)` at the start of both revert blocks in `update()` (the `!res.ok` branch and the `catch` branch).
 
-**Files**: `src/lib/hooks/use-preferences.ts`
+**Resolution (2026-08-08)**: the fix as written was not directly available — `update()` lives in a Zustand store, outside React, so it cannot call `useTheme()`. Added a module-level `registerThemeSetter()` bridge in `use-preferences.ts`; `PreferencesLoader` (root layout, always mounted, already holds `useTheme`) registers next-themes' stable `setTheme` on mount. Both revert blocks now call it, guarded on `partial.colorMode !== undefined` so unrelated preference saves don't touch the theme.
+
+Also repaired while in the same function: the `catch` revert omitted `defaultZoom`, so a network error restored every other field but left the optimistic zoom in place.
+
+**Verified**: `window.fetch` monkey-patched to reject the preferences `PUT`, then Light selected on `/settings` — `localStorage.theme` and the `<html>` class both return to `dark`.
+
+**Files**: `src/lib/hooks/use-preferences.ts`, `src/components/layout/preferences-loader.tsx`
 
 ---
 
@@ -1973,11 +1990,14 @@ When `update()` fails (PUT returns non-OK or network error), the revert block re
 |----------|------|---------|-------------|-------------|----------|
 | P0 | 0 | 0 | 0 | 0 | 16 |
 | P1 | 1 | 2 | 0 | 0 | 29 |
-| P2 | 21 | 3 | 1 | 0 | 26 |
-| P3 | 9 | 0 | 0 | 2 | 5 |
-| **Total** | **31** | **5** | **1** | **2** | **76** |
+| P2 | 20 | 3 | 1 | 0 | 27 |
+| P3 | 8 | 0 | 0 | 2 | 6 |
+| P4 | 1 | 0 | 0 | 0 | 1 |
+| **Total** | **30** | **5** | **1** | **2** | **79** |
 
-**Latest update (2026-08-07, staffing session)**: Resolved four P1 defects found while evaluating shift tracking against a production data copy — **OI-107** (edit dialog rewrote history instead of versioning), **OI-108** (overlapping shift versions double-counted headcount; found live in prod data), **OI-109** (weekly matrix headcount silently discounted by `paidToAvailable`), **OI-110** (paid/available/productive MH chain collapsed, understating Paid MH ~11%). Also **OI-112** (matrix clipped Saturday + Tot columns at every screen size). New open items: **OI-111** (`staffing_shifts` has no `group_id` lineage) and **OI-113** (admin capacity pages unusable at phone width). Suite 705 → 714; `npm run validate` exits 0. Added **OI-114** (responsive panel priority), **OI-115** (removed the dead legacy capacity engine and its misleading Admin → Settings fields) and **OI-116** (productivity-chain explainer + click-to-edit percentages).
+**Latest update (2026-08-08, pre-v1.0.0 sweep)**: triaged the open list against the v1.0.0 release boundary and cleared the three items that were cheap, low-risk and shippable — **OI-133** (donut denominator), **OI-089** (theme not reverted on a failed preference save) and **OI-138** (P2 — End picker displayed a window 12 h wider than the one queried; root cause was hydration, not timezone). `npm run validate` exits 0, 936 tests. Deliberately **not** taken into v1.0.0: OI-047 (P1, open since February, needs a root-cause session), OI-103 (versioning transactions still need a DB harness), OI-132 (awaiting Jason's product call), OI-113/120/122, and the enhancement/backlog block. **OI-043** (P1) needs no code — its fix is committed but undeployed, so it closes during the v1.0.0 production rollout by confirming the `Location` header. **OI-093** should be reviewed for closure: the pill-marker redesign it describes was cancelled, not deferred.
+
+**Previous update (2026-08-07, staffing session)**: Resolved four P1 defects found while evaluating shift tracking against a production data copy — **OI-107** (edit dialog rewrote history instead of versioning), **OI-108** (overlapping shift versions double-counted headcount; found live in prod data), **OI-109** (weekly matrix headcount silently discounted by `paidToAvailable`), **OI-110** (paid/available/productive MH chain collapsed, understating Paid MH ~11%). Also **OI-112** (matrix clipped Saturday + Tot columns at every screen size). New open items: **OI-111** (`staffing_shifts` has no `group_id` lineage) and **OI-113** (admin capacity pages unusable at phone width). Suite 705 → 714; `npm run validate` exits 0. Added **OI-114** (responsive panel priority), **OI-115** (removed the dead legacy capacity engine and its misleading Admin → Settings fields) and **OI-116** (productivity-chain explainer + click-to-edit percentages).
 
 **Previous update (2026-08-07, later)**: Added **OI-106** (README screenshots for GitHub).
 
