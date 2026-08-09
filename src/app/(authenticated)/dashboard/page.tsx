@@ -19,6 +19,7 @@ import { usePreferences } from "@/lib/hooks/use-preferences";
 import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { PrintButton } from "@/components/shared/print-button";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
+import { useSmoothUpdate } from "@/lib/hooks/use-smooth-update";
 
 function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
@@ -86,6 +87,18 @@ function DashboardPageInner() {
     });
   }, [snapshots, focusedOperator, operatorFilteredWps]);
 
+  // Every panel reads from one snapshot so they all change together, and that
+  // snapshot is applied inside a view transition — the panels morph over half a
+  // second instead of snapping. See useSmoothUpdate + the .vt-* names in
+  // globals.css. The memo keeps the object stable so the effect only fires when
+  // something genuinely changed.
+  const view = useSmoothUpdate(
+    useMemo(
+      () => ({ wps: displayWps, snapshots: displaySnapshots, focusedOperator }),
+      [displayWps, displaySnapshots, focusedOperator],
+    ),
+  );
+
   const handleOperatorClick = useCallback((operator: string | null) => {
     setFocusedOperator(operator);
   }, []);
@@ -139,7 +152,12 @@ function DashboardPageInner() {
         }
       />
 
-      {isLoading || snapshotsLoading ? (
+      {/* Skeleton only when there is nothing to show. A refetch (changing an
+          operator or a date in the FilterBar) keeps the current panels on screen
+          and lets the view transition carry them to the new numbers — swapping
+          the whole page for a skeleton and back was the biggest part of the
+          clunk. */}
+      {(isLoading || snapshotsLoading) && workPackages.length === 0 ? (
         <LoadingSkeleton variant="page" />
       ) : (
         <div ref={printRef} className="flex-1">
@@ -154,7 +172,7 @@ function DashboardPageInner() {
                   <span className="ml-auto">{timezone === "UTC" ? "UTC" : "Eastern (ET)"}</span>
                 </h3>
                 <CombinedChart
-                  snapshots={displaySnapshots}
+                  snapshots={view.snapshots}
                   timezone={timezone}
                   timeFormat={timeFormat}
                   height={200}
@@ -164,19 +182,19 @@ function DashboardPageInner() {
 
               {/* Row 2: Average Ground Time | Aircraft & Turns | Total Aircraft By Type */}
               <div className="grid grid-cols-3 gap-2">
-                <AvgGroundTimeCard workPackages={displayWps} />
+                <AvgGroundTimeCard workPackages={view.wps} />
                 <TotalAircraftCard
-                  workPackages={displayWps}
+                  workPackages={view.wps}
                   filterStart={start}
                   filterEnd={end}
                   timezone={timezone}
                 />
-                <AircraftByTypeCard workPackages={displayWps} />
+                <AircraftByTypeCard workPackages={view.wps} />
               </div>
 
               {/* Row 3: Operator Performance — full width so table columns have room */}
               <OperatorPerformance
-                workPackages={displayWps}
+                workPackages={view.wps}
                 focusedOperator={null}
                 onOperatorClick={() => {}}
               />
@@ -186,7 +204,7 @@ function DashboardPageInner() {
             // Phone: chart on top, then KPI cards, then donut, then operator table
             <div className="flex flex-col gap-3 flex-1">
               {/* Chart first on phone */}
-              <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
+              <div className="vt-combined-chart rounded-lg border border-border bg-card p-4 flex flex-col">
                 <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                   <i className="fa-solid fa-chart-column" />
                   Arrivals / Departures / On Ground
@@ -194,7 +212,7 @@ function DashboardPageInner() {
                 </h3>
                 <div className="min-h-[250px]">
                   <CombinedChart
-                    snapshots={displaySnapshots}
+                    snapshots={view.snapshots}
                     timezone={timezone}
                     timeFormat={timeFormat}
                     onSelectionChange={handleTimeRangeChange}
@@ -203,34 +221,37 @@ function DashboardPageInner() {
               </div>
 
               {/* KPI cards */}
-              <AvgGroundTimeCard workPackages={displayWps} />
+              <AvgGroundTimeCard workPackages={view.wps} className="vt-avg-ground" />
               <MhByOperatorCard
-                workPackages={displayWps}
-                focusedOperator={focusedOperator}
+                workPackages={view.wps}
+                focusedOperator={view.focusedOperator}
                 onOperatorClick={handleOperatorFromCard}
+                className="vt-mh-operator"
               />
               <TotalAircraftCard
-                workPackages={displayWps}
+                workPackages={view.wps}
                 filterStart={start}
                 filterEnd={end}
                 timezone={timezone}
+                className="vt-aircraft-turns"
               />
-              <AircraftByTypeCard workPackages={displayWps} />
+              <AircraftByTypeCard workPackages={view.wps} className="vt-aircraft-types" />
 
               {/* Donut */}
-              <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
+              <div className="vt-customer-donut rounded-lg border border-border bg-card p-4 flex flex-col">
                 <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                   <i className="fa-solid fa-chart-pie" />
                   Aircraft By Customer
                 </h3>
-                <CustomerDonut workPackages={displayWps} onCustomerClick={handleOperatorFromCard} />
+                <CustomerDonut workPackages={view.wps} onCustomerClick={handleOperatorFromCard} />
               </div>
 
               {/* Operator table */}
               <OperatorPerformance
-                workPackages={displayWps}
-                focusedOperator={focusedOperator}
+                workPackages={view.wps}
+                focusedOperator={view.focusedOperator}
                 onOperatorClick={handleOperatorClick}
+                className="vt-operator-table"
               />
             </div>
           ) : (
@@ -245,29 +266,32 @@ function DashboardPageInner() {
             >
               {/* Left: flex ratios — MH 65%, Type 32% of remaining */}
               <div className="flex flex-col gap-3">
-                <div className="shrink-0">
-                  <AvgGroundTimeCard workPackages={displayWps} />
+                <div className="vt-avg-ground shrink-0">
+                  <AvgGroundTimeCard workPackages={view.wps} />
                 </div>
                 <MhByOperatorCard
-                  workPackages={displayWps}
-                  focusedOperator={focusedOperator}
+                  workPackages={view.wps}
+                  focusedOperator={view.focusedOperator}
                   onOperatorClick={handleOperatorFromCard}
-                  className="flex-[2]"
+                  className="vt-mh-operator flex-[2]"
                 />
-                <div className="shrink-0">
+                <div className="vt-aircraft-turns shrink-0">
                   <TotalAircraftCard
-                    workPackages={displayWps}
+                    workPackages={view.wps}
                     filterStart={start}
                     filterEnd={end}
                     timezone={timezone}
                   />
                 </div>
-                <AircraftByTypeCard workPackages={displayWps} className="flex-[3]" />
+                <AircraftByTypeCard
+                  workPackages={view.wps}
+                  className="vt-aircraft-types flex-[3]"
+                />
               </div>
 
               {/* Center: chart + operator table */}
               <div className="flex flex-col gap-3">
-                <div className="rounded-lg border border-border bg-card p-4 flex-1 flex flex-col">
+                <div className="vt-combined-chart rounded-lg border border-border bg-card p-4 flex-1 flex flex-col">
                   <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                     <i className="fa-solid fa-chart-column" />
                     Arrivals / Departures / On Ground
@@ -275,7 +299,7 @@ function DashboardPageInner() {
                   </h3>
                   <div className="flex-1 min-h-[250px]">
                     <CombinedChart
-                      snapshots={displaySnapshots}
+                      snapshots={view.snapshots}
                       timezone={timezone}
                       timeFormat={timeFormat}
                       onSelectionChange={handleTimeRangeChange}
@@ -283,24 +307,21 @@ function DashboardPageInner() {
                   </div>
                 </div>
                 <OperatorPerformance
-                  workPackages={displayWps}
-                  focusedOperator={focusedOperator}
+                  workPackages={view.wps}
+                  focusedOperator={view.focusedOperator}
                   onOperatorClick={handleOperatorClick}
-                  className="flex-1"
+                  className="vt-operator-table flex-1"
                 />
               </div>
 
               {/* Right: Donut stretches to match full height */}
-              <div className="rounded-lg border border-border bg-card p-4 flex flex-col">
+              <div className="vt-customer-donut rounded-lg border border-border bg-card p-4 flex flex-col">
                 <h3 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-2">
                   <i className="fa-solid fa-chart-pie" />
                   Aircraft By Customer
                 </h3>
                 <div className="flex-1">
-                  <CustomerDonut
-                    workPackages={displayWps}
-                    onCustomerClick={handleOperatorFromCard}
-                  />
+                  <CustomerDonut workPackages={view.wps} onCustomerClick={handleOperatorFromCard} />
                 </div>
               </div>
             </div>

@@ -6,7 +6,12 @@ import { ThemeScript } from "@/components/layout/theme-script";
 import { TimelineScript } from "@/components/layout/timeline-script";
 import { PreferencesLoader } from "@/components/layout/preferences-loader";
 import { AppConfigProvider } from "@/components/layout/app-config-provider";
-import { getAppTitle, getPasswordRequirements, getAppearanceDefaults } from "@/lib/config/loader";
+import {
+  getAppTitle,
+  getAppSubtitle,
+  getPasswordRequirements,
+  getAppearanceDefaults,
+} from "@/lib/config/loader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -76,7 +81,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <AppConfigProvider appTitle={appTitle} passwordMinLength={passwordMinLength}>
+        <AppConfigProvider
+          appTitle={appTitle}
+          appSubtitle={getAppSubtitle()}
+          passwordMinLength={passwordMinLength}
+        >
           <AuthProvider>
             <ThemeProvider defaultTheme={appearance.defaultColorMode}>
               <PreferencesLoader />

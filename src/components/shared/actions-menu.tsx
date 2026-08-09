@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useActions } from "@/lib/hooks/use-actions";
 import { useFilters } from "@/lib/hooks/use-filters";
+import { usePreferences } from "@/lib/hooks/use-preferences";
 import { ColumnsFilterDialog } from "./actions-menu/columns-filter-dialog";
 import { SortDialog } from "./actions-menu/sort-dialog";
 import { ControlBreakDialog } from "./actions-menu/control-break-dialog";
@@ -25,15 +26,31 @@ type DialogId = "columns" | "sort" | "break" | "highlight" | "groupBy" | null;
 export function ActionsMenu() {
   const [openDialog, setOpenDialog] = useState<DialogId>(null);
   const { resetAll, activeCount } = useActions();
-  const { setOperators, setAircraft, setTypes } = useFilters();
+  const { reset: resetFilters, hydrateFromPreferences } = useFilters();
+  const {
+    loaded: prefsLoaded,
+    defaultDateRange,
+    defaultStartOffset,
+    defaultEndOffset,
+    defaultTimezone,
+  } = usePreferences();
 
   const count = activeCount();
 
   const handleReset = () => {
     resetAll();
-    setOperators([]);
-    setAircraft([]);
-    setTypes([]);
+    // resetFilters() clears the operator/aircraft/type selections *and* puts the
+    // date window back to the system default. The user's own default range then
+    // takes precedence, so Reset lands on exactly what a fresh page load shows.
+    resetFilters();
+    if (prefsLoaded) {
+      hydrateFromPreferences({
+        defaultDateRange,
+        defaultStartOffset,
+        defaultEndOffset,
+        defaultTimezone,
+      });
+    }
   };
 
   return (

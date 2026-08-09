@@ -19,9 +19,19 @@ interface FlightDetailDrawerProps {
   open: boolean;
   onClose: () => void;
   onWpUpdated?: () => void;
+  /** Called when a Linked Information link is followed. The result of those
+   *  links is a set of rows, so the board switches to the list view rather than
+   *  leaving the user on a Gantt zoomed to one flight. */
+  onFollowLink?: () => void;
 }
 
-export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDetailDrawerProps) {
+export function FlightDetailDrawer({
+  wp,
+  open,
+  onClose,
+  onWpUpdated,
+  onFollowLink,
+}: FlightDetailDrawerProps) {
   const { getColor } = useCustomers();
   const { timezone, setOperators, setAircraft } = useFilters();
   const { data: session } = useSession();
@@ -268,6 +278,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
                 className="text-xs text-primary hover:underline"
                 onClick={() => {
                   setAircraft([wp.aircraftReg]);
+                  onFollowLink?.();
                   onClose();
                 }}
               >
@@ -509,6 +520,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
                 label={`All ${wp.aircraftReg} visits`}
                 onClick={() => {
                   setAircraft([wp.aircraftReg]);
+                  onFollowLink?.();
                   onClose();
                 }}
               />
@@ -516,6 +528,7 @@ export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDet
                 label={`All ${wp.customer} work packages`}
                 onClick={() => {
                   setOperators([wp.customer]);
+                  onFollowLink?.();
                   onClose();
                 }}
               />

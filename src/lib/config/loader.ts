@@ -55,6 +55,7 @@ export interface CronJobYamlEntry {
 interface ServerConfig {
   app?: {
     title?: string;
+    subtitle?: string;
     baseUrl?: string;
   };
   auth?: {
@@ -92,6 +93,7 @@ interface ServerConfig {
 // ─── Hardcoded Defaults ─────────────────────────────────────────────────────
 
 const DEFAULT_APP_TITLE = "Dashboard";
+const DEFAULT_APP_SUBTITLE = "Line Maintenance Operations";
 const DEFAULT_LOG_LEVEL = "info";
 const DEFAULT_FEATURES: AppFeatures = {
   enableSeedEndpoint: false,
@@ -146,6 +148,7 @@ const DEFAULT_PASSWORD_REQUIREMENTS: PasswordRequirements = {
 interface ServerConfigState {
   inMemoryConfig: PasswordRequirements | null;
   inMemoryAppTitle: string | null;
+  inMemoryAppSubtitle: string | null;
   inMemoryBaseUrl: string | null;
   inMemoryLogLevel: string | null;
   inMemoryFeatures: AppFeatures | null;
@@ -165,6 +168,7 @@ function getState(): ServerConfigState {
     g[STATE_KEY] = {
       inMemoryConfig: null,
       inMemoryAppTitle: null,
+      inMemoryAppSubtitle: null,
       inMemoryBaseUrl: null,
       inMemoryLogLevel: null,
       inMemoryFeatures: null,
@@ -286,6 +290,7 @@ export function loadServerConfig(force = false): void {
   const yaml = readYamlFile();
 
   s.inMemoryAppTitle = yaml.app?.title ?? DEFAULT_APP_TITLE;
+  s.inMemoryAppSubtitle = yaml.app?.subtitle ?? DEFAULT_APP_SUBTITLE;
   s.inMemoryBaseUrl = yaml.app?.baseUrl ?? null;
   s.inMemoryLogLevel = yaml.logging?.level ?? DEFAULT_LOG_LEVEL;
   s.inMemoryFeatures = {
@@ -344,6 +349,13 @@ export function getAppTitle(): string {
   const s = getState();
   if (s.inMemoryAppTitle === null) loadServerConfig();
   return s.inMemoryAppTitle!;
+}
+
+/** Strapline under the title on the login and register pages */
+export function getAppSubtitle(): string {
+  const s = getState();
+  if (s.inMemoryAppSubtitle === null) loadServerConfig();
+  return s.inMemoryAppSubtitle!;
 }
 
 /** Base URL for auth redirects (optional — overrides Host header detection) */

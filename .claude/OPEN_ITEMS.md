@@ -730,6 +730,85 @@ Found while capturing README screenshots (OI-106). The dashboard's **Arrivals / 
 
 ---
 
+### OI-127 | Dashboard Cross-Filtering Snapped Instead of Transitioning — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | UX |
+| **Status** | **Resolved** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+Selecting an operator (or changing the FilterBar) rewrote every dashboard panel in one frame: rows left the MH list and the operator table, the donut re-sliced, the KPI numbers jumped. Two causes — the page swapped itself for `LoadingSkeleton` on *every* refetch, not just the first, and nothing interpolated between the old and new content.
+
+**Resolution**:
+- `useSmoothUpdate` (`src/lib/hooks/use-smooth-update.ts`) defers one memoized snapshot of `{ wps, snapshots, focusedOperator }` and commits it inside `document.startViewTransition`, so the synchronous (cross-filter click) and asynchronous (FilterBar refetch) paths animate identically. Falls back to a plain state update where the API is missing or `prefers-reduced-motion: reduce` is set, and skips a still-running transition when a newer value arrives.
+- Seven `.vt-*` names in `globals.css` give each panel its own transition group at **500ms** `cubic-bezier(0.4, 0, 0.2, 1)`, so the boxes and the space between them morph rather than cross-fade as one page.
+- The skeleton now renders only while `workPackages` is empty; a refetch keeps the current panels on screen.
+
+**Verified** in Chromium against production data: one transition per cross-filter click, all seven groups at 500ms, no skeleton flash on a date change, 0 console errors.
+
+**Files**: `src/lib/hooks/use-smooth-update.ts`, `src/app/(authenticated)/dashboard/page.tsx`, `src/app/globals.css`, `src/components/dashboard/avg-ground-time-card.tsx`
+
+---
+
+### OI-128 | Flight Board Linked-Information Links Landed on the Gantt — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | UX |
+| **Status** | **Resolved** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+The flight detail drawer's three links — *View all `<reg>` work packages*, *All `<reg>` visits*, *All `<customer>` work packages* — each apply a filter whose result is a **set of rows**, but left the board in Gantt view.
+
+**Resolution**: `FlightDetailDrawer` takes an `onFollowLink` callback, fired by all three links; the flight board passes `() => setViewMode("list")`. Verified: following the aircraft link applies `ac=N753CS` and renders the list table.
+
+**Files**: `src/components/flight-board/flight-detail-drawer.tsx`, `src/app/(authenticated)/flight-board/page.tsx`
+
+---
+
+### OI-129 | Login Page Showed the Strapline Twice — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | UX |
+| **Status** | **Resolved** |
+| **Priority** | P4 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+"Line Maintenance Operations" was hardcoded twice on `/login` — under the title and again at the bottom of the card. The lower copy is gone and the remaining one is now config-driven: **`app.subtitle`** in `server.config.yml` (default `"Line Maintenance Operations"`), loaded by `getAppSubtitle()` and exposed to client components as `useAppSubtitle()`, matching the `app.title` pattern.
+
+**Files**: `src/app/login/page.tsx`, `src/lib/config/loader.ts`, `src/components/layout/app-config-provider.tsx`, `src/app/layout.tsx`, `server.config.dev.yml`
+
+---
+
+### OI-130 | Actions → Reset Left the Date Window Untouched — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | UX |
+| **Status** | **Resolved** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+Reset cleared the transforms and the operator/aircraft/type selections but left whatever start/end the user had picked, so "reset" never returned the page to what a fresh load shows.
+
+**Resolution**: `handleReset` now calls the filter store's `reset()` (which restores the system default window along with every selection) and then re-applies the user's own default range via `hydrateFromPreferences` when preferences have loaded — the same precedence `PreferencesLoader` uses at startup. Verified: start moved 8/8 → 8/5, Reset returned it to 8/8 01:00 – 8/11 01:00 and dropped the `ac` filter.
+
+**Files**: `src/components/shared/actions-menu.tsx`
+
+---
+
 ### OI-106 | README Screenshots for GitHub — RESOLVED
 
 | Field | Value |

@@ -371,6 +371,7 @@ function FlightBoardPageInner() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onWpUpdated={refetchWps}
+        onFollowLink={() => setViewMode("list")}
       />
     </div>
   );

@@ -8,6 +8,10 @@ app:
   # Default: "Dashboard"
   title: "CVG Dashboard"
 
+  # Strapline under the title on the login and register pages
+  # Default: "Line Maintenance Operations"
+  # subtitle: "Line Maintenance Operations"
+
   # Public base URL — only needed behind a reverse proxy that rewrites the Host header
   # (e.g. Cloudflare Tunnel). Leave commented for auto-detection via trustHost.
   # YAML takes priority over BASE_URL env var.
