@@ -109,6 +109,9 @@ const CATEGORY_DOT_COLOR: Record<StaffingShiftCategory, string> = {
 
 const CATEGORY_ORDER: StaffingShiftCategory[] = ["DAY", "SWING", "NIGHT", "OTHER"];
 
+/** Archived rows revealed per "Show more" click. */
+const ARCHIVE_PAGE = 10;
+
 function fmtTime(h: number, m: number) {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 }
@@ -176,6 +179,8 @@ export function ShiftDefinitionsGrid({
   const [archiveTarget, setArchiveTarget] = useState<StaffingShift | null>(null);
   const [archiveWarning, setArchiveWarning] = useState<string | null>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveQuery, setArchiveQuery] = useState("");
+  const [archiveLimit, setArchiveLimit] = useState(ARCHIVE_PAGE);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<StaffingShiftCategory>>(
     new Set(),
   );
@@ -255,9 +260,25 @@ export function ShiftDefinitionsGrid({
   const activeShifts = shifts.filter(
     (s) => s.isActive && (s.rotationEndDate === null || s.rotationEndDate >= today),
   );
-  const archivedShifts = shifts.filter(
-    (s) => !s.isActive || (s.rotationEndDate !== null && s.rotationEndDate < today),
-  );
+  // Most recently retired first — with a year of version history, sortOrder
+  // buries the version you just replaced among the ones you replaced last spring.
+  const archivedShifts = shifts
+    .filter((s) => !s.isActive || (s.rotationEndDate !== null && s.rotationEndDate < today))
+    .sort((a, b) => (b.rotationEndDate ?? "").localeCompare(a.rotationEndDate ?? ""));
+
+  const archiveMatches = archiveQuery.trim()
+    ? archivedShifts.filter((s) => {
+        const q = archiveQuery.trim().toLowerCase();
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.category.toLowerCase().includes(q) ||
+          s.rotationStartDate.includes(q) ||
+          (s.rotationEndDate ?? "").includes(q)
+        );
+      })
+    : archivedShifts;
+
+  const archiveVisible = archiveMatches.slice(0, archiveLimit);
 
   // Group shifts by category
   const grouped: Record<StaffingShiftCategory, StaffingShift[]> = {
@@ -1201,8 +1222,25 @@ export function ShiftDefinitionsGrid({
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent>
+            <div className="px-3 pt-2 pb-1 space-y-2">
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Archived versions are retained permanently — historical capacity is calculated from
+                them.
+              </p>
+              {archivedShifts.length > ARCHIVE_PAGE && (
+                <Input
+                  value={archiveQuery}
+                  onChange={(e) => {
+                    setArchiveQuery(e.target.value);
+                    setArchiveLimit(ARCHIVE_PAGE);
+                  }}
+                  placeholder="Search archive by name, category or date…"
+                  className="h-7 text-xs"
+                />
+              )}
+            </div>
             <div className="px-2 py-1 space-y-1 opacity-70">
-              {archivedShifts.map((s) => (
+              {archiveVisible.map((s) => (
                 <div
                   key={s.id}
                   className="flex items-center gap-3 px-3 py-2 rounded-lg border border-border/50 bg-muted/20"
@@ -1240,6 +1278,20 @@ export function ShiftDefinitionsGrid({
                 </div>
               ))}
             </div>
+            {archiveMatches.length === 0 && (
+              <p className="px-3 py-3 text-[10px] text-muted-foreground">
+                No archived shifts match &ldquo;{archiveQuery}&rdquo;.
+              </p>
+            )}
+            {archiveVisible.length < archiveMatches.length && (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-[10px] text-muted-foreground hover:bg-accent/30 transition-colors"
+                onClick={() => setArchiveLimit((n) => n + ARCHIVE_PAGE)}
+              >
+                Show more ({archiveMatches.length - archiveVisible.length} remaining)
+              </button>
+            )}
           </CollapsibleContent>
         </Collapsible>
       )}

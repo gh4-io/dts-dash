@@ -6,6 +6,7 @@ import { cronJobRuns } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { cleanupCanceledWPs } from "./tasks/cleanup-canceled";
 import { backupDatabase } from "./tasks/backup-database";
+import { pruneImportHistoryTask, DEFAULT_RETENTION_DAYS } from "./tasks/prune-import-history";
 import { createChildLogger } from "@/lib/logger";
 import { getFeatures, getCronJobOverrides, getFlightSettings } from "@/lib/config/loader";
 import { nextCronRun } from "@/lib/utils/cron-helpers";
@@ -114,6 +115,26 @@ const BUILTIN_JOBS: BuiltinJobDef[] = [
         min: 1,
         max: 365,
         description: "Number of recent backups to retain (oldest are pruned automatically)",
+      },
+    },
+  },
+  {
+    key: "prune-import-history",
+    name: "Prune Import History",
+    description: "Deletes import history entries older than the retention window",
+    script: "src/lib/cron/tasks/prune-import-history.ts",
+    handler: pruneImportHistoryTask,
+    defaultSchedule: "30 3 * * *",
+    defaultEnabled: true,
+    defaultOptions: { retentionDays: DEFAULT_RETENTION_DAYS },
+    optionsSchema: {
+      retentionDays: {
+        type: "number",
+        default: DEFAULT_RETENTION_DAYS,
+        label: "Retention (days)",
+        min: 0,
+        max: 3650,
+        description: "Delete import history older than this. 0 disables pruning.",
       },
     },
   },

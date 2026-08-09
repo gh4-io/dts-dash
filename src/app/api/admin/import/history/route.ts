@@ -11,8 +11,28 @@ import { db } from "@/lib/db/client";
 import { importLog, users } from "@/lib/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
+import { getEffectiveJobs } from "@/lib/cron";
+import { DEFAULT_RETENTION_DAYS } from "@/lib/cron/tasks/prune-import-history";
 
 const log = createChildLogger("api/admin/import/history");
+
+/**
+ * The retention window the prune-import-history job is currently configured with,
+ * so the UI can explain why older runs are absent rather than looking broken.
+ * Returns null when the job is disabled or set to keep everything.
+ */
+function getRetentionDays(): number | null {
+  try {
+    const job = getEffectiveJobs().find((j) => j.key === "prune-import-history");
+    if (!job || !job.enabled) return null;
+
+    const days = (job.options as { retentionDays?: unknown }).retentionDays;
+    const value = typeof days === "number" ? days : DEFAULT_RETENTION_DAYS;
+    return value > 0 ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -72,6 +92,7 @@ export async function GET(request: NextRequest) {
         total,
         totalPages: Math.ceil(total / pageSize),
       },
+      retentionDays: getRetentionDays(),
     });
   } catch (error) {
     log.error({ err: error }, "GET error");

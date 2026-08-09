@@ -992,3 +992,30 @@ Before the merge: `flight_comments.author_id` and `feedback_posts.author_id` had
 **Impact:** BREAKING (v1.0.0, D-028). Schema-level; the API contract types are unchanged, so no UI changed. Callers that delete work packages must delete flight comments explicitly. Flight comment deletion removes more than it used to — which is the point.
 
 **Links:** [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-099, OI-092, OI-094, OI-123, D-028 (semver)
+
+---
+
+## D-068 | 2026-08-08 | Retention: Import History Is Deleted Outright; Staffing Archives Are Never Pruned (OI-134, OI-135, OI-136)
+
+**Context:** Two lists were growing without bound and were raised together, but they turned out to be opposites. `import_log` had accumulated 12,159 rows in ~170 days (~71/day from the API ingest) — 19% of an 8.8 MB database, every row `success`, 41% of them recording zero inserts and zero updates. Staffing shift and rotation *archives* grow the same way visually, but each archived row is the effective-dated history the capacity engine reads to answer "what was the roster on this past date".
+
+**Decision:**
+
+1. **Import history is deleted outright past a configurable window, default 10 days, `0` disables.** No summary, no rollup, no retained failures — everything past the cutoff goes. Delivered as a `prune-import-history` built-in cron job (`30 3 * * *`) plus the CLI twin `npm run db:prune-import-history`. The window is edited in Admin → Cron; the existing generic `optionsSchema` renderer supplies the number field, so no new settings surface was built.
+
+2. **No rollup store, and no attempt to relocate the trace.** A per-day summary table was designed and rejected as unnecessary schema. There is also nowhere existing to put it: `/admin/audit` is an unimplemented stub, `analytics_events` is user telemetry with a `NOT NULL` user FK and no retention of its own, pino is stdout-only, and `cron_job_runs` holds one row per job rather than a history. Deferred to OI-136, to be revisited when the Audit Log is built for real.
+
+3. **The prune clears `work_packages.import_log_id` before deleting.** That FK is `NO ACTION` and the connection runs `foreign_keys = ON`, so the delete fails without it — nightly, in production, and never in a test that forgets to reference a log row. The column is write-only provenance that nothing reads, so nulling it loses nothing. Covered by an explicit FK regression test.
+
+4. **Staffing archives are never pruned — only their presentation is fixed.** `isShiftEffectiveOn` / `isPatternEffectiveOn` resolve past dates from archived versions, so an age-based delete would silently restate historical capacity and utilization: the OI-108 double-count defect returning through a different door. They are also negligible in size. Instead both admin lists collapse archives into a searchable, paged `Archive (n)` section carrying a caption that says they are retained permanently — the caption exists to stop a future "cleanup".
+
+**Alternatives considered:**
+- *Roll each expired day into one surviving `import_log` row behind a nullable `rolled_up_runs` column* — kept the trace with no new table, but still schema for a log that has never recorded a failure
+- *Retain `partial`/`failed` runs indefinitely* — sound in principle, but zero of 12,159 production rows were anything but `success`
+- *Cap by row count instead of age* — permanently bounded regardless of feed rate, but not the time-based drop-off that was asked for
+- *Stop logging no-op runs at the source* (41% of rows) — attacks the cause, but touches the import hot path across ~10 schema modules and makes "the feed ran and found nothing" indistinguishable from "the feed did not run"
+- *Prune archived shift versions older than 30 days* — rejected outright; see point 4
+
+**Impact:** Additive, non-breaking. No schema change of any kind. Existing databases get the job on next start; the first run deletes the accumulated backlog (12,159 → 589 on the production copy, 1.65 MB → 102 KB). SQLite returns the freed pages to its freelist rather than to the OS, which is correct here — the log keeps writing and reuses them.
+
+**Links:** [OPEN_ITEMS.md](OPEN_ITEMS.md) OI-134, OI-135, OI-136, OI-108 (overlapping versions), OI-105 (cron disabled-state UX), D-028 (semver)

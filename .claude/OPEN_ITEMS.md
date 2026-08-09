@@ -284,6 +284,74 @@ Needs a product call on whether these should be reconciled or just labelled more
 
 ---
 
+### OI-134 | Import History Grew Without Bound — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Resolved** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+`import_log` had no retention. The production snapshot held **12,159 rows** accumulated over ~170 days (2026-02-18 → 2026-08-07) at ~71/day, essentially all from the `api` ingest. Every single row had status `success`; **4,929 (41%) recorded zero inserts and zero updates**; `warnings`, `errors` and `field_mapping` were empty on all of them. The table plus its two indexes occupied **1.65 MB of an 8.8 MB database — 19%**.
+
+**Growth**: ~139 bytes/row all-in × ~26,000 rows/year ≈ **3.5 MB/year**. Five years would reach ~130,000 rows and ~18 MB, taking the DB to ~27 MB with `import_log` at ~67% of it. Not a query-performance problem — the history page is `ORDER BY imported_at DESC LIMIT 10` against `idx_import_log_imported_at` and stays fast — but it inflates every backup, lengthens `VACUUM`, and buries the handful of runs anyone would actually read.
+
+**Fix**: a `prune-import-history` cron job (nightly, `30 3 * * *`) deleting runs past a **configurable** window, default 10 days, `0` disabling it. Configurable via Admin → Cron; the generic `optionsSchema` renderer supplies the field, so no new settings form was needed. CLI twin `npm run db:prune-import-history -- --days=N`. Verified against the production copy: **12,159 → 589 rows, 1.65 MB → 102 KB**, work packages untouched, `foreign_key_check` clean, idempotent on re-run.
+
+**The foreign key is the trap.** `work_packages.import_log_id` references `import_log(id)` with the default `NO ACTION`, and `src/lib/db/client.ts` sets `foreign_keys = ON`, so the delete fails outright unless those pointers are cleared first. The prune nulls them in the same transaction (5,180 rows on the production copy). The column is write-only provenance — nothing reads it — so nothing is lost. Guarded by an explicit FK regression test.
+
+**Deliberately not done**: no summary/rollup store. See OI-136.
+
+**Files**: `src/lib/cron/tasks/prune-import-history.ts`, `src/lib/cron/index.ts`, `scripts/db/prune-import-history.ts`, `src/app/api/admin/import/history/route.ts`, `src/components/admin/import/import-history.tsx`, `src/__tests__/db/prune-import-history.test.ts`
+
+---
+
+### OI-135 | Staffing Archives Flooded the Admin Lists — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | **Resolved** |
+| **Priority** | P3 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+Every effective-dated edit to a shift or rotation leaves an archived version behind, so both admin lists grow indefinitely. Production has only 7 shifts (1 archived) and 6 patterns (0 archived) today, so this was **anticipated, not yet observed** — reproduced with `npm run db:seed-archives` (50 archived shifts + 50 archived pattern versions over 12 months).
+
+At that scale `rotation-pattern-list.tsx` was much the worse of the two: it had **no archive concept at all**, rendering inactive patterns inline in the main list at `opacity-40` and merely sorting them last, so **56 rows appeared with the 6 real ones buried among them**. `shift-definitions-grid.tsx` at least collapsed to `Archive (n)`, but unpaginated, unfiltered, and sorted by `sortOrder`.
+
+**Fix**: the rotation list gains a collapsed `Archive (n)` section mirroring the shift grid; both gain a search box, a 10-row cap with `Show more (n remaining)`, and archives sorted most-recently-retired first. Post-fix: 12 live rotations + `Archive (44)`, 6 live shifts + `Archive (51)`.
+
+**⚠️ Archives must never be pruned — considered and explicitly rejected.** `isShiftEffectiveOn` / `isPatternEffectiveOn` in `staffing-engine.ts` resolve the roster for any **past** date from exactly these archived rows (see the comment at line 53). Deleting versions older than N days would silently zero out historical capacity and utilization for the periods they covered — the OI-108 failure mode returning through a different door. They are also tiny (a few versions per shift per year), so there is no storage argument. Both archive sections now carry a caption saying so, as a durable guard against a future "cleanup".
+
+**Files**: `src/components/admin/capacity/rotation-pattern-list.tsx`, `src/components/admin/capacity/shift-definitions-grid.tsx`, `scripts/db/dev-seed-archives.ts`
+
+---
+
+### OI-136 | Pruned Import Runs Leave No Durable Trace
+
+| Field | Value |
+|-------|-------|
+| **Type** | Enhancement |
+| **Status** | Open (deferred, by decision) |
+| **Priority** | P4 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+
+OI-134 deletes import runs outright. Past the retention window, "did the feed run on March 3rd, and did it do anything" becomes unanswerable.
+
+Accepted deliberately. A per-day rollup table was designed and **rejected by Jason as unnecessary schema** — and there is no existing system log to hand the summary to: `/admin/audit` is a "Coming Soon" placeholder with no table behind it; `analytics_events` is user-behaviour telemetry with a `NOT NULL` user FK, a JSON blob for payload, and no retention of its own (moving the problem, not solving it); pino writes to stdout only; `cron_job_runs` holds one last-run row per job, not a history. Given every one of the 12,159 production rows was `success`, the trace has arguably never carried information.
+
+**Revisit when the Audit Log is built for real.** That is the correct home: pruned import runs should fold into it as a per-day summary at that point, and the retention window can then be shortened without losing anything.
+
+**Files**: `src/app/(authenticated)/admin/audit/page.tsx` (stub), `src/lib/cron/tasks/prune-import-history.ts`
+
+---
+
 ## Open Enhancements
 
 ### OI-107 | Shift Edit Dialog Rewrote History Instead of Versioning — RESOLVED

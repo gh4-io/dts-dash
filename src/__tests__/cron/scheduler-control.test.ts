@@ -23,9 +23,17 @@ const state = vi.hoisted(() => ({
 
 const backupHandler = vi.hoisted(() => vi.fn(async () => ({ message: "backed up" })));
 const cleanupHandler = vi.hoisted(() => vi.fn(async () => ({ message: "cleaned up" })));
+const pruneHandler = vi.hoisted(() => vi.fn(async () => ({ message: "pruned" })));
+
+/** Every built-in job, in registration order. Update when BUILTIN_JOBS changes. */
+const BUILTIN_KEYS = ["cleanup-canceled", "backup-database", "prune-import-history"];
 
 vi.mock("@/lib/cron/tasks/backup-database", () => ({ backupDatabase: backupHandler }));
 vi.mock("@/lib/cron/tasks/cleanup-canceled", () => ({ cleanupCanceledWPs: cleanupHandler }));
+vi.mock("@/lib/cron/tasks/prune-import-history", () => ({
+  pruneImportHistoryTask: pruneHandler,
+  DEFAULT_RETENTION_DAYS: 10,
+}));
 
 vi.mock("@/lib/config/loader", () => ({
   getFeatures: () => state.features,
@@ -112,8 +120,8 @@ describe("startCron — deployment gate", () => {
   it("registers the built-in jobs when the gate is on and the scheduler is running", () => {
     startCron();
 
-    expect(getActiveJobKeys()).toEqual(["cleanup-canceled", "backup-database"]);
-    expect(state.scheduled).toHaveLength(2);
+    expect(getActiveJobKeys()).toEqual(BUILTIN_KEYS);
+    expect(state.scheduled).toHaveLength(BUILTIN_KEYS.length);
   });
 });
 
@@ -127,7 +135,7 @@ describe("startCron — runtime pause", () => {
 
   it("does not silently resume a paused scheduler when a config edit restarts it", () => {
     startCron();
-    expect(getActiveTaskCount()).toBe(2);
+    expect(getActiveTaskCount()).toBe(BUILTIN_KEYS.length);
 
     // Admin pauses, then edits a job — the edit calls restartCron()
     pauseScheduler("admin@example.com");
@@ -146,7 +154,7 @@ describe("pause / resume", () => {
 
     expect(paused.status).toBe("paused");
     expect(getActiveTaskCount()).toBe(0);
-    expect(state.stopped).toHaveLength(2);
+    expect(state.stopped).toHaveLength(BUILTIN_KEYS.length);
     // The deployment gate is untouched — pausing is never a config edit
     expect(state.features).toEqual(before);
   });
@@ -166,8 +174,8 @@ describe("pause / resume", () => {
 
     resumeScheduler("admin@example.com");
 
-    expect(getActiveJobKeys()).toEqual(["cleanup-canceled", "backup-database"]);
-    expect(state.scheduled).toHaveLength(2);
+    expect(getActiveJobKeys()).toEqual(BUILTIN_KEYS);
+    expect(state.scheduled).toHaveLength(BUILTIN_KEYS.length);
   });
 
   it("resuming twice cannot double-register a job", () => {
@@ -178,8 +186,8 @@ describe("pause / resume", () => {
     resumeScheduler("admin@example.com");
     resumeScheduler("admin@example.com");
 
-    expect(getActiveTaskCount()).toBe(2);
-    expect(state.scheduled).toHaveLength(2);
+    expect(getActiveTaskCount()).toBe(BUILTIN_KEYS.length);
+    expect(state.scheduled).toHaveLength(BUILTIN_KEYS.length);
   });
 
   it("a repeated startCron() is a no-op while tasks are already registered", () => {
@@ -187,8 +195,8 @@ describe("pause / resume", () => {
     startCron();
     startCron();
 
-    expect(getActiveTaskCount()).toBe(2);
-    expect(state.scheduled).toHaveLength(2);
+    expect(getActiveTaskCount()).toBe(BUILTIN_KEYS.length);
+    expect(state.scheduled).toHaveLength(BUILTIN_KEYS.length);
   });
 });
 
@@ -226,7 +234,7 @@ describe("getSchedulerState", () => {
 
   it("reports the live task count so the UI never has to infer it", () => {
     startCron();
-    expect(getSchedulerState().activeTaskCount).toBe(2);
+    expect(getSchedulerState().activeTaskCount).toBe(BUILTIN_KEYS.length);
     expect(getSchedulerState().status).toBe("running");
   });
 });
