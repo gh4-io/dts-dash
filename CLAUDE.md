@@ -6,20 +6,55 @@
 > **Last updated:** 2026-08-07 (v0.3.0 in progress)
 >
 > **🔶 CURRENT STATE — READ BEFORE PLANNING WORK:**
-> - Work merged to `dev` on 2026-08-07. `package.json` is `0.3.0`.
-> - **v0.3.0 is NOT release-ready.** The `[0.3.0]` CHANGELOG entry is dated 2026-03-04 and predates everything in `[Unreleased]`. **The release boundary is still undecided** — what ships as v0.3.0 vs v0.3.1.
-> - **Production runs `0.2.0-rc1`** — it predates OI-080 entirely, so prod has no `rotation_end_date` column and no shift history. Upgrading applies **M022, M025 and M026**; all additive, backfilled and idempotent.
+> - **v1.0.0 is cut and gated, awaiting merge.** The release lives on `release/v1.0.0` as a stripped
+>   tree on `master`'s history. `dev`'s `package.json` stays `0.3.0` — the version is bumped on the
+>   release branch only (D-028). **v0.3.0 was never released** and no tag for it ever existed; its
+>   CHANGELOG entry is folded into `[1.0.0]`, so the release boundary question is closed.
+> - **⚠️ `master` and `dev` have NO common ancestor.** `master` is a 3-commit, orphan-rooted,
+>   *stripped* production baseline (548 files vs dev's 774 — no `.claude/`, no `CLAUDE.md`, no tests,
+>   no dev deps). A release is one squashed stripped commit on top of it. **Never `git merge master`
+>   into `dev`** — REQ_Versioning's v1.0.0 addendum says to, and it would delete the knowledge base,
+>   plans and tests from `dev`. It is also why release-branch fixes must be **back-ported to `dev` by
+>   hand**; nothing merges back on its own.
+> - **Production runs `0.2.0-rc1`**, which is *not* an ancestor of `master` — it sits on the `dev`
+>   line, 204 commits ahead of the released `v0.2.0`. The tag exists only locally and is deliberately
+>   unpushed. Prod predates OI-080: no `rotation_end_date`, no shift history, no `flight_comments` or
+>   `notifications` tables at all.
+> - **`npm run db:upgrade-v1` is mandatory and is the only upgrade path.** It is verified from every
+>   released schema (v0.1.0, v0.1.1, v0.2.0, v0.2.0-rc1) and is idempotent. The app now **refuses to
+>   boot** against an un-upgraded database rather than silently serving blank work-package
+>   identifiers — `assertSchemaCompatible()` in `bootstrap.ts` (OI-139).
 > - **Capacity has ONE engine** (D-064, OI-115). The legacy `headcount × 6.5` model and its Admin → Settings fields were deleted — they had no live consumers but were still editable, so configuring them silently did nothing. Capacity is `capacity_assumptions` (paidToAvailable × availableToProductive) + `capacity_shifts`. The old "Real capacity: headcount × 6.5 MH/person" rule is superseded.
 > - **Effective dating works end to end.** OI-100/101/102 resolved, plus OI-107 (the edit dialog was still rewriting history via `PUT`) and OI-108 (two versions of one shift effective at once, double-counting the roster).
-> - **⚠️ Nothing has ever been pushed.** No upstream on any local branch; `origin` has only `dev`, `master`, `release/v0.2.0`. All work exists solely on this machine — including `dev` after the merge.
-> - **⚠️ Production data carries the OI-108 defect** — duplicate `13SMD` rows are effective simultaneously and double-count that roster. Correct it on upgrade.
-> - **Unfinished:** `5e66700` is `wip: checkpoint before pill marker redesign` — never done. `ground-events.ts` still has AOG as a diamond with BTB/Ferry/MX as pills, the hybrid the checkpoint meant to replace. The commit parks no code. Confirm with Jason whether it is still wanted.
+> - `dev` is pushed and current on `origin`. `origin` carries `dev` and `master` only.
+> - **Production data is clean of the OI-108 defect** — the duplicate `13SMD` rows were corrected on
+>   2026-08-06. The 2026-08-09 snapshot has 6 shifts, 6 lineages, zero overlapping active versions.
+> - **The pill-marker redesign is CANCELLED, not pending.** The AOG diamond with BTB/Ferry/MX pills in
+>   `ground-events.ts` is the intended design. `5e66700` (`wip: checkpoint before pill marker
+>   redesign`) parks no code and needs no follow-up.
 >
 > **⚠️ WSL / 9p trap — Turbopack file watching does NOT fire on `/mnt/d`.** HMR silently serves stale markup; edits appear to do nothing. **Restart the dev server after every change** or you will verify the wrong build. This is separate from the `npm install` EACCES issue below.
 >
 > **Working preferences (Jason):**
 > - **Keep a dev server running** whenever practical — he evaluates live, not from tests. Bring it up while getting oriented and drive it with Playwright. Stop it before `npm install` (it holds `node_modules` open); kill with `fuser -k 3000/tcp`.
 > - **Run against a copy of production data**, pulled from the NAS, rather than seed data — seed data is thin and hides real edge cases. Use seed data only when testing seed/import behaviour, and restore afterwards. `npm run db:backup` first, `npm run db:migrate` after (prod is on an older schema).
+>
+> **What changed (2026-08-09 session — v1.0.0 release):**
+> - Cut `release/v1.0.0`: stripped tree on `master`'s history, CHANGELOG collapsed to `[1.0.0]` with
+>   a Migration Guide, dead `v0.3.0` compare links repointed at `v0.2.0`
+> - **OI-139** — the upgrade path was unusable from *any* prior release: `createTables()` threw on
+>   pre-v1.0.0 databases (index on a column `CREATE TABLE IF NOT EXISTS` never added), taking
+>   `db:migrate`, the snapshot restore and app startup with it; `--dry-run` failed on every database
+>   it exists to preview. Guarded, plus `assertSchemaCompatible()` so the app fails loud instead of
+>   serving wrong data
+> - **OI-140** — pre-v1.0.0 `/feedback/[id]` links resolve via `messages.legacy_id` and 308 to the
+>   canonical URL; real "Post not found" page. The remap is **database-specific** (prod: 4/5/6 → 1/2/3,
+>   not the CHANGELOG's dev-database 49/50/51)
+> - Docker gate found three more: nine test files outside `src/__tests__` broke the prod image build;
+>   the healthcheck used `localhost`, which resolves to `::1` first and left the container permanently
+>   `unhealthy`; compose volumes resolved to `docker/data` rather than `data/`
+> - Production rehearsal passed on a real snapshot — 10,133 work packages, messages reconciled exactly,
+>   rollback proven. Suite 936 → 950
 >
 > **What changed (2026-08-07 session):**
 > - Removed the dead legacy capacity engine + its misleading Admin → Settings fields (OI-115, D-064)

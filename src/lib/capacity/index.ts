@@ -1,5 +1,5 @@
 /**
- * Capacity Modeling Module (v0.3.0)
+ * Capacity Modeling Module (v1.0.0)
  *
  * Public API for the capacity modeling system.
  */

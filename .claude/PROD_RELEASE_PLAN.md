@@ -139,6 +139,17 @@ These are deleted on the release branch only. They remain on `dev`.
 | `scripts/phase_commit.sh` | Dev workflow tool |
 | `scripts/feature_intake.sh` | Dev workflow tool |
 | `scripts/db/dev-seed.ts` | Dev-only seed script |
+| `scripts/db/dev-seed-archives.ts` | Dev-only seed script |
+| **all `*.test.ts(x)` and `__tests__/` anywhere under `src/`** | Import `vitest`, which is stripped |
+
+> ⚠️ **Strip tests by pattern, not by directory.** This list said `src/__tests__` until v1.0.0, and
+> nine test files live outside it — `src/lib/capacity/staffing-engine.test.ts` beside its engine, and
+> all of `src/lib/utils/__tests__/`. They survived the strip, still imported `vitest`, and the prod
+> image failed `next build` type checking. Use:
+>
+> ```bash
+> git rm -rqf $(git ls-files | grep -E '\.test\.(ts|tsx)$|/__tests__/')
+> ```
 
 > **Note:** `docs/` (BACKUP.md, DEPLOYMENT.md, MONITORING.md) is KEPT — operational docs ship with the release.
 

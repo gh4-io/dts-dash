@@ -6,6 +6,12 @@
  * Reads the new version from package.json and updates downstream files:
  *   - docs/DEPLOYMENT.md, docs/MONITORING.md, docs/BACKUP.md
  *   - CHANGELOG.md ([Unreleased] → [x.y.z], new [Unreleased] inserted, diff links updated)
+ *   - build.json (version field)
+ *   - README.md (any `vX.Y.Z` version badge or heading)
+ *
+ * build.json and README.md were added at v1.0.0. Both carried a version this
+ * script did not touch, so both drifted every release and had to be corrected by
+ * hand — which is the same as saying they were usually wrong.
  *
  * Manual usage: node scripts/db/sync-version.mjs
  */
@@ -92,5 +98,22 @@ update('CHANGELOG.md', (src) => {
 
   return out;
 });
+
+// ── build.json ───────────────────────────────────────────────────────────────
+// The build NUMBER is owned by the pre-commit hook (D-063) and must not be
+// touched here — only the version it was built against.
+update('build.json', (src) => {
+  const build = JSON.parse(src);
+  if (build.version === version) return src;
+  build.version = version;
+  return JSON.stringify(build, null, 2) + '\n';
+});
+
+// ── README.md ────────────────────────────────────────────────────────────────
+// Only rewrites an explicit `vX.Y.Z`, so prose mentioning a historical release
+// ("changed in v0.2.0") is left alone — same rule the source-file headers follow.
+update('README.md', (src) =>
+  src.replace(/(\bversion-|\bv)\d+\.\d+\.\d+(-[\w.]+)?\b/g, `$1${version}`)
+);
 
 console.log(`sync-version: done — v${version}`);

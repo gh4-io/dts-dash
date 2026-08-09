@@ -449,7 +449,7 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
-    -- Capacity Modeling (v0.3.0)
+    -- Capacity Modeling (v1.0.0)
     CREATE TABLE IF NOT EXISTS capacity_shifts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL UNIQUE,

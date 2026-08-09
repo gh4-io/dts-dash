@@ -28,7 +28,12 @@ services:
         # Override to match host file ownership on bind-mounted volumes
         PUID: 1001
         PGID: 1001
-    image: dtsd:latest
+    # Pinned by version so a rollback is `VERSION=0.2.0 docker compose up -d`.
+    # `dtsd:latest` alone made that impossible: every build overwrote the only
+    # tag, so the previous image had no name to roll back to — even though
+    # `npm run docker:build:tag` was already producing a versioned image that
+    # nothing consumed. Falls back to `latest` when VERSION is unset.
+    image: dtsd:${VERSION:-latest}
     container_name: dtsd-prod
     restart: unless-stopped
 
@@ -52,17 +57,28 @@ services:
       - ../.env.prod
 
     volumes:
+      # Paths are relative to THIS FILE's directory (docker/), which is what
+      # `docker compose -f docker/docker-compose.prod.yml` makes the project
+      # directory — hence `../`, matching env_file above. As `./data` these
+      # resolved to docker/data, so the container ran a different database from
+      # the one every `npm run db:*` script and the docs point at: an operator
+      # could run db:upgrade-v1 against data/dashboard.db and the container would
+      # never see it.
+      #
       # Persistent database + input files
-      - ./data:/app/data
+      - ../data:/app/data
 
       # Runtime config (log level, theme defaults, password policy, etc.)
       # Edit server.config.yml on the host; restart the container to apply.
       # The image includes server.config.dev.yml as a fallback if this is omitted.
-      - ./server.config.yml:/app/server.config.yml:ro
+      - ../server.config.yml:/app/server.config.yml:ro
 
-    # Health check — verifies DB connectivity via /api/health endpoint
+    # Health check — verifies DB connectivity via /api/health endpoint.
+    # 127.0.0.1, not `localhost`: localhost also resolves to ::1, wget tries that
+    # first, and the server binds IPv4-only — so `localhost` reports the
+    # container unhealthy forever while it is serving fine.
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

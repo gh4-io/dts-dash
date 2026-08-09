@@ -1,5 +1,5 @@
 /**
- * Staffing Data Access Layer (v0.3.0)
+ * Staffing Data Access Layer (v1.0.0)
  *
  * Drizzle queries for loading/saving rotation patterns, staffing configs,
  * and staffing shifts. All functions return plain objects.

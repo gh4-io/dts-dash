@@ -1,5 +1,5 @@
 /**
- * Staffing Engine (v0.3.0)
+ * Staffing Engine (v1.0.0)
  *
  * Pure computation functions for rotation-based staffing resolution.
  * Converts rotation patterns + shift definitions into headcount-per-category-per-date,

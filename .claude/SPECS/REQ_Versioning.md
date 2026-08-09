@@ -178,6 +178,39 @@ The branch-from-`master`-and-cherry-pick pattern above is the **hotfix** pattern
 
 It does not scale. At v1.0.0, `dev` was ~255 commits ahead of `master`; cherry-picking that is not review, it is an opportunity to silently drop a schema change.
 
+> ### ⚠️ Corrected at v1.0.0 — do NOT branch the release from `dev`
+>
+> The procedure below was written before anyone checked what `master` actually is. It does not work,
+> and following it causes damage:
+>
+> - **`master` and `dev` share no ancestor.** `master` is an orphan-rooted, *stripped* production
+>   baseline (v0.1.0 was published as an orphan commit — see `PROD_RELEASE_PLAN.md`). A PR from a
+>   `dev`-rooted branch into it is an unrelated-histories merge, which git refuses.
+> - **Forced through, it ships the knowledge base to production** — `.claude/`, `CLAUDE.md`, `plan/`,
+>   `docs-wiki/`, every test and every dev dependency. That is the exact opposite of the stripping
+>   policy.
+> - **`git checkout dev && git merge master` (step 9 below) is destructive.** It merges the *stripped*
+>   tree into `dev` and deletes `.claude/`, `CLAUDE.md`, `plan/`, `docs-wiki/` and `src/__tests__/`.
+>   It also contradicts PROD_RELEASE_PLAN's "the `dev` branch is never modified by the release
+>   process". **Never run it.**
+>
+> **What v1.0.0 actually did** — move the *tree*, not the *history*:
+>
+> ```bash
+> git checkout -b release/v1.0.0 master   # inherits master's history + stripped baseline
+> git rm -rq --ignore-unmatch .           # clear the index
+> git checkout dev -- .                   # bring dev's content in, BEFORE stripping
+> #   ^ safe in this order. Doing it AFTER staging deletions restores them (v0.1.0 lesson 2)
+> git rm -rqf <the strip list>            # PROD_RELEASE_PLAN.md
+> npm version major --no-git-tag-version
+> gh pr create --base master              # a normal single-parent diff, fully reviewable
+> ```
+>
+> Every invariant holds: version bumped on the release branch only, `master` reached through a
+> reviewed PR, `master` stays stripped and linear, `dev` untouched.
+>
+> **Consequence:** release-branch fixes never merge back. Back-port them to `dev` by hand.
+
 **For a release of more than a few commits, branch the release from `dev`:**
 
 ```bash

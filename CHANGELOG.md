@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> Work landed on `feat/flight-event-enhancements` after the `[0.3.0]` version bump of 2026-03-04.
-> **The `[0.3.0]` entry below is incomplete** — it predates everything in this section. Fold these
-> into `[0.3.0]`, or split them into `[0.3.1]`, when the release boundary is decided.
+---
+
+## [1.0.0] - 2026-08-09
+
+> **MAJOR release** — contains backwards-incompatible changes. See the
+> [Migration Guide](#migration-guide--upgrading-to-v100) below before upgrading; `npm run db:upgrade-v1`
+> is **mandatory**.
+>
+> v0.3.0 was never released — no tag for it ever existed — so its entry is folded in here rather
+> than shipped separately. Everything below is what a deployment running v0.2.x receives.
 
 ### Changed — BREAKING
 
@@ -102,13 +109,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `staffing_shifts` has no `group_id` lineage (OI-111), so overlap detection matches on shift name; renaming a shift hides an overlap
 - Admin capacity pages collapse at phone width — the content region measures ~103px at 390px (OI-113)
 
----
+### Added — from the unreleased v0.3.0 work
 
-## [0.3.0] - 2026-03-04
-
-> **MINOR release** — all changes are backwards-compatible; all new functionality is additive.
-
-### Added
+> These landed on `dev` under a `0.3.0` version bump on 2026-03-04 that was never tagged or
+> released. They ship for the first time in v1.0.0.
 
 #### Capacity — Staffing Shifts
 - **Rotation end date** — `rotationEndDate` (nullable) on `staffing_shifts` provides a historical timeline of headcount changes (M022 migration)
@@ -124,12 +128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **iOS install prompt** — A2HS banner for iOS users on first visit
 - **Floating popup menu** — replaced bottom-sheet overflow menu with a right-aligned floating popup on mobile
 
-### Fixed
+### Fixed — from the unreleased v0.3.0 work
 
 #### Flight Board
 - Disable `viewMode` (Gantt/List) persistence across page loads — view resets to Gantt on navigation
 - Default sort by arrival time when no user sort is active in List view
-- Fall back to `title` field for WP number display in tooltip and detail drawer when `workpackageNo` is absent
+- ~~Fall back to `title` field for WP number display in tooltip and detail drawer when `workpackageNo` is absent~~ — superseded within this same release by OI-086, which merged the two columns; there is no longer a `title` to fall back to
 - Superscript date separators + semibold registration labels in List card header; timezone-aware date formatting
 - Suppress ECharts `axisBuilder` race condition warnings in console
 - Date format changed to `m/d/yyyy` in filter bar; Gantt date label alignment improved
@@ -141,6 +145,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Move `themeColor` to Next.js `Viewport` export — eliminates duplicate `<meta>` tags
 - Scoped mobile CSS globals to prevent overflow into desktop layouts; removed desktop font overrides
 - Mobile phone UX polish: card layout redesign, section reorder, tab bar refinements
+
+---
+
+## Migration Guide — upgrading to v1.0.0
+
+**Required for every existing deployment.** v1.0.0 moves data between columns and tables. Running it
+against a database that has not been upgraded is prevented, not merely discouraged — the app checks
+the schema at startup and refuses to serve rather than return wrong data.
+
+### 1. What broke
+
+| Item | What changed | What you do |
+|---|---|---|
+| OI-086 | `work_packages.title` removed; its contents are the work package number and now live in `workpackage_no`. `WorkPackage.title` and `SerializedWorkPackage.title` are gone | Read `workpackageNo`. The upgrade copies the values across |
+| OI-099 | Six messaging tables replaced by `messages` / `labels` / `message_labels`. **Post ids were renumbered** | Nothing — old `/feedback/[id]` links redirect automatically (see §4) |
+| OI-109 | `headcount` removed from the staffing-matrix API response | Read `rosterHeadcount` for people counts, `effectiveHeadcount` for the MH basis |
+| OI-125 | `mh_override_history.work_package_id` foreign key removed (it aborted the `cleanup-canceled` cron) | Nothing |
+| OI-111 | `staffing_shifts.group_id` added; overlap detection keys on lineage rather than name | Nothing — backfilled |
+| OI-126 | Partial UNIQUE indexes on `capacity_assumptions` and `staffing_configs` | Nothing, unless existing rows violate them — the upgrade reports which |
+
+The API-contract **types** for comments, notifications and feedback are unchanged. `FlightComment`,
+`AppNotification` and everything in `src/types/feedback.ts` kept their shape, so no client code needs
+updating for OI-099.
+
+### 2. Upgrading
+
+Stop the app first. The upgrade takes a full backup before it writes anything.
+
+```bash
+# 1. Stop the application (the database must not be open)
+docker compose -f docker/docker-compose.prod.yml down
+
+# 2. Preview — writes nothing
+npm run db:upgrade-v1 -- --dry-run
+
+# 3. Apply. Takes its own backup first and prints the rollback command
+npm run db:upgrade-v1
+
+# 4. Start the new version
+docker compose -f docker/docker-compose.prod.yml up -d
+```
+
+**Supported from any released schema** — v0.1.0, v0.1.1, v0.2.0 and v0.2.0-rc1 were each verified to
+upgrade to a schema identical to a fresh v1.0.0 install. The script is version-agnostic by
+construction: it builds a reference database from the current schema and diffs yours against it,
+so there is no hand-maintained list to drift.
+
+It is **idempotent** — a second run reports `already at the v1.0.0 schema — nothing to do`.
+
+### 3. Rolling back
+
+`db:upgrade-v1` writes a full copy to `data/backups/pre-v1-<timestamp>/` before its first write and
+prints the exact restore command. Restore that file and start the previous version.
+
+⚠️ `npm run db:export` is **not** a backup — its table list omits several tables, including all six
+legacy messaging tables. Use `npm run db:backup`, or the file the upgrade itself wrote.
+
+### 4. Feedback links
+
+Post ids were renumbered because the four merged tables each had an independent `AUTOINCREMENT`
+sequence, so their ids collided and could not all be preserved.
+
+**The remap is specific to your database.** On the development reference database posts 4/5/6 became
+49/50/51; on the production snapshot the same posts became 1/2/3, because that database has no
+notifications occupying the low ids. Do not rely on any fixed mapping.
+
+You do not need to do anything about this. `/feedback/<old id>` resolves through `messages.legacy_id`
+and permanently redirects to the current URL, so saved links keep working and correct themselves. An
+id that genuinely no longer exists shows a "Post not found" page explaining the renumbering.
+
+### 5. Known limitations
+
+- **`NOT NULL` columns are added as nullable.** SQLite cannot add a `NOT NULL` column without a
+  default to a table that already has rows, so the upgrade adds them nullable and warns per column.
+  The data is correct; the constraint is not enforced on those columns until the table is rebuilt.
+- **Legacy messaging tables are retained, read-only.** They are the only rollback for a bad remap and
+  are dropped in v1.1.0 (OI-123). `npm run db:status` lists them with a `(legacy — drop in v1.1.0)`
+  suffix.
+- **Indexes not in the v1.0.0 schema are left in place**, never dropped — an upgrade that deletes
+  structures it did not create is a worse failure mode than one that leaves a stale index behind.
+  The script reports them.
 
 ---
 
@@ -281,10 +366,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2025-12-15
 
-Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
+Initial release. See the project knowledge base for v0.1.0 release notes.
 
-[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...v0.3.0
+<!-- v0.3.0 is deliberately absent: it was bumped in package.json on 2026-03-04 but never
+     tagged or released, so a compare link for it would point at a tag that does not exist.
+     Its content is folded into [1.0.0], which compares from v0.2.0 — the last real release. -->
+
+[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0

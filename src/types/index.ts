@@ -191,7 +191,7 @@ export interface HourlySnapshot {
   onGroundCount: number;
 }
 
-// ─── Capacity Modeling V2 (v0.3.0) ─────────────────────────────────────────
+// ─── Capacity Modeling V2 (v1.0.0) ─────────────────────────────────────────
 
 export interface CapacityShift {
   id: number;

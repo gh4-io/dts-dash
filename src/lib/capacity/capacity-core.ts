@@ -1,5 +1,5 @@
 /**
- * Capacity Core Compute Engine (v0.3.0)
+ * Capacity Core Compute Engine (v1.0.0)
  *
  * Pure computation functions for capacity math — zero DB dependencies.
  * All functions take data as arguments and return computed results.

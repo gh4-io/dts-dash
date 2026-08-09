@@ -464,7 +464,7 @@ export const cronJobRuns = sqliteTable("cron_job_runs", {
     .$defaultFn(() => new Date().toISOString()),
 });
 
-// ─── Capacity Modeling (v0.3.0) ─────────────────────────────────────────────
+// ─── Capacity Modeling (v1.0.0) ─────────────────────────────────────────────
 
 export const capacityShifts = sqliteTable("capacity_shifts", {
   id: integer("id").primaryKey({ autoIncrement: true }),

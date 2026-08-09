@@ -30,8 +30,13 @@ type RouteContext = { params: Promise<{ id: string }> };
  * Get post detail with comments and labels.
  *
  * ⚠️ v1.0.0 BREAKING: post ids were remapped when the tables merged (OI-099), so
- * bookmarked /feedback/[id] URLs from v0.3.0 point at a different post or at
- * nothing. The pre-merge id survives on messages.legacy_id if a lookup is needed.
+ * a pre-v1.0.0 /feedback/[id] denotes a different post, or none.
+ *
+ * This route takes the id literally and 404s on a miss — it is the data API, and
+ * silently answering with a different post than the one asked for is worse than
+ * saying no. Recovery belongs to the page: it calls resolveFeedbackPostId(),
+ * which falls back to messages.legacy_id, and redirects to the canonical URL
+ * (OI-140). So old links do keep working; they just get corrected first.
  */
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {

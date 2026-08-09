@@ -35,6 +35,11 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+# docker/docker-compose.prod.yml reads .env.prod and it holds AUTH_SECRET.
+# The compose file said "do not commit this file" but nothing enforced it —
+# these two patterns are what actually stop it.
+.env.prod
+.env.production
 
 # IDE
 .vscode/

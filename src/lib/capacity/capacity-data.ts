@@ -1,5 +1,5 @@
 /**
- * Capacity Data Access Layer (v0.3.0)
+ * Capacity Data Access Layer (v1.0.0)
  *
  * Drizzle queries for loading capacity modeling data from SQLite.
  * All functions return plain objects (no DB cursors or lazy evaluation).
