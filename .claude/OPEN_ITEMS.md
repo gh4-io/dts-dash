@@ -352,6 +352,66 @@ Accepted deliberately. A per-day rollup table was designed and **rejected by Jas
 
 ---
 
+### OI-137 | Drawer Links Hijacked the Flight Board Instead of Navigating — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | UX / Architecture |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-09 |
+| **Resolved** | 2026-08-09 |
+
+The flight detail drawer's links were not links. Each was a `<button>` that wrote the subject into the **global** filter store (`setAircraft` / `setOperators`) and flipped the board's view mode. Three consequences:
+
+1. **The Back arrow did not work.** No navigation happened — the URL was only rewritten by the store→URL mirror, which uses `router.replace`, so no history entry existed. Back left the Flight Board entirely.
+2. **The board's state was destroyed in place.** The user's filters were overwritten, the view forced to list, and the pan/zoom window discarded when the row set changed. There was nothing to go back *to*.
+3. **The selection leaked.** `useFilterUrlSync` hydrated from the URL on mount but only *added* params it found, never clearing store values absent from the URL — so the selection followed the user to every other page for the session.
+
+**Resolution** — the links now navigate to an isolated **Focus view**, `/flight-board/focus?scope=…&subject=…`:
+
+- **`FlightBoardView`** (`src/components/flight-board/flight-board-view.tsx`) is the board's body, extracted and parameterised. Both `/flight-board` and the Focus route render it, so the Focus view has the *whole* board — Gantt **and** list, zoom presets, pan, expand, condense, print, Actions, date filtering. The Focus view **defaults to list on every device** — following one of these links asks a question whose answer is a set of rows — while the board keeps its device-based default. The Gantt is one click away and the choice is remembered per subject.
+- **The subject lives in the URL, never in the filter store.** It narrows the fetched rows (`FOCUS_SCOPES[scope].match`) before any transform runs. Nothing the drawer does touches shared state, which is what makes Back correct rather than something to undo afterwards. It is **pinned**: no removable chip, and the title never shifts under the user.
+- **The date window is inherited**, built from the live store by `buildFilterUrlParams` so the href is self-describing even before the debounced URL mirror has run — and meaningful when opened in a new tab.
+- **Session-cached view state** keyed per view (`fbView:flight-board`, `fbView:flight-board:focus:<scope>:<subject>`) restores view mode, zoom level and the ECharts window, so Back lands on the view that was left. `sessionStorage`, so it is a "where I was" cache and not a preference competing with `defaultZoom`.
+- **`useFilterUrlSync` fixed twice**: the store→URL mirror now seeds from the live URL and overwrites only the nine filter keys (otherwise it stripped `scope`/`subject` 300ms after arrival); and mount hydration is authoritative for the six selection lists — absent from the URL means empty, which is the leak in (3) closed generally.
+- **The duplicate aircraft link is gone** — "View all `<reg>` work packages" and "All `<reg>` visits" were the same action under two labels. One link remains, labelled from `FOCUS_SCOPES` so it always equals the page title.
+
+**Verified** in Chromium against a copy of production data: from a board filtered to `op=21 Air` at a 12h zoom, following "All N753CS visits" lands on `/flight-board/focus?…&scope=aircraft&subject=N753CS` titled *All N753CS visits*, showing that lane only, with the window and the operator filter intact and no N753CS chip; `scope`/`subject` survive the debounce; **Back returns to the board with the 21 Air chip, the Gantt, and the 12h window — and no leaked aircraft filter**. Focus→focus navigation works with Back at each step; `scope=nonsense` and a subject with no rows render empty states rather than throwing; operator names containing spaces round-trip. 0 console errors. `npm run validate` exits 0 — 936 tests / 44 files.
+
+**Files**: `src/lib/utils/flight-board-focus.ts` (new), `src/components/flight-board/flight-board-view.tsx` (new), `src/app/(authenticated)/flight-board/focus/{page,error}.tsx` (new), `src/app/(authenticated)/flight-board/page.tsx`, `src/components/flight-board/flight-detail-drawer.tsx`, `src/lib/hooks/use-filter-url-sync.ts`, `src/lib/utils/filter-helpers.ts`, `src/__tests__/components/flight-board-focus.test.ts`
+**Links**: OI-128 (superseded), OI-138 (found while verifying)
+
+---
+
+### OI-138 | End Date Picker Displays a Different Instant Than the One Queried
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | Open |
+| **Priority** | P2 |
+| **Owner** | — |
+| **Created** | 2026-08-09 |
+
+On a **fresh page load** the End picker renders a wall clock that does not correspond to the `end` the app actually queries with. Observed on `/flight-board` with TZ = Eastern:
+
+- picker shows **`8/11/2026 10:00`**
+- store holds **`2026-08-11T02:00:00.000Z`**, which is `8/10 22:00` Eastern
+- `/api/work-packages/all` is called with `end=2026-08-11T02:00:00.000Z`
+
+So the **data is right and the label is wrong** — the user is shown a window 12 hours wider than the one being fetched. Start is unaffected (`2026-08-08T14:00:00.000Z` → `8/8 10:00` ET, correct).
+
+It corrects itself after a client-side navigation: arriving back on the board via the browser Back arrow, the same store value renders as `8/10/2026 22:00`. That points at the load-time ordering between `getDefaults()`, `PreferencesLoader.hydrateFromPreferences` and `setTimezone`'s `reinterpretDate` — the picker appears to render a value from before one of those steps.
+
+**Confirmed pre-existing**, not introduced by OI-137: reproduced with that work stashed, on `dev` at `c916d37`. It surfaced only because the Focus view's href carries the raw store value, making the discrepancy visible.
+
+**Files**: `src/components/shared/datetime-picker.tsx`, `src/lib/hooks/use-filters.ts`, `src/components/layout/preferences-loader.tsx`
+**Links**: OI-137, OI-124 (the other filter-window defect), D-049
+
+---
+
 ## Open Enhancements
 
 ### OI-107 | Shift Edit Dialog Rewrote History Instead of Versioning — RESOLVED
@@ -889,16 +949,21 @@ Selecting an operator (or changing the FilterBar) rewrote every dashboard panel 
 
 ---
 
-### OI-128 | Flight Board Linked-Information Links Landed on the Gantt — RESOLVED
+### OI-128 | Flight Board Linked-Information Links Landed on the Gantt — SUPERSEDED
 
 | Field | Value |
 |-------|-------|
 | **Type** | UX |
-| **Status** | **Resolved** |
+| **Status** | **Superseded** by OI-137 (2026-08-09) |
 | **Priority** | P3 |
 | **Owner** | Claude |
 | **Created** | 2026-08-08 |
 | **Resolved** | 2026-08-08 |
+
+> **Superseded**: this resolution treated the symptom. Switching the board to list
+> view still left the user *on the board*, with their filters overwritten and no
+> history entry to go back to. `onFollowLink` and the filter mutation behind it
+> were both removed by OI-137, which gives the links a page of their own.
 
 The flight detail drawer's three links — *View all `<reg>` work packages*, *All `<reg>` visits*, *All `<customer>` work packages* — each apply a filter whose result is a **set of rows**, but left the board in Gantt view.
 

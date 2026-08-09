@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,27 +14,20 @@ import { useSession } from "next-auth/react";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 import type { FlightComment, GroundEventType } from "@/types";
 import { GROUND_EVENTS, GROUND_EVENT_TYPES } from "@/lib/utils/ground-events";
+import { FOCUS_SCOPES, focusHref, type FocusScope } from "@/lib/utils/flight-board-focus";
+import { buildFilterUrlParams } from "@/lib/utils/filter-helpers";
+import { trackAction } from "@/lib/analytics/track";
 
 interface FlightDetailDrawerProps {
   wp: SerializedWorkPackage | null;
   open: boolean;
   onClose: () => void;
   onWpUpdated?: () => void;
-  /** Called when a Linked Information link is followed. The result of those
-   *  links is a set of rows, so the board switches to the list view rather than
-   *  leaving the user on a Gantt zoomed to one flight. */
-  onFollowLink?: () => void;
 }
 
-export function FlightDetailDrawer({
-  wp,
-  open,
-  onClose,
-  onWpUpdated,
-  onFollowLink,
-}: FlightDetailDrawerProps) {
+export function FlightDetailDrawer({ wp, open, onClose, onWpUpdated }: FlightDetailDrawerProps) {
   const { getColor } = useCustomers();
-  const { timezone, setOperators, setAircraft } = useFilters();
+  const { timezone } = useFilters();
   const { data: session } = useSession();
 
   const [comments, setComments] = useState<FlightComment[]>([]);
@@ -274,16 +268,7 @@ export function FlightDetailDrawer({
                 </span>
               </Row>
               <Row label="Type" value={wp.inferredType} />
-              <button
-                className="text-xs text-primary hover:underline"
-                onClick={() => {
-                  setAircraft([wp.aircraftReg]);
-                  onFollowLink?.();
-                  onClose();
-                }}
-              >
-                → View all {wp.aircraftReg} work packages
-              </button>
+              <FocusLink scope="aircraft" subject={wp.aircraftReg} onNavigate={onClose} />
             </div>
           </section>
 
@@ -516,22 +501,7 @@ export function FlightDetailDrawer({
               Linked Information
             </h3>
             <div className="space-y-1.5">
-              <LinkButton
-                label={`All ${wp.aircraftReg} visits`}
-                onClick={() => {
-                  setAircraft([wp.aircraftReg]);
-                  onFollowLink?.();
-                  onClose();
-                }}
-              />
-              <LinkButton
-                label={`All ${wp.customer} work packages`}
-                onClick={() => {
-                  setOperators([wp.customer]);
-                  onFollowLink?.();
-                  onClose();
-                }}
-              />
+              <FocusLink scope="operator" subject={wp.customer} onNavigate={onClose} />
             </div>
           </section>
 
@@ -686,10 +656,41 @@ function Row({
   );
 }
 
-function LinkButton({ label, onClick }: { label: string; onClick: () => void }) {
+/**
+ * Navigates to the Focus view for one aircraft or operator.
+ *
+ * A real `<Link>`, not a filter mutation: it pushes a history entry (so Back
+ * returns to the board), carries the current date window across in the query
+ * string, and leaves the shared filter store untouched — which is what stops
+ * the selection following the user around. It also makes middle-click and
+ * open-in-new-tab work.
+ */
+function FocusLink({
+  scope,
+  subject,
+  onNavigate,
+}: {
+  scope: FocusScope;
+  subject: string;
+  onNavigate: () => void;
+}) {
+  const filters = useFilters();
+  const label = FOCUS_SCOPES[scope].label(subject);
+  // Build the window from the store rather than the current URL: the store→URL
+  // mirror is debounced, so the address bar can still be bare on first load and
+  // the link would carry no dates at all. This also makes the href meaningful
+  // when opened in a new tab.
+  const href = focusHref(scope, subject, buildFilterUrlParams(filters));
   return (
-    <button className="block text-xs text-primary hover:underline" onClick={onClick}>
+    <Link
+      href={href}
+      className="block text-xs text-primary hover:underline"
+      onClick={() => {
+        trackAction("focus_link_follow", { scope, subject });
+        onNavigate();
+      }}
+    >
       → {label}
-    </button>
+    </Link>
   );
 }

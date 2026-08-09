@@ -60,6 +60,46 @@ export function buildFilterQuery(f: Partial<FilterState>): Record<string, string
   return q;
 }
 
+/** Every query key the browser URL uses for filter state. */
+export const FILTER_URL_KEYS = [
+  "start",
+  "end",
+  "tz",
+  "op",
+  "ac",
+  "type",
+  "nop",
+  "nac",
+  "ntype",
+] as const;
+
+/**
+ * Assemble the *browser URL* params from filter state.
+ *
+ * Note the keys are the short forms (`op`, `nac`) rather than the long ones the
+ * data APIs take (`operators`, `excludeAircraft`) — see buildFilterQuery for
+ * those. Shared by the URL sync hook and by any link that needs to carry the
+ * current window across a navigation, so the two cannot drift.
+ */
+export function buildFilterUrlParams(
+  f: Partial<FilterState>,
+  base?: URLSearchParams,
+): URLSearchParams {
+  const params = new URLSearchParams(base);
+  for (const key of FILTER_URL_KEYS) params.delete(key);
+
+  if (f.start) params.set("start", f.start);
+  if (f.end) params.set("end", f.end);
+  if (f.timezone && f.timezone !== "UTC") params.set("tz", f.timezone);
+  if (f.operators?.length) params.set("op", f.operators.join(","));
+  if (f.aircraft?.length) params.set("ac", f.aircraft.join(","));
+  if (f.types?.length) params.set("type", f.types.join(","));
+  if (f.excludeOperators?.length) params.set("nop", f.excludeOperators.join(","));
+  if (f.excludeAircraft?.length) params.set("nac", f.excludeAircraft.join(","));
+  if (f.excludeTypes?.length) params.set("ntype", f.excludeTypes.join(","));
+  return params;
+}
+
 /**
  * Predicate for "does this customer survive the operator filter?".
  * Reused for the non-work-package demand sources (contracts, flight events,
