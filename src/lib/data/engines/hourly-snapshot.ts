@@ -6,6 +6,35 @@ import type { WorkPackage, HourlySnapshot } from "@/types";
  * Used for time-series charts (arrivals/departures/concurrent aircraft)
  */
 
+/** Anything with an arrival/departure, in either Date or serialized-string form. */
+type Occupancy = { arrival: Date | string; departure: Date | string };
+
+const ms = (v: Date | string) => new Date(v).getTime();
+
+/**
+ * The single definitions of the three hourly series. They are exported because
+ * the dashboard recounts them client-side (to honour the focused operator and
+ * the Actions column filters, neither of which the server snapshot knows about)
+ * and the two implementations had drifted: the client counted "on ground" as
+ * overlapping anywhere inside the hour, the engine as present at the boundary.
+ * Clicking an operator therefore changed the chart without changing the data.
+ * Both callers now go through these.
+ */
+export function countArrivalsInHour(wps: readonly Occupancy[], hourStart: number): number {
+  const hourEnd = hourStart + 3_600_000;
+  return wps.filter((wp) => ms(wp.arrival) >= hourStart && ms(wp.arrival) < hourEnd).length;
+}
+
+export function countDeparturesInHour(wps: readonly Occupancy[], hourStart: number): number {
+  const hourEnd = hourStart + 3_600_000;
+  return wps.filter((wp) => ms(wp.departure) >= hourStart && ms(wp.departure) < hourEnd).length;
+}
+
+/** On ground AT the hour boundary — not merely overlapping somewhere inside it. */
+export function countOnGroundAtHour(wps: readonly Occupancy[], hourStart: number): number {
+  return wps.filter((wp) => ms(wp.arrival) <= hourStart && ms(wp.departure) > hourStart).length;
+}
+
 /**
  * Compute hourly snapshots for the given work packages
  * Returns time-series data with arrivals, departures, and on-ground counts
@@ -45,25 +74,12 @@ export function computeHourlySnapshots(
   // Count events at each boundary
   const snapshots: HourlySnapshot[] = hourBoundaries.map((hour) => {
     const hourTime = hour.getTime();
-    const nextHourTime = hourTime + 3600000; // +1 hour
-
-    const arrivalsCount = workPackages.filter(
-      (wp) => wp.arrival.getTime() >= hourTime && wp.arrival.getTime() < nextHourTime
-    ).length;
-
-    const departuresCount = workPackages.filter(
-      (wp) => wp.departure.getTime() >= hourTime && wp.departure.getTime() < nextHourTime
-    ).length;
-
-    const onGroundCount = workPackages.filter(
-      (wp) => wp.arrival.getTime() <= hourTime && wp.departure.getTime() > hourTime
-    ).length;
 
     return {
       hour: hour.toISOString(),
-      arrivalsCount,
-      departuresCount,
-      onGroundCount,
+      arrivalsCount: countArrivalsInHour(workPackages, hourTime),
+      departuresCount: countDeparturesInHour(workPackages, hourTime),
+      onGroundCount: countOnGroundAtHour(workPackages, hourTime),
     };
   });
 

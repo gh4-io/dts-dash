@@ -217,6 +217,73 @@ Aircraft & Turns section on `/dashboard` does not reflect date selection from th
 
 ---
 
+### OI-131 | Dashboard Chart Changed Its Numbers When an Operator Was Clicked — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Resolved** |
+| **Priority** | P2 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+| **Resolved** | 2026-08-08 |
+
+The Arrivals / Departures / On Ground chart was counted in two places with two different definitions of "on ground", and clicking an operator row switched between them.
+
+`computeHourlySnapshots()` counted presence **at the hour boundary** (`arrival <= hour && departure > hour`). The dashboard's client-side recount in `displaySnapshots` counted **overlap anywhere inside the hour** (`arrival < hourEnd && departure > hourStart`), and that recount only ran `if (focusedOperator)`. So with an operator already selected in the FilterBar the chart used the server's numbers; clicking that same operator's row in Operator Performance re-counted an identical set of work packages with the looser formula and the On Ground series jumped.
+
+Measured against the production snapshot — CargoJet Airways, 2026-08-02 01:00 ET → 2026-08-10 13:00 ET, 77 WPs, 205 hours: **36 hours disagreed, by up to +5 aircraft.** The overlap formula is always ≥ the boundary formula, since it also counts anything arriving or departing partway through the hour.
+
+Secondary divergence: the client recount reads `useTransformedData` output, so it also applied the Actions column filters, which the server snapshot knows nothing about. Any active column filter was a second, independent reason the two views disagreed.
+
+**Resolution**: `countArrivalsInHour` / `countDeparturesInHour` / `countOnGroundAtHour` exported from the engine as the single definition of each series, accepting either `Date` or serialized-string rows. Both `computeHourlySnapshots()` and the dashboard now call them. The client recount is no longer gated on `focusedOperator` — it runs always, so it agrees with the server for the unfocused case and picks up the column filters consistently.
+
+**Files**: `src/lib/data/engines/hourly-snapshot.ts`, `src/app/(authenticated)/dashboard/page.tsx`, `src/__tests__/dashboard/hourly-snapshot-consistency.test.ts`
+**Links**: OI-124 (the other defect in this chart's data path)
+
+---
+
+### OI-132 | Dashboard Panels Define "Avg Ground" and "Share" Differently
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | Open |
+| **Priority** | P3 |
+| **Owner** | Jason (decision) |
+| **Created** | 2026-08-08 |
+
+Found while scanning for other instances of OI-131. These are cross-panel definitional mismatches, not server/client drift — every panel reads the same `view.wps`, they just measure different things under similar labels.
+
+1. **Avg Ground.** `AvgGroundTimeCard` deliberately splits the set at 24 h and reports two averages; the Operator Performance table's "Avg Ground" column blends everything into one. For CargoJet over the range above: card shows **6:30** (60 short turns) and **36:45** (17 long), table shows **13:11**. All three are correct for their own definition, and none of them equal each other.
+2. **Share.** The donut is share of **unique aircraft**; the table's "Share" column is share of **turns**. Same word, different denominator.
+
+Needs a product call on whether these should be reconciled or just labelled more explicitly. No code change made.
+
+**Files**: `src/components/dashboard/avg-ground-time-card.tsx`, `src/components/dashboard/operator-performance.tsx`, `src/components/dashboard/customer-donut.tsx`
+
+---
+
+### OI-133 | Customer Donut Percentages Can Exceed 100%
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | Open (latent) |
+| **Priority** | P4 |
+| **Owner** | Claude |
+| **Created** | 2026-08-08 |
+
+`CustomerDonut` sizes each slice by that customer's unique `aircraftReg` count, but divides by the **global** unique-registration count. A registration flown under two customers is counted in both slices and once in the denominator, so the printed percentages sum above 100% — and worse, Recharts draws the arcs proportional to the sum of the slice values, so the wedge geometry and the printed label disagree.
+
+**Latent today**: the production snapshot has **0 registrations appearing under more than one customer** (152 unique regs, slices sum to exactly 152). It becomes visible the first time an aircraft changes operator inside a filter window, which is plausible for leased tails.
+
+**Fix**: divide by the sum of the slice values rather than the global unique count, or count `(customer, reg)` pairs in the denominator.
+
+**Files**: `src/components/dashboard/customer-donut.tsx`
+
+---
+
 ## Open Enhancements
 
 ### OI-107 | Shift Edit Dialog Rewrote History Instead of Versioning — RESOLVED

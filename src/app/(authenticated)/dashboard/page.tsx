@@ -20,6 +20,11 @@ import { useTransformedData } from "@/lib/hooks/use-transformed-data";
 import { PrintButton } from "@/components/shared/print-button";
 import { useDeviceType } from "@/lib/hooks/use-device-type";
 import { useSmoothUpdate } from "@/lib/hooks/use-smooth-update";
+import {
+  countArrivalsInHour,
+  countDeparturesInHour,
+  countOnGroundAtHour,
+} from "@/lib/data/engines/hourly-snapshot";
 
 function DashboardPageInner() {
   const { workPackages, isLoading, error } = useWorkPackages();
@@ -59,33 +64,28 @@ function DashboardPageInner() {
     });
   }, [operatorFilteredWps, timeRange]);
 
-  // Snapshots for chart — reflects operator filter only (not time range)
+  // Snapshots for chart — reflects operator filter only (not time range).
+  //
+  // This recount runs unconditionally, not just when an operator is focused.
+  // It used to be gated on `focusedOperator`, which meant clicking an operator
+  // swapped the chart between the server's counts and these — and the on-ground
+  // predicate here did not match the engine's, so the numbers moved even when
+  // the underlying set was identical. Keep `countOnGroundAtHour` as the single
+  // definition of "on ground": a reading AT the hour boundary, not an overlap
+  // anywhere within the hour. Running it always also means the chart picks up
+  // the Actions column filters, which the server snapshot knows nothing about.
   const displaySnapshots = useMemo(() => {
-    if (!focusedOperator || snapshots.length === 0) return snapshots;
+    if (snapshots.length === 0) return snapshots;
     return snapshots.map((snapshot) => {
       const hourStart = new Date(snapshot.hour).getTime();
-      const hourEnd = hourStart + 3_600_000;
-      const arrivals = operatorFilteredWps.filter((wp) => {
-        const t = new Date(wp.arrival).getTime();
-        return t >= hourStart && t < hourEnd;
-      }).length;
-      const departures = operatorFilteredWps.filter((wp) => {
-        const t = new Date(wp.departure).getTime();
-        return t >= hourStart && t < hourEnd;
-      }).length;
-      const onGround = operatorFilteredWps.filter((wp) => {
-        return (
-          new Date(wp.arrival).getTime() < hourEnd && new Date(wp.departure).getTime() > hourStart
-        );
-      }).length;
       return {
         ...snapshot,
-        arrivalsCount: arrivals,
-        departuresCount: departures,
-        onGroundCount: onGround,
+        arrivalsCount: countArrivalsInHour(operatorFilteredWps, hourStart),
+        departuresCount: countDeparturesInHour(operatorFilteredWps, hourStart),
+        onGroundCount: countOnGroundAtHour(operatorFilteredWps, hourStart),
       };
     });
-  }, [snapshots, focusedOperator, operatorFilteredWps]);
+  }, [snapshots, operatorFilteredWps]);
 
   // Every panel reads from one snapshot so they all change together, and that
   // snapshot is applied inside a view transition — the panels morph over half a
