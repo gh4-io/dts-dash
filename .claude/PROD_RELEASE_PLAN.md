@@ -153,6 +153,67 @@ These are deleted on the release branch only. They remain on `dev`.
 
 > **Note:** `docs/` (BACKUP.md, DEPLOYMENT.md, MONITORING.md) is KEPT — operational docs ship with the release.
 
+### Dev-level component audit (added v1.0.0) — run this every release
+
+The REMOVE table above is a **list of paths, and lists rot**. At v1.0.0 it named `src/__tests__` only,
+while nine test files lived elsewhere (`src/lib/capacity/staffing-engine.test.ts` and all of
+`src/lib/utils/__tests__/`). They shipped, still imported `vitest` — which the release strips — and
+the production image failed `next build`. The gap was invisible until the image was actually built.
+
+So verify by **scanning the shipped tree**, not by re-reading the list. Run this on the release branch
+after stripping and before the version bump. Every check must print nothing.
+
+```bash
+# 1. No test, spec, mock, story or test-config artifact anywhere
+git ls-files | grep -iE '\.(test|spec)\.(ts|tsx|js|jsx)$|/__tests__/|/__mocks__/|\.stories\.|vitest\.config|jest\.config'
+
+# 2. No npm script pointing at a file that is no longer in the tree
+node -e 'const{execSync}=require("child_process");const f=new Set(execSync("git ls-files",{encoding:"utf8"}).trim().split("\n"));
+for(const[k,v]of Object.entries(require("./package.json").scripts))
+for(const m of v.match(/scripts\/[\w./-]+/g)||[])if(!f.has(m))console.log("BROKEN",k,"->",m)'
+
+# 3. No stripped dev dependency still imported by shipped code
+git ls-files 'src/**/*.ts*' 'scripts/**' | xargs grep -lE "from ['\"](vitest|@testing-library|jsdom|puppeteer-core)" 2>/dev/null
+
+# 4. No dev-only tooling config left at the root
+git ls-files | grep -E '^\.(husky|serena|prettierrc|prettierignore|vscode|idea)|^CLAUDE\.md|^\.claude/|^plan/|^docs-wiki/'
+
+# 5. CI must not call a script the release removed
+grep -nE 'npm run (test|validate|format)' .github/workflows/*.yml
+```
+
+Then the build itself is the backstop — `npm run docker:build` type-checks the whole shipped tree, so
+anything importing a stripped package fails there rather than in production.
+
+#### Classification — what "dev-level" means here
+
+**Stripped (193 files at v1.0.0).** Tests and test config; `.claude/` knowledge base; `plan/`;
+`docs-wiki/`; `.serena/`; `.husky/`; `CLAUDE.md`; prettier config; `scripts/phase_commit.sh`,
+`scripts/feature_intake.sh`, `scripts/tag-checkpoint.sh`; `scripts/db/dev-seed.ts`,
+`scripts/db/dev-seed-archives.ts`. Plus 8 npm scripts, 10 devDependencies and the `lint-staged` block.
+
+**Ships despite looking dev-level — deliberate, do not strip these:**
+
+| Path | Why it ships |
+|---|---|
+| `src/app/api/seed/route.ts` | Hardened, not removed. Returns **404** unless `features.enableSeedEndpoint` is true in `server.config.yml` (default `false` in both the template and the loader), and additionally requires superadmin in production |
+| `src/app/api/admin/aircraft-types/test/route.ts` | A product feature — tests a raw type string against current mappings. The word "test" in the path is not a unit test |
+| `src/app/(authenticated)/admin/capacity/dev-overview/page.tsx` | OI-066 temp fixture, deliberately in scope for v1.0.0 despite the `dev-` name |
+| `server.config.dev.yml` | Ships as the **config template** — `server.config.yml` is gitignored. See the warning below |
+| `scripts/db/seed.ts`, `seed-reference.ts` | Operational: first-run and reference data, not dev fixtures |
+| `scripts/db/sync-version.mjs` | Release tooling, invoked by the `npm version` hook |
+| `.github/workflows/` | CI/CD. Verified it calls only `lint`, `tsc --noEmit`, `build` and `audit` — all of which survive the strip |
+| `docs/` | Operational runbooks (DEPLOYMENT, BACKUP, MONITORING) |
+
+⚠️ **`server.config.dev.yml` ships with `logging.level: "debug"`.** It is the template an operator
+copies to `server.config.yml`, so a production deployment that copies it verbatim runs debug logging —
+verbose, and a disclosure risk. Setting `level: "info"` is a **required** step of every deployment, not
+a recommendation. It is called out in the compose file header for the same reason.
+
+⚠️ **The seed endpoint's guard moved** from the `ENABLE_SEED_ENDPOINT` env var (described in Phase 1.9
+below, now stale) to `features.enableSeedEndpoint` in `server.config.yml`. The protection is equivalent
+and still default-off; only the mechanism changed.
+
 ### KEEP — shipped in release
 
 | Path | Reason |
