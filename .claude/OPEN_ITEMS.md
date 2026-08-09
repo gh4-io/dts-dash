@@ -423,6 +423,80 @@ It corrects itself after a client-side navigation: arriving back on the board vi
 
 ---
 
+### OI-139 | v1.0.0 Upgrade Path Unusable From Any Prior Release — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **RESOLVED** (2026-08-09, v1.0.0) |
+| **Priority** | P1 — release blocker |
+| **Owner** | — |
+| **Created** | 2026-08-09 |
+
+Found during the v1.0.0 production rehearsal, against a fresh `0.2.0-rc1` snapshot. Three faults on the one path every existing deployment has to take.
+
+**1. `createTables()` threw against every pre-v1.0.0 database.** `CREATE TABLE IF NOT EXISTS` is a no-op on a table that already exists, so `rotation_patterns` and `staffing_shifts` kept their old column set — then `CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id)` failed with `no such column: group_id`. `IF NOT EXISTS` on an index suppresses "already exists", not "no such column".
+
+That one statement broke `npm run db:migrate`, the `prod-db-snapshot` restore (which calls it), **and app startup** — `bootstrap.ts` calls `createTables()` via `instrumentation.ts`, so the v1.0.0 image against an un-upgraded database is a Docker restart loop, not the "silently blank identifiers" the handoff predicted.
+
+**2. `db:upgrade-v1 --dry-run` failed on every database it exists to preview.** Step 2 only *reports* the columns it would add, then Step 3 queried them: `no such column: group_id` from v0.2.0, `no such table: rotation_patterns` from v0.1.0. The safe preview an operator is told to run always errored, making a migration that would have succeeded look broken.
+
+**3. Step 3 guards were ad-hoc.** `backfillShiftGroups` and `remapTitleToWorkpackageNo` probed for their columns; `backfillPatternGroups` and `closeOverlappingShiftVersions` did not.
+
+**Fix** — the upgrader is now the canonical path from *any* released schema, and the app refuses anything it cannot read correctly:
+
+- Shared `hasTable()` / `hasColumn()` probes in `upgrade-to-v1.ts`; every Step 3 correction guarded. Skips are silent under `--dry-run` and warn in a real run, where a skip means Step 2 failed to deliver something.
+- The two lineage indexes moved out of the `createTables()` SQL into `createLineageIndexes()`, created only once `group_id` exists. `createTables()` stays purely additive — it does **not** become a migration.
+- New `assertSchemaCompatible()`, called from `bootstrapDatabase()` immediately after `createTables()`. Probes four structural markers (OI-099 `messages`, OI-086 `work_packages.title`, OI-111 `group_id`, OI-104 `mh_override_history`) rather than the `schemaVersion` stamp, which an operator can set. Refuses to boot with the failing markers and the exact command to run.
+
+**Verified** — upgraded from every released schema, built by replaying each tag's own `createTables()` SQL:
+
+| From | Dry-run | Real | Schema vs fresh v1.0.0 | Idempotent |
+|---|---|---|---|---|
+| v0.1.0 | exit 0 | exit 0, 73 changes | matches | no-op |
+| v0.1.1 | exit 0 | exit 0, 73 changes | matches | no-op |
+| v0.2.0 | exit 0 | exit 0, 30 changes | matches | no-op |
+| v0.2.0-rc1 (production) | exit 0 | exit 0, 36 changes | matches | no-op |
+
+The only schema difference is the four `feedback_*` tables retained read-only until v1.1.0 (OI-123), plus `idx_customers_guid`, which the upgrader reports as "left as-is" by design. Dry-run confirmed non-mutating. Rollback from the Step 0 backup restores the pre-upgrade state exactly.
+
+⚠️ **Carried into the Migration Guide**: Step 2 adds `NOT NULL`-without-default columns **as nullable** — SQLite cannot backfill them — so "upgraded" does not mean "every constraint enforced" for those columns. The upgrader warns per column.
+
+**Files**: `scripts/db/upgrade-to-v1.ts`, `src/lib/db/schema-init.ts`, `src/lib/db/bootstrap.ts`, `src/__tests__/db/schema-compatibility.test.ts`
+**Links**: OI-086, OI-099, OI-104, OI-111, OI-140, D-028
+
+---
+
+### OI-140 | Pre-v1.0.0 Feedback Links Died Silently — RESOLVED
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug / UX |
+| **Status** | **RESOLVED** (2026-08-09, v1.0.0) |
+| **Priority** | P2 |
+| **Owner** | — |
+| **Created** | 2026-08-09 |
+
+OI-099 merged four tables into `messages`. Each had its own `AUTOINCREMENT` sequence, so ids collided and could not all be preserved — every `/feedback/[id]` link saved before v1.0.0 points at a different post or at nothing.
+
+Two problems. The remap was treated as unrecoverable when it is not: the original id survives on `messages.legacy_id`. And the failure was invisible — `post-detail.tsx` did `router.push("/feedback")` on a 404, bouncing the reader to the board with no explanation and making its own "Post not found" block (line 228) **dead code**.
+
+**Fix**:
+
+- `resolveFeedbackPostId()` in the messages repository. Tries the current id first, then falls back to `(legacy_source = 'feedback_posts', legacy_id)`, which carries a UNIQUE index. **Current ids win** — a live post id and another post's legacy id can be the same number, and fixing old links must never hijack a working one.
+- The page resolves before rendering and `permanentRedirect`s (308) stale ids to the canonical URL, so bookmarks self-heal.
+- Real not-found page, distinguishing a malformed id from a missing one, and naming the v1.0.0 renumbering as the likely cause.
+- The 404 bounce is gone; `post-detail.tsx`'s not-found state is reachable and now covers "deleted while you were reading".
+
+**Note for the Migration Guide**: the CHANGELOG's `4/5/6 → 49/50/51` is the **dev** database's remap. On production it is `4/5/6 → 1/2/3`, because production has no notifications occupying the low ids. The remap is database-specific and must not be documented as fixed numbers.
+
+**Verified** on upgraded production data: `/feedback/4` → 308 → `/feedback/1` ("Group by shift", `legacy_id` 4). `/feedback/999` and `/feedback/abc` render the not-found page. 6 tests including the collision case.
+
+**Files**: `src/lib/messages/repository.ts`, `src/app/(authenticated)/feedback/[id]/page.tsx`, `src/components/feedback/post-detail.tsx`, `src/__tests__/db/feedback-legacy-ids.test.ts`, `src/__tests__/db/no-legacy-message-refs.test.ts`
+**Links**: OI-099, OI-123, OI-139, D-067
+
+---
+
 ## Open Enhancements
 
 ### OI-107 | Shift Edit Dialog Rewrote History Instead of Versioning — RESOLVED

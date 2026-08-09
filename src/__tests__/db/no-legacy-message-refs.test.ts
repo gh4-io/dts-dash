@@ -55,6 +55,9 @@ const ALLOWED = [
   // Asserts that createTables() does NOT declare them — it has to name them to
   // check they are absent.
   "src/__tests__/db/schema-consolidation.test.ts",
+  // Builds messages rows carrying legacy_source/legacy_id, so it names the
+  // sources those rows came from. Nothing here reads a legacy table.
+  "src/__tests__/db/feedback-legacy-ids.test.ts",
 ];
 
 /** This test file names them all as data, so it must exempt itself. */
@@ -114,14 +117,27 @@ function stripComments(source: string): string {
 function findTableRefs(code: string, table: string): number {
   let hits = 0;
 
+  // `messages.legacy_source` stores the name of the table a row came from, so
+  // comparing against it is a VALUE, not a table reference — it reads a column
+  // on `messages` and touches nothing legacy. `resolveFeedbackPostId` needs this
+  // to turn a pre-v1.0.0 /feedback/[id] link into the post it became.
+  //
+  // Scoped tightly to that column so it cannot launder a real table reference:
+  // `FROM feedback_posts` is untouched by this and still fails rule 1 below.
+  const asLegacySourceValue = new RegExp(
+    `legacy_?source["']?\\s*(?:,|:|=|==|===)\\s*["']${table}["']`,
+    "gi",
+  );
+  const scanned = code.replace(asLegacySourceValue, "legacy_source_value");
+
   // Keywords may be upper or lower case; table names are always lowercase
   // snake_case, so matching against a lowercased copy is safe for this rule.
   const sqlRe = new RegExp(`\\b(?:from|join|into|update|table)\\s+"?${table}"?(?![\\w-])`, "g");
-  hits += [...code.toLowerCase().matchAll(sqlRe)].length;
+  hits += [...scanned.toLowerCase().matchAll(sqlRe)].length;
 
   // Case-sensitive, so a `title="Notifications"` tooltip is not a finding.
   if (table.includes("_")) {
-    hits += [...code.matchAll(new RegExp(`["']${table}["']`, "g"))].length;
+    hits += [...scanned.matchAll(new RegExp(`["']${table}["']`, "g"))].length;
   }
 
   // Always forbidden regardless of name shape.
@@ -189,11 +205,31 @@ describe("OI-099 — legacy messaging tables are unreachable from code", () => {
       `export function useNotifications() {`,
       `const log = createChildLogger("notifications");`,
       `<button title="Notifications" />`,
+      // messages.legacy_source stores the originating table's NAME, so comparing
+      // against it reads `messages` and touches nothing legacy (OI-099).
+      `eq(messages.legacySource, "feedback_posts")`,
+      `WHERE legacy_source = 'feedback_comments'`,
+      `{ legacySource: "feedback_labels" }`,
     ];
 
     for (const sample of benign) {
       const hit = LEGACY_TABLES.some((t) => findTableRefs(sample, t) > 0);
       expect(hit, sample).toBe(false);
+    }
+  });
+
+  it("does not let a legacy_source comparison launder a real table reference", () => {
+    // The carve-out above is scoped to the value position. Code that both
+    // compares legacy_source AND selects from the dropped table must still fail,
+    // or the exemption becomes a hole big enough to drive the defect through.
+    const laundering = [
+      `eq(messages.legacySource, "feedback_posts"); db.prepare("SELECT 1 FROM feedback_posts")`,
+      `WHERE legacy_source = 'feedback_comments' AND id IN (SELECT id FROM feedback_comments)`,
+    ];
+
+    for (const sample of laundering) {
+      const hit = LEGACY_TABLES.some((t) => findTableRefs(sample, t) > 0);
+      expect(hit, sample).toBe(true);
     }
   });
 

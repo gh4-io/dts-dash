@@ -85,6 +85,39 @@ function record(step: string, detail: string): void {
   log(`  ${c.green}+${c.reset} ${detail}`);
 }
 
+// ─── Schema probes ───────────────────────────────────────────────────────────
+//
+// Step 3 runs against whatever the operator actually has, which may be any
+// released schema back to v0.1.0 — where entire capacity tables do not exist
+// yet. Step 2 normally creates them first, so in a real run every table is
+// present by the time Step 3 starts. Under --dry-run it does NOT: Step 2 only
+// reports what it would add. Every correction below therefore has to ask before
+// it touches anything, or --dry-run dies on the databases it exists to preview.
+
+function hasTable(live: Database.Database, table: string): boolean {
+  return (
+    live.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`).get(table) !==
+    undefined
+  );
+}
+
+function hasColumn(live: Database.Database, table: string, column: string): boolean {
+  if (!hasTable(live, table)) return false;
+  const cols = live.prepare(`PRAGMA table_info("${table}")`).all() as ColumnInfo[];
+  return cols.some((col) => col.name === column);
+}
+
+/**
+ * True when the correction cannot run yet because the schema it needs is only
+ * scheduled, not applied. Under --dry-run that is expected and silent; in a real
+ * run it means Step 2 failed to add something it claimed to, which is a bug
+ * worth surfacing rather than skipping quietly.
+ */
+function skipUnavailable(what: string): boolean {
+  if (!DRY_RUN) warn(`${what} — skipped (Step 2 did not provide it)`);
+  return true;
+}
+
 // ─── Step 0: Backup ──────────────────────────────────────────────────────────
 
 function backupDatabase(live: Database.Database): string {
@@ -291,6 +324,11 @@ function applyAdditiveCatchUp(
  * Each existing row becomes its own lineage.
  */
 function backfillPatternGroups(live: Database.Database): void {
+  // Absent entirely before v0.2.0, and without group_id before M026.
+  if (!hasColumn(live, "rotation_patterns", "group_id")) {
+    return void skipUnavailable("rotation_patterns.group_id");
+  }
+
   const pending = live
     .prepare(`SELECT COUNT(*) AS n FROM rotation_patterns WHERE group_id IS NULL`)
     .get() as { n: number };
@@ -397,8 +435,10 @@ function dropOverrideHistoryFk(live: Database.Database): void {
 }
 
 function backfillShiftGroups(live: Database.Database): void {
-  const cols = live.prepare(`PRAGMA table_info("staffing_shifts")`).all() as ColumnInfo[];
-  if (!cols.some((c) => c.name === "group_id")) return; // pre-OI-111 schema
+  // pre-OI-111 schema, or pre-v0.2.0 where the table itself does not exist yet
+  if (!hasColumn(live, "staffing_shifts", "group_id")) {
+    return void skipUnavailable("staffing_shifts.group_id");
+  }
 
   const pending = live
     .prepare(`SELECT COUNT(*) AS n FROM staffing_shifts WHERE group_id IS NULL`)
@@ -425,6 +465,16 @@ function backfillShiftGroups(live: Database.Database): void {
 }
 
 function closeOverlappingShiftVersions(live: Database.Database): void {
+  // Both columns arrived after the table did: rotation_end_date in M022,
+  // group_id in OI-111. Upgrading from v0.2.0 or earlier reaches here with
+  // neither, and from v0.1.x without the table at all.
+  if (
+    !hasColumn(live, "staffing_shifts", "group_id") ||
+    !hasColumn(live, "staffing_shifts", "rotation_end_date")
+  ) {
+    return void skipUnavailable("staffing_shifts version columns");
+  }
+
   const rows = live
     .prepare(
       `SELECT id, config_id, group_id, name, rotation_start_date, rotation_end_date, headcount

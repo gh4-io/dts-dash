@@ -519,6 +519,49 @@ export function listFeedbackPosts(opts: {
   return { posts, total };
 }
 
+/**
+ * Resolve a `/feedback/[id]` id to the post it means today.
+ *
+ * v1.0.0 merged four tables into `messages` (OI-099). Each had its own
+ * AUTOINCREMENT sequence, so ids collided across them and could not all be
+ * preserved — every pre-v1.0.0 feedback link points somewhere else or nowhere.
+ * The original id survives on `messages.legacy_id`, so the link is recoverable
+ * rather than broken, and that is what this does.
+ *
+ * Order matters, and current ids win. A live post id and some other post's
+ * legacy id can be the same number, and in that collision the id that resolves
+ * today must not be hijacked by a link from a previous release. So: try the
+ * real id first, and only fall back to the legacy lookup when nothing has that
+ * id now. The fallback is unambiguous on its own — (legacy_source, legacy_id)
+ * carries a UNIQUE index and this scopes to 'feedback_posts'.
+ *
+ * `moved` tells the caller the URL is stale so it can redirect to the canonical
+ * one, which is what stops the bookmark being wrong a second time.
+ */
+export function resolveFeedbackPostId(id: number): { id: number; moved: boolean } | null {
+  const current = db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(and(eq(messages.kind, "feedback_post"), eq(messages.id, id)))
+    .get();
+  if (current) return { id: current.id, moved: false };
+
+  const legacy = db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.kind, "feedback_post"),
+        eq(messages.legacySource, "feedback_posts"),
+        eq(messages.legacyId, id),
+      ),
+    )
+    .get();
+  if (legacy) return { id: legacy.id, moved: true };
+
+  return null;
+}
+
 export function getFeedbackPostDetail(id: number): FeedbackPostDetail | null {
   const post = db
     .select({

@@ -6,7 +6,7 @@
  */
 
 import { sqlite } from "./client";
-import { createTables, runMigrations } from "./schema-init";
+import { createTables, runMigrations, assertSchemaCompatible } from "./schema-init";
 import { backfillMessages, assertMessagesReconciled } from "./backfill/messages-backfill";
 import { SYSTEM_AUTH_ID, SYSTEM_USER_EMAIL, SYSTEM_USER_DISPLAY_NAME } from "@/lib/constants";
 import { createChildLogger } from "@/lib/logger";
@@ -278,6 +278,13 @@ function ensureMessagesBackfilled(): void {
 export function bootstrapDatabase(): void {
   try {
     createTables();
+
+    // Before anything reads a column that moved in v1.0.0. createTables() is
+    // additive and cannot bring an older database forward — db:upgrade-v1 does
+    // that — so this is the line between "not upgraded yet" and "silently
+    // serving wrong data".
+    assertSchemaCompatible();
+
     const migrations = runMigrations();
     const applied = migrations.filter((m) => m.applied);
     if (applied.length > 0) {

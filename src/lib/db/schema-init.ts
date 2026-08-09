@@ -561,10 +561,8 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
-    -- Versions of one pattern share a group_id (OI-101). Resolution follows the
-    -- group to the version whose effective window contains the date being
-    -- computed, so a shift never needs repointing when its pattern is edited.
-    CREATE INDEX IF NOT EXISTS idx_rp_group ON rotation_patterns(group_id);
+    -- (idx_rp_group is created by createLineageIndexes() below, not here — it
+    -- indexes a column an older rotation_patterns table does not have.)
 
     -- Staffing: Rotation Presets (reference library)
     CREATE TABLE IF NOT EXISTS rotation_presets (
@@ -629,8 +627,8 @@ export function createTables() {
 
     CREATE INDEX IF NOT EXISTS idx_ss_config ON staffing_shifts(config_id);
     CREATE INDEX IF NOT EXISTS idx_ss_config_category ON staffing_shifts(config_id, category);
-    CREATE INDEX IF NOT EXISTS idx_ss_group ON staffing_shifts(group_id);
     CREATE INDEX IF NOT EXISTS idx_ss_rotation ON staffing_shifts(rotation_id);
+    -- (idx_ss_group: see createLineageIndexes() below.)
 
     -- Demand Contracts (hierarchical)
     CREATE TABLE IF NOT EXISTS demand_contracts (
@@ -803,6 +801,119 @@ export function createTables() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_wmp_customer_day_shift
       ON weekly_mh_projections(customer, day_of_week, shift_code);
   `);
+
+  createLineageIndexes();
+}
+
+/**
+ * The two lineage indexes, created only once their column exists.
+ *
+ * `CREATE TABLE IF NOT EXISTS` is a no-op against a table that already exists,
+ * so on a pre-v1.0.0 database `rotation_patterns` and `staffing_shifts` keep
+ * their old column set — without `group_id` (OI-101, OI-111). `IF NOT EXISTS`
+ * on the *index* does not help: it suppresses "index already exists", not
+ * "no such column", so the statement threw and took the whole of createTables()
+ * with it. That made `db:migrate` — and app startup, which calls createTables()
+ * via bootstrap — fail against every database older than v1.0.0.
+ *
+ * Skipping the index is safe and temporary: it is only a lookup optimisation,
+ * and `db:upgrade-v1` adds the column and then the index. Correctness does not
+ * depend on it; the upgrade is still mandatory, and assertSchemaCompatible()
+ * is what enforces that rather than an incidental SQL error.
+ */
+function createLineageIndexes(): void {
+  const lineage: { table: string; index: string }[] = [
+    { table: "rotation_patterns", index: "idx_rp_group" },
+    { table: "staffing_shifts", index: "idx_ss_group" },
+  ];
+
+  for (const { table, index } of lineage) {
+    const cols = sqlite.prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[];
+    if (!cols.some((col) => col.name === "group_id")) continue;
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS ${index} ON ${table}(group_id);`);
+  }
+}
+
+// ─── Schema compatibility gate ───────────────────────────────────────────────
+
+/** A v1.0.0 structural marker, and the change that introduced it. */
+const V1_MARKERS: { describe: string; ok: () => boolean; owner: string }[] = [
+  {
+    describe: "the unified `messages` table is missing",
+    ok: () => tableExists("messages"),
+    owner: "OI-099",
+  },
+  {
+    describe: "`work_packages.title` still exists (identifiers live in `workpackage_no` now)",
+    ok: () => !columnExists("work_packages", "title"),
+    owner: "OI-086",
+  },
+  {
+    describe: "`staffing_shifts.group_id` is missing",
+    ok: () => columnExists("staffing_shifts", "group_id"),
+    owner: "OI-111",
+  },
+  {
+    describe: "the `mh_override_history` table is missing",
+    ok: () => tableExists("mh_override_history"),
+    owner: "OI-104",
+  },
+];
+
+function tableExists(table: string): boolean {
+  return (
+    sqlite.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`).get(table) !==
+    undefined
+  );
+}
+
+function columnExists(table: string, column: string): boolean {
+  if (!tableExists(table)) return false;
+  const cols = sqlite.prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[];
+  return cols.some((col) => col.name === column);
+}
+
+/**
+ * Refuse to serve a database the running code cannot read correctly.
+ *
+ * `createTables()` only ever adds what is missing, so against a pre-v1.0.0
+ * database it leaves the old shape in place and returns happily. The app then
+ * starts and looks healthy while reading columns that moved: work package
+ * identifiers come back blank, and comments, notifications and feedback come
+ * back empty — with no error and no log line. That exact failure happened once
+ * during development, and it is far worse than not starting at all.
+ *
+ * So this runs at bootstrap and stops the process with the fix rather than a
+ * symptom. It probes structure, not a version string: `schemaVersion` is only a
+ * stamp and an operator can set it, whereas a missing table cannot be faked.
+ */
+export function assertSchemaCompatible(): void {
+  const failed = V1_MARKERS.filter((marker) => !marker.ok());
+  if (failed.length === 0) return;
+
+  const stamped =
+    (
+      sqlite.prepare(`SELECT value FROM app_config WHERE key = 'schemaVersion'`).get() as
+        | { value: string }
+        | undefined
+    )?.value ?? "pre-1.0.0 (unstamped)";
+
+  throw new Error(
+    [
+      `Database schema is not compatible with this build (found: ${stamped}).`,
+      "",
+      ...failed.map((f) => `  - ${f.describe} [${f.owner}]`),
+      "",
+      "Upgrade it once, with the app stopped:",
+      "",
+      "    npm run db:upgrade-v1            # takes a full backup first",
+      "    npm run db:upgrade-v1 -- --dry-run   # preview, writes nothing",
+      "",
+      "The upgrade is mandatory and supports every released schema from v0.1.0.",
+      "Starting without it would serve blank work package identifiers and empty",
+      "comment, notification and feedback lists. See the v1.0.0 Migration Guide.",
+    ].join("\n"),
+  );
 }
 
 // ─── Migrations ──────────────────────────────────────────────────────────────
