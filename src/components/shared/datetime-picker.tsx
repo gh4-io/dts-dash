@@ -83,6 +83,17 @@ export function DateTimePicker({
   const [open, setOpen] = React.useState(false);
   const { timeFormat } = usePreferences();
 
+  // The server and the first client render can disagree about `value`: SSR has
+  // no `__TIMELINE_DEFAULTS__`, so `getDefaults()` falls back to hardcoded
+  // offsets that need not match the ones derived from server.config.yml. The
+  // display span is `suppressHydrationWarning` (its text is time-dependent by
+  // nature), which means React deliberately does NOT patch the mismatch — the
+  // server's label would otherwise stay on screen until some unrelated
+  // re-render, showing a window the app never queried. Swapping the key on
+  // mount forces the client's value into the DOM exactly once. (OI-138)
+  const [hydrated, setHydrated] = React.useState(false);
+  React.useEffect(() => setHydrated(true), []);
+
   // Wall-clock components in the selected timezone
   const wc = React.useMemo(() => {
     const date = value ? new Date(value) : new Date();
@@ -220,7 +231,9 @@ export function DateTimePicker({
         >
           {icon && <i className={cn(icon, "mr-1.5 text-muted-foreground")} />}
           <span className="hidden sm:inline mr-1 text-muted-foreground">{label}:</span>
-          <span suppressHydrationWarning>{formatDisplay()}</span>
+          <span key={hydrated ? "client" : "server"} suppressHydrationWarning>
+            {formatDisplay()}
+          </span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">

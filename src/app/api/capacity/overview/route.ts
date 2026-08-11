@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { readWorkPackages } from "@/lib/data/reader";
 import { transformWorkPackages } from "@/lib/data/transformer";
-import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
+import {
+  applyFilters,
+  parseFilterParams,
+  parseColumnFilters,
+  makeCustomerPredicate,
+} from "@/lib/utils/filter-helpers";
+import { applyColumnFiltersToRecords } from "@/lib/utils/data-transforms";
 import {
   loadShifts,
   loadAssumptions,
@@ -40,6 +46,8 @@ import {
   applyBilledHours,
   computeEffectivePaidHours,
   deriveNonOperatingFromStaffing,
+  buildDayGrid,
+  toLocalDateStr,
 } from "@/lib/capacity";
 import type { DemandWorkPackage } from "@/lib/capacity";
 import type { ResolvedShiftInfo, CapacityComputeMode } from "@/types";
@@ -63,6 +71,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const filterParams = parseFilterParams(searchParams);
     const modeOverride = searchParams.get("mode") as CapacityComputeMode | null;
+    // Column-filter rules that have no filter-store field (status, ground
+    // time, arrival/departure, man-hours, shift). Before this they were
+    // client-side only and so had no effect on server-computed demand.
+    const columnFilters = parseColumnFilters(searchParams.get("cf"));
+    // Operator include/exclude, reused for every customer-bearing source below
+    const keepCustomer = makeCustomerPredicate(filterParams);
 
     // Load capacity configuration from DB
     const shifts = loadShifts();
@@ -75,14 +89,24 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // OI-119: the operational clock. Every engine buckets by the timezone
+    // stored on the shift rows (D-049) — Admin → Capacity → Shift Timezone —
+    // so the day grid, the date-bounded DB queries and the column-filter rules
+    // must all resolve on that same clock. The FilterBar timezone is a display
+    // preference and deliberately has no say here; re-slicing a roster's days
+    // onto a viewer's clock would split every shift across two buckets.
+    const operationalTimezone = shifts[0]?.timezone ?? "UTC";
+
     // Determine date range from filters or default to 30 days
     // Filter store sends full ISO datetimes (e.g. "2026-02-20T15:00:00.000Z")
     // but date-range/plan queries need YYYY-MM-DD only.
-    const startDate = toDateOnly(filterParams.start ?? getDefaultStartDate());
-    const endDate = toDateOnly(filterParams.end ?? getDefaultEndDate());
-
-    // Generate date array
-    const dates = generateDateRange(startDate, endDate);
+    const rangeStart = filterParams.start ?? getDefaultStartDate();
+    const rangeEnd = filterParams.end ?? getDefaultEndDate();
+    const dates = buildDayGrid(rangeStart, rangeEnd, operationalTimezone);
+    // An inverted range yields an empty grid; the date-bounded queries below
+    // still need well-formed bounds.
+    const startDate = dates[0] ?? toLocalDateStr(rangeStart, operationalTimezone);
+    const endDate = dates[dates.length - 1] ?? toLocalDateStr(rangeEnd, operationalTimezone);
 
     // Compute capacity: detect auto mode from DB, then apply override if requested.
     const activeConfig = loadActiveStaffingConfig();
@@ -100,7 +124,10 @@ export async function GET(request: NextRequest) {
     if (computeMode === "staffing") {
       if (activeConfig) {
         const staffingShifts = loadStaffingShifts(activeConfig.id);
-        const patterns = loadRotationPatterns(true);
+        // OI-101: load every version, not just active ones — superseded pattern
+        // versions are required to resolve historical dates correctly. The
+        // resolver applies effectiveness per date.
+        const patterns = loadRotationPatterns();
         const patternMap = buildPatternMap(patterns);
         staffingMap = resolveStaffingForCapacity(dates, staffingShifts, patternMap);
 
@@ -196,10 +223,23 @@ export async function GET(request: NextRequest) {
       scheduleSource = "headcount";
     }
 
-    // Read and transform work packages, apply filters for demand
+    // Read and transform work packages, apply filters for demand.
+    // Filter on the same whole-day bounds the capacity grid uses — filtering on
+    // the raw sub-day timestamps produced partial demand against full-day
+    // capacity for any window that did not start and end at midnight.
     const rawData = readWorkPackages();
     const workPackages = await transformWorkPackages(rawData);
-    const filtered = applyFilters(workPackages, filterParams);
+    const filtered = applyColumnFiltersToRecords(
+      applyFilters(workPackages, {
+        ...filterParams,
+        start: `${startDate}T00:00:00.000Z`,
+        end: `${endDate}T23:59:59.999Z`,
+      }),
+      columnFilters,
+      // The `shift`, arrival and departure rules resolve against real shift
+      // windows, so they read the operational clock — not the viewer's.
+      operationalTimezone,
+    );
 
     // Convert to DemandWorkPackage format
     const demandWPs: DemandWorkPackage[] = filtered.map((wp) => ({
@@ -220,11 +260,16 @@ export async function GET(request: NextRequest) {
       (d) => dateSet.has(d.date),
     );
 
-    // Load active contracts for date range and apply allocations to demand
-    const contracts = loadDemandContracts(startDate, endDate, true);
+    // Load active contracts for date range and apply allocations to demand.
+    // Every source below carries a customer, so the operator filter applies to
+    // all of them — otherwise an excluded operator still moved the allocated,
+    // worked and billed lenses, the KPI strip and the pies.
+    const customerNameMap = loadCustomerNameMap();
+    const contracts = loadDemandContracts(startDate, endDate, true).filter((c) =>
+      keepCustomer(c.customerName ?? customerNameMap.get(c.customerId)),
+    );
     let adjustedDemand = demand;
     if (contracts.length > 0) {
-      const customerNameMap = loadCustomerNameMap();
       adjustedDemand = applyAllocations(
         demand,
         contracts,
@@ -235,7 +280,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Load flight events, expand recurring templates, and compute coverage windows
-    const rawFlightEvents = loadFlightEvents(startDate, endDate, true);
+    // NOTE: only the customer filter applies here. FlightEvent.aircraftReg holds
+    // a flight number, not a registration, so the aircraft/type filters would
+    // not mean the same thing.
+    const rawFlightEvents = loadFlightEvents(startDate, endDate, true).filter((e) =>
+      keepCustomer(e.customer),
+    );
 
     // Separate recurring templates from specific (one-off) events
     const recurringTemplates = rawFlightEvents.filter((e) => e.isRecurring);
@@ -306,14 +356,18 @@ export async function GET(request: NextRequest) {
     }
 
     // Load time bookings and overlay worked hours on demand
-    const timeBookings = loadTimeBookings(startDate, endDate, true);
+    const timeBookings = loadTimeBookings(startDate, endDate, true).filter((tb) =>
+      keepCustomer(tb.customer),
+    );
     if (timeBookings.length > 0) {
       const workedAgg = aggregateWorkedHours(timeBookings, startDate, endDate);
       adjustedDemand = applyWorkedHours(adjustedDemand, workedAgg);
     }
 
     // Load billing entries and overlay billed hours on demand
-    const billingEntries = loadBillingEntries(startDate, endDate, true);
+    const billingEntries = loadBillingEntries(startDate, endDate, true).filter((be) =>
+      keepCustomer(be.customer),
+    );
     if (billingEntries.length > 0) {
       const billedAgg = aggregateBilledHours(billingEntries, startDate, endDate);
       adjustedDemand = applyBilledHours(adjustedDemand, billedAgg);
@@ -334,6 +388,7 @@ export async function GET(request: NextRequest) {
       warnings,
       shifts,
       assumptions,
+      operationalTimezone,
       contracts: contracts.length > 0 ? contracts : undefined,
       flightEvents: flightEvents.length > 0 ? flightEvents : undefined,
       coverageWindows: coverageWindows && coverageWindows.length > 0 ? coverageWindows : undefined,
@@ -372,24 +427,4 @@ function getDefaultEndDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 23);
   return d.toISOString().split("T")[0];
-}
-
-/** Extract YYYY-MM-DD from an ISO datetime or date-only string. */
-function toDateOnly(s: string): string {
-  return s.split("T")[0].split(" ")[0];
-}
-
-function generateDateRange(start: string, end: string): string[] {
-  const dates: string[] = [];
-  const startStr = toDateOnly(start);
-  const endStr = toDateOnly(end);
-  const current = new Date(startStr + "T00:00:00Z");
-  const endDate = new Date(endStr + "T00:00:00Z");
-
-  while (current <= endDate) {
-    dates.push(current.toISOString().split("T")[0]);
-    current.setUTCDate(current.getUTCDate() + 1);
-  }
-
-  return dates;
 }

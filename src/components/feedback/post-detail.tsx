@@ -86,11 +86,14 @@ export function PostDetail({ postId }: PostDetailProps) {
     const res = await fetch(`/api/feedback/${postId}`);
     if (res.ok) {
       setPost(await res.json());
-    } else if (res.status === 404) {
-      router.push("/feedback");
     }
+    // A 404 leaves `post` null and falls through to the not-found state below.
+    // This used to router.push("/feedback"), which bounced the reader back to
+    // the board with no explanation and made that state unreachable. The page
+    // resolves ids before rendering, so reaching here means the post was
+    // deleted after the page loaded — worth saying, not worth hiding.
     setLoading(false);
-  }, [postId, router]);
+  }, [postId]);
 
   const fetchLabels = useCallback(async () => {
     const res = await fetch("/api/feedback/labels");
@@ -225,8 +228,19 @@ export function PostDetail({ postId }: PostDetailProps) {
   if (!post) {
     return (
       <div className="rounded-lg border border-border bg-card p-12 text-center">
+        <i
+          className="fa-regular fa-comment-slash mb-4 text-3xl text-muted-foreground"
+          aria-hidden
+        />
         <h2 className="text-lg font-semibold">Post not found</h2>
-        <Link href="/feedback" className="mt-2 text-sm text-primary hover:underline">
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+          This post is no longer available — it may have been deleted while you were reading.
+        </p>
+        <Link
+          href="/feedback"
+          className="mt-6 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <i className="fa-solid fa-arrow-left" aria-hidden />
           Back to Feedback Board
         </Link>
       </div>

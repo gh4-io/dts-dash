@@ -35,6 +35,11 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+# docker/docker-compose.prod.yml reads .env.prod and it holds AUTH_SECRET.
+# The compose file said "do not commit this file" but nothing enforced it —
+# these two patterns are what actually stop it.
+.env.prod
+.env.production
 
 # IDE
 .vscode/
@@ -71,6 +76,8 @@ data/dashboard.db-shm
 data/dashboard.db-wal
 data/backups/
 data/exports/
+# Production DB snapshots — real operational data, never commit
+data/prod-snapshots/
 
 # Uploads (if any)
 /public/uploads/
@@ -111,6 +118,12 @@ out/
 
 # Serena MCP memories
 .serena/
+
+# Playwright MCP scratch output (screenshots, console logs, page snapshots)
+.playwright-mcp/
+
+# Agent worktrees — full checkouts created inside the repo by isolated subagents
+.claude/worktrees/
 
 # Server configuration (instance-specific)
 server.config.yml

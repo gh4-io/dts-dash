@@ -6,6 +6,7 @@ import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
 
 interface AvgGroundTimeCardProps {
   workPackages: SerializedWorkPackage[];
+  className?: string;
 }
 
 function formatHM(hours: number): string {
@@ -15,7 +16,7 @@ function formatHM(hours: number): string {
   return `${h}:${m.toString().padStart(2, "0")}`;
 }
 
-export function AvgGroundTimeCard({ workPackages }: AvgGroundTimeCardProps) {
+export function AvgGroundTimeCard({ workPackages, className }: AvgGroundTimeCardProps) {
   const { avgShort, avgLong, shortCount, longCount } = useMemo(() => {
     const short = workPackages.filter((wp) => wp.groundHours < 24);
     const long = workPackages.filter((wp) => wp.groundHours >= 24);
@@ -34,7 +35,7 @@ export function AvgGroundTimeCard({ workPackages }: AvgGroundTimeCardProps) {
   }, [workPackages]);
 
   return (
-    <KpiCard title="Average Ground Time" icon="fa-solid fa-clock">
+    <KpiCard title="Average Ground Time" icon="fa-solid fa-clock" className={className}>
       <div className="flex items-center gap-3">
         <div className="text-center flex-1">
           <p className="text-[10px] uppercase tracking-wide text-muted-foreground">&lt; 24 Hrs</p>

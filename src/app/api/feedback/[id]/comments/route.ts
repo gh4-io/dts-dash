@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import { feedbackComments, feedbackPosts } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { parseIntParam } from "@/lib/utils/route-helpers";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
+import {
+  getFeedbackPostOwner,
+  getFeedbackComment,
+  createFeedbackComment,
+} from "@/lib/messages/repository";
 
 const log = createChildLogger("api/feedback/[id]/comments");
 
@@ -14,6 +16,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 /**
  * POST /api/feedback/[id]/comments
  * Add a comment to a post.
+ *
+ * Comments are `messages` rows with kind = 'feedback_comment' and root_id = the
+ * post's id (OI-099). The post IS its own thread root, which is what makes
+ * "every comment on this post" a single indexed equality.
  */
 export async function POST(request: NextRequest, context: RouteContext) {
   try {
@@ -28,14 +34,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
     }
 
-    // Verify post exists
-    const post = db
-      .select({ id: feedbackPosts.id })
-      .from(feedbackPosts)
-      .where(eq(feedbackPosts.id, id))
-      .get();
-
-    if (!post) {
+    // Verify the post exists — and that it really is a post, not some other kind
+    // of message that happens to share the id.
+    if (!getFeedbackPostOwner(id)) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
@@ -50,35 +51,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Validate parentId belongs to the same post
+    // Validate parentId is a feedback comment on this same post.
     if (parentId) {
-      const parent = db
-        .select({ id: feedbackComments.id, postId: feedbackComments.postId })
-        .from(feedbackComments)
-        .where(eq(feedbackComments.id, parentId))
-        .get();
+      const parent = getFeedbackComment(parentId);
       if (!parent || parent.postId !== id) {
         return NextResponse.json({ error: "Parent comment not found" }, { status: 404 });
       }
     }
 
-    const now = new Date().toISOString();
-    const userId = getSessionUserId(session);
+    const commentId = createFeedbackComment({
+      postId: id,
+      parentId,
+      authorId: getSessionUserId(session),
+      body: commentBody,
+    });
 
-    const newComment = db
-      .insert(feedbackComments)
-      .values({
-        postId: id,
-        parentId,
-        authorId: userId,
-        body: commentBody,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning({ id: feedbackComments.id })
-      .get();
-
-    return NextResponse.json({ id: newComment.id }, { status: 201 });
+    return NextResponse.json({ id: commentId }, { status: 201 });
   } catch (error) {
     log.error({ err: error }, "POST error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

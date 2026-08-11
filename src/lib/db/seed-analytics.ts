@@ -17,7 +17,7 @@ const EVENT_TYPES = [
   "filter_change",
   "data_import",
   "login",
-  "action_export_csv",
+  "csv_export",
   "error",
 ];
 

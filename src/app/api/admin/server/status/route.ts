@@ -15,6 +15,7 @@ const TABLE_NAMES = [
   "user_preferences",
   "work_packages",
   "mh_overrides",
+  "mh_override_history",
   "aircraft_type_mappings",
   "manufacturers",
   "aircraft_models",
@@ -25,10 +26,10 @@ const TABLE_NAMES = [
   "analytics_events",
   "app_config",
   "cron_job_runs",
-  "feedback_posts",
-  "feedback_comments",
-  "feedback_labels",
-  "feedback_post_labels",
+  // OI-099: the six pre-v1.0.0 messaging tables were folded into these three.
+  "messages",
+  "labels",
+  "message_labels",
 ];
 
 function formatBytes(bytes: number): string {

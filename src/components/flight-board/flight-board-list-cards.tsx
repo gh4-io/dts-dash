@@ -6,6 +6,8 @@ import { useCustomers } from "@/lib/hooks/use-customers";
 import { EmptyState } from "@/components/shared/empty-state";
 import { cn } from "@/lib/utils";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
+import { GROUND_EVENTS } from "@/lib/utils/ground-events";
+import type { GroundEventType } from "@/types";
 
 interface FlightBoardListCardsProps {
   workPackages: SerializedWorkPackage[];
@@ -175,12 +177,33 @@ export function FlightBoardListCards({
                         {tzAbbr} ({formatGroundTime(wp.groundHours)})
                       </span>
                     </div>
-                    <Badge
-                      variant={STATUS_VARIANT[wp.status] ?? "secondary"}
-                      className="text-[10px] shrink-0 ml-2"
-                    >
-                      {wp.status}
-                    </Badge>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                      <Badge
+                        variant={STATUS_VARIANT[wp.status] ?? "secondary"}
+                        className="text-[10px]"
+                      >
+                        {wp.status}
+                      </Badge>
+                      {wp.groundEventTypes?.map((type: string) => {
+                        const meta = GROUND_EVENTS[type as GroundEventType];
+                        if (!meta) return null;
+                        return (
+                          <Badge
+                            key={type}
+                            variant={type === "AOG" ? "destructive" : "secondary"}
+                            className="text-[10px]"
+                            style={type === "AOG" ? { backgroundColor: meta.color } : undefined}
+                          >
+                            {meta.label}
+                          </Badge>
+                        );
+                      })}
+                      {wp._commentCount > 0 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          <i className="fa-solid fa-comment text-[8px]" /> {wp._commentCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })()}
@@ -201,7 +224,7 @@ export function FlightBoardListCards({
                   )}
                 >
                   <span className="font-semibold">WP:</span>{" "}
-                  {wp.workpackageNo ?? wp.title ?? (wp.hasWorkpackage ? "✓" : "—")}
+                  {wp.workpackageNo ?? (wp.hasWorkpackage ? "✓" : "—")}
                 </span>
               </div>
 

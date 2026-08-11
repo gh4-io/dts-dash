@@ -9,7 +9,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import type {
@@ -24,6 +23,16 @@ import type {
 import { computeDayOfWeekPattern } from "@/lib/capacity/forecast-pattern-engine";
 import { buildProjectionOverlay, hasProjectionData } from "@/lib/capacity/projection-engine";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { useChartSeriesVisibility } from "@/lib/hooks/use-chart-series-visibility";
+import { shiftHex } from "@/lib/utils/shift-colors";
+import { ChartLegend, type LegendRow } from "@/components/shared/chart-legend";
+import {
+  SERIES_KEY,
+  shiftKey,
+  customerKey,
+  CAPACITY_LINE,
+  buildCapacityLegendRows,
+} from "./chart-series-style";
 
 type ViewMode = "byShift" | "byCustomer" | "total";
 
@@ -38,16 +47,10 @@ interface ForecastPatternChartProps {
   fillHeight?: boolean;
 }
 
-const SHIFT_BAR_COLORS: Record<string, string> = {
-  DAY: "#f59e0b",
-  SWING: "#f97316",
-  NIGHT: "#6366f1",
-};
-
 // Lens overlay line config (only MH-compatible lenses)
 const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: string }> = {
   forecast: { stroke: "#14b8a6", dash: "3 3", name: "Avg Forecast" },
-  allocated: { stroke: "#f59e0b", dash: "6 3", name: "Avg Allocated" },
+  allocated: { stroke: "#a855f7", dash: "6 3", name: "Avg Allocated" },
 };
 
 // Muted style for secondary comparison overlay (G-07 session 2)
@@ -70,6 +73,8 @@ export function ForecastPatternChart({
   const [showProjections, setShowProjections] = useState(false);
   const [projectionOverlay, setProjectionOverlay] = useState<ProjectionDayOverlay[] | null>(null);
   const { getColor, fetch: fetchCustomers } = useCustomers();
+  // Legend visibility — reset when the drawn series change (view mode switch)
+  const { isHidden, toggle } = useChartSeriesVisibility(viewMode);
 
   useEffect(() => {
     fetchCustomers();
@@ -253,6 +258,39 @@ export function ForecastPatternChart({
     projectionOverlay,
   ]);
 
+  // Bar label changes when showing projected vs historical
+  const barLabel = useProjected ? "Projected" : "Avg Demand";
+
+  // Legend rows — entities (shift/customer) above, series roles below.
+  // This chart has no utilization axis.
+  const legendRows = useMemo<LegendRow[]>(
+    () =>
+      buildCapacityLegendRows({
+        viewMode,
+        activeShifts,
+        allCustomers,
+        getCustomerColor: getColor,
+        isHidden,
+        lens: useProjected ? null : lensLineConfig,
+        secondary: useProjected ? null : secondaryLineConfig,
+        demandLabel: barLabel,
+        capacityLabel: "Avg Capacity",
+        includeUtilization: false,
+        totalDemandColor: useProjected ? "#ec4899" : "#3b82f6",
+      }),
+    [
+      viewMode,
+      activeShifts,
+      allCustomers,
+      getColor,
+      isHidden,
+      lensLineConfig,
+      secondaryLineConfig,
+      barLabel,
+      useProjected,
+    ],
+  );
+
   if (demand.length === 0) {
     return (
       <div className="flex items-center justify-center h-[300px] text-muted-foreground">
@@ -263,9 +301,6 @@ export function ForecastPatternChart({
       </div>
     );
   }
-
-  // Bar label changes when showing projected vs historical
-  const barLabel = useProjected ? "Projected" : "Avg Demand";
 
   return (
     <div
@@ -313,170 +348,155 @@ export function ForecastPatternChart({
         </div>
       </div>
 
-      <div className={`p-3${fillHeight ? " flex-1 min-h-0" : ""}`}>
-        <ResponsiveContainer
-          width="100%"
-          height={fillHeight ? "100%" : 340}
-          minWidth={0}
-          minHeight={0}
-        >
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-              tickLine={false}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              interval={0}
-              height={30}
-            />
-            <YAxis
-              yAxisId="mh"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-              label={{
-                value: useProjected ? "Projected MH" : "Avg Man-Hours",
-                angle: -90,
-                position: "insideLeft",
-                fill: "hsl(var(--muted-foreground))",
-                fontSize: 10,
-                offset: 10,
-              }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                color: "hsl(var(--popover-foreground))",
-                fontSize: 12,
-              }}
-              formatter={(value, name) => [`${value} MH`, name]}
-              labelFormatter={(_, payload) => {
-                const item = payload?.[0]?.payload;
-                if (!item) return "";
-                const samples = item.sampleCount ?? 0;
-                const source = useProjected
-                  ? "projected"
-                  : `avg of ${samples} ${samples === 1 ? "day" : "days"}`;
-                return `${item.label} — ${source}`;
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-
-            {/* === DEMAND BARS (swap data source when projected is ON) === */}
-
-            {/* Total mode: 1 bar per day-of-week */}
-            {viewMode === "total" && (
-              <Bar
-                yAxisId="mh"
-                dataKey="avgDemandMH"
-                name={barLabel}
-                fill={useProjected ? "#ec4899" : "#3b82f6"}
-                fillOpacity={0.8}
-                radius={[2, 2, 0, 0]}
-                barSize={20}
+      <div className={`p-3 flex flex-col${fillHeight ? " flex-1 min-h-0" : ""}`}>
+        <div className={fillHeight ? "flex-1 min-h-0" : ""}>
+          <ResponsiveContainer
+            width="100%"
+            height={fillHeight ? "100%" : 340}
+            minWidth={0}
+            minHeight={0}
+          >
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                tickLine={false}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                interval={0}
+                height={30}
               />
-            )}
+              <YAxis
+                yAxisId="mh"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tickLine={false}
+                axisLine={false}
+                label={{
+                  value: useProjected ? "Projected MH" : "Avg Man-Hours",
+                  angle: -90,
+                  position: "insideLeft",
+                  fill: "hsl(var(--muted-foreground))",
+                  fontSize: 10,
+                  offset: 10,
+                }}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--popover))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  color: "hsl(var(--popover-foreground))",
+                  fontSize: 12,
+                }}
+                formatter={(value, name) => [`${value} MH`, name]}
+                labelFormatter={(_, payload) => {
+                  const item = payload?.[0]?.payload;
+                  if (!item) return "";
+                  const samples = item.sampleCount ?? 0;
+                  const source = useProjected
+                    ? "projected"
+                    : `avg of ${samples} ${samples === 1 ? "day" : "days"}`;
+                  return `${item.label} — ${source}`;
+                }}
+              />
 
-            {/* By Shift: 3 grouped bars (one per shift), no stackId → side-by-side */}
-            {viewMode === "byShift" &&
-              activeShifts.map((shift) => (
+              {/* === DEMAND BARS (swap data source when projected is ON) === */}
+
+              {/* Total mode: 1 bar per day-of-week */}
+              {viewMode === "total" && (
                 <Bar
-                  key={shift.code}
                   yAxisId="mh"
-                  dataKey={`demand_${shift.code}`}
-                  name={`${shift.name} ${barLabel}`}
-                  fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
+                  dataKey="avgDemandMH"
+                  name={barLabel}
+                  fill={useProjected ? "#ec4899" : "#3b82f6"}
                   fillOpacity={0.8}
                   radius={[2, 2, 0, 0]}
-                  barSize={14}
+                  barSize={20}
+                  hide={isHidden(SERIES_KEY.demand)}
                 />
-              ))}
-
-            {/* By Customer: N×3 bars, stackId per shift → 3 groups stacked by customer */}
-            {viewMode === "byCustomer" &&
-              activeShifts.flatMap((shift, shiftIdx) =>
-                allCustomers.map((customer) => (
-                  <Bar
-                    key={`${shift.code}_${customer}`}
-                    yAxisId="mh"
-                    dataKey={`demand_${shift.code}_${customer}`}
-                    stackId={shift.code}
-                    name={customer}
-                    fill={getColor(customer)}
-                    fillOpacity={0.8}
-                    barSize={14}
-                    legendType={shiftIdx === 0 ? undefined : "none"}
-                  />
-                )),
               )}
 
-            {/* === CAPACITY LINES (always from pattern engine) === */}
-
-            {/* Total mode: single capacity line */}
-            {viewMode === "total" && (
-              <Line
-                yAxisId="mh"
-                dataKey="avgCapacityMH"
-                name="Avg Capacity"
-                type="monotone"
-                stroke="#6366f1"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={false}
-                activeDot={{ r: 4, strokeWidth: 0 }}
-              />
-            )}
-
-            {/* Per-shift modes: 3 capacity lines (dashed, shift-colored) */}
-            {viewMode !== "total" &&
-              activeShifts.map((shift, i) => (
-                <Fragment key={`cap_${shift.code}`}>
-                  <Line
+              {/* By Shift: 3 grouped bars (one per shift), no stackId → side-by-side */}
+              {viewMode === "byShift" &&
+                activeShifts.map((shift) => (
+                  <Bar
+                    key={shift.code}
                     yAxisId="mh"
-                    dataKey={`capacity_${shift.code}`}
-                    name={i === 0 ? "Avg Capacity" : `Avg Capacity (${shift.name})`}
-                    type="monotone"
-                    stroke={SHIFT_BAR_COLORS[shift.code]}
-                    strokeWidth={2}
-                    strokeDasharray="6 3"
-                    dot={false}
-                    activeDot={{ r: 4, strokeWidth: 0 }}
-                    legendType={i === 0 ? undefined : "none"}
+                    dataKey={`demand_${shift.code}`}
+                    name={`${shift.name} ${barLabel}`}
+                    fill={shiftHex(shift.code)}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={14}
+                    hide={isHidden(shiftKey(shift.code), SERIES_KEY.demand)}
                   />
-                </Fragment>
-              ))}
+                ))}
 
-            {/* === LENS OVERLAY (hidden when projected is active) === */}
+              {/* By Customer: N×3 bars, stackId per shift → 3 groups stacked by customer */}
+              {viewMode === "byCustomer" &&
+                activeShifts.flatMap((shift) =>
+                  allCustomers.map((customer) => (
+                    <Bar
+                      key={`${shift.code}_${customer}`}
+                      yAxisId="mh"
+                      dataKey={`demand_${shift.code}_${customer}`}
+                      stackId={shift.code}
+                      name={customer}
+                      fill={getColor(customer)}
+                      fillOpacity={0.8}
+                      barSize={14}
+                      legendType="none"
+                      hide={isHidden(customerKey(customer), SERIES_KEY.demand)}
+                    />
+                  )),
+                )}
 
-            {/* Total mode: single lens line */}
-            {!useProjected && viewMode === "total" && lensLineConfig && (
-              <Line
-                yAxisId="mh"
-                dataKey="lensOverlayMH"
-                name={lensLineConfig.name}
-                type="monotone"
-                stroke={lensLineConfig.stroke}
-                strokeWidth={2}
-                strokeDasharray={lensLineConfig.dash || undefined}
-                dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
-                activeDot={{ r: 5, strokeWidth: 0 }}
-                connectNulls
-              />
-            )}
+              {/* === CAPACITY LINES (always from pattern engine) === */}
 
-            {/* Per-shift modes: 3 lens overlay lines */}
-            {!useProjected &&
-              viewMode !== "total" &&
-              lensLineConfig &&
-              activeShifts.map((shift, i) => (
+              {/* Total mode: single capacity line */}
+              {viewMode === "total" && (
                 <Line
-                  key={`lens_${shift.code}`}
                   yAxisId="mh"
-                  dataKey={`lensOverlay_${shift.code}`}
-                  name={i === 0 ? lensLineConfig.name : `${lensLineConfig.name} (${shift.name})`}
+                  dataKey="avgCapacityMH"
+                  name="Avg Capacity"
+                  type="monotone"
+                  stroke="#6366f1"
+                  strokeWidth={CAPACITY_LINE.strokeWidth}
+                  strokeDasharray={CAPACITY_LINE.strokeDasharray}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                  hide={isHidden(SERIES_KEY.capacity)}
+                />
+              )}
+
+              {/* Per-shift modes: 3 capacity lines (dashed, shift-colored) */}
+              {viewMode !== "total" &&
+                activeShifts.map((shift) => (
+                  <Fragment key={`cap_${shift.code}`}>
+                    <Line
+                      yAxisId="mh"
+                      dataKey={`capacity_${shift.code}`}
+                      name={`Avg Capacity (${shift.name})`}
+                      type="monotone"
+                      stroke={shiftHex(shift.code)}
+                      strokeWidth={CAPACITY_LINE.strokeWidth}
+                      strokeDasharray={CAPACITY_LINE.strokeDasharray}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 0 }}
+                      legendType="none"
+                      hide={isHidden(shiftKey(shift.code), SERIES_KEY.capacity)}
+                    />
+                  </Fragment>
+                ))}
+
+              {/* === LENS OVERLAY (hidden when projected is active) === */}
+
+              {/* Total mode: single lens line */}
+              {!useProjected && viewMode === "total" && lensLineConfig && (
+                <Line
+                  yAxisId="mh"
+                  dataKey="lensOverlayMH"
+                  name={lensLineConfig.name}
                   type="monotone"
                   stroke={lensLineConfig.stroke}
                   strokeWidth={2}
@@ -484,48 +504,40 @@ export function ForecastPatternChart({
                   dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
                   activeDot={{ r: 5, strokeWidth: 0 }}
                   connectNulls
-                  legendType={i === 0 ? undefined : "none"}
+                  hide={isHidden(SERIES_KEY.lens)}
                 />
-              ))}
+              )}
 
-            {/* === SECONDARY LENS OVERLAY (G-07 session 2) === */}
+              {/* Per-shift modes: 3 lens overlay lines */}
+              {!useProjected &&
+                viewMode !== "total" &&
+                lensLineConfig &&
+                activeShifts.map((shift) => (
+                  <Line
+                    key={`lens_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`lensOverlay_${shift.code}`}
+                    name={`${lensLineConfig.name} (${shift.name})`}
+                    type="monotone"
+                    stroke={lensLineConfig.stroke}
+                    strokeWidth={2}
+                    strokeDasharray={lensLineConfig.dash || undefined}
+                    dot={{ r: 3, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
+                    connectNulls
+                    legendType="none"
+                    hide={isHidden(shiftKey(shift.code), SERIES_KEY.lens)}
+                  />
+                ))}
 
-            {/* Total mode: single secondary line */}
-            {!useProjected && viewMode === "total" && secondaryLineConfig && (
-              <Line
-                yAxisId="mh"
-                dataKey="secondaryOverlayMH"
-                name={`${secondaryLineConfig.name} (compare)`}
-                type="monotone"
-                stroke={secondaryLineConfig.stroke}
-                strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
-                strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
-                strokeOpacity={SECONDARY_LINE_STYLE.opacity}
-                dot={{
-                  r: SECONDARY_LINE_STYLE.dotRadius,
-                  fill: secondaryLineConfig.stroke,
-                  strokeWidth: 0,
-                  opacity: SECONDARY_LINE_STYLE.opacity,
-                }}
-                activeDot={{ r: 4, strokeWidth: 0 }}
-                connectNulls
-              />
-            )}
+              {/* === SECONDARY LENS OVERLAY (G-07 session 2) === */}
 
-            {/* Per-shift modes: secondary overlay lines */}
-            {!useProjected &&
-              viewMode !== "total" &&
-              secondaryLineConfig &&
-              activeShifts.map((shift, i) => (
+              {/* Total mode: single secondary line */}
+              {!useProjected && viewMode === "total" && secondaryLineConfig && (
                 <Line
-                  key={`sec_${shift.code}`}
                   yAxisId="mh"
-                  dataKey={`secondaryOverlay_${shift.code}`}
-                  name={
-                    i === 0
-                      ? `${secondaryLineConfig.name} (compare)`
-                      : `${secondaryLineConfig.name} (compare, ${shift.name})`
-                  }
+                  dataKey="secondaryOverlayMH"
+                  name={`${secondaryLineConfig.name} (compare)`}
                   type="monotone"
                   stroke={secondaryLineConfig.stroke}
                   strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
@@ -539,11 +551,41 @@ export function ForecastPatternChart({
                   }}
                   activeDot={{ r: 4, strokeWidth: 0 }}
                   connectNulls
-                  legendType={i === 0 ? undefined : "none"}
+                  hide={isHidden(SERIES_KEY.secondary)}
                 />
-              ))}
-          </ComposedChart>
-        </ResponsiveContainer>
+              )}
+
+              {/* Per-shift modes: secondary overlay lines */}
+              {!useProjected &&
+                viewMode !== "total" &&
+                secondaryLineConfig &&
+                activeShifts.map((shift) => (
+                  <Line
+                    key={`sec_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`secondaryOverlay_${shift.code}`}
+                    name={`${secondaryLineConfig.name} (compare, ${shift.name})`}
+                    type="monotone"
+                    stroke={secondaryLineConfig.stroke}
+                    strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                    strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                    strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                    dot={{
+                      r: SECONDARY_LINE_STYLE.dotRadius,
+                      fill: secondaryLineConfig.stroke,
+                      strokeWidth: 0,
+                      opacity: SECONDARY_LINE_STYLE.opacity,
+                    }}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    connectNulls
+                    legendType="none"
+                    hide={isHidden(shiftKey(shift.code), SERIES_KEY.secondary)}
+                  />
+                ))}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <ChartLegend rows={legendRows} onToggle={toggle} />
       </div>
     </div>
   );

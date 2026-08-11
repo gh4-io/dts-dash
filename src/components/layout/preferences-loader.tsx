@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
-import { usePreferences } from "@/lib/hooks/use-preferences";
+import { usePreferences, registerThemeSetter } from "@/lib/hooks/use-preferences";
 import { useFilters } from "@/lib/hooks/use-filters";
 
 /**
@@ -37,6 +37,12 @@ export function PreferencesLoader() {
       ? new URLSearchParams(window.location.search)
       : new URLSearchParams(),
   );
+
+  // Hand next-themes' setter to the preferences store so a failed save can put
+  // the theme back where it was. (OI-089)
+  useEffect(() => {
+    registerThemeSetter(setTheme);
+  }, [setTheme]);
 
   useEffect(() => {
     if (session?.user && !loaded) {

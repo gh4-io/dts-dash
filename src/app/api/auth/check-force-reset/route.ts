@@ -4,6 +4,9 @@ import { db } from "@/lib/db/client";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
+import { createChildLogger } from "@/lib/logger";
+
+const log = createChildLogger("api/auth/check-force-reset");
 
 // ─── GET — Check if current user needs forced password reset ───────────────
 
@@ -30,7 +33,7 @@ export async function GET() {
       forcePasswordChange: user.forcePasswordChange,
     });
   } catch (error) {
-    console.error("[check-force-reset] Error:", error);
+    log.error({ err: error }, "GET error");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

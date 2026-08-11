@@ -1,5 +1,5 @@
 /**
- * Staffing Engine (v0.3.0)
+ * Staffing Engine (v1.0.0)
  *
  * Pure computation functions for rotation-based staffing resolution.
  * Converts rotation patterns + shift definitions into headcount-per-category-per-date,
@@ -42,6 +42,111 @@ export function isWorkingDay(
   return pattern[dayIndex] === "x";
 }
 
+// ─── Effective Dating (OI-100) ──────────────────────────────────────────────
+
+/**
+ * Does this shift version apply to the given date?
+ *
+ * A shift is effective on `date` when the date falls inside its
+ * [rotationStartDate, rotationEndDate] window. A null end date means open-ended.
+ *
+ * `isActive` gates only open-ended shifts. A shift that has been archived
+ * (end date set, isActive cleared by `archiveStaffingShift`) is a *historical
+ * fact*: it still applies to the dates it covered. Excluding archived versions
+ * outright — as this engine did before OI-100 — made the current headcount
+ * apply to all of history, so past capacity restated on every headcount edit.
+ *
+ * Note that `isWorkingDay` normalises negative offsets, so without the start
+ * bound a rotation projects infinitely backwards past its own start date.
+ */
+export function isShiftEffectiveOn(
+  shift: Pick<StaffingShift, "rotationStartDate" | "rotationEndDate" | "isActive">,
+  date: string,
+): boolean {
+  // ISO dates (YYYY-MM-DD) compare correctly as strings
+  if (date < shift.rotationStartDate) return false;
+  if (shift.rotationEndDate !== null) return date <= shift.rotationEndDate;
+  return shift.isActive;
+}
+
+/**
+ * The date the shift's 21-day pattern is indexed from (pattern[0] == this date).
+ *
+ * OI-102: `rotationStartDate` used to serve as both the effective start and the
+ * pattern anchor, which forced every new version onto a Sunday to preserve the
+ * pattern phase — making a mid-week headcount change retroactive to the start of
+ * the week. `patternAnchorDate` splits the two; null falls back to the old
+ * behaviour so pre-M025 rows keep their phase exactly.
+ */
+export function getPatternAnchor(
+  shift: Pick<StaffingShift, "rotationStartDate" | "patternAnchorDate">,
+): string {
+  return shift.patternAnchorDate ?? shift.rotationStartDate;
+}
+
+/**
+ * Does this rotation pattern version apply to the given date? (OI-101)
+ *
+ * Mirrors `isShiftEffectiveOn`: a null `effectiveFrom` means "since the
+ * beginning of time", a null `effectiveTo` means open-ended, and `isActive`
+ * gates only open-ended versions so a superseded version still describes the
+ * dates it covered.
+ */
+export function isPatternEffectiveOn(
+  pattern: Pick<RotationPattern, "effectiveFrom" | "effectiveTo" | "isActive">,
+  date: string,
+): boolean {
+  if (pattern.effectiveFrom !== null && date < pattern.effectiveFrom) return false;
+  if (pattern.effectiveTo !== null) return date <= pattern.effectiveTo;
+  return pattern.isActive;
+}
+
+/**
+ * Date-aware lookup from a shift's `rotationId` to the pattern version in force.
+ *
+ * A shift references a specific pattern row. That row names a group, and the
+ * group holds every version of the pattern over time; resolution picks the
+ * version whose window contains the date. Before OI-101 a pattern was a single
+ * mutable row, so editing it rewrote which days were worked for every past date.
+ */
+export interface PatternResolver {
+  resolve(rotationId: number, date: string): RotationPattern | null;
+  /** Every version, keyed by row id — for callers that need a specific row. */
+  byId: Map<number, RotationPattern>;
+}
+
+export function buildPatternResolver(patterns: RotationPattern[]): PatternResolver {
+  const byId = new Map<number, RotationPattern>();
+  const byGroup = new Map<number, RotationPattern[]>();
+
+  for (const p of patterns) {
+    byId.set(p.id, p);
+    const group = p.groupId ?? p.id;
+    const bucket = byGroup.get(group);
+    if (bucket) bucket.push(p);
+    else byGroup.set(group, [p]);
+  }
+
+  return {
+    byId,
+    resolve(rotationId, date) {
+      const row = byId.get(rotationId);
+      if (!row) return null;
+
+      const versions = byGroup.get(row.groupId ?? row.id);
+      if (!versions) return null;
+
+      // Windows should not overlap, but prefer the latest start if they do.
+      let best: RotationPattern | null = null;
+      for (const v of versions) {
+        if (!isPatternEffectiveOn(v, date)) continue;
+        if (best === null || (v.effectiveFrom ?? "") > (best.effectiveFrom ?? "")) best = v;
+      }
+      return best;
+    },
+  };
+}
+
 // ─── Effective Paid Hours ───────────────────────────────────────────────────
 
 /**
@@ -82,7 +187,7 @@ export function computeEffectivePaidHours(shift: StaffingShift): number {
 export function resolveStaffingDay(
   date: string,
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
 ): StaffingDayResult {
   const byCategory: Record<StaffingShiftCategory, number> = {
     DAY: 0,
@@ -95,12 +200,16 @@ export function resolveStaffingDay(
   let totalHeadcount = 0;
 
   for (const shift of shifts) {
-    if (!shift.isActive) continue;
+    // OI-100: the effective-date window decides which version applies to this
+    // date — not isActive alone, which erased archived versions from history.
+    if (!isShiftEffectiveOn(shift, date)) continue;
 
-    const rotation = patterns.get(shift.rotationId);
-    if (!rotation || !rotation.isActive) continue;
+    // OI-101: resolve the pattern *version* in force on this date, not the
+    // single mutable row. isPatternEffectiveOn already applied isActive.
+    const rotation = patterns.resolve(shift.rotationId, date);
+    if (!rotation) continue;
 
-    const working = isWorkingDay(date, rotation.pattern, shift.rotationStartDate);
+    const working = isWorkingDay(date, rotation.pattern, getPatternAnchor(shift));
     const effectivePaidHours = computeEffectivePaidHours(shift);
 
     byShift.push({
@@ -124,12 +233,19 @@ export function resolveStaffingDay(
 // ─── Weekly Matrix ──────────────────────────────────────────────────────────
 
 function emptyCell(): WeeklyMatrixCell {
-  return { headcount: 0, paidMH: 0, availableMH: 0, productiveMH: 0 };
+  return {
+    rosterHeadcount: 0,
+    effectiveHeadcount: 0,
+    paidMH: 0,
+    availableMH: 0,
+    productiveMH: 0,
+  };
 }
 
 function addCells(a: WeeklyMatrixCell, b: WeeklyMatrixCell): WeeklyMatrixCell {
   return {
-    headcount: a.headcount + b.headcount,
+    rosterHeadcount: a.rosterHeadcount + b.rosterHeadcount,
+    effectiveHeadcount: a.effectiveHeadcount + b.effectiveHeadcount,
     paidMH: a.paidMH + b.paidMH,
     availableMH: a.availableMH + b.availableMH,
     productiveMH: a.productiveMH + b.productiveMH,
@@ -145,7 +261,7 @@ function addCells(a: WeeklyMatrixCell, b: WeeklyMatrixCell): WeeklyMatrixCell {
 export function computeWeeklyMatrix(
   weekStart: string,
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
   assumptions: CapacityAssumptions,
 ): WeeklyMatrixResult {
   const categories: StaffingShiftCategory[] = ["DAY", "SWING", "NIGHT", "OTHER"];
@@ -159,9 +275,11 @@ export function computeWeeklyMatrix(
   };
   let grandTotal = emptyCell();
 
-  // Total config headcount (sum of all shift headcounts, regardless of working day)
+  // Total config headcount (sum of all shift headcounts, regardless of working day).
+  // OI-100: scoped to the week being viewed, so a past week reports the headcount
+  // that was in force then rather than today's.
   const totalConfigHeadcount = shifts
-    .filter((s) => s.isActive)
+    .filter((s) => isShiftEffectiveOn(s, weekStart))
     .reduce((sum, s) => sum + s.headcount, 0);
 
   const startDate = new Date(weekStart + "T00:00:00Z");
@@ -190,13 +308,25 @@ export function computeWeeklyMatrix(
       const isNight = cat === "NIGHT";
       const nightFactor = isNight ? assumptions.nightProductivityFactor : 1.0;
 
+      // The three stages are distinct (see capacity-core's header):
+      //   paid      = every rostered body × their paid hours — what payroll covers
+      //   available = paid × paidToAvailable — after PTO, training, absence
+      //   productive = available × availableToProductive × nightFactor — wrench time
+      // paidToAvailable used to be folded into the headcount, which understated
+      // Paid MH by that factor and left Available MH an exact copy of it.
+      // Productive MH is unchanged, so utilization and every chart hold.
       const effectiveHC = shiftResult.headcount * assumptions.paidToAvailable;
-      const paidMH = effectiveHC * shiftResult.effectivePaidHours;
-      const availableMH = paidMH;
-      const productiveMH = paidMH * assumptions.availableToProductive * nightFactor;
+      const paidMH = shiftResult.headcount * shiftResult.effectivePaidHours;
+      const availableMH = paidMH * assumptions.paidToAvailable;
+      const productiveMH = availableMH * assumptions.availableToProductive * nightFactor;
 
       const cell: WeeklyMatrixCell = {
-        headcount: effectiveHC,
+        // Roster stays undiscounted — it is the number of people on the schedule,
+        // and it is what the "HC" column and the shift grid footer must agree on.
+        // Folding paidToAvailable in here made every displayed headcount read ~11%
+        // low against a roster the user had just typed in.
+        rosterHeadcount: shiftResult.headcount,
+        effectiveHeadcount: effectiveHC,
         paidMH,
         availableMH,
         productiveMH,
@@ -297,15 +427,21 @@ function findUncoveredRanges(covered: boolean[]): Array<{ startHour: number; end
 export function computeCoverageGaps(
   days: Array<{ date: string; dayOfWeek: number }>,
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
 ): CoverageGap[] {
   const gaps: CoverageGap[] = [];
-  const activeShifts = shifts.filter((s) => s.isActive);
 
-  /** Check if a shift is working on the given date */
+  /**
+   * Check if a shift is working on the given date.
+   *
+   * OI-100: the effective-date window is evaluated per date, not once up
+   * front — an overnight shift is tested against both today and yesterday,
+   * and a version boundary can fall between them.
+   */
   function isShiftWorking(shift: StaffingShift, dateStr: string): boolean {
-    const pat = shift.rotationId ? patterns.get(shift.rotationId) : null;
-    if (pat) return isWorkingDay(dateStr, pat.pattern, shift.rotationStartDate);
+    if (!isShiftEffectiveOn(shift, dateStr)) return false;
+    const pat = shift.rotationId ? patterns.resolve(shift.rotationId, dateStr) : null;
+    if (pat) return isWorkingDay(dateStr, pat.pattern, getPatternAnchor(shift));
     // Orphaned shift (rotationId 0 or null) — not working
     return false;
   }
@@ -328,7 +464,7 @@ export function computeCoverageGaps(
     const covered = new Array<boolean>(24).fill(false);
     const yesterday = prevDay(day.date);
 
-    for (const shift of activeShifts) {
+    for (const shift of shifts) {
       if (isOvernightShift(shift)) {
         // Overnight shift (e.g., 19:00→08:00):
         // If working TODAY: covers today's evening (19:00→23:59)
@@ -381,6 +517,116 @@ export function computeCoverageGaps(
   return gaps;
 }
 
+// ─── Rotation Alignment ──────────────────────────────────────────────────────
+
+/** Align a date to the preceding Sunday (pattern[0] = Sunday) */
+export function alignRotationStartToSunday(date: string): string {
+  const d = new Date(date + "T00:00:00Z");
+  const dow = d.getUTCDay(); // 0=Sun..6=Sat
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+// ─── Archive Safety ──────────────────────────────────────────────────────────
+
+export interface ArchiveSafetyResult {
+  safe: boolean;
+  message?: string;
+}
+
+/** Check whether archiving a shift leaves a gap — another active shift must exist in same config+category */
+export function canArchiveShift(
+  shift: { id: number; configId: number; category: string },
+  allShifts: Array<{
+    id: number;
+    configId: number;
+    category: string;
+    isActive: boolean;
+    rotationEndDate: string | null;
+  }>,
+): ArchiveSafetyResult {
+  const today = new Date().toISOString().slice(0, 10);
+  const hasReplacement = allShifts.some(
+    (s) =>
+      s.id !== shift.id &&
+      s.configId === shift.configId &&
+      s.category === shift.category &&
+      s.isActive &&
+      (s.rotationEndDate === null || s.rotationEndDate >= today),
+  );
+  if (hasReplacement) return { safe: true };
+  return {
+    safe: false,
+    message: `No active ${shift.category} replacement exists. Archive anyway?`,
+  };
+}
+
+// ─── Version Overlap Detection ───────────────────────────────────────────────
+
+export interface ShiftOverlap {
+  name: string;
+  shiftIds: number[];
+  /** First date on which every listed version is simultaneously effective. */
+  fromDate: string;
+  combinedHeadcount: number;
+}
+
+/**
+ * Find shifts that share a name within a config and are effective at the same time.
+ *
+ * Two versions of one shift must never be effective on the same date — the engine
+ * sums whatever it finds, so an overlap silently double-counts that shift's roster.
+ * `versionStaffingShift` closes the old version the day before the new one opens, but
+ * a version created any other way (Add Shift, a direct PUT, an import) leaves the
+ * predecessor open-ended, and nothing has flagged that until now.
+ *
+ * Lineage comes from `groupId` (OI-111), matching how `rotation_patterns`
+ * resolves versions. It used to match on `name`, the only marker the table
+ * carried, which was wrong in both directions: renaming a shift split its
+ * lineage so a genuine overlap went unreported, and two unrelated shifts that
+ * happened to share a name were reported as overlapping when they were not.
+ *
+ * `groupId` is null only on rows written before v1.0.0 that have not been
+ * through `db:upgrade-v1`. Those fall back to the old name-based key, so
+ * detection still works on an un-upgraded database rather than silently
+ * reporting nothing — which, for a check whose whole job is catching a
+ * double-counted roster, would be the worst possible failure mode.
+ */
+export function findShiftOverlaps(shifts: StaffingShift[]): ShiftOverlap[] {
+  const byKey = new Map<string, StaffingShift[]>();
+  for (const s of shifts) {
+    const key = s.groupId != null ? `g\u0000${s.groupId}` : `n\u0000${s.configId}\u0000${s.name}`;
+    const list = byKey.get(key);
+    if (list) list.push(s);
+    else byKey.set(key, [s]);
+  }
+
+  const overlaps: ShiftOverlap[] = [];
+  for (const group of byKey.values()) {
+    if (group.length < 2) continue;
+
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i];
+        const b = group[j];
+        // Windows intersect when each starts on or before the other ends.
+        const start = a.rotationStartDate > b.rotationStartDate ? a : b;
+        const overlapStart = start.rotationStartDate;
+        if (!isShiftEffectiveOn(a, overlapStart) || !isShiftEffectiveOn(b, overlapStart)) {
+          continue;
+        }
+        overlaps.push({
+          name: a.name,
+          shiftIds: [a.id, b.id],
+          fromDate: overlapStart,
+          combinedHeadcount: a.headcount + b.headcount,
+        });
+      }
+    }
+  }
+  return overlaps;
+}
+
 // ─── Capacity Engine Integration ────────────────────────────────────────────
 
 /**
@@ -393,7 +639,7 @@ export function computeCoverageGaps(
 export function resolveStaffingForCapacity(
   dates: string[],
   shifts: StaffingShift[],
-  patterns: Map<number, RotationPattern>,
+  patterns: PatternResolver,
 ): Map<string, Map<string, { headcount: number; effectivePaidHours: number }>> {
   // Returns: Map<date, Map<shiftCode, {headcount, effectivePaidHours}>>
   const result = new Map<string, Map<string, { headcount: number; effectivePaidHours: number }>>();
@@ -435,13 +681,15 @@ export function resolveStaffingForCapacity(
 
 // ─── Pattern Helpers ────────────────────────────────────────────────────────
 
-/** Build a Map<id, RotationPattern> for fast lookup */
-export function buildPatternMap(patterns: RotationPattern[]): Map<number, RotationPattern> {
-  const map = new Map<number, RotationPattern>();
-  for (const p of patterns) {
-    map.set(p.id, p);
-  }
-  return map;
+/**
+ * Build a date-aware pattern lookup.
+ *
+ * Named "map" for history — it returned a plain `Map<id, RotationPattern>` before
+ * OI-101 made patterns versioned. It now returns a {@link PatternResolver}; use
+ * `.resolve(rotationId, date)`, or `.byId` when you genuinely want one row.
+ */
+export function buildPatternMap(patterns: RotationPattern[]): PatternResolver {
+  return buildPatternResolver(patterns);
 }
 
 /** Validate a rotation pattern string */

@@ -9,7 +9,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ReferenceLine,
   Cell,
@@ -23,6 +22,18 @@ import type {
 } from "@/types";
 import { aggregateMonthlyRollup } from "@/lib/capacity/monthly-rollup-engine";
 import { useCustomers } from "@/lib/hooks/use-customers";
+import { useChartSeriesVisibility } from "@/lib/hooks/use-chart-series-visibility";
+import { shiftHex, shiftHexSoft, shiftDotShape } from "@/lib/utils/shift-colors";
+import { ChartLegend, type LegendRow } from "@/components/shared/chart-legend";
+import {
+  SERIES_KEY,
+  shiftKey,
+  customerKey,
+  CAPACITY_LINE,
+  UTILIZATION_LINE,
+  shiftDotRenderer,
+  buildCapacityLegendRows,
+} from "./chart-series-style";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -49,14 +60,8 @@ function getUtilizationColor(percent: number | null): string {
   return "#22c55e";
 }
 
-const SHIFT_BAR_COLORS: Record<string, string> = {
-  DAY: "#f59e0b",
-  SWING: "#f97316",
-  NIGHT: "#6366f1",
-};
-
 const LENS_LINE_CONFIG: Record<string, { stroke: string; dash: string; name: string }> = {
-  allocated: { stroke: "#f59e0b", dash: "6 3", name: "Allocated" },
+  allocated: { stroke: "#a855f7", dash: "6 3", name: "Allocated" },
   forecast: { stroke: "#14b8a6", dash: "3 3", name: "Forecast" },
   worked: { stroke: "#22c55e", dash: "", name: "Worked" },
   billed: { stroke: "#6366f1", dash: "", name: "Billed" },
@@ -110,6 +115,8 @@ export function MonthlyRollupChart({
 }: MonthlyRollupChartProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("total");
   const { getColor, fetch: fetchCustomers } = useCustomers();
+  // Legend visibility — reset when the drawn series change (view mode switch)
+  const { isHidden, toggle } = useChartSeriesVisibility(viewMode);
 
   useEffect(() => {
     fetchCustomers();
@@ -143,6 +150,21 @@ export function MonthlyRollupChart({
     secondaryLens && secondaryLens !== activeLens
       ? (LENS_LINE_CONFIG[secondaryLens] ?? null)
       : null;
+
+  // Legend rows — entities (shift/customer) above, series roles below
+  const legendRows = useMemo<LegendRow[]>(
+    () =>
+      buildCapacityLegendRows({
+        viewMode,
+        activeShifts,
+        allCustomers,
+        getCustomerColor: getColor,
+        isHidden,
+        lens: lensLineConfig,
+        secondary: secondaryLineConfig,
+      }),
+    [viewMode, activeShifts, allCustomers, getColor, isHidden, lensLineConfig, secondaryLineConfig],
+  );
 
   // Transform buckets into Recharts data
   const chartData = useMemo(() => {
@@ -279,260 +301,254 @@ export function MonthlyRollupChart({
         </div>
       </div>
 
-      <div className={`p-3${fillHeight ? " flex-1 min-h-0" : ""}`}>
-        <ResponsiveContainer
-          width="100%"
-          height={fillHeight ? "100%" : 340}
-          minWidth={0}
-          minHeight={0}
-        >
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+      <div className={`p-3 flex flex-col${fillHeight ? " flex-1 min-h-0" : ""}`}>
+        <div className={fillHeight ? "flex-1 min-h-0" : ""}>
+          <ResponsiveContainer
+            width="100%"
+            height={fillHeight ? "100%" : 340}
+            minWidth={0}
+            minHeight={0}
+          >
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
 
-            <XAxis
-              dataKey="label"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              tickLine={false}
-              axisLine={{ stroke: "hsl(var(--border))" }}
-              height={30}
-            />
-            <YAxis
-              yAxisId="mh"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              tickLine={false}
-              axisLine={false}
-              label={{
-                value: viewMode === "gap" ? "Gap (MH)" : "Man-Hours",
-                angle: -90,
-                position: "insideLeft",
-                fill: "hsl(var(--muted-foreground))",
-                fontSize: 10,
-                offset: 10,
-              }}
-            />
-            {viewMode !== "gap" && (
+              <XAxis
+                dataKey="label"
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tickLine={false}
+                axisLine={{ stroke: "hsl(var(--border))" }}
+                height={30}
+              />
               <YAxis
-                yAxisId="pct"
-                orientation="right"
+                yAxisId="mh"
                 tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(v) => `${v}%`}
                 label={{
-                  value: "Utilization %",
-                  angle: 90,
-                  position: "insideRight",
+                  value: viewMode === "gap" ? "Gap (MH)" : "Man-Hours",
+                  angle: -90,
+                  position: "insideLeft",
                   fill: "hsl(var(--muted-foreground))",
                   fontSize: 10,
                   offset: 10,
                 }}
               />
-            )}
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                color: "hsl(var(--popover-foreground))",
-                fontSize: 12,
-              }}
-              formatter={(value, name) => {
-                if (typeof name === "string" && name.includes("Utilization"))
-                  return [value !== null ? `${value}%` : "N/A", name];
-                if (viewMode === "gap") {
-                  const v = value as number;
-                  return [v >= 0 ? `+${v} MH` : `${v} MH`, name];
-                }
-                return [`${value} MH`, name];
-              }}
-              labelFormatter={(_, payload) => {
-                const item = payload?.[0]?.payload;
-                if (!item) return "";
-                return `${item.label} (${item.dayCount}d)${item.aircraftCount ? ` — ${item.aircraftCount} aircraft` : ""}`;
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-
-            {/* === GAP MODE === */}
-            {viewMode === "gap" && (
-              <>
-                <ReferenceLine yAxisId="mh" y={0} stroke="#666" strokeDasharray="3 3" />
-                {activeShifts.map((shift) => (
-                  <Bar
-                    key={`gap_${shift.code}`}
-                    yAxisId="mh"
-                    dataKey={`gap_${shift.code}`}
-                    name={`${shift.name} Gap`}
-                    fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
-                    fillOpacity={0.8}
-                    radius={[2, 2, 0, 0]}
-                    barSize={20}
-                  />
-                ))}
-              </>
-            )}
-
-            {/* === DEMAND BARS (non-gap modes) === */}
-
-            {/* Total mode: 1 bar per month, colored by utilization */}
-            {viewMode === "total" && (
-              <Bar yAxisId="mh" dataKey="demandMH" name="Demand" radius={[2, 2, 0, 0]} barSize={30}>
-                {chartData.map((entry, idx) => (
-                  <Cell
-                    key={idx}
-                    fill={getUtilizationColor(entry.utilization as number | null)}
-                    fillOpacity={0.8}
-                  />
-                ))}
-              </Bar>
-            )}
-
-            {/* By Shift: grouped bars (one per shift) */}
-            {viewMode === "byShift" &&
-              activeShifts.map((shift) => (
-                <Bar
-                  key={shift.code}
-                  yAxisId="mh"
-                  dataKey={`demand_${shift.code}`}
-                  name={`${shift.name} Demand`}
-                  fill={SHIFT_BAR_COLORS[shift.code] ?? "#6b7280"}
-                  fillOpacity={0.8}
-                  radius={[2, 2, 0, 0]}
-                  barSize={20}
+              {viewMode !== "gap" && (
+                <YAxis
+                  yAxisId="pct"
+                  orientation="right"
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v}%`}
+                  label={{
+                    value: "Utilization %",
+                    angle: 90,
+                    position: "insideRight",
+                    fill: "hsl(var(--muted-foreground))",
+                    fontSize: 10,
+                    offset: 10,
+                  }}
                 />
-              ))}
+              )}
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--popover))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  color: "hsl(var(--popover-foreground))",
+                  fontSize: 12,
+                }}
+                formatter={(value, name) => {
+                  if (typeof name === "string" && name.includes("Utilization"))
+                    return [value !== null ? `${value}%` : "N/A", name];
+                  if (viewMode === "gap") {
+                    const v = value as number;
+                    return [v >= 0 ? `+${v} MH` : `${v} MH`, name];
+                  }
+                  return [`${value} MH`, name];
+                }}
+                labelFormatter={(_, payload) => {
+                  const item = payload?.[0]?.payload;
+                  if (!item) return "";
+                  return `${item.label} (${item.dayCount}d)${item.aircraftCount ? ` — ${item.aircraftCount} aircraft` : ""}`;
+                }}
+              />
 
-            {/* By Customer: N×3 bars, stackId per shift */}
-            {viewMode === "byCustomer" &&
-              activeShifts.flatMap((shift, shiftIdx) =>
-                allCustomers.map((customer) => (
-                  <Bar
-                    key={`${shift.code}_${customer}`}
-                    yAxisId="mh"
-                    dataKey={`demand_${shift.code}_${customer}`}
-                    stackId={shift.code}
-                    name={customer}
-                    fill={getColor(customer)}
-                    fillOpacity={0.8}
-                    radius={[2, 2, 0, 0]}
-                    barSize={20}
-                    legendType={shiftIdx === 0 ? undefined : "none"}
-                  />
-                )),
+              {/* === GAP MODE === */}
+              {viewMode === "gap" && (
+                <>
+                  <ReferenceLine yAxisId="mh" y={0} stroke="#666" strokeDasharray="3 3" />
+                  {activeShifts.map((shift) => (
+                    <Bar
+                      key={`gap_${shift.code}`}
+                      yAxisId="mh"
+                      dataKey={`gap_${shift.code}`}
+                      name={`${shift.name} Gap`}
+                      fill={shiftHex(shift.code)}
+                      fillOpacity={0.8}
+                      radius={[2, 2, 0, 0]}
+                      barSize={20}
+                      hide={isHidden(shiftKey(shift.code), SERIES_KEY.gap)}
+                    />
+                  ))}
+                </>
               )}
 
-            {/* === REFERENCE LINES (non-gap modes) === */}
-            {viewMode !== "gap" && (
-              <>
-                <ReferenceLine
-                  yAxisId="pct"
-                  y={120}
-                  stroke="#ef4444"
-                  strokeDasharray="4 4"
-                  strokeWidth={1.5}
-                  label={{ value: "CRITICAL", position: "right", fill: "#ef4444", fontSize: 10 }}
-                />
-                <ReferenceLine
-                  yAxisId="pct"
-                  y={100}
-                  stroke="#f59e0b"
-                  strokeDasharray="4 4"
-                  strokeWidth={1}
-                  label={{ value: "100%", position: "right", fill: "#f59e0b", fontSize: 10 }}
-                />
-              </>
-            )}
+              {/* === DEMAND BARS (non-gap modes) === */}
 
-            {/* === LINES (non-gap modes) === */}
-
-            {/* Total mode: single capacity + utilization lines */}
-            {viewMode === "total" && (
-              <>
-                <Line
+              {/* Total mode: 1 bar per month, colored by utilization */}
+              {viewMode === "total" && (
+                <Bar
                   yAxisId="mh"
-                  dataKey="capacityMH"
-                  name="Capacity"
-                  type="monotone"
-                  stroke="#6366f1"
-                  strokeWidth={2}
-                  strokeDasharray="6 3"
-                  dot={{ r: 4, fill: "#6366f1", strokeWidth: 0 }}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-                <Line
-                  yAxisId="pct"
-                  dataKey="utilization"
-                  name="Utilization"
-                  type="monotone"
-                  stroke="#f97316"
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: "#f97316", strokeWidth: 0 }}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                  connectNulls
-                />
-              </>
-            )}
+                  dataKey="demandMH"
+                  name="Demand"
+                  radius={[2, 2, 0, 0]}
+                  barSize={30}
+                  hide={isHidden(SERIES_KEY.demand)}
+                >
+                  {chartData.map((entry, idx) => (
+                    <Cell
+                      key={idx}
+                      fill={getUtilizationColor(entry.utilization as number | null)}
+                      fillOpacity={0.8}
+                    />
+                  ))}
+                </Bar>
+              )}
 
-            {/* Per-shift modes: capacity + utilization lines per shift */}
-            {viewMode !== "total" &&
-              viewMode !== "gap" &&
-              activeShifts.map((shift, i) => (
-                <Fragment key={`lines_${shift.code}`}>
+              {/* By Shift: grouped bars (one per shift) */}
+              {viewMode === "byShift" &&
+                activeShifts.map((shift) => (
+                  <Bar
+                    key={shift.code}
+                    yAxisId="mh"
+                    dataKey={`demand_${shift.code}`}
+                    name={`${shift.name} Demand`}
+                    fill={shiftHex(shift.code)}
+                    fillOpacity={0.8}
+                    radius={[2, 2, 0, 0]}
+                    barSize={20}
+                    hide={isHidden(shiftKey(shift.code), SERIES_KEY.demand)}
+                  />
+                ))}
+
+              {/* By Customer: N×3 bars, stackId per shift */}
+              {viewMode === "byCustomer" &&
+                activeShifts.flatMap((shift) =>
+                  allCustomers.map((customer) => (
+                    <Bar
+                      key={`${shift.code}_${customer}`}
+                      yAxisId="mh"
+                      dataKey={`demand_${shift.code}_${customer}`}
+                      stackId={shift.code}
+                      name={customer}
+                      fill={getColor(customer)}
+                      fillOpacity={0.8}
+                      radius={[2, 2, 0, 0]}
+                      barSize={20}
+                      legendType="none"
+                      hide={isHidden(customerKey(customer), SERIES_KEY.demand)}
+                    />
+                  )),
+                )}
+
+              {/* === REFERENCE LINES (non-gap modes) === */}
+              {viewMode !== "gap" && (
+                <>
+                  <ReferenceLine
+                    yAxisId="pct"
+                    y={120}
+                    stroke="#ef4444"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                    label={{ value: "CRITICAL", position: "right", fill: "#ef4444", fontSize: 10 }}
+                  />
+                  <ReferenceLine
+                    yAxisId="pct"
+                    y={100}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    strokeWidth={1}
+                    label={{ value: "100%", position: "right", fill: "#f59e0b", fontSize: 10 }}
+                  />
+                </>
+              )}
+
+              {/* === LINES (non-gap modes) === */}
+
+              {/* Total mode: single capacity + utilization lines */}
+              {viewMode === "total" && (
+                <>
                   <Line
                     yAxisId="mh"
-                    dataKey={`capacity_${shift.code}`}
-                    name={i === 0 ? "Capacity" : `Capacity (${shift.name})`}
+                    dataKey="capacityMH"
+                    name="Capacity"
                     type="monotone"
-                    stroke={SHIFT_BAR_COLORS[shift.code]}
-                    strokeWidth={2}
-                    strokeDasharray="6 3"
-                    dot={{ r: 4, fill: SHIFT_BAR_COLORS[shift.code], strokeWidth: 0 }}
+                    stroke="#6366f1"
+                    strokeWidth={CAPACITY_LINE.strokeWidth}
+                    strokeDasharray={CAPACITY_LINE.strokeDasharray}
+                    dot={false}
                     activeDot={{ r: 6, strokeWidth: 0 }}
-                    legendType={i === 0 ? undefined : "none"}
+                    hide={isHidden(SERIES_KEY.capacity)}
                   />
                   <Line
                     yAxisId="pct"
-                    dataKey={`utilization_${shift.code}`}
-                    name={i === 0 ? "Utilization" : `Utilization (${shift.name})`}
+                    dataKey="utilization"
+                    name="Utilization"
                     type="monotone"
-                    stroke={SHIFT_BAR_COLORS[shift.code]}
-                    strokeWidth={2}
-                    dot={{ r: 4, fill: SHIFT_BAR_COLORS[shift.code], strokeWidth: 0 }}
+                    stroke="#f97316"
+                    strokeWidth={UTILIZATION_LINE.strokeWidth}
+                    dot={{ r: 4, fill: "#f97316", strokeWidth: 0 }}
                     activeDot={{ r: 6, strokeWidth: 0 }}
                     connectNulls
-                    legendType={i === 0 ? undefined : "none"}
+                    hide={isHidden(SERIES_KEY.utilization)}
                   />
-                </Fragment>
-              ))}
+                </>
+              )}
 
-            {/* === LENS OVERLAY === */}
+              {/* Per-shift modes: capacity + utilization lines per shift */}
+              {viewMode !== "total" &&
+                viewMode !== "gap" &&
+                activeShifts.map((shift) => (
+                  <Fragment key={`lines_${shift.code}`}>
+                    <Line
+                      yAxisId="mh"
+                      dataKey={`capacity_${shift.code}`}
+                      name={`Capacity (${shift.name})`}
+                      type="monotone"
+                      stroke={shiftHex(shift.code)}
+                      strokeWidth={CAPACITY_LINE.strokeWidth}
+                      strokeDasharray={CAPACITY_LINE.strokeDasharray}
+                      dot={false}
+                      activeDot={{ r: 6, strokeWidth: 0 }}
+                      legendType="none"
+                      hide={isHidden(shiftKey(shift.code), SERIES_KEY.capacity)}
+                    />
+                    <Line
+                      yAxisId="pct"
+                      dataKey={`utilization_${shift.code}`}
+                      name={`Utilization (${shift.name})`}
+                      type="monotone"
+                      stroke={shiftHexSoft(shift.code)}
+                      strokeWidth={UTILIZATION_LINE.strokeWidth}
+                      dot={shiftDotRenderer(shiftDotShape(shift.code), shiftHexSoft(shift.code), 4)}
+                      activeDot={{ r: 6, strokeWidth: 0 }}
+                      connectNulls
+                      legendType="none"
+                      hide={isHidden(shiftKey(shift.code), SERIES_KEY.utilization)}
+                    />
+                  </Fragment>
+                ))}
 
-            {/* Total mode: single lens line */}
-            {viewMode === "total" && lensLineConfig && (
-              <Line
-                yAxisId="mh"
-                dataKey="lensOverlayMH"
-                name={lensLineConfig.name}
-                type="monotone"
-                stroke={lensLineConfig.stroke}
-                strokeWidth={2}
-                strokeDasharray={lensLineConfig.dash || undefined}
-                dot={{ r: 4, fill: lensLineConfig.stroke, strokeWidth: 0 }}
-                activeDot={{ r: 6, strokeWidth: 0 }}
-                connectNulls
-              />
-            )}
+              {/* === LENS OVERLAY === */}
 
-            {/* Per-shift modes: lens overlay lines per shift */}
-            {viewMode !== "total" &&
-              viewMode !== "gap" &&
-              lensLineConfig &&
-              activeShifts.map((shift, i) => (
+              {/* Total mode: single lens line */}
+              {viewMode === "total" && lensLineConfig && (
                 <Line
-                  key={`lens_${shift.code}`}
                   yAxisId="mh"
-                  dataKey={`lensOverlay_${shift.code}`}
-                  name={i === 0 ? lensLineConfig.name : `${lensLineConfig.name} (${shift.name})`}
+                  dataKey="lensOverlayMH"
+                  name={lensLineConfig.name}
                   type="monotone"
                   stroke={lensLineConfig.stroke}
                   strokeWidth={2}
@@ -540,48 +556,40 @@ export function MonthlyRollupChart({
                   dot={{ r: 4, fill: lensLineConfig.stroke, strokeWidth: 0 }}
                   activeDot={{ r: 6, strokeWidth: 0 }}
                   connectNulls
-                  legendType={i === 0 ? undefined : "none"}
+                  hide={isHidden(SERIES_KEY.lens)}
                 />
-              ))}
+              )}
 
-            {/* === SECONDARY LENS OVERLAY (G-07) === */}
+              {/* Per-shift modes: lens overlay lines per shift */}
+              {viewMode !== "total" &&
+                viewMode !== "gap" &&
+                lensLineConfig &&
+                activeShifts.map((shift) => (
+                  <Line
+                    key={`lens_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`lensOverlay_${shift.code}`}
+                    name={`${lensLineConfig.name} (${shift.name})`}
+                    type="monotone"
+                    stroke={lensLineConfig.stroke}
+                    strokeWidth={2}
+                    strokeDasharray={lensLineConfig.dash || undefined}
+                    dot={{ r: 4, fill: lensLineConfig.stroke, strokeWidth: 0 }}
+                    activeDot={{ r: 6, strokeWidth: 0 }}
+                    connectNulls
+                    legendType="none"
+                    hide={isHidden(shiftKey(shift.code), SERIES_KEY.lens)}
+                  />
+                ))}
 
-            {/* Total mode: single secondary comparison line */}
-            {viewMode === "total" && secondaryLineConfig && (
-              <Line
-                yAxisId="mh"
-                dataKey="secondaryOverlayMH"
-                name={`${secondaryLineConfig.name} (compare)`}
-                type="monotone"
-                stroke={secondaryLineConfig.stroke}
-                strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
-                strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
-                strokeOpacity={SECONDARY_LINE_STYLE.opacity}
-                dot={{
-                  r: SECONDARY_LINE_STYLE.dotRadius,
-                  fill: secondaryLineConfig.stroke,
-                  strokeWidth: 0,
-                  opacity: SECONDARY_LINE_STYLE.opacity,
-                }}
-                activeDot={{ r: 4, strokeWidth: 0 }}
-                connectNulls
-              />
-            )}
+              {/* === SECONDARY LENS OVERLAY (G-07) === */}
 
-            {/* Per-shift modes: secondary comparison lines per shift */}
-            {viewMode !== "total" &&
-              viewMode !== "gap" &&
-              secondaryLineConfig &&
-              activeShifts.map((shift, i) => (
+              {/* Total mode: single secondary comparison line */}
+              {viewMode === "total" && secondaryLineConfig && (
                 <Line
-                  key={`secondary_${shift.code}`}
                   yAxisId="mh"
-                  dataKey={`secondaryOverlay_${shift.code}`}
-                  name={
-                    i === 0
-                      ? `${secondaryLineConfig.name} (compare)`
-                      : `${secondaryLineConfig.name} (${shift.name}, compare)`
-                  }
+                  dataKey="secondaryOverlayMH"
+                  name={`${secondaryLineConfig.name} (compare)`}
                   type="monotone"
                   stroke={secondaryLineConfig.stroke}
                   strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
@@ -595,11 +603,41 @@ export function MonthlyRollupChart({
                   }}
                   activeDot={{ r: 4, strokeWidth: 0 }}
                   connectNulls
-                  legendType={i === 0 ? undefined : "none"}
+                  hide={isHidden(SERIES_KEY.secondary)}
                 />
-              ))}
-          </ComposedChart>
-        </ResponsiveContainer>
+              )}
+
+              {/* Per-shift modes: secondary comparison lines per shift */}
+              {viewMode !== "total" &&
+                viewMode !== "gap" &&
+                secondaryLineConfig &&
+                activeShifts.map((shift) => (
+                  <Line
+                    key={`secondary_${shift.code}`}
+                    yAxisId="mh"
+                    dataKey={`secondaryOverlay_${shift.code}`}
+                    name={`${secondaryLineConfig.name} (${shift.name}, compare)`}
+                    type="monotone"
+                    stroke={secondaryLineConfig.stroke}
+                    strokeWidth={SECONDARY_LINE_STYLE.strokeWidth}
+                    strokeDasharray={SECONDARY_LINE_STYLE.strokeDasharray}
+                    strokeOpacity={SECONDARY_LINE_STYLE.opacity}
+                    dot={{
+                      r: SECONDARY_LINE_STYLE.dotRadius,
+                      fill: secondaryLineConfig.stroke,
+                      strokeWidth: 0,
+                      opacity: SECONDARY_LINE_STYLE.opacity,
+                    }}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                    connectNulls
+                    legendType="none"
+                    hide={isHidden(shiftKey(shift.code), SERIES_KEY.secondary)}
+                  />
+                ))}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <ChartLegend rows={legendRows} onToggle={toggle} />
       </div>
     </div>
   );

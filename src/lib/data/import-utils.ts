@@ -305,7 +305,6 @@ export async function commitImportData(
     return {
       guid: String(r.GUID),
       spId: r.ID != null ? Number(r.ID) : null,
-      title: r.Title != null ? String(r.Title) : null,
       aircraftReg: String(aircraft?.Title ?? "Unknown"),
       aircraftType: aircraft?.field_5 != null
         ? String(aircraft.field_5)
@@ -323,7 +322,14 @@ export async function commitImportData(
       description: r.Description != null ? String(r.Description) : null,
       parentId: r.ParentID != null ? String(r.ParentID) : null,
       hasWorkpackage: r.HasWorkpackage != null ? Boolean(r.HasWorkpackage) : null,
-      workpackageNo: r.WorkpackageNo != null ? String(r.WorkpackageNo) : null,
+      // OI-086: inbound `Title` holds the WP identifier, so it lands here.
+      // An explicit `WorkpackageNo` wins when a source supplies one.
+      workpackageNo:
+        r.WorkpackageNo != null
+          ? String(r.WorkpackageNo)
+          : r.Title != null
+            ? String(r.Title)
+            : null,
       calendarComments: r.CalendarComments != null ? String(r.CalendarComments) : null,
       isNotClosedOrCanceled: r.IsNotClosedOrCanceled != null ? String(r.IsNotClosedOrCanceled) : null,
       documentSetId: r.DocumentSetID != null ? Number(r.DocumentSetID) : null,
@@ -402,7 +408,6 @@ export async function commitImportData(
         db.update(workPackages)
           .set({
             spId: record.spId,
-            title: record.title,
             aircraftReg: record.aircraftReg,
             aircraftType: record.aircraftType,
             customer: record.customer,

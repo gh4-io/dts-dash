@@ -52,6 +52,12 @@ interface CronJobFormProps {
     options: Record<string, unknown>;
   }) => Promise<void>;
   onReset?: () => void;
+  /**
+   * True when the deployment gate is off. The dialog becomes a viewer: every
+   * field is inert and there is no Save, because nothing entered here could
+   * ever take effect (and the API would refuse it anyway).
+   */
+  readOnly?: boolean;
 }
 
 function slugify(text: string): string {
@@ -69,6 +75,7 @@ export function CronJobForm({
   builtinDefs,
   onSubmit,
   onReset,
+  readOnly = false,
 }: CronJobFormProps) {
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
@@ -146,11 +153,23 @@ export function CronJobForm({
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {mode === "create" ? "Add Custom Job" : `Edit: ${initialData?.name ?? ""}`}
+            {readOnly
+              ? `View: ${initialData?.name ?? ""}`
+              : mode === "create"
+                ? "Add Custom Job"
+                : `Edit: ${initialData?.name ?? ""}`}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        {readOnly && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <i className="fa-solid fa-lock mr-1.5" />
+            Read-only — the cron scheduler is disabled by server configuration (
+            <code className="font-mono">features.cronEnabled</code>).
+          </div>
+        )}
+
+        <div className={`space-y-4 py-2 ${readOnly ? "pointer-events-none opacity-60" : ""}`}>
           {error && (
             <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {error}
@@ -293,19 +312,21 @@ export function CronJobForm({
         </div>
 
         <DialogFooter className="flex items-center gap-2">
-          {isBuiltin && onReset && (
+          {!readOnly && isBuiltin && onReset && (
             <Button type="button" variant="outline" size="sm" onClick={onReset} className="mr-auto">
               <i className="fa-solid fa-rotate-left mr-1.5" />
               Reset to Defaults
             </Button>
           )}
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </Button>
-          <Button onClick={handleSubmit} disabled={saving}>
-            {saving && <i className="fa-solid fa-spinner fa-spin mr-1.5" />}
-            {mode === "create" ? "Create" : "Save"}
-          </Button>
+          {!readOnly && (
+            <Button onClick={handleSubmit} disabled={saving}>
+              {saving && <i className="fa-solid fa-spinner fa-spin mr-1.5" />}
+              {mode === "create" ? "Create" : "Save"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

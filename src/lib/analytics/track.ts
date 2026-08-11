@@ -1,11 +1,14 @@
+/* eslint-disable no-console */
 /**
  * Event Tracking Utility
  * Client-side analytics tracking
  * Fire-and-forget (never blocks UI)
+ *
+ * Client-only: uses `console.*`, never the pino logger (`@/lib/logger` is a
+ * server-external package — see next.config.ts `serverExternalPackages`).
+ * Event names follow the catalog in .claude/SPECS/REQ_Analytics.md §3.
+ * One POST per event — no client-side batching (OI-017).
  */
-import { createChildLogger } from "@/lib/logger";
-
-const log = createChildLogger("analytics");
 
 export interface TrackEventProps {
   [key: string]: string | number | boolean | null | undefined;
@@ -22,7 +25,7 @@ export interface TrackEventProps {
 export function trackEvent(eventType: string, props?: TrackEventProps): void {
   // Don't track in development (optional - remove if you want dev tracking)
   if (process.env.NODE_ENV === "development") {
-    log.info({ eventType, props }, `${eventType}`);
+    console.debug("[analytics]", eventType, props ?? {});
     return;
   }
 
@@ -38,7 +41,7 @@ export function trackEvent(eventType: string, props?: TrackEventProps): void {
     }),
   }).catch((error) => {
     // Silently fail - never block UI
-    log.warn({ err: error }, "Failed to track event");
+    console.warn("[analytics] Failed to track event", eventType, error);
   });
 }
 
@@ -60,8 +63,10 @@ export function trackFilterChange(filters: TrackEventProps): void {
 
 /**
  * Track user action
- * Convenience wrapper for user actions
+ * Convenience wrapper for the named user actions in the event catalog
+ * (csv_export, data_import, gantt_bar_click, print, …). The action name is
+ * emitted verbatim so it matches REQ_Analytics.md §3.
  */
 export function trackAction(action: string, props?: TrackEventProps): void {
-  trackEvent(`action_${action}`, props);
+  trackEvent(action, props);
 }

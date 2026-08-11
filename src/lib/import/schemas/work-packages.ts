@@ -60,7 +60,6 @@ interface SPWorkPackageRecord {
 interface WorkPackageDbValues {
   guid: string;
   spId: number | null;
-  title: string | null;
   aircraftReg: string;
   aircraftType: string | null;
   customer: string;
@@ -126,7 +125,6 @@ function mapRecordToDb(rec: Record<string, unknown>, importedAt: string): WorkPa
   return {
     guid: String(rec.GUID ?? rec.guid ?? ""),
     spId: rec.ID != null ? Number(rec.ID) : rec.spId != null ? Number(rec.spId) : null,
-    title: rec.Title != null ? String(rec.Title) : rec.title != null ? String(rec.title) : null,
     aircraftReg: String(aircraft?.Title ?? rec.aircraftReg ?? "Unknown"),
     aircraftType:
       aircraft?.field_5 != null
@@ -177,13 +175,26 @@ function mapRecordToDb(rec: Record<string, unknown>, importedAt: string): WorkPa
         ? Boolean(rec.HasWorkpackage)
         : rec.hasWorkpackage != null
           ? Boolean(rec.hasWorkpackage)
-          : null,
+          : // Infer from available data: if TotalMH > 0 or WorkpackageNo present, it has a WP
+            (rec.TotalMH != null && Number(rec.TotalMH) > 0) ||
+              (rec.WorkpackageNo != null && String(rec.WorkpackageNo).trim() !== "") ||
+              (rec.totalMH != null && Number(rec.totalMH) > 0) ||
+              (rec.workpackageNo != null && String(rec.workpackageNo).trim() !== "")
+            ? true
+            : null,
+    // OI-086 — inbound `Title` carries the work package identifier, not a
+    // display label, so it feeds this column. An explicit `WorkpackageNo` wins
+    // when a source supplies one; `Title` is the fallback every SP export uses.
     workpackageNo:
       rec.WorkpackageNo != null
         ? String(rec.WorkpackageNo)
         : rec.workpackageNo != null
           ? String(rec.workpackageNo)
-          : null,
+          : rec.Title != null
+            ? String(rec.Title)
+            : rec.title != null
+              ? String(rec.title)
+              : null,
     calendarComments:
       rec.CalendarComments != null
         ? String(rec.CalendarComments)
@@ -268,14 +279,6 @@ const workPackagesSchema: ImportSchema = {
       required: false,
       aliases: ["ID"],
       description: "SharePoint list item ID.",
-    },
-    {
-      name: "title",
-      label: "Title",
-      type: "string",
-      required: false,
-      aliases: ["Title"],
-      description: "Work package title.",
     },
     {
       name: "aircraftReg",
@@ -400,8 +403,9 @@ const workPackagesSchema: ImportSchema = {
       label: "Workpackage No",
       type: "string",
       required: false,
-      aliases: ["WorkpackageNo"],
-      description: "Work package number.",
+      aliases: ["WorkpackageNo", "Title"],
+      description:
+        "Work package number/identifier. SharePoint exports carry it in `Title` (OI-086).",
     },
     {
       name: "calendarComments",
@@ -749,7 +753,6 @@ const workPackagesSchema: ImportSchema = {
           db.update(workPackages)
             .set({
               spId: record.spId,
-              title: record.title,
               aircraftReg: record.aircraftReg,
               aircraftType: record.aircraftType,
               customer: record.customer,

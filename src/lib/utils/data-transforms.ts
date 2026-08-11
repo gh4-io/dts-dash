@@ -65,8 +65,22 @@ export function evaluateCondition(
   if (value === null || value === undefined) return false;
 
   const strVal = String(value);
-  const numVal = typeof value === "number" ? value : parseFloat(strVal);
-  const numTarget = parseFloat(target);
+  // Ordering comparisons: numbers where both sides are numeric, otherwise fall
+  // back to timestamps. Without the date fallback every arrival/departure rule
+  // silently matched nothing — parseFloat("2026-08-07T…") is NaN.
+  // parseFloat would happily read "2026-08-07T12:00:00Z" as 2026, so require a
+  // fully numeric string before treating it as a number.
+  const asNumber = (v: string) => (/^-?\d+(\.\d+)?$/.test(v.trim()) ? parseFloat(v) : NaN);
+  let numVal = typeof value === "number" ? value : asNumber(strVal);
+  let numTarget = asNumber(target);
+  if (isNaN(numVal) || isNaN(numTarget)) {
+    const dateVal = Date.parse(strVal);
+    const dateTarget = Date.parse(target);
+    if (!isNaN(dateVal) && !isNaN(dateTarget)) {
+      numVal = dateVal;
+      numTarget = dateTarget;
+    }
+  }
 
   switch (operator) {
     case "=":
@@ -150,6 +164,45 @@ export function applyColumnFilters(
       return evaluateCondition(val, rule.operator, rule.value);
     }),
   );
+}
+
+/**
+ * Server-side variant of applyColumnFilters.
+ *
+ * The API routes hold `WorkPackage` objects whose arrival/departure are `Date`s,
+ * not the ISO strings the client store carries. Rather than fork the rule
+ * evaluation, this projects each record into the serialized shape and reuses
+ * applyColumnFilters, so client and server apply identical semantics.
+ *
+ * Rules arrive off the wire, so `column`/`operator` are plain strings here.
+ */
+export function applyColumnFiltersToRecords<
+  T extends { arrival: Date | string; departure: Date | string },
+>(
+  records: T[],
+  filters: { column: string; operator: string; value: string; values: string[] }[],
+  timezone?: string,
+): T[] {
+  if (filters.length === 0) return records;
+
+  const rules = filters.map((f) => ({
+    id: "",
+    column: f.column as ActionColumnKey,
+    operator: f.operator as ColumnFilterRule["operator"],
+    value: f.value,
+    values: f.values,
+  }));
+
+  const toIso = (v: Date | string) => (v instanceof Date ? v.toISOString() : v);
+
+  return records.filter((rec) => {
+    const view = {
+      ...rec,
+      arrival: toIso(rec.arrival),
+      departure: toIso(rec.departure),
+    } as unknown as SerializedWorkPackage;
+    return applyColumnFilters([view], rules, timezone).length === 1;
+  });
 }
 
 /** Sort WPs by multiple levels (stable sort via comparator chain) */

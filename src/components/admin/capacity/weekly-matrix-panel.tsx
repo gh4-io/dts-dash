@@ -114,7 +114,9 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
       case "productive":
         return cell.productiveMH;
       default:
-        return cell.headcount;
+        // Roster, not effective: the "HC" column must match the headcount the
+        // user typed into the shift grid, undiscounted by paidToAvailable.
+        return cell.rosterHeadcount;
     }
   };
 
@@ -128,12 +130,14 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
 
   // Stats
   const totalHeadcount = matrix?.totalConfigHeadcount ?? 0;
-  const avgDailyHeadcount = matrix ? matrix.days.reduce((s, d) => s + d.total.headcount, 0) / 7 : 0;
+  const avgDailyHeadcount = matrix
+    ? matrix.days.reduce((s, d) => s + d.total.rosterHeadcount, 0) / 7
+    : 0;
   const peakDay = matrix
     ? matrix.days.reduce(
         (max, d) =>
-          d.total.headcount > max.headcount
-            ? { day: d.dayOfWeek, headcount: d.total.headcount }
+          d.total.rosterHeadcount > max.headcount
+            ? { day: d.dayOfWeek, headcount: d.total.rosterHeadcount }
             : max,
         { day: 0, headcount: 0 },
       )
@@ -141,8 +145,8 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
   const minDay = matrix
     ? matrix.days.reduce(
         (min, d) =>
-          d.total.headcount < min.headcount
-            ? { day: d.dayOfWeek, headcount: d.total.headcount }
+          d.total.rosterHeadcount < min.headcount
+            ? { day: d.dayOfWeek, headcount: d.total.rosterHeadcount }
             : min,
         { day: 0, headcount: Infinity },
       )
@@ -210,9 +214,13 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
               ))}
             </div>
 
-            {/* Heatmap grid */}
-            <div className="rounded-lg border border-border overflow-hidden">
-              <table className="w-full text-xs">
+            {/* Heatmap grid.
+                The panel is narrower than the table's min-content width (277px vs
+                433px at 1440px wide), and `overflow-hidden` — there for the rounded
+                corners — silently clipped Saturday and the Tot column. Scroll instead
+                so every value stays reachable, matching the admin grids in OI-078. */}
+            <div className="rounded-lg border border-border overflow-x-auto">
+              <table className="w-full min-w-[420px] text-xs">
                 <thead>
                   <tr className="bg-muted/30">
                     <th className="px-2 py-1.5 text-left text-[10px] text-muted-foreground font-medium w-16">
@@ -237,7 +245,7 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
                 <tbody className="divide-y divide-border/50">
                   {CATEGORIES.map((cat) => {
                     const catTotal = matrix.categoryTotals[cat];
-                    if (catTotal.headcount === 0 && catTotal.paidMH === 0) return null;
+                    if (catTotal.rosterHeadcount === 0 && catTotal.paidMH === 0) return null;
 
                     return (
                       <tr key={cat} className="hover:bg-accent/20 transition-colors">
@@ -294,6 +302,11 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
               <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Weekly Totals
               </h4>
+              {/* Paid -> Available -> Productive is three stages, not one ratio.
+                  State it here: this panel is where the numbers are read. */}
+              <p className="text-[10px] text-muted-foreground font-mono leading-relaxed">
+                HC x HOURS = Paid &middot; x ATT = Available &middot; x PROD = Productive
+              </p>
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-lg border border-border bg-card p-2.5 text-center">
                   <div className="text-[10px] text-muted-foreground mb-0.5">Paid MH</div>
@@ -323,7 +336,13 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
               </h4>
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded border border-border bg-card p-2">
-                  <div className="text-[10px] text-muted-foreground">Config Headcount</div>
+                  {/* Scoped to the week start (OI-100), so it can legitimately differ from
+                      the shift grid's footer when a version takes effect mid-week. Say which
+                      date it is as of, rather than leave two unequal totals side by side. */}
+                  <div className="text-[10px] text-muted-foreground">
+                    Config Headcount{" "}
+                    <span className="text-muted-foreground/60">as of {weekStart}</span>
+                  </div>
                   <div className="text-sm font-bold tabular-nums">{totalHeadcount} AMTs</div>
                 </div>
                 <div className="rounded border border-border bg-card p-2">
@@ -335,14 +354,14 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
                 <div className="rounded border border-border bg-card p-2">
                   <div className="text-[10px] text-muted-foreground">Peak Day</div>
                   <div className="text-sm font-bold tabular-nums">
-                    {peakDay ? `${DAY_NAMES[peakDay.day]} (${fmtNum(peakDay.headcount, 2)})` : "—"}
+                    {peakDay ? `${DAY_NAMES[peakDay.day]} (${fmtNum(peakDay.headcount, 0)})` : "—"}
                   </div>
                 </div>
                 <div className="rounded border border-border bg-card p-2">
                   <div className="text-[10px] text-muted-foreground">Min Day</div>
                   <div className="text-sm font-bold tabular-nums">
                     {minDay && minDay.headcount < Infinity
-                      ? `${DAY_NAMES[minDay.day]} (${fmtNum(minDay.headcount, 2)})`
+                      ? `${DAY_NAMES[minDay.day]} (${fmtNum(minDay.headcount, 0)})`
                       : "—"}
                   </div>
                 </div>
@@ -357,7 +376,7 @@ export function WeeklyMatrixPanel({ configId }: WeeklyMatrixPanelProps) {
               <div className="space-y-1">
                 {CATEGORIES.map((cat) => {
                   const ct = matrix.categoryTotals[cat];
-                  if (ct.headcount === 0 && ct.paidMH === 0) return null;
+                  if (ct.rosterHeadcount === 0 && ct.paidMH === 0) return null;
                   return (
                     <div
                       key={cat}

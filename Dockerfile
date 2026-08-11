@@ -207,8 +207,12 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# 127.0.0.1, never `localhost`. The image's /etc/hosts maps localhost to both
+# 127.0.0.1 and ::1, BusyBox wget tries ::1 first, and Next binds IPv4-only
+# (HOSTNAME=0.0.0.0 above) — so `localhost` is refused and the container reports
+# unhealthy forever while serving traffic perfectly through its published port.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
 
 # Entrypoint adjusts UID/GID if PUID/PGID env vars are set, then drops to nextjs
 ENTRYPOINT ["/docker-entrypoint.sh"]

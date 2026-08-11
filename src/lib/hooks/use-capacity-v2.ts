@@ -2,8 +2,10 @@
 
 import { create } from "zustand";
 import { useFilters } from "./use-filters";
-import { useEffect } from "react";
+import { useActions } from "./use-actions";
+import { useEffect, useMemo } from "react";
 import { getAvailableLenses } from "@/lib/capacity/lens-config";
+import { buildFilterQuery, serializeColumnFilters } from "@/lib/utils/filter-helpers";
 import type {
   DailyDemandV2,
   DailyCapacityV2,
@@ -33,6 +35,8 @@ interface CapacityV2State {
   warnings: string[];
   shifts: CapacityShift[];
   assumptions: CapacityAssumptions | null;
+  /** Clock the server bucketed every day/heatmap row/rollup on (OI-119) */
+  operationalTimezone: string | null;
   // Compute metadata
   computeMode: CapacityComputeMode;
   autoMode: CapacityComputeMode;
@@ -58,6 +62,9 @@ interface CapacityV2State {
   fetchOverview: (filters: Record<string, string>) => Promise<void>;
 }
 
+/** Module-level abort controller — ensures only the latest fetch wins */
+let activeAbort: AbortController | null = null;
+
 export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   demand: [],
   capacity: [],
@@ -66,6 +73,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   warnings: [],
   shifts: [],
   assumptions: null,
+  operationalTimezone: null,
   // Compute metadata
   computeMode: "headcount" as CapacityComputeMode,
   autoMode: "headcount" as CapacityComputeMode,
@@ -90,15 +98,22 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
   error: null,
 
   fetchOverview: async (filters: Record<string, string>) => {
+    // Only the latest request may write to the store. Without this a deep link
+    // could resolve its stale first fetch after the URL-hydrated one.
+    if (activeAbort) activeAbort.abort();
+    const abort = new AbortController();
+    activeAbort = abort;
+
     set({ isLoading: true, error: null });
     try {
       const params = new URLSearchParams(filters);
-      const res = await fetch(`/api/capacity/overview?${params}`);
+      const res = await fetch(`/api/capacity/overview?${params}`, { signal: abort.signal });
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: "Failed to fetch capacity data" }));
         throw new Error(data.error ?? "Failed to fetch capacity data");
       }
       const json: CapacityOverviewResponse = await res.json();
+      if (abort.signal.aborted) return;
       const available = getAvailableLenses(json);
       set((state) => ({
         demand: json.demand,
@@ -108,6 +123,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         warnings: json.warnings,
         shifts: json.shifts,
         assumptions: json.assumptions,
+        operationalTimezone: json.operationalTimezone ?? null,
         computeMode: json.computeMode ?? "headcount",
         autoMode: json.autoMode ?? "headcount",
         modeWarning: json.modeWarning ?? null,
@@ -127,6 +143,7 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
         isLoading: false,
       }));
     } catch (err) {
+      if (abort.signal.aborted || (err as Error).name === "AbortError") return;
       set({ error: (err as Error).message, isLoading: false });
     }
   },
@@ -137,21 +154,56 @@ export const useCapacityV2Store = create<CapacityV2State>()((set) => ({
  * Uses the new /api/capacity/overview endpoint with per-shift drilldown data.
  */
 export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
-  const { start, end, operators, aircraft, types } = useFilters();
+  const {
+    start,
+    end,
+    operators,
+    aircraft,
+    types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
+  } = useFilters();
+  const urlSynced = useFilters((s) => s._urlSynced);
+  // Column-filter rules the filter store has no field for (status, ground
+  // time, arrival/departure, man-hours, shift) are applied server-side. They
+  // resolve on the operational shift clock the server reads from the shift
+  // rows, so the FilterBar timezone is deliberately not sent (OI-119).
+  const columnFilters = useActions((s) => s.columnFilters);
   const store = useCapacityV2Store();
 
-  useEffect(() => {
-    const filters: Record<string, string> = {};
-    if (start) filters.start = start;
-    if (end) filters.end = end;
-    if (operators.length > 0) filters.operators = operators.join(",");
-    if (aircraft.length > 0) filters.aircraft = aircraft.join(",");
-    if (types.length > 0) filters.types = types.join(",");
-    if (modeOverride) filters.mode = modeOverride;
+  const query = useMemo(() => {
+    const q = buildFilterQuery({
+      start,
+      end,
+      operators,
+      aircraft,
+      types,
+      excludeOperators,
+      excludeAircraft,
+      excludeTypes,
+    });
+    if (columnFilters.length > 0) q.cf = serializeColumnFilters(columnFilters);
+    if (modeOverride) q.mode = modeOverride;
+    return q;
+  }, [
+    start,
+    end,
+    operators,
+    aircraft,
+    types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
+    columnFilters,
+    modeOverride,
+  ]);
 
-    store.fetchOverview(filters);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end, operators, aircraft, types, modeOverride]);
+  const { fetchOverview } = store;
+  useEffect(() => {
+    if (!urlSynced) return; // wait for useFilterUrlSync, else two fetches race
+    fetchOverview(query);
+  }, [urlSynced, query, fetchOverview]);
 
   return {
     demand: store.demand,
@@ -161,6 +213,7 @@ export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
     warnings: store.warnings,
     shifts: store.shifts,
     assumptions: store.assumptions,
+    operationalTimezone: store.operationalTimezone,
     computeMode: store.computeMode,
     autoMode: store.autoMode,
     modeWarning: store.modeWarning,
@@ -179,15 +232,6 @@ export function useCapacityV2(modeOverride?: CapacityComputeMode | null) {
     setActiveLens: store.setActiveLens,
     isLoading: store.isLoading,
     error: store.error,
-    refetch: () => {
-      const filters: Record<string, string> = {};
-      if (start) filters.start = start;
-      if (end) filters.end = end;
-      if (operators.length > 0) filters.operators = operators.join(",");
-      if (aircraft.length > 0) filters.aircraft = aircraft.join(",");
-      if (types.length > 0) filters.types = types.join(",");
-      if (modeOverride) filters.mode = modeOverride;
-      store.fetchOverview(filters);
-    },
+    refetch: () => store.fetchOverview(query),
   };
 }

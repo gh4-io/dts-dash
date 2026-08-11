@@ -58,6 +58,47 @@ html {
   }
 }
 
+/* ─── Cross-filter view transitions ───────────────────────────────────────────
+   Selecting an operator (or changing the FilterBar) rewrites every panel at
+   once: rows leave, the donut re-slices, bars re-scale. Naming each panel gives
+   it its own transition group, so the boxes and the space between them morph
+   over half a second instead of snapping. Driven by useSmoothUpdate(). */
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-group(*) {
+    animation-duration: 500ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 500ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+.vt-avg-ground {
+  view-transition-name: vt-avg-ground;
+}
+.vt-mh-operator {
+  view-transition-name: vt-mh-operator;
+}
+.vt-aircraft-turns {
+  view-transition-name: vt-aircraft-turns;
+}
+.vt-aircraft-types {
+  view-transition-name: vt-aircraft-types;
+}
+.vt-combined-chart {
+  view-transition-name: vt-combined-chart;
+}
+.vt-operator-table {
+  view-transition-name: vt-operator-table;
+}
+.vt-customer-donut {
+  view-transition-name: vt-customer-donut;
+}
+
 /* ─── Tailwind v4 Theme Integration ────────────────────────────────────────── */
 
 @theme inline {

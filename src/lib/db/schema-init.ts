@@ -88,7 +88,6 @@ export function createTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       guid TEXT NOT NULL UNIQUE,
       sp_id INTEGER UNIQUE,
-      title TEXT,
       aircraft_reg TEXT NOT NULL,
       aircraft_type TEXT,
       customer TEXT NOT NULL,
@@ -102,6 +101,8 @@ export function createTables() {
       description TEXT,
       parent_id TEXT,
       has_workpackage INTEGER,
+      -- OI-086: the inbound SharePoint Title is the work package identifier,
+      -- not a display label, so it lands here. There is no title column.
       workpackage_no TEXT,
       calendar_comments TEXT,
       is_not_closed_or_canceled TEXT,
@@ -112,8 +113,175 @@ export function createTables() {
       sp_created TEXT,
       sp_version TEXT,
       import_log_id INTEGER REFERENCES import_log(id),
-      imported_at TEXT NOT NULL
+      imported_at TEXT NOT NULL,
+      ground_event_types TEXT
     );
+
+    -- ═════════════════════════════════════════════════════════════════════════
+    -- Messages (OI-099, v1.0.0 BREAKING)
+    -- ═════════════════════════════════════════════════════════════════════════
+    --
+    -- One table for every utterance in the app. Replaces four tables that were
+    -- the same shape wearing different column names:
+    --
+    --   flight_comments   → kind = 'flight_comment'
+    --   notifications     → kind = 'notification'
+    --   feedback_posts    → kind = 'feedback_post'
+    --   feedback_comments → kind = 'feedback_comment'
+    --
+    -- Two things the original OI-099 sketch got wrong, recorded here so nobody
+    -- reintroduces them:
+    --
+    --   * There was never a user_notification_dismissals table. Notifications
+    --     are a per-recipient fan-out — one row per recipient — and read_at on
+    --     the recipient's own row IS the dismissal state.
+    --   * There is no voting on feedback posts. No vote column, no vote table,
+    --     no vote code ever existed. Do not design for it.
+    --
+    -- Labels are deliberately NOT folded in here — see the labels table below.
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+      kind TEXT NOT NULL
+        CHECK (kind IN ('flight_comment', 'notification', 'feedback_post', 'feedback_comment')),
+
+      -- Threading. parent_id is the direct reply target; root_id is the thread
+      -- container, so "everything in this thread" is one WHERE root_id = ?
+      -- instead of a recursive CTE. A feedback_post is its own root.
+      parent_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+      root_id INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+
+      -- External subject, for messages attached to a non-message entity.
+      -- Polymorphic, so it cannot carry a real FK: subject_type names the table
+      -- ('work_package') and subject_id the row. Because there is no FK there is
+      -- also no ON DELETE CASCADE — deleting the subject must delete its
+      -- messages explicitly (see cleanup-canceled).
+      subject_type TEXT,
+      subject_id INTEGER,
+
+      -- ⚠️ author_id has NO ON DELETE CASCADE, and must never be given one.
+      -- Adding a cascade here would destroy comment history — every post and
+      -- every comment a user ever wrote — the first time an account is deleted,
+      -- silently and unrecoverably. Authorship is a historical fact about the
+      -- message; it is not a reason for the message to stop existing. If user
+      -- deletion needs to anonymise instead, NULL this column, do not cascade.
+      author_id INTEGER REFERENCES users(id),
+
+      -- Notifications only: the recipient of this copy. This one DOES cascade —
+      -- a notification exists solely to be delivered to that user, so when the
+      -- account goes, so does the delivery. Keeping author_id and recipient_id
+      -- as separate columns is exactly what lets the two delete policies coexist.
+      recipient_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+
+      title TEXT,
+      body TEXT,
+
+      -- Notification taxonomy (was notifications.type / .category). Named
+      -- msg_type because type is too easily confused with kind.
+      msg_type TEXT,
+      category TEXT,
+      read_at TEXT,
+      action_url TEXT,
+      expires_at TEXT,
+
+      -- Feedback post workflow.
+      status TEXT,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+
+      metadata TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+
+      -- Provenance + the backfill's idempotency key. legacy_parent_id keeps the
+      -- pre-merge parent so pass 2 of the backfill can remap trees after every
+      -- row has its new id.
+      legacy_source TEXT,
+      legacy_id INTEGER,
+      legacy_parent_id INTEGER,
+
+      -- Per-kind invariants. The old tables stated these with NOT NULL; folding
+      -- four shapes into one makes every column nullable, so the rules move here
+      -- rather than degrading into a convention enforced only by application code.
+      CHECK (kind <> 'notification' OR recipient_id IS NOT NULL),
+      CHECK (kind = 'notification' OR (author_id IS NOT NULL AND body IS NOT NULL)),
+      CHECK (kind <> 'flight_comment'
+             OR (subject_type = 'work_package' AND subject_id IS NOT NULL)),
+      CHECK (kind <> 'feedback_comment' OR root_id IS NOT NULL)
+    );
+
+    -- Indexes are PARTIAL and per-kind. This is the whole reason the merge is
+    -- performance-neutral: a plain index on (recipient_id, read_at) would span
+    -- all four kinds and force every notification lookup to wade through comment
+    -- and feedback rows. Each index below covers exactly the kind that queries it.
+    --
+    -- ⚠️ A partial index is only usable when the query repeats its WHERE clause
+    -- literally. Every repository query MUST carry its kind = '...' filter or
+    -- these indexes silently stop being used — and the results silently start
+    -- including other kinds. See src/lib/messages/repository.ts.
+
+    -- /api/notifications/unread-count is polled on an interval by the
+    -- notification bell for every logged-in client. It is the hottest query in
+    -- the app and this is the index it must hit.
+    CREATE INDEX IF NOT EXISTS idx_messages_notif_unread
+      ON messages(recipient_id, read_at) WHERE kind = 'notification';
+    CREATE INDEX IF NOT EXISTS idx_messages_notif_created
+      ON messages(recipient_id, created_at) WHERE kind = 'notification';
+
+    CREATE INDEX IF NOT EXISTS idx_messages_flight_subject
+      ON messages(subject_id, created_at) WHERE kind = 'flight_comment';
+
+    CREATE INDEX IF NOT EXISTS idx_messages_feedback_post
+      ON messages(status, created_at) WHERE kind = 'feedback_post';
+    CREATE INDEX IF NOT EXISTS idx_messages_feedback_comment
+      ON messages(root_id, created_at) WHERE kind = 'feedback_comment';
+
+    -- Thread walking and subtree deletes, all kinds.
+    CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_root ON messages(root_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_author ON messages(author_id);
+
+    -- The backfill's idempotency key: a second run finds every row already
+    -- present instead of duplicating it. UNIQUE is what makes that a guarantee
+    -- rather than a hope.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_legacy
+      ON messages(legacy_source, legacy_id) WHERE legacy_source IS NOT NULL;
+
+    -- ─── Labels ───────────────────────────────────────────────────────────────
+    --
+    -- Labels stay a SEPARATE table. They are not messages and folding them in
+    -- was rejected deliberately (OI-099):
+    --
+    --   1. name is NOT NULL UNIQUE. Inside messages that constraint has
+    --      nowhere to live — every column there is nullable because four shapes
+    --      share it — so a hard declaration would degrade into a convention.
+    --   2. The join table is a composite-PK pair with no id, author, body or
+    --      timestamps. It cannot be a message row under any reading.
+    --   3. A label is a dimension, not an utterance. Folding it in would make
+    --      every single messages query carry AND kind != 'label' forever.
+    CREATE TABLE IF NOT EXISTS labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      legacy_source TEXT,
+      legacy_id INTEGER
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_legacy
+      ON labels(legacy_source, legacy_id) WHERE legacy_source IS NOT NULL;
+
+    -- Many-to-many between messages and labels. Composite PK makes re-inserting
+    -- an existing pair a no-op under INSERT OR IGNORE, which is the backfill's
+    -- idempotency story for this table.
+    CREATE TABLE IF NOT EXISTS message_labels (
+      message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+      PRIMARY KEY (message_id, label_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_message_labels_message ON message_labels(message_id);
+    CREATE INDEX IF NOT EXISTS idx_message_labels_label ON message_labels(label_id);
 
     CREATE TABLE IF NOT EXISTS mh_overrides (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,6 +290,38 @@ export function createTables() {
       updated_by INTEGER NOT NULL REFERENCES users(id),
       updated_at TEXT NOT NULL
     );
+
+    -- Append-only audit trail for mh_overrides (OI-104). mh_overrides itself
+    -- holds only the current value (one row per WP, UNIQUE), so a clear erases
+    -- the previous value entirely — this table is where before/after lives.
+    -- supplied_mh keeps the value as the user or CSV supplied it, before the
+    -- optional minimum-hours transform raised it.
+    -- work_package_id is a logical reference with NO foreign key, deliberately,
+    -- matching flight_events / time_bookings / billing_entries. With an FK and
+    -- no ON DELETE, the cleanup-canceled cron threw "FOREIGN KEY constraint
+    -- failed" and rolled back its whole transaction the first time a canceled
+    -- work package had override history — it deletes mh_overrides explicitly
+    -- but never these rows. ON DELETE CASCADE would have traded that for
+    -- something worse: a routine scheduled job silently erasing the audit trail
+    -- it exists to preserve. History outlives the work package, so a row
+    -- pointing at a deleted WP is expected, not corruption.
+    CREATE TABLE IF NOT EXISTS mh_override_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_package_id INTEGER NOT NULL,
+      action TEXT NOT NULL,
+      previous_mh REAL,
+      new_mh REAL,
+      imported_mh REAL,
+      supplied_mh REAL,
+      min_hours REAL,
+      source TEXT NOT NULL DEFAULT 'api',
+      note TEXT,
+      changed_by INTEGER NOT NULL REFERENCES users(id),
+      changed_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_mh_override_history_wp ON mh_override_history(work_package_id);
+    CREATE INDEX IF NOT EXISTS idx_mh_override_history_changed ON mh_override_history(changed_at);
 
     CREATE TABLE IF NOT EXISTS aircraft_type_mappings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -226,41 +426,15 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
-    -- Feedback Board
-    CREATE TABLE IF NOT EXISTS feedback_posts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      author_id INTEGER NOT NULL REFERENCES users(id),
-      title TEXT NOT NULL,
-      body TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'open',
-      is_pinned INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_comments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      post_id INTEGER NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-      parent_id INTEGER REFERENCES feedback_comments(id) ON DELETE CASCADE,
-      author_id INTEGER NOT NULL REFERENCES users(id),
-      body TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_labels (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      color TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS feedback_post_labels (
-      post_id INTEGER NOT NULL REFERENCES feedback_posts(id) ON DELETE CASCADE,
-      label_id INTEGER NOT NULL REFERENCES feedback_labels(id) ON DELETE CASCADE,
-      PRIMARY KEY (post_id, label_id)
-    );
+    -- The Feedback Board tables (feedback_posts, feedback_comments,
+    -- feedback_labels, feedback_post_labels) were folded into messages / labels /
+    -- message_labels in v1.0.0 (OI-099) and are deliberately NOT declared here.
+    --
+    -- Existing installations keep their old tables — read-only, as the only
+    -- rollback for a bad remap — until they are dropped in v1.1.0. Their absence
+    -- from createTables() is what makes them unreachable on fresh installs, and
+    -- their absence from schema.ts is what turns any stale reference into a
+    -- compile error rather than a silent empty result.
 
     -- Invite Codes
     CREATE TABLE IF NOT EXISTS invite_codes (
@@ -275,7 +449,7 @@ export function createTables() {
       updated_at TEXT NOT NULL
     );
 
-    -- Capacity Modeling (v0.3.0)
+    -- Capacity Modeling (v1.0.0)
     CREATE TABLE IF NOT EXISTS capacity_shifts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       code TEXT NOT NULL UNIQUE,
@@ -308,6 +482,13 @@ export function createTables() {
       updated_at TEXT NOT NULL,
       updated_by INTEGER REFERENCES users(id)
     );
+
+    -- Exactly one active row. loadActiveAssumptions() selects on is_active with
+    -- no ordering, so a second active row would silently change every capacity
+    -- number in the app depending on row order — the same shape of defect as
+    -- OI-108's double-counted roster, and just as invisible.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_capacity_assumptions_active
+      ON capacity_assumptions(is_active) WHERE is_active = 1;
 
     CREATE TABLE IF NOT EXISTS headcount_plans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -360,25 +541,28 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_aircraft_operator ON aircraft(operator_id);
     CREATE INDEX IF NOT EXISTS idx_aircraft_source ON aircraft(source);
     CREATE INDEX IF NOT EXISTS idx_aircraft_model ON aircraft(aircraft_model_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_posts_author ON feedback_posts(author_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_posts_status ON feedback_posts(status);
-    CREATE INDEX IF NOT EXISTS idx_feedback_posts_created ON feedback_posts(created_at);
-    CREATE INDEX IF NOT EXISTS idx_feedback_comments_post ON feedback_comments(post_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_post ON feedback_post_labels(post_id);
-    CREATE INDEX IF NOT EXISTS idx_feedback_post_labels_label ON feedback_post_labels(label_id);
+    -- (The feedback_* and flight_comments indexes that lived here were removed
+    -- with their tables in v1.0.0 — OI-099. The messages/labels indexes are
+    -- declared alongside their tables above.)
     CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code);
 
     -- Staffing: Rotation Patterns
     CREATE TABLE IF NOT EXISTS rotation_patterns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id INTEGER,
       name TEXT NOT NULL,
       description TEXT,
       pattern TEXT NOT NULL,
+      effective_from TEXT,
+      effective_to TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    -- (idx_rp_group is created by createLineageIndexes() below, not here — it
+    -- indexes a column an older rotation_patterns table does not have.)
 
     -- Staffing: Rotation Presets (reference library)
     CREATE TABLE IF NOT EXISTS rotation_presets (
@@ -403,15 +587,30 @@ export function createTables() {
       created_by INTEGER REFERENCES users(id)
     );
 
+    -- Exactly one active config. loadActiveStaffingConfig() takes LIMIT 1 with
+    -- no ordering, so a second active config would silently pick an arbitrary
+    -- roster. activateStaffingConfig() deactivates all before activating one,
+    -- so this constraint is never transiently violated.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_staffing_configs_active
+      ON staffing_configs(is_active) WHERE is_active = 1;
+
     -- Staffing: Shift Definitions
     CREATE TABLE IF NOT EXISTS staffing_shifts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       config_id INTEGER NOT NULL REFERENCES staffing_configs(id) ON DELETE CASCADE,
+      -- Versions of one shift share a group_id (OI-111), mirroring the lineage
+      -- rotation_patterns got in M026. Before this the only lineage marker was
+      -- the shift's name, so renaming a shift silently split its history and two
+      -- unrelated shifts sharing a name looked like one. Backfilled to the id of
+      -- the earliest version in each (config_id, name) lineage.
+      group_id INTEGER,
       name TEXT NOT NULL,
       description TEXT,
       category TEXT NOT NULL,
       rotation_id INTEGER REFERENCES rotation_patterns(id),
       rotation_start_date TEXT NOT NULL,
+      rotation_end_date TEXT,
+      pattern_anchor_date TEXT,
       start_hour INTEGER NOT NULL,
       start_minute INTEGER NOT NULL DEFAULT 0,
       end_hour INTEGER NOT NULL,
@@ -429,6 +628,7 @@ export function createTables() {
     CREATE INDEX IF NOT EXISTS idx_ss_config ON staffing_shifts(config_id);
     CREATE INDEX IF NOT EXISTS idx_ss_config_category ON staffing_shifts(config_id, category);
     CREATE INDEX IF NOT EXISTS idx_ss_rotation ON staffing_shifts(rotation_id);
+    -- (idx_ss_group: see createLineageIndexes() below.)
 
     -- Demand Contracts (hierarchical)
     CREATE TABLE IF NOT EXISTS demand_contracts (
@@ -601,6 +801,119 @@ export function createTables() {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_wmp_customer_day_shift
       ON weekly_mh_projections(customer, day_of_week, shift_code);
   `);
+
+  createLineageIndexes();
+}
+
+/**
+ * The two lineage indexes, created only once their column exists.
+ *
+ * `CREATE TABLE IF NOT EXISTS` is a no-op against a table that already exists,
+ * so on a pre-v1.0.0 database `rotation_patterns` and `staffing_shifts` keep
+ * their old column set — without `group_id` (OI-101, OI-111). `IF NOT EXISTS`
+ * on the *index* does not help: it suppresses "index already exists", not
+ * "no such column", so the statement threw and took the whole of createTables()
+ * with it. That made `db:migrate` — and app startup, which calls createTables()
+ * via bootstrap — fail against every database older than v1.0.0.
+ *
+ * Skipping the index is safe and temporary: it is only a lookup optimisation,
+ * and `db:upgrade-v1` adds the column and then the index. Correctness does not
+ * depend on it; the upgrade is still mandatory, and assertSchemaCompatible()
+ * is what enforces that rather than an incidental SQL error.
+ */
+function createLineageIndexes(): void {
+  const lineage: { table: string; index: string }[] = [
+    { table: "rotation_patterns", index: "idx_rp_group" },
+    { table: "staffing_shifts", index: "idx_ss_group" },
+  ];
+
+  for (const { table, index } of lineage) {
+    const cols = sqlite.prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[];
+    if (!cols.some((col) => col.name === "group_id")) continue;
+    sqlite.exec(`CREATE INDEX IF NOT EXISTS ${index} ON ${table}(group_id);`);
+  }
+}
+
+// ─── Schema compatibility gate ───────────────────────────────────────────────
+
+/** A v1.0.0 structural marker, and the change that introduced it. */
+const V1_MARKERS: { describe: string; ok: () => boolean; owner: string }[] = [
+  {
+    describe: "the unified `messages` table is missing",
+    ok: () => tableExists("messages"),
+    owner: "OI-099",
+  },
+  {
+    describe: "`work_packages.title` still exists (identifiers live in `workpackage_no` now)",
+    ok: () => !columnExists("work_packages", "title"),
+    owner: "OI-086",
+  },
+  {
+    describe: "`staffing_shifts.group_id` is missing",
+    ok: () => columnExists("staffing_shifts", "group_id"),
+    owner: "OI-111",
+  },
+  {
+    describe: "the `mh_override_history` table is missing",
+    ok: () => tableExists("mh_override_history"),
+    owner: "OI-104",
+  },
+];
+
+function tableExists(table: string): boolean {
+  return (
+    sqlite.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`).get(table) !==
+    undefined
+  );
+}
+
+function columnExists(table: string, column: string): boolean {
+  if (!tableExists(table)) return false;
+  const cols = sqlite.prepare(`PRAGMA table_info("${table}")`).all() as { name: string }[];
+  return cols.some((col) => col.name === column);
+}
+
+/**
+ * Refuse to serve a database the running code cannot read correctly.
+ *
+ * `createTables()` only ever adds what is missing, so against a pre-v1.0.0
+ * database it leaves the old shape in place and returns happily. The app then
+ * starts and looks healthy while reading columns that moved: work package
+ * identifiers come back blank, and comments, notifications and feedback come
+ * back empty — with no error and no log line. That exact failure happened once
+ * during development, and it is far worse than not starting at all.
+ *
+ * So this runs at bootstrap and stops the process with the fix rather than a
+ * symptom. It probes structure, not a version string: `schemaVersion` is only a
+ * stamp and an operator can set it, whereas a missing table cannot be faked.
+ */
+export function assertSchemaCompatible(): void {
+  const failed = V1_MARKERS.filter((marker) => !marker.ok());
+  if (failed.length === 0) return;
+
+  const stamped =
+    (
+      sqlite.prepare(`SELECT value FROM app_config WHERE key = 'schemaVersion'`).get() as
+        | { value: string }
+        | undefined
+    )?.value ?? "pre-1.0.0 (unstamped)";
+
+  throw new Error(
+    [
+      `Database schema is not compatible with this build (found: ${stamped}).`,
+      "",
+      ...failed.map((f) => `  - ${f.describe} [${f.owner}]`),
+      "",
+      "Upgrade it once, with the app stopped:",
+      "",
+      "    npm run db:upgrade-v1            # takes a full backup first",
+      "    npm run db:upgrade-v1 -- --dry-run   # preview, writes nothing",
+      "",
+      "The upgrade is mandatory and supports every released schema from v0.1.0.",
+      "Starting without it would serve blank work package identifiers and empty",
+      "comment, notification and feedback lists. See the v1.0.0 Migration Guide.",
+    ].join("\n"),
+  );
 }
 
 // ─── Migrations ──────────────────────────────────────────────────────────────
@@ -611,8 +924,20 @@ export interface MigrationResult {
 }
 
 export function runMigrations(): MigrationResult[] {
-  // v0.2.0: All migrations (M003–M021) consolidated into createTables().
-  // Fresh databases get the complete schema; no incremental migrations needed.
-  // Future schema changes after v0.2.0 should add new migrations here.
+  // v1.0.0: the migration ladder was collapsed. All migrations (M003-M026) are
+  // now declared directly in createTables(), which is the single canonical
+  // statement of the schema — a fresh database is complete after createTables()
+  // alone, with nothing left for this function to apply.
+  //
+  // Databases created before v1.0.0 do NOT catch up here. They are brought
+  // forward once, deliberately, by `npm run db:upgrade-v1`
+  // (scripts/db/upgrade-to-v1.ts), which also takes a full backup first. That
+  // separation is the point: schema declaration and one-time data movement are
+  // different jobs and should not share a code path.
+  //
+  // Schema changes made AFTER v1.0.0 go here as new migrations, in the style of
+  // the old M022-M026 blocks (see git history) — guarded by a PRAGMA
+  // table_info / sqlite_master probe so they are idempotent, and mirrored into
+  // createTables() so fresh installs never need them.
   return [];
 }

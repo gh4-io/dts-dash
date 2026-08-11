@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,21 @@ interface AssumptionsFormProps {
   initial: CapacityAssumptions;
   onSave: (updates: Partial<CapacityAssumptions>) => Promise<void>;
 }
+
+/**
+ * Opt-in click-to-edit config for percentage SliderFields. Values are stored as
+ * decimal fractions (0-1) but typed as whole percents, so both edges convert.
+ * The 4-decimal round keeps 89 -> 0.89 exact instead of 0.8899999999999999.
+ */
+const PERCENT_EDIT: SliderFieldEdit = {
+  suffix: "%",
+  toInput: (v) => `${(v * 100).toFixed(0)}`,
+  fromInput: (raw) => {
+    const n = Number(raw.trim().replace("%", ""));
+    if (raw.trim() === "" || !Number.isFinite(n)) return null;
+    return parseFloat((n / 100).toFixed(4));
+  },
+};
 
 export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
   const [paidToAvailable, setPaidToAvailable] = useState(initial.paidToAvailable);
@@ -162,6 +178,7 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
           max={1.0}
           step={0.01}
           format={(v) => `${(v * 100).toFixed(0)}%`}
+          editable={PERCENT_EDIT}
         />
 
         <SliderField
@@ -173,6 +190,7 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
           max={1.0}
           step={0.01}
           format={(v) => `${(v * 100).toFixed(0)}%`}
+          editable={PERCENT_EDIT}
         />
 
         <SliderField
@@ -184,7 +202,63 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
           max={1.0}
           step={0.01}
           format={(v) => `${(v * 100).toFixed(0)}%`}
+          editable={PERCENT_EDIT}
         />
+
+        {/* These two factors multiply — 89% x 65% is 58%, not 89% or 65%. That is
+            easy to mis-read as a single ratio, so spell the chain out with the
+            current numbers rather than leaving it to be inferred. */}
+        <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <i className="fa-solid fa-circle-info mr-1.5" />
+            How productive MH is calculated
+          </div>
+
+          <div className="font-mono text-xs text-foreground">
+            HC x HOURS x ATT x PROD <span className="text-muted-foreground">[x NIGHT]</span> =
+            Productive MH
+          </div>
+
+          <div className="font-mono text-[11px] text-muted-foreground">
+            e.g. 8 heads x 10h x {paidToAvailable.toFixed(2)} x {availableToProductive.toFixed(2)} ={" "}
+            <span className="text-foreground font-medium">
+              {(8 * 10 * paidToAvailable * availableToProductive).toFixed(1)} MH
+            </span>
+          </div>
+
+          <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-[11px] text-muted-foreground pt-1">
+            <dt className="font-mono text-foreground">HC x HOURS</dt>
+            <dd>
+              <span className="text-foreground">Paid MH</span> — everyone rostered, at their shift
+              length. What payroll covers.
+            </dd>
+
+            <dt className="font-mono text-foreground">x ATT</dt>
+            <dd>
+              <span className="text-foreground">Available MH</span> — attendance rate. Removes
+              call-offs, sick leave, vacation.
+            </dd>
+
+            <dt className="font-mono text-foreground">x PROD</dt>
+            <dd>
+              <span className="text-foreground">Productive MH</span> — wrench time. Removes breaks,
+              admin, travel.
+            </dd>
+
+            <dt className="font-mono text-foreground">x NIGHT</dt>
+            <dd>Night shifts only, applied on top of PROD.</dd>
+          </dl>
+
+          <p className="text-[11px] text-muted-foreground border-t border-border pt-2">
+            Combined efficiency is{" "}
+            <span className="font-mono text-foreground">
+              {(paidToAvailable * availableToProductive * 100).toFixed(1)}%
+            </span>{" "}
+            of paid hours — the two factors multiply, they do not average. Productive MH is what
+            capacity and utilisation are measured against; Paid and Available MH are reported for
+            reference.
+          </p>
+        </div>
       </section>
 
       {/* Default MH */}
@@ -295,6 +369,19 @@ export function AssumptionsForm({ initial, onSave }: AssumptionsFormProps) {
   );
 }
 
+/**
+ * Opt-in click-to-edit behaviour for a SliderField's value display. Omit it and
+ * the value stays a plain read-only label (the `format` output is unchanged).
+ */
+interface SliderFieldEdit {
+  /** Stored value -> raw text shown while editing (e.g. 0.89 -> "89") */
+  toInput: (v: number) => string;
+  /** Typed text -> stored value; return null to reject and restore the previous value */
+  fromInput: (raw: string) => number | null;
+  /** Unit rendered beside the input while editing */
+  suffix?: string;
+}
+
 /** Reusable slider field with label, description, and value display */
 function SliderField({
   label,
@@ -305,6 +392,7 @@ function SliderField({
   max,
   step,
   format,
+  editable,
 }: {
   label: string;
   description: string;
@@ -314,12 +402,73 @@ function SliderField({
   max: number;
   step: number;
   format: (v: number) => string;
+  editable?: SliderFieldEdit;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Set by Escape so the blur that follows unmounting the input does not commit
+  const cancelledRef = useRef(false);
+
+  const startEdit = useCallback(() => {
+    if (!editable) return;
+    cancelledRef.current = false;
+    setDraft(editable.toInput(value));
+    setEditing(true);
+  }, [editable, value]);
+
+  const commit = useCallback(() => {
+    if (!editable || cancelledRef.current) {
+      setEditing(false);
+      return;
+    }
+    const parsed = editable.fromInput(draft);
+    // Non-numeric or empty input falls back to the previous value rather than NaN
+    if (parsed !== null) onChange(Math.min(max, Math.max(min, parsed)));
+    setEditing(false);
+  }, [editable, draft, onChange, min, max]);
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label className="text-sm">{label}</Label>
-        <span className="text-sm font-mono tabular-nums font-medium">{format(value)}</span>
+        {editing && editable ? (
+          <div className="flex items-center gap-1">
+            <Input
+              autoFocus
+              inputMode="decimal"
+              aria-label={label}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  cancelledRef.current = true;
+                  setEditing(false);
+                }
+              }}
+              className="h-7 w-20 text-right text-sm font-mono tabular-nums font-medium"
+            />
+            {editable.suffix && (
+              <span className="text-sm font-mono text-muted-foreground">{editable.suffix}</span>
+            )}
+          </div>
+        ) : editable ? (
+          <button
+            type="button"
+            onClick={startEdit}
+            aria-label={`Edit ${label}`}
+            className="rounded px-1 text-sm font-mono tabular-nums font-medium hover:bg-accent focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none"
+          >
+            {format(value)}
+          </button>
+        ) : (
+          <span className="text-sm font-mono tabular-nums font-medium">{format(value)}</span>
+        )}
       </div>
       <Slider
         value={[value]}

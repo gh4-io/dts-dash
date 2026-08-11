@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useFilters } from "./use-filters";
+import { buildFilterUrlParams } from "@/lib/utils/filter-helpers";
 import type { AircraftType } from "@/types";
 
 /**
@@ -23,6 +24,9 @@ export function useFilterUrlSync() {
     operators,
     aircraft,
     types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
     hydrate,
   } = useFilters();
 
@@ -34,19 +38,34 @@ export function useFilterUrlSync() {
     const urlOp = searchParams.get("op");
     const urlAc = searchParams.get("ac");
     const urlType = searchParams.get("type");
+    // Exclusions — `n` prefix for "not"
+    const urlNotOp = searchParams.get("nop");
+    const urlNotAc = searchParams.get("nac");
+    const urlNotType = searchParams.get("ntype");
 
+    const list = (raw: string | null) => (raw ? raw.split(",").filter(Boolean) : []);
+
+    // start/end/timezone stay merge-only: a bare first load must leave them
+    // alone so PreferencesLoader can apply the user's default window.
     const params: Record<string, unknown> = {};
     if (urlStart) params.start = urlStart;
     if (urlEnd) params.end = urlEnd;
     if (urlTz) params.timezone = urlTz;
-    if (urlOp) params.operators = urlOp.split(",").filter(Boolean);
-    if (urlAc) params.aircraft = urlAc.split(",").filter(Boolean);
-    if (urlType)
-      params.types = urlType.split(",").filter(Boolean) as AircraftType[];
 
-    if (Object.keys(params).length > 0) {
-      hydrate(params as Record<string, never>);
-    }
+    // The six selection lists are authoritative: absent from the URL means
+    // empty, not "keep whatever the last page left in the store". Without this
+    // a selection made on one page silently follows the user everywhere else,
+    // including back through the browser's Back arrow.
+    params.operators = list(urlOp);
+    params.aircraft = list(urlAc);
+    params.types = list(urlType) as AircraftType[];
+    params.excludeOperators = list(urlNotOp);
+    params.excludeAircraft = list(urlNotAc);
+    params.excludeTypes = list(urlNotType);
+
+    hydrate(params as Record<string, never>);
+    // Signal that URL → store sync is complete so data hooks can fetch
+    useFilters.getState()._markUrlSynced();
     // Brief delay before enabling store→URL sync
     setTimeout(() => {
       isHydrating.current = false;
@@ -62,14 +81,26 @@ export function useFilterUrlSync() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
-      const params = new URLSearchParams();
-
-      if (start) params.set("start", start);
-      if (end) params.set("end", end);
-      if (timezone && timezone !== "UTC") params.set("tz", timezone);
-      if (operators.length > 0) params.set("op", operators.join(","));
-      if (aircraft.length > 0) params.set("ac", aircraft.join(","));
-      if (types.length > 0) params.set("type", types.join(","));
+      // Seed from the live URL and overwrite only the filter keys, so params the
+      // route itself owns survive. The Focus view carries its subject in
+      // `scope`/`subject`; rebuilding from filter state alone would strip them
+      // 300ms after arrival and the page would lose what it is focused on.
+      // Read from window rather than the `searchParams` hook so this effect does
+      // not re-run on its own router.replace.
+      const params = buildFilterUrlParams(
+        {
+          start,
+          end,
+          timezone,
+          operators,
+          aircraft,
+          types,
+          excludeOperators,
+          excludeAircraft,
+          excludeTypes,
+        },
+        new URLSearchParams(window.location.search),
+      );
 
       const qs = params.toString();
       const url = qs ? `${pathname}?${qs}` : pathname;
@@ -80,5 +111,17 @@ export function useFilterUrlSync() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [start, end, timezone, operators, aircraft, types, pathname, router]);
+  }, [
+    start,
+    end,
+    timezone,
+    operators,
+    aircraft,
+    types,
+    excludeOperators,
+    excludeAircraft,
+    excludeTypes,
+    pathname,
+    router,
+  ]);
 }
