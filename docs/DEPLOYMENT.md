@@ -49,8 +49,10 @@ cd cvg-dashboard
 cp docker/.env.prod.example .env.prod
 npm run generate-secret
 # Paste the output as AUTH_SECRET in .env.prod
-cp server.config.dev.yml server.config.yml
-# Edit server.config.yml: set logging.level: info, features.enableSeedEndpoint: false
+cp server.config.prod.yml server.config.yml
+# ^ the PROD template. Do NOT use server.config.dev.yml: it sets logging to
+#   "debug" and drops the password policy to 8 characters with no character
+#   requirements. Both are development conveniences.
 ```
 
 ### 2. Build and start
@@ -120,8 +122,10 @@ npm ci
 cp docker/.env.prod.example .env.prod
 npm run generate-secret
 # Paste the output as AUTH_SECRET in .env.prod
-cp server.config.dev.yml server.config.yml
-# Edit server.config.yml: set logging.level: info, features.enableSeedEndpoint: false
+cp server.config.prod.yml server.config.yml
+# ^ the PROD template. Do NOT use server.config.dev.yml: it sets logging to
+#   "debug" and drops the password policy to 8 characters with no character
+#   requirements. Both are development conveniences.
 ```
 
 ### 3. Build

@@ -199,20 +199,58 @@ anything importing a stripped package fails there rather than in production.
 | `src/app/api/seed/route.ts` | Hardened, not removed. Returns **404** unless `features.enableSeedEndpoint` is true in `server.config.yml` (default `false` in both the template and the loader), and additionally requires superadmin in production |
 | `src/app/api/admin/aircraft-types/test/route.ts` | A product feature — tests a raw type string against current mappings. The word "test" in the path is not a unit test |
 | `src/app/(authenticated)/admin/capacity/dev-overview/page.tsx` | OI-066 temp fixture, deliberately in scope for v1.0.0 despite the `dev-` name |
-| `server.config.dev.yml` | Ships as the **config template** — `server.config.yml` is gitignored. See the warning below |
+| `server.config.prod.yml` | The **production** config template — this is the one deployments copy to `server.config.yml` |
+| `server.config.dev.yml` | Ships too, for bare-metal dev installs. **Never copy it to production** — see below |
 | `scripts/db/seed.ts`, `seed-reference.ts` | Operational: first-run and reference data, not dev fixtures |
 | `scripts/db/sync-version.mjs` | Release tooling, invoked by the `npm version` hook |
 | `.github/workflows/` | CI/CD. Verified it calls only `lint`, `tsc --noEmit`, `build` and `audit` — all of which survive the strip |
 | `docs/` | Operational runbooks (DEPLOYMENT, BACKUP, MONITORING) |
 
-⚠️ **`server.config.dev.yml` ships with `logging.level: "debug"`.** It is the template an operator
-copies to `server.config.yml`, so a production deployment that copies it verbatim runs debug logging —
-verbose, and a disclosure risk. Setting `level: "info"` is a **required** step of every deployment, not
-a recommendation. It is called out in the compose file header for the same reason.
+#### Config templates — `server.config.prod.yml` is the one production uses
 
-⚠️ **The seed endpoint's guard moved** from the `ENABLE_SEED_ENDPOINT` env var (described in Phase 1.9
-below, now stale) to `features.enableSeedEndpoint` in `server.config.yml`. The protection is equivalent
-and still default-off; only the mechanism changed.
+There are two templates, and until v1.0.0 there was only the development one, which the deployment
+instructions told operators to copy. That is a defect, not a nuance: **`server.config.dev.yml`
+deliberately relaxes two production-relevant settings**, and copying it carries both onto a live host.
+
+| Setting | `server.config.dev.yml` | `server.config.prod.yml` | Why it matters |
+|---|---|---|---|
+| `logging.level` | `debug` | `info` | debug logs request detail continuously — noisy, disk-hungry, and it writes data to disk that should not be there |
+| `passwordSecurity.minLength` | `8` | `12` | |
+| `requireUppercase` / `Lowercase` / `Digits` / `SpecialChars` | all `false` | all `true` | an 8-character all-lowercase password is accepted on a network-facing login |
+| `minEntropy` | `30` | `50` | |
+
+Both templates keep `enableSeedEndpoint: false`.
+
+**Defence in depth, so this cannot recur silently:**
+
+1. `server.config.prod.yml` exists and is what the compose header, `docs/DEPLOYMENT.md` and the release
+   checklist all tell you to copy.
+2. The **built-in defaults are already safe** — `DEFAULT_LOG_LEVEL = "info"`, `enableSeedEndpoint: false`.
+   A container with no config mounted is correct by default. Only an explicit file can make it unsafe.
+3. `warnOnUnsafeProductionConfig()` in `src/lib/config/loader.ts` logs a warning on **every start** when
+   `NODE_ENV=production` and the log level is below `info`, or the seed endpoint is on. It warns rather
+   than overrides — raising the level to debug on a live system is legitimate while chasing a problem;
+   what this stops is the temporary change nobody remembers to undo.
+4. The **prod image bakes in no config at all**. Only the `dev` stage copies `server.config.dev.yml`
+   (Dockerfile line 111). A comment in the compose file claimed the prod image used it as a fallback —
+   it never did, and that comment is now corrected.
+
+#### What the seed endpoint is, and how it is locked
+
+`/api/seed` writes **default starter data** — the default admin user, default customers, default
+settings — over whatever is already in the database. It exists so a brand-new install can populate
+itself. On a live system it is a way to overwrite real data with starter data.
+
+Two independent locks, both on by default:
+
+- `features.enableSeedEndpoint: false` in `server.config.yml` → the URL returns **404**, as though the
+  route did not exist. This is the default in the loader *and* in both templates.
+- Even when enabled, production additionally requires a **superadmin session** (403 otherwise).
+
+⚠️ **The switch moved.** Phase 1.9 below still describes an `ENABLE_SEED_ENDPOINT` environment
+variable. **Nothing reads that variable any more** — setting it has no effect in either direction. The
+control is `features.enableSeedEndpoint` in `server.config.yml`. The protection is equivalent and still
+default-off; only the mechanism changed, and the docs did not follow.
 
 ### KEEP — shipped in release
 
@@ -232,7 +270,8 @@ and still default-off; only the mechanism changed.
 | `components.json` | shadcn/ui configuration |
 | `next-env.d.ts` | Next.js TypeScript declarations |
 | `.gitignore` | Git ignore rules |
-| `server.config.dev.yml` | Default config template (live `server.config.yml` is gitignored) |
+| `server.config.prod.yml` | Production config template — what deployments copy to `server.config.yml` |
+| `server.config.dev.yml` | Development config template (live `server.config.yml` is gitignored) |
 | `scripts/init-config.js` | Config initialization |
 | `scripts/backup-db.sh` | DB backup shell script |
 | `Dockerfile` | Unified container build (prod default + dev target) |

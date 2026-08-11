@@ -99,6 +99,44 @@ const DEFAULT_FEATURES: AppFeatures = {
   enableSeedEndpoint: false,
   cronEnabled: true,
 };
+
+/** Log levels below "info" — verbose, and they put request detail on disk. */
+const VERBOSE_LOG_LEVELS = ["trace", "debug"];
+
+/**
+ * Say something when production is running development settings.
+ *
+ * The built-in defaults are safe — log level "info", seed endpoint off — so this
+ * only ever fires when a config file explicitly asked for something riskier. The
+ * usual cause is copying `server.config.dev.yml` to a production host: it sets
+ * `logging.level: "debug"` and relaxes the password policy, because both are
+ * convenient locally. `server.config.prod.yml` exists so that copy is never the
+ * right move.
+ *
+ * A warning, not a correction. Raising the log level to debug on a live system
+ * is a legitimate thing to do while chasing a problem, and silently overriding
+ * the operator would be worse than noisy. What this prevents is the temporary
+ * change nobody remembers to undo: it is on every start until it is put back.
+ */
+function warnOnUnsafeProductionConfig(logLevel: string, seedEnabled: boolean): void {
+  if (process.env.NODE_ENV !== "production") return;
+
+  if (VERBOSE_LOG_LEVELS.includes(logLevel.toLowerCase())) {
+    console.warn(
+      `[Config] logging.level is "${logLevel}" in production. Expected "info" or higher — ` +
+        `verbose levels log request detail continuously. If this is temporary, put it back ` +
+        `when you are done; see server.config.prod.yml.`,
+    );
+  }
+
+  if (seedEnabled) {
+    console.warn(
+      `[Config] features.enableSeedEndpoint is true in production. /api/seed overwrites live ` +
+        `data with default starter data. It still requires a superadmin session, but it should ` +
+        `be false unless you are deliberately seeding right now.`,
+    );
+  }
+}
 const DEFAULT_TIMELINE: TimelineDefaults = {
   startOffset: -0.5,
   endOffset: 2.5, // derived: startOffset + defaultDays (-0.5 + 3)
@@ -297,6 +335,8 @@ export function loadServerConfig(force = false): void {
     enableSeedEndpoint: yaml.features?.enableSeedEndpoint ?? DEFAULT_FEATURES.enableSeedEndpoint,
     cronEnabled: yaml.features?.cronEnabled ?? DEFAULT_FEATURES.cronEnabled,
   };
+
+  warnOnUnsafeProductionConfig(s.inMemoryLogLevel, s.inMemoryFeatures.enableSeedEndpoint);
   const yamlTl = yaml.timeline ?? {};
   const startOffset = yamlTl.startOffset ?? DEFAULT_TIMELINE.startOffset;
   const defaultDays = yamlTl.defaultDays ?? DEFAULT_TIMELINE.defaultDays;
