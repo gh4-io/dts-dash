@@ -1,24 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import { feedbackComments } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { parseIntParam } from "@/lib/utils/route-helpers";
 import { getSessionUserId } from "@/lib/utils/session-helpers";
-
-/** Recursively delete a comment and all its replies. */
-function deleteCommentTree(commentId: number): void {
-  const children = db
-    .select({ id: feedbackComments.id })
-    .from(feedbackComments)
-    .where(eq(feedbackComments.parentId, commentId))
-    .all();
-  for (const child of children) {
-    deleteCommentTree(child.id);
-  }
-  db.delete(feedbackComments).where(eq(feedbackComments.id, commentId)).run();
-}
+import {
+  getFeedbackComment,
+  updateFeedbackComment,
+  deleteMessageSubtree,
+} from "@/lib/messages/repository";
 
 const log = createChildLogger("api/feedback/[id]/comments/[commentId]");
 
@@ -41,12 +30,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Invalid comment ID" }, { status: 400 });
     }
 
-    const comment = db
-      .select()
-      .from(feedbackComments)
-      .where(eq(feedbackComments.id, commentId))
-      .get();
-
+    const comment = getFeedbackComment(commentId);
     if (!comment) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
     }
@@ -66,13 +50,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    db.update(feedbackComments)
-      .set({
-        body: commentBody,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(feedbackComments.id, commentId))
-      .run();
+    updateFeedbackComment(commentId, commentBody);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -83,7 +61,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 /**
  * DELETE /api/feedback/[id]/comments/[commentId]
- * Delete a comment (author or admin).
+ * Delete a comment and all of its replies (author or admin).
+ *
+ * The recursive walk that used to be local to this file is now
+ * deleteMessageSubtree in the repository, shared with flight comments — which is
+ * how flight comments picked up full-subtree deletion in v1.0.0 (OI-099).
  */
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
@@ -100,12 +82,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     const role = (session.user as unknown as { role: string }).role;
     const isAdmin = role === "admin" || role === "superadmin";
 
-    const comment = db
-      .select()
-      .from(feedbackComments)
-      .where(eq(feedbackComments.id, commentId))
-      .get();
-
+    const comment = getFeedbackComment(commentId);
     if (!comment) {
       return NextResponse.json({ error: "Comment not found" }, { status: 404 });
     }
@@ -116,7 +93,7 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    deleteCommentTree(commentId);
+    deleteMessageSubtree(commentId);
 
     return NextResponse.json({ success: true });
   } catch (error) {

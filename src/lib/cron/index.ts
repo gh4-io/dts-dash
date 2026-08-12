@@ -6,8 +6,12 @@ import { cronJobRuns } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { cleanupCanceledWPs } from "./tasks/cleanup-canceled";
 import { backupDatabase } from "./tasks/backup-database";
+import { pruneImportHistoryTask, DEFAULT_RETENTION_DAYS } from "./tasks/prune-import-history";
 import { createChildLogger } from "@/lib/logger";
 import { getFeatures, getCronJobOverrides, getFlightSettings } from "@/lib/config/loader";
+import { nextCronRun } from "@/lib/utils/cron-helpers";
+import { getSchedulerRuntimeState, setSchedulerRuntimeState } from "./scheduler-state";
+import { isJobScheduled, resolveSchedulerStatus, type SchedulerState } from "./scheduler-status";
 
 const log = createChildLogger("cron");
 
@@ -65,6 +69,10 @@ export interface CronJobStatus extends CronJobConfig {
   lastRunStatus: "success" | "error" | null;
   lastRunMessage: string | null;
   runCount: number;
+  /** When this job will next fire, or null if it is not registered */
+  nextRunAt: string | null;
+  /** True only when the scheduler is running AND the job is enabled */
+  scheduled: boolean;
 }
 
 // ─── Built-in Job Registry ───────────────────────────────────────────────────
@@ -107,6 +115,26 @@ const BUILTIN_JOBS: BuiltinJobDef[] = [
         min: 1,
         max: 365,
         description: "Number of recent backups to retain (oldest are pruned automatically)",
+      },
+    },
+  },
+  {
+    key: "prune-import-history",
+    name: "Prune Import History",
+    description: "Deletes import history entries older than the retention window",
+    script: "src/lib/cron/tasks/prune-import-history.ts",
+    handler: pruneImportHistoryTask,
+    defaultSchedule: "30 3 * * *",
+    defaultEnabled: true,
+    defaultOptions: { retentionDays: DEFAULT_RETENTION_DAYS },
+    optionsSchema: {
+      retentionDays: {
+        type: "number",
+        default: DEFAULT_RETENTION_DAYS,
+        label: "Retention (days)",
+        min: 0,
+        max: 3650,
+        description: "Delete import history older than this. 0 disables pruning.",
       },
     },
   },
@@ -257,6 +285,16 @@ export async function executeJob(job: CronJobConfig): Promise<CronTaskResult> {
 /** Run a job and update runtime state */
 async function runJob(job: CronJobConfig): Promise<void> {
   const jobLog = createChildLogger(`cron:${job.key}`);
+
+  // Re-check the runtime switch at fire time. `pauseScheduler()` already stops
+  // the registered tasks, but only in the process that handled the request —
+  // this makes a pause effective even if the tasks live somewhere else, so
+  // "paused" can never quietly still be running.
+  if (getSchedulerRuntimeState().paused) {
+    jobLog.info("Scheduler is paused, skipping scheduled run");
+    return;
+  }
+
   jobLog.info("Cron job executing");
 
   try {
@@ -280,6 +318,14 @@ export function startCron(): void {
   // Check system-level kill switch from server.config.yml
   if (!getFeatures().cronEnabled) {
     log.info("Cron disabled via server.config.yml features.cronEnabled");
+    return;
+  }
+
+  // Check the DB-backed runtime switch. Checked here (not only in
+  // pauseScheduler) so that a config edit calling restartCron() — or a server
+  // restart — does not silently resume a scheduler an admin deliberately paused.
+  if (getSchedulerRuntimeState().paused) {
+    log.info("Cron paused by administrator, not registering jobs");
     return;
   }
 
@@ -338,21 +384,77 @@ export function restartCron(): void {
   startCron();
 }
 
+/** How many tasks this process currently has registered */
+export function getActiveTaskCount(): number {
+  return activeTasks.size;
+}
+
+/** Job keys currently registered — used by tests to assert no duplicate scheduling */
+export function getActiveJobKeys(): string[] {
+  return [...activeTasks.keys()];
+}
+
+/**
+ * Deployment gate + runtime switch + live task count, resolved into one shape.
+ * This is what the admin UI renders and what every mutating route checks.
+ */
+export function getSchedulerState(): SchedulerState {
+  const gateEnabled = getFeatures().cronEnabled;
+  const runtime = getSchedulerRuntimeState();
+
+  return {
+    ...runtime,
+    gateEnabled,
+    status: resolveSchedulerStatus(gateEnabled, runtime.paused),
+    activeTaskCount: activeTasks.size,
+  };
+}
+
+/**
+ * Pause the scheduler from the admin UI: persist the state (so it survives a
+ * restart) then stop the registered tasks. Takes effect immediately — no
+ * restart, and server.config.yml is never touched.
+ */
+export function pauseScheduler(changedBy: string): SchedulerState {
+  setSchedulerRuntimeState(true, changedBy);
+  stopCron();
+  return getSchedulerState();
+}
+
+/**
+ * Resume the scheduler. `startCron()` re-registers only enabled jobs and its
+ * own `activeTasks.size` guard prevents a second registration if something is
+ * already scheduled, so resuming twice cannot double-fire a job.
+ */
+export function resumeScheduler(changedBy: string): SchedulerState {
+  setSchedulerRuntimeState(false, changedBy);
+  startCron();
+  return getSchedulerState();
+}
+
 // ─── Status API ──────────────────────────────────────────────────────────────
 
 /** Get effective jobs merged with runtime state */
 export function getCronStatus(): CronJobStatus[] {
   const jobs = getEffectiveJobs();
   const runStates = getRunStates();
+  const { status } = getSchedulerState();
 
   return jobs.map((job) => {
     const state = runStates.get(job.key);
+    // A next run is only meaningful for a job that is actually registered —
+    // reporting one for a gated-off or paused scheduler is the exact kind of
+    // false reassurance OI-105 is about.
+    const scheduled = isJobScheduled(status, job.enabled);
+
     return {
       ...job,
       lastRunAt: state?.lastRunAt ?? null,
       lastRunStatus: state?.lastRunStatus ?? null,
       lastRunMessage: state?.lastRunMessage ?? null,
       runCount: state?.runCount ?? 0,
+      nextRunAt: scheduled ? (nextCronRun(job.schedule)?.toISOString() ?? null) : null,
+      scheduled,
     };
   });
 }

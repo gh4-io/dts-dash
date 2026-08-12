@@ -1,15 +1,17 @@
 "use client";
 
 import { useMemo, useState, useRef, useEffect, useCallback } from "react";
+import { useChartSeriesVisibility } from "@/lib/hooks/use-chart-series-visibility";
+import { ChartLegend, type LegendRow } from "@/components/shared/chart-legend";
 import {
   ComposedChart,
+  Legend as RechartsLegend,
   Bar,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ReferenceLine,
   ReferenceArea,
@@ -52,6 +54,18 @@ interface SelectionStats {
   endLabel: string;
 }
 
+const SERIES = {
+  arrivals: "series:arrivals",
+  departures: "series:departures",
+  onGround: "series:onGround",
+} as const;
+
+const SERIES_COLOR = {
+  arrivals: "#3b82f6",
+  departures: "#f43f5e",
+  onGround: "#eab308",
+} as const;
+
 export function CombinedChart({
   snapshots,
   timezone = "UTC",
@@ -68,6 +82,40 @@ export function CombinedChart({
       onGround: s.onGroundCount,
     }));
   }, [snapshots]);
+
+  // ─── Legend visibility — click an entry to drop that series ───
+  const { isHidden, toggle } = useChartSeriesVisibility();
+  const legendRows = useMemo<LegendRow[]>(
+    () => [
+      {
+        id: "series",
+        items: [
+          {
+            key: SERIES.arrivals,
+            label: "Arrivals",
+            color: SERIES_COLOR.arrivals,
+            mark: "bar" as const,
+            hidden: isHidden(SERIES.arrivals),
+          },
+          {
+            key: SERIES.departures,
+            label: "Departures",
+            color: SERIES_COLOR.departures,
+            mark: "bar" as const,
+            hidden: isHidden(SERIES.departures),
+          },
+          {
+            key: SERIES.onGround,
+            label: "On Ground",
+            color: SERIES_COLOR.onGround,
+            mark: "solid" as const,
+            hidden: isHidden(SERIES.onGround),
+          },
+        ],
+      },
+    ],
+    [isHidden],
+  );
 
   // ─── NOW indicator — find the chart data point matching the current hour ───
   const [nowTimestamp, setNowTimestamp] = useState(Date.now);
@@ -390,7 +438,9 @@ export function CombinedChart({
           allowDecimals={false}
           width={35}
         />
-        <Legend
+        {/* Print path keeps Recharts' own legend — there is no wrapper element to
+            place ours in — but hidden series drop out of both plot and legend. */}
+        <RechartsLegend
           wrapperStyle={{
             fontSize: 11,
             paddingTop: 8,
@@ -402,27 +452,33 @@ export function CombinedChart({
         <Bar
           dataKey="arrivals"
           name="Arrivals"
-          fill="#3b82f6"
+          fill={SERIES_COLOR.arrivals}
           radius={[2, 2, 0, 0]}
           barSize={8}
           isAnimationActive={false}
+          hide={isHidden(SERIES.arrivals)}
+          legendType={isHidden(SERIES.arrivals) ? "none" : undefined}
         />
         <Bar
           dataKey="departures"
           name="Departures"
-          fill="#f43f5e"
+          fill={SERIES_COLOR.departures}
           radius={[2, 2, 0, 0]}
           barSize={8}
           isAnimationActive={false}
+          hide={isHidden(SERIES.departures)}
+          legendType={isHidden(SERIES.departures) ? "none" : undefined}
         />
         <Line
           dataKey="onGround"
           name="On Ground"
           type="monotone"
-          stroke="#eab308"
+          stroke={SERIES_COLOR.onGround}
           strokeWidth={2}
           dot={false}
           isAnimationActive={false}
+          hide={isHidden(SERIES.onGround)}
+          legendType={isHidden(SERIES.onGround) ? "none" : undefined}
         />
       </ComposedChart>
     );
@@ -573,40 +629,35 @@ export function CombinedChart({
               return `${datePart} ${timePart}`;
             }}
           />
-          <Legend
-            wrapperStyle={{
-              fontSize: 11,
-              paddingTop: 8,
-              color: "hsl(var(--foreground))",
-              pointerEvents: "none",
-            }}
-            formatter={(value) => <span style={{ color: "hsl(var(--foreground))" }}>{value}</span>}
-          />
           <Bar
             dataKey="arrivals"
             name="Arrivals"
-            fill="#3b82f6"
+            fill={SERIES_COLOR.arrivals}
             radius={[2, 2, 0, 0]}
             barSize={8}
+            hide={isHidden(SERIES.arrivals)}
           />
           <Bar
             dataKey="departures"
             name="Departures"
-            fill="#f43f5e"
+            fill={SERIES_COLOR.departures}
             radius={[2, 2, 0, 0]}
             barSize={8}
+            hide={isHidden(SERIES.departures)}
           />
           <Line
             dataKey="onGround"
             name="On Ground"
             type="monotone"
-            stroke="#eab308"
+            stroke={SERIES_COLOR.onGround}
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 4, strokeWidth: 0 }}
+            hide={isHidden(SERIES.onGround)}
           />
         </ComposedChart>
       </ResponsiveContainer>
+      <ChartLegend rows={legendRows} onToggle={toggle} />
     </>
   );
 }

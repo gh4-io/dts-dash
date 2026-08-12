@@ -20,7 +20,12 @@ export function CustomerDonut({ workPackages, onCustomerClick }: CustomerDonutPr
       grouped.get(wp.customer)!.add(wp.aircraftReg);
     });
 
-    const total = new Set(workPackages.map((wp) => wp.aircraftReg)).size;
+    // Denominator is the sum of the slices, not the global unique-registration
+    // count: a tail flown under two customers belongs to both slices, and
+    // Recharts draws arcs proportional to that sum. Dividing by the global
+    // count would print percentages that exceed 100% and disagree with the
+    // geometry. (OI-133)
+    const total = Array.from(grouped.values()).reduce((sum, regs) => sum + regs.size, 0);
 
     return Array.from(grouped.entries())
       .map(([name, regs]) => ({

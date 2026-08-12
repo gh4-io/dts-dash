@@ -112,7 +112,8 @@ const KEY_TABLES = [
   "mh_overrides",
   "import_log",
   "analytics_events",
-  "feedback_posts",
+  // OI-099: feedback posts, flight comments and notifications all live here now.
+  "messages",
 ] as const;
 
 // ─── Component ──────────────────────────────────────────────────────────────

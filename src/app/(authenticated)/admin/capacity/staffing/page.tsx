@@ -79,9 +79,22 @@ export default function StaffingPage() {
         />
       </div>
 
-      {/* Three-panel layout */}
+      {/* Three-panel layout.
+          The side columns were pinned at 320px for every width from lg up, so the
+          weekly matrix stayed 277px of usable space on a 4K display while the middle
+          column swallowed the extra — the Saturday and Tot columns were clipped no
+          matter how large the screen. Give the matrix room as the viewport grows;
+          490px at 2xl clears its 433px content width in every view mode.
+          Below 2xl the rotations panel condenses (pattern dots and the Select
+          toggle hide, Add drops to a bare "+"), so it gives width back to the
+          shift grid rather than holding 320px it can no longer fill.
+
+          The shift grid has a hard floor of 420px (`minmax(420px, 1fr)`) — it is
+          the working surface and must not keep shrinking. At lg the weekly matrix
+          therefore drops out of the side-by-side row and stacks full width
+          beneath, so the squeeze lands on the panel that can afford it. */}
       <div
-        className="grid grid-cols-1 lg:grid-cols-[320px_1fr_320px] gap-3"
+        className="grid grid-cols-1 gap-3 lg:grid-cols-[180px_minmax(420px,1fr)] xl:grid-cols-[200px_minmax(420px,1fr)_400px] 2xl:grid-cols-[340px_minmax(420px,1fr)_490px]"
         style={{ minHeight: "calc(100vh - 280px)" }}
       >
         {/* Left: Rotation Patterns */}
@@ -114,8 +127,10 @@ export default function StaffingPage() {
           )}
         </div>
 
-        {/* Right: Weekly Matrix + Stats */}
-        <div className="rounded-lg border border-border bg-card overflow-hidden lg:max-h-[calc(100vh-280px)]">
+        {/* Right: Weekly Matrix + Stats.
+            At lg there is no third column — it stacks full width under the other
+            two rather than competing with the shift grid for horizontal space. */}
+        <div className="rounded-lg border border-border bg-card overflow-hidden lg:col-span-2 lg:max-h-none xl:col-span-1 xl:max-h-[calc(100vh-280px)]">
           <WeeklyMatrixPanel configId={selectedConfigId} />
         </div>
       </div>

@@ -91,6 +91,20 @@ function applyThemeToDOM(preset: ThemePreset, accentColor: string | null) {
   }
 }
 
+// ─── next-themes bridge ─────────────────────────────────────────────────────
+
+/**
+ * `update()` has to be able to put next-themes back where it was when a
+ * preference save fails, but it lives outside React and cannot call
+ * `useTheme()`. `PreferencesLoader` (mounted in the root layout, so always
+ * present) registers next-themes' stable `setTheme` here on mount. (OI-089)
+ */
+let themeSetter: ((mode: ColorMode) => void) | null = null;
+
+export function registerThemeSetter(fn: (mode: ColorMode) => void) {
+  themeSetter = fn;
+}
+
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 const tl = getTimelineFromWindow();
@@ -184,7 +198,11 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
       });
 
       if (!res.ok) {
-        // Revert on failure
+        // Revert on failure. The caller (header toggle / PreferencesForm)
+        // already applied the new mode to next-themes optimistically, so the
+        // store alone reverting would leave the two disagreeing and the next
+        // toggle off by one. (OI-089)
+        if (partial.colorMode !== undefined) themeSetter?.(prev.colorMode);
         set({
           colorMode: prev.colorMode,
           themePreset: prev.themePreset,
@@ -199,7 +217,8 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
         get().applyTheme();
       }
     } catch {
-      // Revert on network error
+      // Revert on network error (see the !res.ok branch above)
+      if (partial.colorMode !== undefined) themeSetter?.(prev.colorMode);
       set({
         colorMode: prev.colorMode,
         themePreset: prev.themePreset,
@@ -207,6 +226,7 @@ export const usePreferences = create<PreferencesState>((set, get) => ({
         compactMode: prev.compactMode,
         defaultTimezone: prev.defaultTimezone,
         defaultDateRange: prev.defaultDateRange,
+        defaultZoom: prev.defaultZoom,
         timeFormat: prev.timeFormat,
         tablePageSize: prev.tablePageSize,
       });

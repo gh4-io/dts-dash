@@ -29,6 +29,8 @@ import { usePreferences } from "@/lib/hooks/use-preferences";
 import { formatFlightTooltip } from "./flight-tooltip";
 import { cn } from "@/lib/utils";
 import { isCanceled } from "@/lib/utils/status";
+import { GROUND_EVENTS } from "@/lib/utils/ground-events";
+import { useWheelZoom, useDragPan, useTouchGestures } from "./use-chart-gestures";
 import { BREAK_PREFIX } from "@/lib/hooks/use-transformed-data";
 import { computeTickInterval } from "@/lib/utils/tick-interval";
 import type { SerializedWorkPackage } from "@/lib/hooks/use-work-packages";
@@ -308,6 +310,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     const [scrollbarWidth, setScrollbarWidth] = useState(0);
     // ─── NOW timestamp — initialized on mount, updated every 60s (used by NOW line rendering)
     const [nowTimestamp, setNowTimestamp] = useState(0);
+    // Ref mirror so zoomRange memo can read NOW without re-triggering every 60s
+    const nowTimestampRef = useRef(0);
+    useEffect(() => {
+      nowTimestampRef.current = nowTimestamp;
+    }, [nowTimestamp]);
     // ─── Row hover highlight refs (graphic-based, no React re-render) ───
     const hoveredRowIdxRef = useRef<number>(-1);
     const rafIdRef = useRef<number>(0);
@@ -557,6 +564,8 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
     }, [workPackages, getColor, transformedRegistrations, groups]);
 
     // ─── Zoom range for the dataZoom (only recalculates on preset/filter change) ───
+    // NOTE: reads nowTimestampRef (not nowTimestamp state) to avoid re-triggering
+    // the entire chart option cascade every 60s when the NOW line updates.
     const zoomRange = useMemo(() => {
       if (workPackages.length === 0) return { start: 0, end: 100 };
 
@@ -583,7 +592,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       }
 
       // Smart anchor: center on "now" if within filter range, else center of filter
-      const now = nowTimestamp || filterStartMs;
+      const now = nowTimestampRef.current || filterStartMs;
       const centerMs =
         now >= filterStartMs && now <= filterEndMs ? now : filterStartMs + totalMs / 2;
 
@@ -591,7 +600,7 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       const start = Math.max(0, Math.min(100 - span, centerPct - span / 2));
       const end = start + span;
       return { start, end };
-    }, [workPackages.length, filterStart, filterEnd, zoomLevel, nowTimestamp]);
+    }, [workPackages.length, filterStart, filterEnd, zoomLevel]);
 
     // ─── Sync realZoomState ref when zoom preset/filter changes ───
     useEffect(() => {
@@ -912,15 +921,19 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       setContainerHeight(wrapper.clientHeight);
       setScrollbarWidth(wrapper.offsetWidth - wrapper.clientWidth);
 
+      let prevSbw = wrapper.offsetWidth - wrapper.clientWidth;
       const observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
           const newHeight = entry.contentRect.height;
-          const newSbw = wrapper.offsetWidth - wrapper.clientWidth;
           if (Math.abs(newHeight - containerHeightRef.current) > 5) {
             containerHeightRef.current = newHeight;
             setContainerHeight(newHeight);
           }
-          setScrollbarWidth(newSbw);
+          const newSbw = wrapper.offsetWidth - wrapper.clientWidth;
+          if (newSbw !== prevSbw) {
+            prevSbw = newSbw;
+            setScrollbarWidth(newSbw);
+          }
         }
       });
 
@@ -1229,6 +1242,154 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
         }
         // < 70px: no text, tooltip serves as full detail
 
+        // ─── Ground Event Markers ───
+        const events = wp?.groundEventTypes;
+        if (events && events.length > 0 && w >= 16) {
+          // Sizing: font fills most of the bar height
+          const pillFS = Math.max(9, Math.min(barHeight - 4, 13));
+          const pillH = pillFS + 2;
+          const diamondR = Math.floor(pillH / 2);
+          const pillGap = 4;
+          const pillY = y + (barHeight - pillH) / 2;
+
+          // Compute widths per marker (diamond vs pill)
+          const markerWidths = events.map((et) => {
+            const m = GROUND_EVENTS[et as keyof typeof GROUND_EVENTS];
+            if (!m) return 0;
+            if (m.marker.mode === "symbol") return diamondR * 2;
+            return m.marker.label.length * pillFS * 0.62 + 4;
+          });
+          const totalFullW =
+            markerWidths.reduce((s, mw) => s + mw, 0) + (events.length - 1) * pillGap;
+
+          // Dot fallback sizing
+          const dotR = Math.max(3, Math.floor(barHeight / 5));
+          const dotGap = 3;
+          const totalDotW = events.length * dotR * 2 + (events.length - 1) * dotGap;
+
+          // Decide: full markers or dot fallback?
+          // Use dots when bar is too narrow for even the smallest full marker
+          const useDots = w < 50 || totalFullW > w * 0.8;
+
+          if (useDots) {
+            // Colored dot per event — centered in bar
+            let dotX = x + w / 2 - totalDotW / 2 + dotR;
+            for (const eventType of events) {
+              const meta = GROUND_EVENTS[eventType as keyof typeof GROUND_EVENTS];
+              if (!meta) continue;
+              if (dotX + dotR > x + w - 2) break;
+              children.push({
+                type: "circle",
+                shape: { cx: dotX, cy: centerY, r: dotR },
+                style: {
+                  fill: meta.marker.fill,
+                  stroke: meta.marker.stroke,
+                  lineWidth: 1,
+                },
+                z: 12,
+              } as RenderGroup);
+              dotX += dotR * 2 + dotGap;
+            }
+          } else {
+            // Full markers: diamonds + pills
+            let markerX: number;
+            if (w >= 240) {
+              const textLen = truncate(centerLabel, w - 100, 6.5).length;
+              markerX = x + w / 2 + (textLen * 6.5) / 2 + 10;
+            } else if (w >= 170) {
+              const textLen = truncate(centerLabel, w - 56, 6.5).length;
+              markerX = x + (w - 56) / 2 + 4 + (textLen * 6.5) / 2 + 10;
+            } else if (w >= 130) {
+              markerX = x + w / 2 + (centerLabel.length * 6.5) / 2 + 10;
+            } else if (w >= 70) {
+              const textLen = truncate(centerLabel, w - 8, 5.5).length;
+              markerX = x + w / 2 + (textLen * 5.5) / 2 + 10;
+            } else {
+              // 50-69px: markers only, centered
+              markerX = x + w / 2 - totalFullW / 2;
+            }
+
+            for (let ei = 0; ei < events.length; ei++) {
+              const meta = GROUND_EVENTS[events[ei] as keyof typeof GROUND_EVENTS];
+              if (!meta) continue;
+              const mw = markerWidths[ei];
+              if (markerX + mw > x + w - 2) break;
+
+              if (meta.marker.mode === "symbol") {
+                const cx = markerX + diamondR;
+                children.push({
+                  type: "polygon",
+                  shape: {
+                    points: [
+                      [cx, centerY - diamondR],
+                      [cx + diamondR, centerY],
+                      [cx, centerY + diamondR],
+                      [cx - diamondR, centerY],
+                    ],
+                  },
+                  style: {
+                    fill: meta.marker.fill,
+                    stroke: meta.marker.stroke,
+                    lineWidth: 1.5,
+                  },
+                  z: 12,
+                } as RenderGroup);
+              } else {
+                children.push({
+                  type: "rect",
+                  shape: {
+                    x: markerX,
+                    y: pillY,
+                    width: mw,
+                    height: pillH,
+                    r: [2, 2, 2, 2],
+                  },
+                  style: {
+                    fill: meta.marker.fill,
+                    stroke: meta.marker.stroke,
+                    lineWidth: 1.5,
+                  },
+                  z: 12,
+                } as RenderGroup);
+
+                children.push({
+                  type: "text",
+                  style: {
+                    text: meta.marker.label,
+                    x: markerX + mw / 2,
+                    y: pillY + pillH / 2,
+                    fill: meta.marker.textColor,
+                    fontSize: pillFS,
+                    fontWeight: 700,
+                    fontFamily: "'Arial Narrow', 'Helvetica Neue', system-ui",
+                    textAlign: "center",
+                    textVerticalAlign: "middle",
+                  },
+                  z: 13,
+                } as RenderGroup);
+              }
+
+              markerX += mw + pillGap;
+            }
+          }
+        }
+
+        // ─── Comment indicator dot ───
+        if (wp && wp._commentCount > 0 && w >= 50) {
+          const dotR = Math.max(4, Math.floor(barHeight / 4));
+          const dotX = x + w - (w >= 240 ? 50 : w >= 170 ? 40 : 14);
+          children.push({
+            type: "circle",
+            shape: { cx: dotX, cy: centerY, r: dotR },
+            style: {
+              fill: "rgba(255,255,255,0.85)",
+              stroke: "rgba(255,255,255,0.5)",
+              lineWidth: 1,
+            },
+            z: 12,
+          } as RenderGroup);
+        }
+
         return { type: "group", children } as RenderGroup;
       },
       [colorMap, timeFmt, paddedRegistrations, highlightMap, cc, condensed, allWps, resolvedTheme],
@@ -1417,12 +1578,13 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
               departure: wp.departure,
               groundHours: wp.groundHours,
               status: wp.status,
-              workpackageNo: wp.workpackageNo ?? wp.title,
+              workpackageNo: wp.workpackageNo,
               effectiveMH: wp.effectiveMH,
               mhSource: wp.mhSource,
               comments: wp.calendarComments,
               timezone,
               timeFormat,
+              groundEventTypes: wp.groundEventTypes ?? undefined,
             });
           },
         },
@@ -1590,132 +1752,10 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       syncLock.current = false;
     }, [onZoomChange]);
 
-    // ─── Body chart: Ctrl+Scroll zoom, Shift+Scroll pan ───
-    useEffect(() => {
-      const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
-      if (!bodyEl) return;
-
-      const handleWheel = (e: WheelEvent) => {
-        if (!e.ctrlKey && !e.shiftKey) return; // plain scroll → let CSS handle
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        const headerInstance = headerChartRef.current?.getEchartsInstance();
-        const bodyInstance = bodyChartRef.current?.getEchartsInstance();
-        if (!headerInstance || !bodyInstance) return;
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const opt = headerInstance.getOption() as any;
-        const dz = opt?.dataZoom?.[0];
-        if (!dz) return;
-
-        let { start, end } = dz;
-        const span = end - start;
-
-        if (e.ctrlKey) {
-          // Zoom: scale by deltaY magnitude (clamped) to handle trackpads + mice
-          const absDelta = Math.min(Math.abs(e.deltaY), 100);
-          const rate = absDelta * 0.0015; // gentle: ~0.15 for a full mouse tick (deltaY≈100)
-          const factor = e.deltaY > 0 ? 1 + rate : 1 / (1 + rate);
-          const newSpan = Math.min(100, Math.max(1, span * factor));
-          const center = (start + end) / 2;
-          start = Math.max(0, center - newSpan / 2);
-          end = Math.min(100, center + newSpan / 2);
-        } else if (e.shiftKey) {
-          // Pan: scale by deltaY magnitude
-          const absDelta = Math.min(Math.abs(e.deltaY), 100);
-          const shift = Math.sign(e.deltaY) * span * absDelta * 0.001;
-          start = Math.max(0, Math.min(100 - span, start + shift));
-          end = start + span;
-        }
-
-        // Dispatch to both charts
-        [headerInstance, bodyInstance].forEach((inst) => {
-          inst.dispatchAction({ type: "dataZoom", start, end });
-        });
-      };
-
-      bodyEl.addEventListener("wheel", handleWheel, { passive: false });
-      return () => bodyEl.removeEventListener("wheel", handleWheel);
-    }, [workPackages.length]); // re-attach if chart rebuilds
-
-    // ─── Body chart: click+drag pan (hand tool) ───
-    const dragState = useRef<{ startX: number; startPct: number; span: number; dragging: boolean }>(
-      {
-        startX: 0,
-        startPct: 0,
-        span: 0,
-        dragging: false,
-      },
-    );
-
-    useEffect(() => {
-      const bodyEl = bodyChartRef.current?.getEchartsInstance()?.getDom();
-      if (!bodyEl) return;
-
-      if (panMode) {
-        bodyEl.style.cursor = "grab";
-      } else {
-        bodyEl.style.cursor = "";
-      }
-
-      if (!panMode) return;
-
-      const handleMouseDown = (e: MouseEvent) => {
-        // Only left button
-        if (e.button !== 0) return;
-        const headerInstance = headerChartRef.current?.getEchartsInstance();
-        if (!headerInstance) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const opt = headerInstance.getOption() as any;
-        const dz = opt?.dataZoom?.[0];
-        if (!dz) return;
-
-        dragState.current = {
-          startX: e.clientX,
-          startPct: dz.start,
-          span: dz.end - dz.start,
-          dragging: true,
-        };
-        bodyEl.style.cursor = "grabbing";
-        e.preventDefault();
-      };
-
-      const handleMouseMove = (e: MouseEvent) => {
-        if (!dragState.current.dragging) return;
-        const dx = e.clientX - dragState.current.startX;
-        // Convert px delta to % of dataZoom range
-        const chartWidth = bodyEl.clientWidth;
-        const pctDelta = -(dx / chartWidth) * dragState.current.span * 1.5;
-        let start = dragState.current.startPct + pctDelta;
-        start = Math.max(0, Math.min(100 - dragState.current.span, start));
-        const end = start + dragState.current.span;
-
-        const headerInstance = headerChartRef.current?.getEchartsInstance();
-        const bodyInstance = bodyChartRef.current?.getEchartsInstance();
-        [headerInstance, bodyInstance].forEach((inst) => {
-          inst?.dispatchAction({ type: "dataZoom", start, end });
-        });
-      };
-
-      const handleMouseUp = () => {
-        if (dragState.current.dragging) {
-          dragState.current.dragging = false;
-          bodyEl.style.cursor = "grab";
-        }
-      };
-
-      bodyEl.addEventListener("mousedown", handleMouseDown);
-      window.addEventListener("mousemove", handleMouseMove);
-      window.addEventListener("mouseup", handleMouseUp);
-      return () => {
-        bodyEl.removeEventListener("mousedown", handleMouseDown);
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-        bodyEl.style.cursor = "";
-      };
-    }, [panMode, workPackages.length]);
+    // ─── Interaction hooks (extracted for code splitting) ───
+    useWheelZoom(headerChartRef, bodyChartRef, workPackages.length);
+    useDragPan(headerChartRef, bodyChartRef, panMode, workPackages.length);
+    useTouchGestures(headerChartRef, bodyChartRef, workPackages.length);
 
     // ─── Row hover highlight — track mouse position, update graphic rect ───
     useEffect(() => {
@@ -1849,6 +1889,11 @@ export const FlightBoardChart = forwardRef<FlightBoardChartHandle, FlightBoardCh
       (params: { data?: GanttDataItem }) => {
         if (panMode) return; // suppress clicks in pan mode
         if (!params.data || !onBarClick) return;
+        // Hide tooltip immediately — on touch devices (iPad) it persists after tap
+        const instance = bodyChartRef.current?.getEchartsInstance();
+        if (instance) {
+          instance.dispatchAction({ type: "hideTip" });
+        }
         const wpIdx = params.data[6];
         const wp = allWps[wpIdx];
         if (wp) onBarClick(wp);

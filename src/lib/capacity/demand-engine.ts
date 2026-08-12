@@ -1,5 +1,5 @@
 /**
- * Demand Engine (v0.3.0)
+ * Demand Engine (v1.0.0)
  *
  * Demand aggregation with configurable weighted spread across ground time shifts.
  *

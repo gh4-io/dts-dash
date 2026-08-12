@@ -13,16 +13,11 @@ import {
 } from "@/components/ui/command";
 import { useCustomers } from "@/lib/hooks/use-customers";
 import type { WeeklyProjection, ProjectionShiftCode } from "@/types";
+import { shiftText } from "@/lib/utils/shift-colors";
 
 const ISO_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const ISO_DAY_SHORT = ["M", "T", "W", "T", "F", "S", "S"];
 const SHIFTS: ProjectionShiftCode[] = ["DAY", "SWING", "NIGHT"];
-const SHIFT_COLORS: Record<ProjectionShiftCode, string> = {
-  DAY: "text-amber-500",
-  SWING: "text-orange-500",
-  NIGHT: "text-indigo-400",
-};
-
 interface ProjectionGridProps {
   projections: WeeklyProjection[];
   onSave: (
@@ -366,7 +361,7 @@ function CustomerRows({
               )}
             </td>
             {/* Shift label */}
-            <td className={`px-1 py-1 text-center ${SHIFT_COLORS[shift]}`}>
+            <td className={`px-1 py-1 text-center ${shiftText(shift)}`}>
               <span className="text-[10px] font-medium">
                 {shift === "DAY" ? "D" : shift === "SWING" ? "S" : "N"}
               </span>

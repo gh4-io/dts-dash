@@ -5,6 +5,7 @@ import { transformWorkPackages } from "@/lib/data/transformer";
 import { applyFilters, parseFilterParams } from "@/lib/utils/filter-helpers";
 import { paginate, parsePaginationParams } from "@/lib/utils/pagination";
 import { createChildLogger } from "@/lib/logger";
+import { flightCommentCountsBySpId } from "@/lib/messages/repository";
 
 const log = createChildLogger("api/work-packages");
 
@@ -33,15 +34,23 @@ export async function GET(request: NextRequest) {
     // Apply filters
     const filtered = applyFilters(workPackages, filterParams);
 
+    // Enrich with comment counts (join through sp_id since wp.id = SharePoint ID)
+    // One repository call, shared with /api/work-packages/all — both routes used
+    // to carry their own copy of this subquery, which is a second place to forget
+    // the `kind` filter (OI-099).
+    const countMap = flightCommentCountsBySpId();
+
+    const enriched = filtered.map((wp) => ({
+      ...wp,
+      _commentCount: countMap.get(wp.id) ?? 0,
+    }));
+
     // Paginate
-    const result = paginate(filtered, paginationParams);
+    const result = paginate(enriched, paginationParams);
 
     return NextResponse.json(result);
   } catch (error) {
     log.error({ err: error }, "Error");
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

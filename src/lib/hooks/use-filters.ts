@@ -129,11 +129,23 @@ function getDefaults(): FilterState {
     operators: [],
     aircraft: [],
     types: [],
+    excludeOperators: [],
+    excludeAircraft: [],
+    excludeTypes: [],
   };
 }
 
-export const useFilters = create<FilterState & FilterActions>()((set) => ({
+export const useFilters = create<
+  FilterState &
+    FilterActions & {
+      /** True after useFilterUrlSync has run its mount effect */
+      _urlSynced: boolean;
+      _markUrlSynced: () => void;
+    }
+>()((set) => ({
   ...getDefaults(),
+  _urlSynced: false,
+  _markUrlSynced: () => set({ _urlSynced: true }),
 
   setStart: (v: string) => set({ start: v }),
   setEnd: (v: string) => set({ end: v }),
@@ -149,6 +161,9 @@ export const useFilters = create<FilterState & FilterActions>()((set) => ({
   setOperators: (v: string[]) => set({ operators: v }),
   setAircraft: (v: string[]) => set({ aircraft: v }),
   setTypes: (v: string[]) => set({ types: v }),
+  setExcludeOperators: (v: string[]) => set({ excludeOperators: v }),
+  setExcludeAircraft: (v: string[]) => set({ excludeAircraft: v }),
+  setExcludeTypes: (v: string[]) => set({ excludeTypes: v }),
   reset: () => set(getDefaults()),
   hydrate: (params: Partial<FilterState>) => set(params),
   hydrateDefaults: (dateRange: string, tz: string) => {

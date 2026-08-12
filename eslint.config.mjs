@@ -2,6 +2,10 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
+// eslint-config-prettier is a dev dependency and is stripped from the release
+// build, along with prettier itself. It only ever switched OFF stylistic rules
+// that would fight the formatter, so dropping it cannot introduce a failure —
+// and formatting is settled on `dev` before the release branch is cut.
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { exportToCsv } from "@/lib/utils/csv-export";
+import { trackAction } from "@/lib/analytics/track";
 import { usePreferences } from "@/lib/hooks/use-preferences";
 import type {
   DailyDemandV2,
@@ -254,6 +255,11 @@ function MonthlyRollupTable({ rollup }: { rollup: MonthlyRollupResult }) {
       { header: "Aircraft", accessor: (r) => String(r.totalAircraftCount) },
     ];
     exportToCsv("capacity-monthly.csv", rollup.buckets, csvCols);
+    trackAction("csv_export", {
+      source_page: "/capacity",
+      view: "monthly",
+      row_count: rollup.buckets.length,
+    });
   };
 
   return (
@@ -755,6 +761,12 @@ export function CapacityTable({
     }
 
     exportToCsv("capacity-report.csv", rows, csvColumns);
+    trackAction("csv_export", {
+      source_page: "/capacity",
+      view: "daily",
+      row_count: rows.length,
+      lens: activeLens,
+    });
   }, [rows, activeLens, secondaryLens]);
 
   // ─── Non-daily modes: render extracted components ───────────────────

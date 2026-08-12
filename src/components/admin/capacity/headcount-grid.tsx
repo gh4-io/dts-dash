@@ -31,6 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { CapacityShift, HeadcountPlan, HeadcountException } from "@/types";
+import { shiftIcon } from "@/lib/utils/shift-colors";
 
 interface HeadcountGridProps {
   shifts: CapacityShift[];
@@ -53,12 +54,6 @@ const DAYS_OF_WEEK = [
   { value: "5", label: "Friday" },
   { value: "6", label: "Saturday" },
 ];
-
-const SHIFT_ICONS: Record<string, string> = {
-  DAY: "fa-sun",
-  SWING: "fa-cloud-sun",
-  NIGHT: "fa-moon",
-};
 
 export function HeadcountGrid({
   shifts,
@@ -313,7 +308,7 @@ export function HeadcountGrid({
                     <TableCell className="text-sm">
                       <span className="flex items-center gap-1.5">
                         <i
-                          className={`fa-solid ${SHIFT_ICONS[getShiftCode(plan.shiftId)] ?? "fa-clock"} text-[10px] text-muted-foreground`}
+                          className={`fa-solid ${shiftIcon(getShiftCode(plan.shiftId))} text-[10px] text-muted-foreground`}
                         />
                         {getShiftName(plan.shiftId)}
                       </span>
@@ -518,7 +513,7 @@ export function HeadcountGrid({
                     <TableCell className="text-sm">
                       <span className="flex items-center gap-1.5">
                         <i
-                          className={`fa-solid ${SHIFT_ICONS[getShiftCode(exc.shiftId)] ?? "fa-clock"} text-[10px] text-muted-foreground`}
+                          className={`fa-solid ${shiftIcon(getShiftCode(exc.shiftId))} text-[10px] text-muted-foreground`}
                         />
                         {getShiftName(exc.shiftId)}
                       </span>

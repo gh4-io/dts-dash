@@ -1,5 +1,5 @@
 /**
- * Capacity Modeling Module (v0.3.0)
+ * Capacity Modeling Module (v1.0.0)
  *
  * Public API for the capacity modeling system.
  */
@@ -39,9 +39,16 @@ export {
   computeCoverageGaps,
   resolveStaffingForCapacity,
   buildPatternMap,
+  buildPatternResolver,
+  isPatternEffectiveOn,
+  isShiftEffectiveOn,
+  getPatternAnchor,
   validatePattern,
   countWorkingDays,
+  alignRotationStartToSunday,
+  canArchiveShift,
 } from "./staffing-engine";
+export type { ArchiveSafetyResult } from "./staffing-engine";
 
 // Staffing data access (rotation patterns, configs, shifts)
 export {
@@ -51,6 +58,9 @@ export {
   updateRotationPattern,
   deleteRotationPattern,
   isRotationPatternInUse,
+  versionRotationPattern,
+  archiveRotationPattern,
+  canArchiveRotationPattern,
   loadStaffingConfigs,
   loadActiveStaffingConfig,
   loadStaffingConfig,
@@ -63,6 +73,8 @@ export {
   createStaffingShift,
   updateStaffingShift,
   deleteStaffingShift,
+  archiveStaffingShift,
+  versionStaffingShift,
   loadRotationPresets,
   loadRotationPresetCount,
 } from "./staffing-data";
@@ -174,7 +186,13 @@ export {
 } from "./billing-data";
 
 // Timezone helpers (pure functions)
-export { getLocalHour, getLocalDateStr, isValidTimezone } from "./tz-helpers";
+export {
+  getLocalHour,
+  getLocalDateStr,
+  toLocalDateStr,
+  buildDayGrid,
+  isValidTimezone,
+} from "./tz-helpers";
 
 // Lens configuration (P2-7, pure constants)
 export { CAPACITY_LENSES, getAvailableLenses } from "./lens-config";

@@ -4,11 +4,12 @@ import { signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAppTitle } from "@/components/layout/app-config-provider";
+import { useAppTitle, useAppSubtitle } from "@/components/layout/app-config-provider";
 
 export default function LoginPage() {
   const router = useRouter();
   const appTitle = useAppTitle();
+  const appSubtitle = useAppSubtitle();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -73,7 +74,7 @@ export default function LoginPage() {
         <div className="text-center">
           <i className="fa-solid fa-plane-circle-check text-4xl text-primary mb-4" />
           <h1 className="text-2xl font-bold text-foreground">{appTitle}</h1>
-          <p className="text-sm text-muted-foreground">Line Maintenance Operations</p>
+          <p className="text-sm text-muted-foreground">{appSubtitle}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -147,8 +148,6 @@ export default function LoginPage() {
             </Link>
           </p>
         )}
-
-        <p className="text-center text-xs text-muted-foreground">Line Maintenance Operations</p>
       </div>
     </div>
   );

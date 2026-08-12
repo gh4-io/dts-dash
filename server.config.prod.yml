@@ -1,0 +1,133 @@
+# Production Server Configuration — TEMPLATE
+#
+# Copy this to server.config.yml on the production host:
+#
+#     cp server.config.prod.yml server.config.yml
+#
+# server.config.yml is gitignored, so your live settings are never committed.
+#
+# ⚠️  Do NOT copy server.config.dev.yml to production. It is the DEVELOPMENT
+#     template and deliberately relaxes two things that matter in production:
+#     it sets logging to "debug", and it lowers the password policy to 8
+#     characters with no character requirements. Both are convenient locally and
+#     wrong on a live system. That is why this file exists.
+
+# ─── Application ─────────────────────────────────────────────────────────────
+app:
+  # Site title shown in browser tab, sidebar, login page, and nav
+  title: "CVG Dashboard"
+
+  # Strapline under the title on the login and register pages
+  # subtitle: "Line Maintenance Operations"
+
+  # Public base URL — only needed behind a reverse proxy that rewrites the Host
+  # header (e.g. Cloudflare Tunnel). Leave commented for auto-detection.
+  # baseUrl: "https://dashboard.example.com"
+
+# ─── Authentication ──────────────────────────────────────────────────────────
+# Prefer the AUTH_SECRET env var (via .env.prod) over putting the secret here —
+# this file sits on disk beside the application. Must be 32+ characters.
+# Generate with: npm run generate-secret
+# auth:
+#   secret: "your-secret-here"
+
+# ─── Database ────────────────────────────────────────────────────────────────
+# database:
+#   # In Docker this is set by DATABASE_PATH=/app/data/dashboard.db
+#   path: "./data/dashboard.db"
+
+# ─── Logging ──────────────────────────────────────────────────────────────────
+logging:
+  # Server-side pino log level: trace | debug | info | warn | error | fatal
+  #
+  # "info" is the production setting. Anything below it logs request-level detail
+  # continuously — noisy, disk-hungry, and it puts data in the logs that has no
+  # business being there. Raise it to "debug" temporarily to diagnose a problem,
+  # then put it back; the app warns on every start while production runs below
+  # "info" so a temporary change cannot quietly become permanent.
+  level: "info"
+
+# ─── Features ─────────────────────────────────────────────────────────────────
+features:
+  # The /api/seed endpoint writes default starter data — the default admin user,
+  # default customers, default settings — over whatever is already there.
+  # false makes the URL return 404, as if it did not exist.
+  #
+  # ⚠️  Keep this false in production. It exists to populate a brand-new install.
+  #     On a live system it is a way to overwrite real data with starter data.
+  #     (Even when true, production additionally requires a superadmin session —
+  #     but that is the second lock, not a reason to open the first.)
+  enableSeedEndpoint: false
+
+  # In-app cron scheduler. Set false to disable all scheduled background tasks
+  # (canceled-WP cleanup, import-history pruning).
+  cronEnabled: true
+
+# ─── Timeline Defaults ────────────────────────────────────────────────────────
+timeline:
+  # Days before today the flight board starts (fractions allowed: -0.5 = 12h ago)
+  startOffset: -0.5
+
+  # Days the window spans from startOffset. endOffset is derived unless set.
+  defaultDays: 3
+
+  # Default zoom: "6h" | "12h" | "1d" | "3d" | "1w" | "all"
+  defaultZoom: "3d"
+
+  # Start flight board in compact mode by default
+  defaultCompact: false
+
+  # Default timezone: "UTC" | "America/New_York" (IANA string)
+  defaultTimezone: "America/New_York"
+
+# ─── Flights ─────────────────────────────────────────────────────────────────
+flights:
+  # Hide canceled work packages from all views
+  hideCanceled: true
+
+  # Hours before the cleanup cron permanently deletes canceled WPs (1-720)
+  cleanupGraceHours: 6
+
+# ─── Appearance ──────────────────────────────────────────────────────────────
+appearance:
+  # First-time visitor defaults, before login / localStorage
+  # defaultColorMode: "light" | "dark" | "system"
+  defaultColorMode: "dark"
+
+  # neutral, ocean, purple, black, vitepress, dusk, catppuccin, solar, emerald,
+  # ruby, aspen
+  defaultThemePreset: "vitepress"
+
+# ─── Password Security ──────────────────────────────────────────────────────
+# Production policy. The development template relaxes all of this to 8
+# characters with no character requirements, which is exactly what you do not
+# want facing a network.
+passwordSecurity:
+  # Minimum password length (8-128)
+  minLength: 12
+
+  # Maximum password length (8-128)
+  maxLength: 128
+
+  # Character requirements
+  requireUppercase: true
+  requireLowercase: true
+  requireDigits: true
+  requireSpecialChars: true
+
+  # Block passwords on the common-password blocklist
+  preventCommon: true
+
+  # Minimum entropy score (0 = disabled, 30-50 = medium, 70+ = high)
+  minEntropy: 50
+
+# ─── Cron Job Overrides ─────────────────────────────────────────────────────
+# Override built-in job settings or define custom jobs. Built-in jobs only need
+# the fields you want to change; custom jobs need script + schedule at minimum.
+#
+# cron:
+#   jobs:
+#     cleanup-canceled:
+#       schedule: "0 */12 * * *"
+#       options:
+#         graceHours: 12

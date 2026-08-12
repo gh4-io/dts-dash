@@ -45,7 +45,10 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3", "pino", "pino-pretty", "node-cron"],
   transpilePackages: ["echarts", "zrender"],
   turbopack: {},
-  allowedDevOrigins: ["http://localhost:3000"],
+  // Bare hostnames only — NOT origin URLs. An entry like "http://localhost:3000"
+  // never matches, leaving only the implicit "localhost" allowed, which 403s the
+  // dev JS chunks for a browser on the Windows host (it uses 127.0.0.1).
+  allowedDevOrigins: ["localhost", "127.0.0.1", "[::1]", "*.local", "dts.gh4.io"],
   env: {
     BUILD_NUMBER: String(buildInfo.build),
     BUILD_BRANCH: buildInfo.branch,

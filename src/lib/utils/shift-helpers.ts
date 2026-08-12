@@ -79,7 +79,10 @@ export function getOverlappingShifts(
   // Safety bound: max 30 days (extremely long ground times)
   const maxDays = Math.min(Math.ceil((departureMs - midnightMs) / 86400000) + 1, 30);
 
-  for (let d = 0; d < maxDays; d++) {
+  // Start one day BEFORE the arrival day: the Night window that contains an
+  // early-morning arrival (23:00 → 07:00) belongs to the previous calendar day,
+  // so walking only from the arrival day reported an 02:00 arrival as Day-only.
+  for (let d = -1; d < maxDays; d++) {
     const dayStart = midnightMs + d * 86400000;
 
     for (const shift of SHIFTS) {
@@ -95,8 +98,8 @@ export function getOverlappingShifts(
     // Early exit if all 3 shifts already matched
     if (matched.size === 3) break;
 
-    // Stop if we've passed the departure
-    if (dayStart + 31 * 3600000 > departureMs) break;
+    // Stop if we've passed the departure (never on the lead-in day)
+    if (d >= 0 && dayStart + 31 * 3600000 > departureMs) break;
   }
 
   return [...matched];

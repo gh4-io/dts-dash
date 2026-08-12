@@ -9,7 +9,227 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.2.0] - 2026-03-02
+## [1.0.0] - 2026-08-09
+
+> **MAJOR release** — contains backwards-incompatible changes. See the
+> [Migration Guide](#migration-guide--upgrading-to-v100) below before upgrading; `npm run db:upgrade-v1`
+> is **mandatory**.
+>
+> v0.3.0 was never released — no tag for it ever existed — so its entry is folded in here rather
+> than shipped separately. Everything below is what a deployment running v0.2.x receives.
+
+### Changed — BREAKING
+
+- **Six messaging tables unified into `messages` / `labels` / `message_labels`** (OI-099, D-067) — `flight_comments`, `notifications`, `feedback_posts`, `feedback_comments`, `feedback_labels` and `feedback_post_labels` were the same shape wearing different column names. They are now one `messages` table discriminated by `kind` (`flight_comment` | `notification` | `feedback_post` | `feedback_comment`), plus a separate `labels` table and its `message_labels` join. **The API-contract types are unchanged** — `FlightComment`, `AppNotification` and everything in `src/types/feedback.ts` kept their shape, and `src/lib/messages/repository.ts` maps at the boundary — so no UI changed and no client code needs updating
+  - **⚠️ `/feedback/[id]` bookmarks and links break.** Post ids were remapped: the four legacy tables used independent `AUTOINCREMENT` sequences, so ids collided across them and could not all be preserved. On the reference database, posts 4/5/6 became 49/50/51 while notifications occupied 1–48. A pre-v1.0.0 id now resolves to a different post or to a 404. The old id survives on `messages.legacy_id` if a mapping is needed. The same applies to any stored notification or comment id
+  - **Migration runs automatically at startup and refuses to boot if it does not reconcile.** `createTables()` creates `messages` empty on a database that still holds every legacy row, and in that window the app runs perfectly while showing **zero** comments, notifications and feedback — no error, no exception, no log line. So `backfillMessages()` is wired into `bootstrapDatabase()` and a reconciliation guard **throws** on any count mismatch. It is idempotent, atomic, and a no-op on fresh installs. Also available as `npm run db:backfill-messages` (`--dry-run`, `--strict`) and as Step 3 of `npm run db:upgrade-v1`
+  - **Legacy tables are retained read-only for one release** as the only rollback for a bad remap; they are dropped in v1.1.0 (OI-123). `npm run db:status` lists them with a `(legacy — drop in v1.1.0)` suffix. They are removed from `createTables()` and from `schema.ts`, so any stale reference is a compile error, and a grep test catches raw SQL that `tsc` cannot see
+  - **Labels deliberately stay a separate table**, not a `kind` — `name` is `NOT NULL UNIQUE` and that constraint has nowhere to live in a table whose every column is nullable; the join row has no id, author, body or timestamps; and a label is a dimension, not an utterance, so folding it in would make every query carry `AND kind != 'label'` forever
+  - **Flight comment deletion now removes the full reply subtree** — this **fixes** the orphaning defect carried on OI-092, where two flat `DELETE`s removed only one level of replies and stranded anything deeper. Recorded as intended: it is a behaviour change, and it deletes more than it used to
+  - **`notifications.metadata.commentId` is rewritten** to the new message id, with the original kept as `legacyCommentId` (which also guards against double-remapping)
+  - Deleting a work package no longer removes its comments via cascade — `subject_id` is polymorphic and cannot carry a foreign key, so `cleanup-canceled` deletes them explicitly. Any future code path deleting work packages must do the same (D-067)
+  - `author_id` carries **no** `ON DELETE CASCADE` and must never be given one; `recipient_id` does. Keeping them as separate columns is what lets both policies coexist (D-067)
+  - ⚠️ Note `npm run db:export` enumerated a table list that omitted **all six** legacy tables, so it was never a backup of comments, notifications or feedback. `messages`, `labels` and `message_labels` are now included — but use `npm run db:backup` for anything you intend to restore from
+- **Deprecated `headcount` field removed from the staffing-matrix response** (OI-109) — `WeeklyMatrixCell` carried `headcount` as an alias for `effectiveHeadcount`, kept for backwards compatibility when OI-109 split roster from effective headcount, and marked for removal on the next MAJOR. This is that MAJOR. Consumers of `/api/admin/capacity/staffing-matrix` read `rosterHeadcount` for people-counts and `effectiveHeadcount` for the MH basis
+- **`work_packages.title` remapped to `workpackage_no`** (OI-086) — inbound SharePoint `Title` carries the work package *number* (`AALA/L-201125-2`, `782CK-DAILY-TS-11-20-2025`), not a display label, but since v0.1.1 it was written to a column called `title` while `workpackage_no` was fed from an inbound `WorkpackageNo` no export ever sends — leaving the identifier under the wrong name and `workpackage_no` NULL on all 10,080 production rows. The two are now one column. **The `title` column and the `WorkPackage.title` / `SerializedWorkPackage.title` fields are gone**; consumers read `workpackageNo`. Import maps `WorkpackageNo ?? Title`, so the explicit field still wins if a source ever supplies it, and `Title` is now an alias on the `workpackageNo` import field. Existing databases are carried over by `npm run db:upgrade-v1` (Step 3): the value is copied into any empty `workpackage_no`, then `title` is dropped. Copy-then-drop rather than `RENAME COLUMN` because both columns have coexisted since v0.1.1 and SQLite cannot rename onto an occupied name. Allowed only because v1.0.0 is a MAJOR (D-028)
+
+### Added
+- **Import history retention** (OI-134, D-068) — a new `prune-import-history` cron job (nightly at 03:30) deletes import history entries older than a **configurable** window, default **10 days**; set it to `0` to keep everything. Edit the window under **Admin → Cron → Prune Import History**, or run it by hand with `npm run db:prune-import-history -- --days=N`. The log had no retention at all: the production snapshot held **12,159 entries** accumulated in ~170 days at ~71/day, every one of them `success`, 41% recording zero inserts and zero updates — **1.65 MB of an 8.8 MB database (19%)**, growing ~3.5 MB/year. Pruning it takes that to **589 entries / 102 KB**. The Data Hub history table now says which window it is showing, so a short retention never reads as a broken feed
+  - Entries are **deleted outright** — no summary is kept. Past the window, "did the feed run last March" is unanswerable; accepted deliberately, tracked as OI-136 to revisit when the Audit Log is implemented for real
+  - The prune clears `work_packages.import_log_id` first (write-only provenance that nothing reads). That foreign key is `NO ACTION` with `foreign_keys = ON`, so the delete fails without it. **No work packages are deleted or altered otherwise**
+- **`npm run db:seed-archives`** — generates synthetic archived shift and rotation versions (dev only, `[FIXTURE]`-prefixed, removable with `--clean`) so the admin archive UI can be evaluated at a year's scale. It asserts that no lineage has two versions effective on the same date before exiting, which is the OI-108 double-count guard
+- **Version lineage on staffing shifts** (OI-111) — `staffing_shifts.group_id` gives every version of one shift a stable identity, as `rotation_patterns` got in M026. Overlap detection now keys on the lineage instead of the shift **name**, which was wrong in both directions: a renamed version's overlap was invisible, and two unrelated shifts sharing a name were reported as overlapping. Done in this release specifically because the backfill is not repeatable later — lineage is only reconstructible while every version still shares a name, and the first rename after the tag would destroy that evidence permanently. `db:upgrade-v1` collapses rows sharing `(config_id, name)` onto one group
+- **Single-active-row guarantees are now enforced** (OI-126) — partial unique indexes on `capacity_assumptions` and `staffing_configs`. Both were documented as having exactly one active row and enforced it nowhere; a second would not error, it would silently return an arbitrary row and change every capacity number based on row order
+
+- **Man-hour override management** (OI-104, D-066) — the `mh_overrides` table has existed since v0.1.0 with no UI at all; the only way to set one was direct SQL, and production carries 722 of them with no record of who set them or what they replaced. The work package drawer now shows **Imported MH**, **Effective MH** and **MH Source** together with **Save Override** and **Clear** (admin-gated); `/admin/mh-overrides` lists what is in force plus an append-only before/after history, both exportable as CSV; and bulk changes run through the Data Hub as a new **MH Overrides** import schema with a full pre-commit preview (matched / unchanged / redundant / unmatched / duplicate / invalid) and a transactional commit. Endpoints live under `/api/admin/mh-overrides` and record the acting user and timestamp on every change
+  - **A value equal to the imported WP MH is not stored** — it clears any existing override instead. An override that restates its source behaves like a pin: when the source is later corrected, the stale copy silently wins
+  - **Optional minimum-hours floor** raises a low value while keeping the number actually supplied in the audit trail
+  - **Bulk rows match on `workpackageNo`, then `spId`, then `guid`.** `workpackage_no` is the documented identifier and, after `db:upgrade-v1`, is populated on 9,783 of 10,080 work packages. The fallbacks cover the ~300 rows that carry no identifier at all, and a database that has not yet been upgraded — where the column is empty on every row, since the values are still sitting in the old `title` column. Both CSV exports carry `spId` so an export → edit → import round-trip works regardless
+  - Saving or clearing invalidates the transformer cache, so the flight board and `/capacity` reflect the change on their next request without a server restart
+- **Downloadable import report** — every Data Hub import's results step gained a **Download Report** button (CSV: totals, errors and per-row warnings)
+
+- **Click-to-hide chart legend** (OI-121, D-065) — the capacity charts' legend is now interactive and has two rows: shifts (or customers) above, series roles below. Clicking **Days** hides the Day bar, its capacity line and its utilization line together; clicking **Capacity** hides that role across every shift. Applies to the daily, weekly-pattern and monthly charts. Previously the legend was inert and, worse, labelled five entries for nine drawn series. The dashboard's **Arrivals / Departures / On Ground** chart toggles the same way; hiding a series there also removes it from the printed chart
+- **Filter exclusions are first-class** (OI-117) — `!=` / `not in` on Operator, Aircraft and Type now live in the filter state and the URL (`nop` / `nac` / `ntype`) instead of being client-side only, so they reach the server, survive a reload and carry between pages. Shown as `≠ Value` chips
+- **Productivity chain explainer** (OI-116) — `/admin/capacity/assumptions` now states the formula `HC x HOURS x ATT x PROD [x NIGHT] = Productive MH`, with a worked example on live values, each stage named (Paid → Available → Productive) and the combined efficiency spelled out. The two factors multiply (0.89 x 0.65 = 57.9%), which read as a single ratio before and made the resulting MH look wrong. A one-line form sits in the staffing weekly matrix
+- **Click-to-edit productivity percentages** (OI-116) — the three Productivity Factor values accept typed entry; Enter or blur commits, Escape cancels, values clamp to range. The 0.01 slider step was too coarse for precise entry
+- **Overlapping shift version detection** (OI-108) — `findShiftOverlaps()` flags two versions of one shift effective on the same date, which the engine silently sums into a doubled roster. Surfaced as a banner and a per-row badge
+- **Prod DB snapshot skill** — `.claude/skills/prod-db-snapshot/` pulls a consistent production snapshot (`sqlite3 .backup` over SSH, WAL included) and restores it into dev with verification, a pre-restore backup and an automatic migrate. Developer tooling, deliberately outside the application
+
+
+- **Flight event comments + ground event markers** (OI-092, OI-093) — comments per flight event; unique markers for AOG, BTB and similar ground events
+- **In-app notification system** with auto-triggers (OI-094)
+- **Rotation pattern versioning** (OI-101, M026) — patterns carry an effective window plus a `group_id` giving stable identity across versions. Editing the pattern string auto-versions instead of overwriting, so past dates keep the definition that was actually in force. Shifts need no repointing; resolution follows the group
+- **Shift pattern anchor** (OI-102, M025) — `staffing_shifts.pattern_anchor_date` separates the date a version takes effect from the date the 21-day pattern is indexed from. A headcount change now takes effect on the save date without rotating the pattern phase or restating earlier days
+
+### Fixed
+- **Archived shifts and rotations buried the live ones** (OI-135, D-068) — every effective-dated edit leaves an archived version behind, so both admin staffing lists grow indefinitely. Rotation Patterns had **no archive concept at all**: inactive versions rendered inline in the main list at 40% opacity and merely sorted last, so with a year of history 56 rows appeared with the 6 real patterns buried among them. Both lists now collapse archives into a searchable `Archive (n)` section showing 10 at a time behind *Show more*, sorted most-recently-retired first
+  - **Archived versions are still never deleted**, and both sections now say so. The capacity engine resolves the roster for any *past* date from exactly those rows, so an age-based cleanup would silently restate historical capacity and utilization — the OI-108 double-count defect returning through a different door
+- **The dashboard chart changed its numbers when an operator was clicked** (OI-131) — the Arrivals / Departures / On Ground series were counted in two places under two different definitions of "on ground": the engine measured presence *at* the hour boundary, the dashboard's client-side recount measured overlap *anywhere inside* the hour, and that recount only ran once an operator was focused. Selecting CargoJet in the FilterBar and then clicking its Operator Performance row re-counted an identical set of work packages with the looser formula — 36 of 205 hours moved, by up to 5 aircraft. `countArrivalsInHour` / `countDeparturesInHour` / `countOnGroundAtHour` are now the single definition of each series, called by both the engine and the dashboard, and the client recount runs unconditionally so it also picks up the Actions column filters the server snapshot never saw
+- **Dashboard cross-filtering snapped instead of transitioning** (OI-127) — selecting an operator rewrote every panel in one frame, and every FilterBar change swapped the whole page for a loading skeleton and back. Panel updates now commit inside a view transition (`useSmoothUpdate`), with each panel carrying its own transition name so the boxes and the space between them morph over 500ms; the skeleton renders only while there is no data to show. Falls back to an immediate update where the View Transition API is unavailable or `prefers-reduced-motion: reduce` is set
+- **Flight board Linked Information links landed on the Gantt** (OI-128) — *View all `<reg>` work packages*, *All `<reg>` visits* and *All `<customer>` work packages* each produce a set of rows, so following one now switches the board to the list view instead of leaving a filtered Gantt zoomed to a single flight
+- **Login page showed the strapline twice** (OI-129) — the duplicate at the bottom of the card is gone, and the remaining one is driven by the new **`app.subtitle`** setting in `server.config.yml` (default `"Line Maintenance Operations"`), following the same loader → `AppConfigProvider` path as `app.title`
+- **Actions → Reset left the date window untouched** (OI-130) — Reset cleared the transforms and selections but kept whatever start/end had been picked. It now also restores the default range, preferring the user's own default (as applied at page load) over the system default
+- **`cleanup-canceled` would have aborted on any work package with override history** (OI-125) — `mh_override_history.work_package_id` shipped with a foreign key and no `ON DELETE`, and the cron deletes `mh_overrides` explicitly but never history rows, so `DELETE FROM work_packages` threw `FOREIGN KEY constraint failed` and rolled back the whole job. The reference is now logical with no FK, matching `flight_events` / `time_bookings` / `billing_entries`. `ON DELETE CASCADE` was rejected deliberately: it would trade a loud failure for a routine scheduled job silently erasing the append-only audit trail the table exists for. `db:upgrade-v1` rebuilds the table for databases that already have the FK
+- **The dashboard's hourly chart ignored the filter date range** (OI-124) — Arrivals / Departures / On Ground, the largest element on `/dashboard`, drew the same window around *now* whatever range was selected. With the filter on Feb 28 – Mar 9 2025 every other panel updated correctly while the chart still rendered Aug 8–10 2026. `useHourlySnapshots` was the only data hook missing both halves of the OI-117 fix, so each load fired two requests — one on the pre-hydration default range, one on the URL's — and with nothing cancelling the first, the stale default usually won. It now waits for `_urlSynced` and aborts in-flight requests, matching `useCapacityV2` and `useWorkPackages`
+
+- **The work package drawer kept showing pre-edit values** (OI-104) — the flight board passed the work package snapshot taken when the bar was clicked, so an edit made inside the drawer refetched the store but never reached the panel the user was looking at. It now re-reads the live row by id, which also fixes ground event flags appearing unchanged after a toggle
+- **Capacity dropped a day of demand and lied about its clock** (OI-119) — the day grid was built by slicing `YYYY-MM-DD` off the UTC start/end instants while the demand, coverage and concurrency engines bucket on the timezone stored on the shift rows (D-049), which is `America/New_York` in production. The grid and the buckets therefore disagreed by five hours: demand landing on the operational day *before* the grid's first date was silently clamped away. The grid is now resolved on the same operational clock (`buildDayGrid`), and the Status/Ground Time/Arrival/Departure/Shift column rules — which resolve against real shift windows — read that clock too instead of the viewer's display preference. Alongside this the FilterBar timezone selector, which could never move these numbers, is shown **locked** on `/capacity` with a tooltip naming the operational timezone and where to change it (Admin → Capacity → Shift Timezone); the date pickers follow the same clock, so the window you type is the window that is computed
+- **Every filter now works on the capacity page** (OI-117) — filters did nothing on `/capacity` for three separate reasons: the Operator/Aircraft/Type value lists were empty there (the picker sourced them from a store only the flight board and dashboard populated), `!=` / `not in` rules never left the browser, and the remaining rules (Status, Ground Time, Arrival, Departure, Man-Hours, Shift) never reached the API at all. Demand contracts, flight events, time bookings and billing entries were also loaded unfiltered, so an operator filter could not remove that customer from the allocated/worked/billed lenses, the KPI strip or the pies. Verified against production data: excluding one operator moves Total Demand 471 → 442 MH
+- **Date and overnight-shift column filters matched nothing** (OI-118) — ordering comparisons ran through `parseFloat`, which reads `"2026-08-07T12:00:00Z"` as `2026`, so every Arrival/Departure rule compared 2026 against 2026. Separately, the overlapping-shift walk started at the arrival day's midnight and so missed the Night window that contains an early-morning arrival — a 02:00 arrival reported as Day-only. Both also affected the flight board
+- **Capacity data raced itself on a deep link** (OI-117) — `useCapacityV2` did not wait for URL → store hydration and had no abort controller, so opening a filtered link fired two overlapping requests and the stale one could win
+- **Capacity demand and capacity used different windows** (OI-117) — work packages were filtered on the raw sub-day timestamps while the capacity grid used whole days, giving partial demand against full-day capacity for any window not starting at midnight
+- **Shift colours drifted between components** (D-065) — Day and Swing were two near-identical oranges, and the palette was copy-pasted into six components, so a change in one chart left the heatmap, pies, drilldown drawer and admin grids behind. There is now a single `shift-colors.ts`; Swing moved to pink, validated for colour-vision deficiency against both themes
+- **Shift edits rewrote history instead of versioning** (OI-107) — the edit dialog saved via `PUT`, mutating the current version in place, so changing a shift's hours or rotation silently restated every date that version already covered. This was the OI-100 failure returning through a different door. The dialog now routes headcount, hours, rotation, breaks, MH override and category through the versioning path; name, description and dates still amend in place
+- **Weekly matrix headcount was silently discounted** (OI-109) — the "HC" column rendered `roster x paidToAvailable` rounded to an integer, showing 59 for a roster of 66, while `totalConfigHeadcount` in the same panel was undiscounted. `WeeklyMatrixCell` now carries `rosterHeadcount` and `effectiveHeadcount` separately. The ambiguous `headcount` field is retained as a deprecated alias for API compatibility (D-028)
+- **Paid/Available/Productive MH chain was collapsed** (OI-110) — `paidToAvailable` was applied at the *paid* stage and `availableMH` was set equal to `paidMH`, understating Paid MH by that factor and making Available MH a duplicate. The three stages are now distinct. **`productiveMH` is algebraically unchanged**, so utilization, gap analysis and every capacity chart are unaffected
+- **Weekly matrix clipped values at every screen size** (OI-112) — the table sat in an `overflow-hidden` wrapper narrower than its content (277px vs 433px), cutting the Saturday and Tot columns with no way to reach them. The three-panel grid also pinned the matrix at 320px for every width from 1024px up, so a 4K display was as cramped as a laptop
+- **Responsive panel priority** (OI-114) — the sidebar auto-collapses to icons below 1536px on non-touch viewports (escapable, and it does not overwrite the stored preference), the rotations panel condenses, and the shift grid has a 420px floor with the matrix stacking beneath rather than squeezing the working surface. Editing a shift is now reachable by clicking its row, not only the hover-revealed icon buttons
+- **Cross-origin dev assets blocked from the Windows host** — `allowedDevOrigins` held origin URLs (`http://localhost:3000`) where Next.js expects bare hostnames, so every entry was inert and JS chunks 403'd for a browser reaching the dev server as `127.0.0.1`. The page rendered but never hydrated
+- **The End date picker showed a window 12 hours wider than the one actually queried** (OI-138) — on a fresh page load the label read `8/11 10:00` while the store, and every API call, used `8/10 22:00`. The data was right and only the label was wrong, and it corrected itself after any client-side navigation. Neither the timezone maths nor `reinterpretDate` was involved: `getDefaults()` reads its offsets from `window.__TIMELINE_DEFAULTS__`, which does not exist during SSR, so the server fell back to a hardcoded `endOffset: 2.5` while the client used the `2.0` derived from `server.config.yml`. The display span's `suppressHydrationWarning` then stopped React patching the mismatch — that attribute makes React *skip* the text fix-up, not merely silence the warning — so the server's label survived hydration. The span's `key` now changes on mount, committing the client's value once. Start was unaffected only because `startOffset` happened to agree
+- **A failed preference save left the theme applied** (OI-089) — the color-mode toggle and the Preferences form apply the new theme optimistically before the `PUT` returns. When that save failed, `update()` reverted the Zustand store but not next-themes, so the two disagreed and the next toggle was off by one. `update()` cannot call `useTheme()` from outside React, so `PreferencesLoader` now registers next-themes' setter with the store. The network-error path also failed to revert `defaultZoom`
+- **Customer donut percentages could exceed 100%** (OI-133) — each slice was sized by that customer's unique registration count but divided by the *global* unique-registration count, so an aircraft flown under two operators inside the filter window counted in both slices and once in the denominator. The labels would then sum past 100% and disagree with the arcs Recharts drew, since those are proportional to the sum of the slice values. That sum is now the denominator. Latent against current data — no production registration currently appears under more than one customer
+
+### Removed
+
+- **Legacy capacity engine and its settings** (OI-115) — the app carried two unrelated capacity models. Engine A (`headcount x realCapacityPerPerson`, ignoring shift length) had **no live consumers**, yet its `realCapacityPerPerson` / `theoreticalCapacityPerPerson` / `shifts` fields were still editable in Admin → Settings, so configuring them changed nothing. Deleted `engines/capacity.ts`, `/api/capacity`, `use-capacity.ts`, `utilization-chart.tsx`, `config-panel.tsx`, the three `app_config` keys and their **Capacity Model** and **Shift Configuration** sections, plus five orphaned types. Capacity is modelled solely by `capacity_assumptions` + `capacity_shifts`. The **Demand Model** section is retained — `defaultMH` and `wpMHMode` are live
+
+
+- **Security: 24 dependency advisories** resolved via `npm audit fix` — 27 → 3 (all criticals and highs cleared; remaining 3 are transitive and need a major bump of their parent). Lockfile-only; `package.json` unchanged. Notable: `next-auth` 5.0.0-beta.30 → beta.32, `@auth/core` 0.41.0 → 0.41.3, `next` 16.1.6 → 16.3.0, `drizzle-orm` 0.45.1 → 0.45.2, `js-yaml` 4.1.1 → 4.3.1, `undici` 7.22.0 → 7.29.0, `sharp` 0.34.5 → 0.35.3
+- **Build gate restored** — type errors in three test files had been failing `next build` and CI's `tsc --noEmit` since roughly February. Compilation succeeded and all tests passed, so the failure went unnoticed. Fixtures were missing `CapacityShift.timezone` (D-049) and `DemandContract.priority` (D-052/M019), `wpContributions` entries had a string `wpId` and were missing `aircraftReg`/`mhSource`, and `transformer-mh.test.ts` was the only test file relying on vitest globals. `npm run validate` now exits 0
+- **Historical capacity is now stable** (OI-100) — the staffing engine honours shift effective dates. Archived versions apply to the dates they covered instead of vanishing, and the current version no longer applies to all of history. **Behaviour change:** dates before a shift's `rotationStartDate` report zero headcount rather than a backwards-projected roster
+- Flight board: dismiss tooltip on tap; eliminate 60s re-render cycle
+- Flight board: fix auto-load on server restart; improve ground event markers
+- Import: infer `hasWorkpackage` from `TotalMH`/`WorkpackageNo` when the source field is absent
+
+### Known Issues
+
+- `versionStaffingShift()` and `versionRotationPattern()` — the archive-and-create transactions — remain untested (OI-103). No capacity test currently mocks the database, so this needs a new fixture pattern. `versionStaffingShift()` was since exercised end-to-end against the dev database, but that is manual verification, not coverage
+- Production currently runs `0.2.0-rc1`, which predates OI-080 entirely. Upgrading applies M022, M025 and M026
+- **Production data carries the OI-108 defect** — duplicate `13SMD` shift rows are effective simultaneously and double-count that roster. Needs correcting on upgrade
+- `staffing_shifts` has no `group_id` lineage (OI-111), so overlap detection matches on shift name; renaming a shift hides an overlap
+- Admin capacity pages collapse at phone width — the content region measures ~103px at 390px (OI-113)
+
+### Added — from the unreleased v0.3.0 work
+
+> These landed on `dev` under a `0.3.0` version bump on 2026-03-04 that was never tagged or
+> released. They ship for the first time in v1.0.0.
+
+#### Capacity — Staffing Shifts
+- **Rotation end date** — `rotationEndDate` (nullable) on `staffing_shifts` provides a historical timeline of headcount changes (M022 migration)
+- **Shift auto-versioning** — editing headcount archives the current shift and creates a new version; rotation start dates auto-align to Sunday (pattern[0] = Sunday)
+- **Archive section** — collapsible archive panel in Shift Definitions grid shows expired shifts with a "Reactivate" button; no-gap safety check warns before archiving the last active shift in a category
+- New engine functions: `alignRotationStartToSunday()`, `canArchiveShift()`, `archiveStaffingShift()`, `versionStaffingShift()`
+
+#### System
+- **Sub-build tracking** (D-063) — `build.json` (git-tracked) auto-increments on every commit via a pre-commit hook; build number surfaces in `/api/health`, Admin → Server page, and git tags
+
+#### Mobile & PWA
+- **Redesigned app icons** — B777-inspired artwork across all sizes (192, 512, maskable-192, maskable-512, Apple touch icon)
+- **iOS install prompt** — A2HS banner for iOS users on first visit
+- **Floating popup menu** — replaced bottom-sheet overflow menu with a right-aligned floating popup on mobile
+
+### Fixed — from the unreleased v0.3.0 work
+
+#### Flight Board
+- Disable `viewMode` (Gantt/List) persistence across page loads — view resets to Gantt on navigation
+- Default sort by arrival time when no user sort is active in List view
+- ~~Fall back to `title` field for WP number display in tooltip and detail drawer when `workpackageNo` is absent~~ — superseded within this same release by OI-086, which merged the two columns; there is no longer a `title` to fall back to
+- Superscript date separators + semibold registration labels in List card header; timezone-aware date formatting
+- Suppress ECharts `axisBuilder` race condition warnings in console
+- Date format changed to `m/d/yyyy` in filter bar; Gantt date label alignment improved
+
+#### Dashboard
+- Average Ground Time card layout now matches Aircraft & Turns card proportions
+
+#### Mobile & PWA
+- Move `themeColor` to Next.js `Viewport` export — eliminates duplicate `<meta>` tags
+- Scoped mobile CSS globals to prevent overflow into desktop layouts; removed desktop font overrides
+- Mobile phone UX polish: card layout redesign, section reorder, tab bar refinements
+
+---
+
+## Migration Guide — upgrading to v1.0.0
+
+**Required for every existing deployment.** v1.0.0 moves data between columns and tables. Running it
+against a database that has not been upgraded is prevented, not merely discouraged — the app checks
+the schema at startup and refuses to serve rather than return wrong data.
+
+### 1. What broke
+
+| Item | What changed | What you do |
+|---|---|---|
+| OI-086 | `work_packages.title` removed; its contents are the work package number and now live in `workpackage_no`. `WorkPackage.title` and `SerializedWorkPackage.title` are gone | Read `workpackageNo`. The upgrade copies the values across |
+| OI-099 | Six messaging tables replaced by `messages` / `labels` / `message_labels`. **Post ids were renumbered** | Nothing — old `/feedback/[id]` links redirect automatically (see §4) |
+| OI-109 | `headcount` removed from the staffing-matrix API response | Read `rosterHeadcount` for people counts, `effectiveHeadcount` for the MH basis |
+| OI-125 | `mh_override_history.work_package_id` foreign key removed (it aborted the `cleanup-canceled` cron) | Nothing |
+| OI-111 | `staffing_shifts.group_id` added; overlap detection keys on lineage rather than name | Nothing — backfilled |
+| OI-126 | Partial UNIQUE indexes on `capacity_assumptions` and `staffing_configs` | Nothing, unless existing rows violate them — the upgrade reports which |
+
+The API-contract **types** for comments, notifications and feedback are unchanged. `FlightComment`,
+`AppNotification` and everything in `src/types/feedback.ts` kept their shape, so no client code needs
+updating for OI-099.
+
+### 2. Upgrading
+
+Stop the app first. The upgrade takes a full backup before it writes anything.
+
+```bash
+# 1. Stop the application (the database must not be open)
+docker compose -f docker/docker-compose.prod.yml down
+
+# 2. Preview — writes nothing
+npm run db:upgrade-v1 -- --dry-run
+
+# 3. Apply. Takes its own backup first and prints the rollback command
+npm run db:upgrade-v1
+
+# 4. Start the new version
+docker compose -f docker/docker-compose.prod.yml up -d
+```
+
+**Supported from any released schema** — v0.1.0, v0.1.1, v0.2.0 and v0.2.0-rc1 were each verified to
+upgrade to a schema identical to a fresh v1.0.0 install. The script is version-agnostic by
+construction: it builds a reference database from the current schema and diffs yours against it,
+so there is no hand-maintained list to drift.
+
+It is **idempotent** — a second run reports `already at the v1.0.0 schema — nothing to do`.
+
+### 3. Rolling back
+
+`db:upgrade-v1` writes a full copy to `data/backups/pre-v1-<timestamp>/` before its first write and
+prints the exact restore command. Restore that file and start the previous version.
+
+⚠️ `npm run db:export` is **not** a backup — its table list omits several tables, including all six
+legacy messaging tables. Use `npm run db:backup`, or the file the upgrade itself wrote.
+
+### 4. Feedback links
+
+Post ids were renumbered because the four merged tables each had an independent `AUTOINCREMENT`
+sequence, so their ids collided and could not all be preserved.
+
+**The remap is specific to your database.** On the development reference database posts 4/5/6 became
+49/50/51; on the production snapshot the same posts became 1/2/3, because that database has no
+notifications occupying the low ids. Do not rely on any fixed mapping.
+
+You do not need to do anything about this. `/feedback/<old id>` resolves through `messages.legacy_id`
+and permanently redirects to the current URL, so saved links keep working and correct themselves. An
+id that genuinely no longer exists shows a "Post not found" page explaining the renumbering.
+
+### 5. Known limitations
+
+- **`NOT NULL` columns are added as nullable.** SQLite cannot add a `NOT NULL` column without a
+  default to a table that already has rows, so the upgrade adds them nullable and warns per column.
+  The data is correct; the constraint is not enforced on those columns until the table is rebuilt.
+- **Legacy messaging tables are retained, read-only.** They are the only rollback for a bad remap and
+  are dropped in v1.1.0 (OI-123). `npm run db:status` lists them with a `(legacy — drop in v1.1.0)`
+  suffix.
+- **Indexes not in the v1.0.0 schema are left in place**, never dropped — an upgrade that deletes
+  structures it did not create is a worse failure mode than one that leaves a stale index behind.
+  The script reports them.
+
+---
+
+## [0.2.0] - 2026-02-28
 
 > **MINOR release** — all changes are backwards-compatible; all new functionality is additive.
 
@@ -146,9 +366,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2025-12-15
 
-Initial release. See `.claude/PROD_RELEASE_PLAN.md` for v0.1.0 release notes.
+Initial release. See the project knowledge base for v0.1.0 release notes.
 
-[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...HEAD
+<!-- v0.3.0 is deliberately absent: it was bumped in package.json on 2026-03-04 but never
+     tagged or released, so a compare link for it would point at a tag that does not exist.
+     Its content is folded into [1.0.0], which compares from v0.2.0 — the last real release. -->
+
+[Unreleased]: https://github.com/gh4-io/dts-dash/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/gh4-io/dts-dash/compare/v0.2.0...v1.0.0
 [0.2.0]: https://github.com/gh4-io/dts-dash/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/gh4-io/dts-dash/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gh4-io/dts-dash/releases/tag/v0.1.0

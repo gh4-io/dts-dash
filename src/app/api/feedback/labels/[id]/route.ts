@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db/client";
-import { feedbackLabels } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
 import { createChildLogger } from "@/lib/logger";
 import { isValidHex } from "@/lib/utils/contrast";
 import { parseIntParam } from "@/lib/utils/route-helpers";
+import { getLabel, updateLabel, deleteLabel } from "@/lib/messages/repository";
 
 const log = createChildLogger("api/feedback/labels/[id]");
 
@@ -33,14 +31,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Invalid label ID" }, { status: 400 });
     }
 
-    const label = db.select().from(feedbackLabels).where(eq(feedbackLabels.id, id)).get();
-
-    if (!label) {
+    if (!getLabel(id)) {
       return NextResponse.json({ error: "Label not found" }, { status: 404 });
     }
 
     const body = await request.json();
-    const updates: Record<string, unknown> = {};
+    const updates: { name?: string; color?: string; sortOrder?: number } = {};
 
     if (body.name !== undefined) {
       const name = (body.name || "").trim();
@@ -68,7 +64,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "No fields to update" }, { status: 400 });
     }
 
-    db.update(feedbackLabels).set(updates).where(eq(feedbackLabels.id, id)).run();
+    updateLabel(id, updates);
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -79,7 +75,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 /**
  * DELETE /api/feedback/labels/[id]
- * Delete a label (admin only). CASCADE removes from post associations.
+ * Delete a label (admin only). message_labels cascades, so post associations go
+ * with it.
  */
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   try {
@@ -99,13 +96,11 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Invalid label ID" }, { status: 400 });
     }
 
-    const label = db.select().from(feedbackLabels).where(eq(feedbackLabels.id, id)).get();
-
-    if (!label) {
+    if (!getLabel(id)) {
       return NextResponse.json({ error: "Label not found" }, { status: 404 });
     }
 
-    db.delete(feedbackLabels).where(eq(feedbackLabels.id, id)).run();
+    deleteLabel(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

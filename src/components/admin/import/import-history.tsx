@@ -50,6 +50,8 @@ interface HistoryResponse {
     total: number;
     totalPages: number;
   };
+  /** Configured retention window, or null when history is kept indefinitely. */
+  retentionDays: number | null;
 }
 
 interface ImportHistoryProps {
@@ -298,6 +300,16 @@ export function ImportHistory({ refreshTrigger }: ImportHistoryProps) {
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* Retention notice — without it, a short window makes a healthy feed
+              look like a broken one. */}
+          {data.retentionDays !== null && (
+            <p className="text-xs text-muted-foreground">
+              <i className="fa-solid fa-circle-info mr-1.5" />
+              Showing the last {data.retentionDays} days. Older entries are removed automatically
+              &mdash; adjust the window under Admin &rarr; Cron &rarr; Prune Import History.
+            </p>
           )}
         </>
       )}

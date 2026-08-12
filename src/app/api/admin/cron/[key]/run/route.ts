@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEffectiveJobs, executeJob, updateRunState } from "@/lib/cron/index";
+import { requireCronGate } from "@/lib/cron/api-guard";
 import { createChildLogger } from "@/lib/logger";
 
 const log = createChildLogger("api/admin/cron/[key]/run");
@@ -18,6 +19,12 @@ export async function POST(
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Run Now respects the deployment gate as well as the role check. A paused
+    // scheduler does NOT block it: pausing suspends the schedule, while Run Now
+    // is an explicit, deliberate one-off by an administrator.
+    const gated = requireCronGate();
+    if (gated) return gated;
 
     const { key } = await params;
     const jobs = getEffectiveJobs();

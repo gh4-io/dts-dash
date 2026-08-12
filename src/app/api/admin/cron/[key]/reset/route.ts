@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getBuiltinJobs, restartCron } from "@/lib/cron/index";
+import { requireCronGate } from "@/lib/cron/api-guard";
 import { getCronJobOverrides, updateCronJobOverrides } from "@/lib/config/loader";
 import { createChildLogger } from "@/lib/logger";
 
@@ -19,6 +20,9 @@ export async function POST(
     if (!session || !["admin", "superadmin"].includes(session.user.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    const gated = requireCronGate();
+    if (gated) return gated;
 
     const { key } = await params;
 

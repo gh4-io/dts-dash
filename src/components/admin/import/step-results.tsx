@@ -14,7 +14,46 @@ interface StepResultsProps {
   onImportMore: () => void;
 }
 
+/** Escape one CSV cell — quotes doubled, field quoted when it needs to be. */
+function csvCell(value: unknown): string {
+  const str = value === null || value === undefined ? "" : String(value);
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+/**
+ * Build the audit/error report for this commit.
+ *
+ * Errors and warnings are the per-row outcomes a schema chose to surface —
+ * for MH overrides (OI-104) that is every unmatched, duplicate, redundant and
+ * minimum-hours-transformed row — so the CSV is the record of what the batch
+ * actually did, not just that it succeeded.
+ */
+function buildReportCsv(result: CommitResult): string {
+  const lines = ["severity,message"];
+
+  lines.push(`summary,${csvCell(`Log ID ${result.logId}`)}`);
+  lines.push(`summary,${csvCell(`Records: ${result.recordCount}`)}`);
+  lines.push(`summary,${csvCell(`Inserted: ${result.recordsInserted}`)}`);
+  lines.push(`summary,${csvCell(`Updated: ${result.recordsUpdated}`)}`);
+  lines.push(`summary,${csvCell(`Skipped: ${result.recordsSkipped}`)}`);
+
+  for (const err of result.errors) lines.push(`error,${csvCell(err)}`);
+  for (const warn of result.warnings) lines.push(`warning,${csvCell(warn)}`);
+
+  return lines.join("\n");
+}
+
 export function StepResults({ result, onImportMore }: StepResultsProps) {
+  const downloadReport = () => {
+    const blob = new Blob([buildReportCsv(result)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `import-report-${result.logId}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-4">
       {/* Status banner */}
@@ -103,6 +142,10 @@ export function StepResults({ result, onImportMore }: StepResultsProps) {
         <Button onClick={onImportMore}>
           <i className="fa-solid fa-plus mr-2" />
           Import More
+        </Button>
+        <Button variant="outline" onClick={downloadReport}>
+          <i className="fa-solid fa-file-csv mr-2" />
+          Download Report
         </Button>
       </div>
     </div>

@@ -53,6 +53,46 @@ export function getLocalDateStr(utcDate: Date, tz: string): string {
   return getDateFormatter(tz).format(utcDate);
 }
 
+/** Matches a date-only string (YYYY-MM-DD) with no time component. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Resolve an ISO datetime (or date-only string) to a calendar date in `tz`.
+ *
+ * A date-only input is already a calendar date and is returned untouched —
+ * reading it as midnight UTC would shift it a day west of Greenwich.
+ */
+export function toLocalDateStr(iso: string, tz: string): string {
+  if (DATE_ONLY.test(iso)) return iso;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.split("T")[0].split(" ")[0];
+  return getLocalDateStr(d, tz);
+}
+
+/**
+ * Build the inclusive list of calendar dates (YYYY-MM-DD) spanned by an
+ * instant range, resolved on `tz`'s clock.
+ *
+ * The endpoints are timezone-sensitive; the walk between them is not — once
+ * both ends are calendar labels, stepping a day is pure calendar arithmetic
+ * and so is unaffected by DST transitions.
+ */
+export function buildDayGrid(start: string, end: string, tz: string): string[] {
+  const startStr = toLocalDateStr(start, tz);
+  const endStr = toLocalDateStr(end, tz);
+
+  const dates: string[] = [];
+  const current = new Date(`${startStr}T00:00:00Z`);
+  const last = new Date(`${endStr}T00:00:00Z`);
+
+  while (current <= last) {
+    dates.push(current.toISOString().split("T")[0]);
+    current.setUTCDate(current.getUTCDate() + 1);
+  }
+
+  return dates;
+}
+
 /**
  * Validate that a timezone string is a valid IANA timezone.
  */
