@@ -8,6 +8,44 @@
 
 ## Active Bugs
 
+### OI-141 | Login Page Ignores `app.title` and `app.subtitle` — Prerendered at Build Time
+
+| Field | Value |
+|-------|-------|
+| **Type** | Bug |
+| **Status** | **Open** |
+| **Priority** | P3 |
+| **Owner** | — |
+| **Created** | 2026-08-12 |
+
+`server.config.yml`'s `app.title` and `app.subtitle` have no effect on `/login`. Production is
+configured with `title: "CVG Dashboard"`, and every authenticated page honours it — the sidebar and
+the browser tab both read "CVG Dashboard". The login page renders the built-in defaults instead:
+heading **"Dashboard"**, strapline **"Line Maintenance Operations"**.
+
+The cause is static prerendering, not config loading. `.next/server/app/login.html` exists in the
+production image, so `/login` is generated at **build time**, when `loadServerConfig()` has only the
+compiled-in defaults — the live YAML is read at container start, long after the HTML was frozen. No
+configuration change can fix it, and it fails silently: the config *is* loaded (the startup log says
+`Configuration loaded from /app/server.config.yml`), it just arrives too late for this one route.
+
+This lands on the one page every user sees before authenticating, and on the register page's
+strapline by the same mechanism. It is also a trap for the next operator, who will reasonably assume
+the config file is broken.
+
+**Fix**: opt the route out of static generation (`export const dynamic = "force-dynamic"` on
+`src/app/login/page.tsx`, or read the title in a client component fed by `AppConfigProvider`).
+Check `/register` and any other prerendered route that reads config — `ls .next/server/app/*.html`
+in the built image lists them.
+
+**Discovered**: 2026-08-12, verifying the v1.0.0 production deployment via Playwright against
+`https://cvg.gh4.io`. Pre-dates v1.0.0 — not a regression from this release.
+
+**Files**: `src/app/login/page.tsx`, `src/app/register/page.tsx`, `src/lib/config/loader.ts`
+**Links**: OI-127, D-035
+
+---
+
 ### OI-100 | Capacity Engine Ignores Shift Effective Dates — Historical Capacity Is Unstable
 
 | Field | Value |

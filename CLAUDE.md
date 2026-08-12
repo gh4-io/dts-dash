@@ -3,30 +3,41 @@
 > Canonical operating manual for Claude Code. Read this first, every session.
 > Detailed specs live in `.claude/` — this file links to them, never duplicates.
 >
-> **Last updated:** 2026-08-07 (v0.3.0 in progress)
+> **Last updated:** 2026-08-12 (v1.0.0 RELEASED and deployed)
 >
 > **🔶 CURRENT STATE — READ BEFORE PLANNING WORK:**
-> - **v1.0.0 is cut and gated, awaiting merge.** The release lives on `release/v1.0.0` as a stripped
->   tree on `master`'s history. `dev`'s `package.json` stays `0.3.0` — the version is bumped on the
->   release branch only (D-028). **v0.3.0 was never released** and no tag for it ever existed; its
->   CHANGELOG entry is folded into `[1.0.0]`, so the release boundary question is closed.
+> - **v1.0.0 is released and running in production.** Merged to `master` via PR #1 (`70219ee`),
+>   tagged `v1.0.0`, GitHub Release published. **v0.3.0 was never released** and no tag for it ever
+>   existed; its CHANGELOG entry is folded into `[1.0.0]`, so the release boundary question is closed.
+> - **⚠️ `dev`'s `package.json` still says `0.3.0` while production runs `1.0.0`.** The old rule was
+>   "the version is bumped on the release branch only (D-028), and `dev` realigns by merging `master`
+>   back" — but merging `master` into `dev` is forbidden (see below), so that realignment can never
+>   happen and `dev` is stranded *below* production. Decide whether to bump `dev` to `1.0.0`; until
+>   then, do not trust `dev`'s version number for anything.
+> - **Deployment is Portainer + Git (GitOps), not a local image.** The stack is defined in the
+>   separate `container-gitops` repo at `stacks/dts-dash/docker-compose.yaml`; images come from
+>   `ghcr.io/gh4-io/dts-dash`, built by `.github/workflows/deploy.yml` on any `v*` tag push. Host
+>   data lives at `/volume2/docker/dts-dash-1/`; `/volume2/docker/dts-dash/` is the frozen v0.2.0
+>   deployment kept as rollback. See [[prod-deployment-access]].
 > - **⚠️ `master` and `dev` have NO common ancestor.** `master` is a 3-commit, orphan-rooted,
 >   *stripped* production baseline (548 files vs dev's 774 — no `.claude/`, no `CLAUDE.md`, no tests,
 >   no dev deps). A release is one squashed stripped commit on top of it. **Never `git merge master`
 >   into `dev`** — REQ_Versioning's v1.0.0 addendum says to, and it would delete the knowledge base,
 >   plans and tests from `dev`. It is also why release-branch fixes must be **back-ported to `dev` by
 >   hand**; nothing merges back on its own.
-> - **Production runs `0.2.0-rc1`**, which is *not* an ancestor of `master` — it sits on the `dev`
->   line, 204 commits ahead of the released `v0.2.0`. The tag exists only locally and is deliberately
->   unpushed. Prod predates OI-080: no `rotation_end_date`, no shift history, no `flight_comments` or
->   `notifications` tables at all.
+> - **Production runs `1.0.0`** (build 267), upgraded from `0.2.0-rc1` on 2026-08-12. The
+>   `v0.2.0-rc1` tag is now pushed to `origin`, so the previously-deployed build is reproducible.
+>   Its schema predated OI-080 entirely — no `rotation_end_date`, no shift history, no
+>   `flight_comments` or `notifications` tables — and `db:upgrade-v1` applied 36 changes to reach
+>   `1.0.0`, verified row-for-row against a pre-upgrade snapshot.
 > - **`npm run db:upgrade-v1` is mandatory and is the only upgrade path.** It is verified from every
 >   released schema (v0.1.0, v0.1.1, v0.2.0, v0.2.0-rc1) and is idempotent. The app now **refuses to
 >   boot** against an un-upgraded database rather than silently serving blank work-package
 >   identifiers — `assertSchemaCompatible()` in `bootstrap.ts` (OI-139).
 > - **Capacity has ONE engine** (D-064, OI-115). The legacy `headcount × 6.5` model and its Admin → Settings fields were deleted — they had no live consumers but were still editable, so configuring them silently did nothing. Capacity is `capacity_assumptions` (paidToAvailable × availableToProductive) + `capacity_shifts`. The old "Real capacity: headcount × 6.5 MH/person" rule is superseded.
 > - **Effective dating works end to end.** OI-100/101/102 resolved, plus OI-107 (the edit dialog was still rewriting history via `PUT`) and OI-108 (two versions of one shift effective at once, double-counting the roster).
-> - `dev` is pushed and current on `origin`. `origin` carries `dev` and `master` only.
+> - `dev` is pushed and current on `origin`. `origin` carries `dev`, `master` and `release/v1.0.0`,
+>   plus tags through `v1.0.0`. The release branch is **retained deliberately** for patch work.
 > - **Production data is clean of the OI-108 defect** — the duplicate `13SMD` rows were corrected on
 >   2026-08-06. The 2026-08-09 snapshot has 6 shifts, 6 lineages, zero overlapping active versions.
 > - **The pill-marker redesign is CANCELLED, not pending.** The AOG diamond with BTB/Ferry/MX pills in
@@ -39,7 +50,37 @@
 > - **Keep a dev server running** whenever practical — he evaluates live, not from tests. Bring it up while getting oriented and drive it with Playwright. Stop it before `npm install` (it holds `node_modules` open); kill with `fuser -k 3000/tcp`.
 > - **Run against a copy of production data**, pulled from the NAS, rather than seed data — seed data is thin and hides real edge cases. Use seed data only when testing seed/import behaviour, and restore afterwards. `npm run db:backup` first, `npm run db:migrate` after (prod is on an older schema).
 >
-> **What changed (2026-08-09 session — v1.0.0 release):**
+> **What changed (2026-08-12 session — v1.0.0 SHIPPED to production):**
+> - Published the release: pushed `v0.2.0-rc1` + `release/v1.0.0`, merged PR #1 to `master`, tagged
+>   `v1.0.0`, GitHub Release created. `deploy.yml` built and pushed `ghcr.io/gh4-io/dts-dash:1.0.0`
+>   / `:1.0` / `:latest` — its **first ever run**, since no `v*` tag had reached `origin` before
+> - Migrated production: 36 changes, 10,231 work packages and 10 users unchanged, `messages`
+>   reconciled exactly (3/5/2 from feedback_posts/labels/post_labels), 6 shift lineages, integrity
+>   and FK checks clean, re-run idempotent. **`/feedback/4` → `/feedback/1`** on this database
+> - Rebuilt the deployment: new folder `/volume2/docker/dts-dash-1/`, config regenerated from
+>   `server.config.prod.yml` (was dev-derived — `debug` logging and 8-char passwords on a public URL),
+>   secret moved out of YAML into `_secrets/dts-dash.env`
+> - **OI-141 filed** — `/login` ignores `app.title`/`app.subtitle` because it is statically prerendered
+>
+> **Traps found deploying v1.0.0 — read before the next release:**
+> - **Renaming a stack in Portainer redeploys it.** A container believed stopped was back up within
+>   the minute, making a "clean" database copy a live one.
+> - **The app does not checkpoint SQLite on shutdown.** After a clean exit-0 stop the `-wal` was still
+>   3.4 MB and the `.db` file was hours stale. **Always copy `.db` + `-wal` + `-shm` together** and
+>   `PRAGMA wal_checkpoint(TRUNCATE)` the copy, or the backup silently loses recent writes.
+> - **The config file must be group-readable by gid 1001.** The container runs uid/gid 1001
+>   (`plexserver:fast-data`); a `640 guru:admin` config gave `Permission denied` and would have
+>   silently fallen back to built-in defaults. `chgrp fast-data`.
+> - **`env_file` values are not available for Compose-time interpolation.** `APP_VERSION` set only in
+>   the env file left `${APP_VERSION:-latest}` resolving to `latest`. Compose-time vars belong in
+>   Portainer's stack environment section.
+> - **Watchtower monitors every container on the NAS** (daily, no `WATCHTOWER_LABEL_ENABLE`). Harmless
+>   while the image was local; moving to GHCR made it able to auto-update production overnight. The
+>   stack now carries `com.centurylinklabs.watchtower.enable=false`.
+> - **`deploy.yml` triggers on `v*`, which includes RC tags.** Pushing `v0.2.0-rc1` kicked off a build.
+> - **`upgrade-to-v1.ts` prompts interactively** — pass `--yes` for non-interactive runs.
+>
+> **What changed (2026-08-09 session — v1.0.0 release prep):**
 > - Cut `release/v1.0.0`: stripped tree on `master`'s history, CHANGELOG collapsed to `[1.0.0]` with
 >   a Migration Guide, dead `v0.3.0` compare links repointed at `v0.2.0`
 > - **OI-139** — the upgrade path was unusable from *any* prior release: `createTables()` threw on
